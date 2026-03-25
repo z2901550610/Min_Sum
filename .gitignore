@@ -1,0 +1,30 @@
+# Build outputs
+obj_dir/
+*.o
+*.d
+*.a
+*.so
+*.gch
+*.mk
+
+# Generated executables
+/golden/mdpc_min_sum_golden
+/obj_dir/V*
+
+# Generated test vectors
+/tb/generated/*.svh
+
+# Waveforms and logs
+*.vcd
+*.fst
+*.wlf
+*.log
+
+# Editor / OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.vscode/
+.idea/

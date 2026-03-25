@@ -1,0 +1,36 @@
+CC ?= cc
+CFLAGS ?= -std=c99 -O2 -Wall -Wextra -pedantic
+VERILATOR ?= verilator
+VERILATOR_FLAGS ?= --binary --sv -Wall -Wno-fatal -I./tb
+
+GOLDEN_BIN := golden/mdpc_min_sum_golden
+VECTOR_SVH := tb/generated/mdpc_demo_vectors.svh
+RTL := rtl/mdpc_demo_pkg.sv rtl/mdpc_i_ram.sv rtl/mdpc_bit_ram_c.sv rtl/mdpc_row_state_ram_m.sv rtl/mdpc_sign_ram_s.sv rtl/mdpc_msg_ram_t.sv rtl/mdpc_msg_ram_u.sv rtl/mdpc_h_shift.sv rtl/mdpc_cnu_a.sv rtl/mdpc_cnu_b.sv rtl/mdpc_vnu.sv rtl/mdpc_decoder_demo.sv
+
+.PHONY: all golden sim test test-unit test-integration
+
+all: test
+
+golden: $(VECTOR_SVH)
+
+$(GOLDEN_BIN): golden/mdpc_min_sum_golden.c
+	$(CC) $(CFLAGS) -o $@ $<
+
+$(VECTOR_SVH): $(GOLDEN_BIN)
+	./$(GOLDEN_BIN) --emit-svh $@
+
+test: test-unit test-integration
+
+test-unit: $(VECTOR_SVH)
+	$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_mdpc_cnu_a rtl/mdpc_demo_pkg.sv rtl/mdpc_cnu_a.sv tb/tb_mdpc_cnu_a.sv
+	./obj_dir/Vtb_mdpc_cnu_a
+	$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_mdpc_cnu_b rtl/mdpc_demo_pkg.sv rtl/mdpc_cnu_b.sv tb/tb_mdpc_cnu_b.sv
+	./obj_dir/Vtb_mdpc_cnu_b
+	$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_mdpc_vnu rtl/mdpc_demo_pkg.sv rtl/mdpc_vnu.sv tb/tb_mdpc_vnu.sv
+	./obj_dir/Vtb_mdpc_vnu
+
+test-integration: $(VECTOR_SVH)
+	$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_mdpc_decoder_demo $(RTL) tb/tb_mdpc_decoder_demo.sv
+	./obj_dir/Vtb_mdpc_decoder_demo
+
+sim: test
