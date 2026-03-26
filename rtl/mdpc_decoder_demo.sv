@@ -14,6 +14,7 @@ module mdpc_decoder_demo (
   localparam logic [VAR_W-1:0] LAST_VAR = VAR_W'(N - 1);
   localparam int ITER_W = $clog2(I_MAX + 1);
   localparam int HIST_IDX_W = (I_MAX > 1) ? $clog2(I_MAX) : 1;
+  localparam logic [EDGE_W-1:0] VNU_LAST_SLOT = EDGE_W'(((W + L) - 1) / L - 1);
 
   logic [DEC_STATE_W-1:0] state;
   logic [R-1:0] syndrome_reg;
@@ -57,9 +58,16 @@ module mdpc_decoder_demo (
   logic cnu_a_out_valid1;
   logic [MSG_W-1:0] c2v_msg0;
   logic [MSG_W-1:0] c2v_msg1;
-  logic signed [APP_W-1:0] vnu_gamma;
+  logic signed [APP_W-1:0] prior_msg;
   logic signed [APP_W-1:0] vnu_app;
   logic vnu_x_out;
+  logic vnu_result_valid;
+  logic vnu_start_var;
+  logic vnu_last_accum;
+  logic vnu_accum_valid0;
+  logic vnu_accum_valid1;
+  logic [MSG_W-1:0] vnu_accum_c2v0;
+  logic [MSG_W-1:0] vnu_accum_c2v1;
   logic [MSG_W-1:0] vnu_u_next [0:W-1];
   logic [R-1:0] syndrome_next;
   logic cnu_a_flush_pending;
@@ -104,12 +112,12 @@ module mdpc_decoder_demo (
   assign lane_edge1_row_global = lane_edge1[LANE_EDGE_ROW_GLOBAL_LSB +: ROW_W];
   assign lane_edge0_edge_slot = lane_edge0[LANE_EDGE_EDGE_SLOT_LSB +: EDGE_W];
   assign lane_edge1_edge_slot = lane_edge1[LANE_EDGE_EDGE_SLOT_LSB +: EDGE_W];
-  assign vnu_gamma = c0_rd_bit ? -$signed(APP_W'(C_VAL)) : $signed(APP_W'(C_VAL));
+  assign prior_msg = c0_rd_bit ? -$signed(APP_W'(C_VAL)) : $signed(APP_W'(C_VAL));
   assign next_iter_count = iter_count + 1'b1;
   assign cnu_a_issue_phase = (state == DEC_CNU_A) && !cnu_a_flush_pending;
   assign c0_load_en = (state == DEC_LOAD);
   assign c1_load_en = (state == DEC_LOAD);
-  assign c1_wr_en = (state == DEC_VNU);
+  assign c1_wr_en = (state == DEC_VNU) && vnu_result_valid;
   assign s_clear_en = (state == DEC_LOAD);
   assign t_clear_en = (state == DEC_LOAD);
   assign u_init_en = (state == DEC_LOAD);
@@ -120,7 +128,9 @@ module mdpc_decoder_demo (
   assign s_wr_en1 = cnu_a_out_valid1;
   assign t_wr_en0 = (state == DEC_CNU_B) && lane_edge0_valid;
   assign t_wr_en1 = (state == DEC_CNU_B) && lane_edge1_valid;
-  assign u_wr_en = (state == DEC_VNU);
+  assign u_wr_en = (state == DEC_VNU) && vnu_result_valid;
+  assign vnu_start_var = (state == DEC_VNU) && (scan_slot == '0);
+  assign vnu_last_accum = (state == DEC_VNU) && (scan_slot == VNU_LAST_SLOT);
 
   always_comb begin
     integer row_idx_local;
@@ -153,6 +163,27 @@ module mdpc_decoder_demo (
     if (state == DEC_CHECK) begin
       stop_decode = (syndrome_next == '0) || (int'(next_iter_count) >= I_MAX);
       continue_decode = !stop_decode;
+    end
+  end
+
+  always_comb begin
+    integer edge_linear_idx;
+
+    vnu_accum_valid0 = 1'b0;
+    vnu_accum_valid1 = 1'b0;
+    vnu_accum_c2v0 = '0;
+    vnu_accum_c2v1 = '0;
+
+    edge_linear_idx = int'(scan_slot) * L;
+    if ((state == DEC_VNU) && (edge_linear_idx < W)) begin
+      vnu_accum_valid0 = 1'b1;
+      vnu_accum_c2v0 = t_msgs[edge_linear_idx];
+    end
+
+    edge_linear_idx = (int'(scan_slot) * L) + 1;
+    if ((state == DEC_VNU) && (edge_linear_idx < W)) begin
+      vnu_accum_valid1 = 1'b1;
+      vnu_accum_c2v1 = t_msgs[edge_linear_idx];
     end
   end
 
@@ -342,8 +373,18 @@ module mdpc_decoder_demo (
   );
 
   mdpc_vnu u_vnu (
-    .gamma_in(vnu_gamma),
-    .c2v_in(t_msgs),
+    .clk(clk),
+    .rst_n(rst_n),
+    .clear_en((state == DEC_LOAD) || continue_decode),
+    .start_var(vnu_start_var),
+    .last_accum(vnu_last_accum),
+    .prior_msg_in(prior_msg),
+    .accum_valid0(vnu_accum_valid0),
+    .accum_c2v0(vnu_accum_c2v0),
+    .accum_valid1(vnu_accum_valid1),
+    .accum_c2v1(vnu_accum_c2v1),
+    .cached_c2v_in(t_msgs),
+    .result_valid(vnu_result_valid),
     .app_out(vnu_app),
     .x_out(vnu_x_out),
     .u_next_out(vnu_u_next)
@@ -424,12 +465,17 @@ module mdpc_decoder_demo (
         end
 
         DEC_VNU: begin
-          x_out[active_var_idx] <= vnu_x_out;
-          if (active_var_idx == LAST_VAR) begin
-            active_var_idx <= '0;
-            state <= DEC_CHECK;
+          if (vnu_result_valid) begin
+            x_out[active_var_idx] <= vnu_x_out;
+            scan_slot <= '0;
+            if (active_var_idx == LAST_VAR) begin
+              active_var_idx <= '0;
+              state <= DEC_CHECK;
+            end else begin
+              active_var_idx <= active_var_idx + 1'b1;
+            end
           end else begin
-            active_var_idx <= active_var_idx + 1'b1;
+            scan_slot <= scan_slot + 1'b1;
           end
         end
 

@@ -49,7 +49,7 @@
 
 作用：
 
-- `C0` 保存输入硬判决，用来生成 `gamma_j`
+- `C0` 保存输入硬判决，用来生成先验消息 `prior_j`
 - `C1` 保存当前轮更新后的硬判决
 
 ### `RAM M`
@@ -87,7 +87,8 @@
 作用：
 
 - 保存 `c2v` 消息
-- VNU 阶段按变量节点一次读出 `W` 条消息
+- 作为论文 Fig. 7 中的中间 `c2v` 缓存
+- `VNU` 每拍从中取最多 `L=2` 条消息做累加
 
 ### `RAM U`
 
@@ -96,7 +97,7 @@
 作用：
 
 - 保存下一轮送回 CNU A 的 `u_i,j`
-- `LOAD` 阶段用 `gamma_j` 初始化
+- `LOAD` 阶段用先验消息初始化
 - `VNU` 阶段整行回写
 
 ## 模块说明
@@ -171,19 +172,23 @@
 
 输入：
 
-- `gamma_j`
-- 当前变量节点收到的全部 `c2v`
+- `prior_msg_j`
+- 每拍最多两条 `c2v`
+- `RAM T` 中缓存的整组 `c2v`
 
 输出：
 
-- `app_j`
+- 最后一拍输出 `app_j`
 - 硬判决 `x_j`
 - 下一轮全部 `u_i,j`
 
 功能：
 
-- `app = gamma + alpha * sum(v)`
+- 每周期累加两条 `c2v`
+- `c2v` 先做 sign-magnitude 到 2's complement 转换
+- `app = prior + alpha * sum(v)`
 - `u = app - alpha * v`
+- `u` 输出前再从 2's complement 转回 sign-magnitude
 
 `u` 以 sign-magnitude 形式写回，并做幅值饱和。
 
@@ -211,7 +216,7 @@
 ### `LOAD`
 
 - `x_in` 写入 `C0` 和 `C1`
-- `U RAM` 按 `gamma_j` 初始化
+- `U RAM` 按先验消息初始化
 - `I RAM` 装载首列索引
 - `M RAM` 清零到初始 row state
 - `S RAM` 和 `T RAM` 清零
@@ -238,9 +243,10 @@
 
 ### `VNU`
 
-- `C0 RAM` 提供 `gamma_j`
-- `T RAM` 一次读出当前变量的全部 `c2v`
-- `mdpc_vnu` 计算 `app`、`x_j` 和下一轮 `u`
+- `C0 RAM` 提供先验消息 `prior_j`
+- `T RAM` 保存该变量节点的全部 `c2v`
+- `mdpc_vnu` 每拍累加最多两条 `c2v`
+- 最后一拍生成 `app`、`x_j` 和下一轮 `u`
 - `x_j` 写回 `C1 RAM`
 - 整个变量节点的 `u` 写回 `U RAM`
 
