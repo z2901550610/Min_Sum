@@ -1,5 +1,3 @@
-import mdpc_demo_pkg::*;
-
 module mdpc_msg_ram_t (
   input  logic clk,
   input  logic rst_n,
@@ -15,6 +13,8 @@ module mdpc_msg_ram_t (
   input  logic [EDGE_W-1:0] wr_edge1,
   input  logic [MSG_W-1:0] wr_msg1
 );
+
+  import mdpc_demo_pkg::*;
 
   logic [MSG_W-1:0] mem [0:N-1][0:W-1];
   always_comb begin

@@ -1,5 +1,3 @@
-import mdpc_demo_pkg::*;
-
 module mdpc_bit_ram_c (
   input  logic clk,
   input  logic rst_n,
@@ -13,6 +11,8 @@ module mdpc_bit_ram_c (
   output logic rd_bit,
   output logic [N-1:0] bits_out
 );
+
+  import mdpc_demo_pkg::*;
 
   logic [N-1:0] mem;
 

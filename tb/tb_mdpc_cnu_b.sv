@@ -1,8 +1,8 @@
 `timescale 1ns/1ps
 
-import mdpc_demo_pkg::*;
-
 module tb_mdpc_cnu_b;
+  import mdpc_demo_pkg::*;
+
   logic [ROW_STATE_W-1:0] row_state_in;
   logic u_sign_in;
   logic [VAR_W-1:0] var_idx;

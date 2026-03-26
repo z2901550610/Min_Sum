@@ -1,5 +1,3 @@
-import mdpc_demo_pkg::*;
-
 //  row_state说明：
 //  ROW_STATE_W = 15 (D=4, VAR_W=4)
 //  bit [14:13] valid_count  (2 bits, 0=empty, 1..W=已处理边数，上限W=3)
@@ -17,6 +15,8 @@ module mdpc_cnu_a (
   output logic [ROW_STATE_W-1:0] row_state_out,
   output logic sign_bit_out
 );
+
+  import mdpc_demo_pkg::*;
 
   logic               u_sign;
   logic [D-1:0]       u_mag;

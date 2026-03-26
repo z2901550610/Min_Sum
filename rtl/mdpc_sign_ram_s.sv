@@ -1,5 +1,3 @@
-import mdpc_demo_pkg::*;
-
 module mdpc_sign_ram_s (
   input  logic clk,
   input  logic rst_n,
@@ -19,6 +17,8 @@ module mdpc_sign_ram_s (
   input  logic [EDGE_W-1:0] wr_edge1,
   input  logic wr_sign1
 );
+
+  import mdpc_demo_pkg::*;
 
   logic mem [0:N-1][0:W-1];
   integer var_idx;

@@ -1,11 +1,11 @@
-import mdpc_demo_pkg::*;
-
 module mdpc_cnu_b (
   input  logic [ROW_STATE_W-1:0] row_state_in,
   input  logic u_sign_in,
   input  logic [VAR_W-1:0] var_idx,
   output logic [MSG_W-1:0] v_out
 );
+
+  import mdpc_demo_pkg::*;
 
   logic [D-1:0] state_min1;
   logic [D-1:0] state_min2;

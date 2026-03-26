@@ -1,5 +1,3 @@
-import mdpc_demo_pkg::*;
-
 module mdpc_i_ram (
   input  logic clk,
   input  logic rst_n,
@@ -9,6 +7,8 @@ module mdpc_i_ram (
   output logic [I_ENTRY_W-1:0] lane_entries [0:L-1][0:W-1],
   output logic [1:0] lane_count [0:L-1]
 );
+
+  import mdpc_demo_pkg::*;
 
   logic [I_ENTRY_W-1:0] mem [0:N0-1][0:L-1][0:W-1];
   logic [1:0] count_mem [0:N0-1][0:L-1];

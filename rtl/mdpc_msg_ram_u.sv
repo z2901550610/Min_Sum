@@ -1,5 +1,3 @@
-import mdpc_demo_pkg::*;
-
 module mdpc_msg_ram_u (
   input  logic clk,
   input  logic rst_n,
@@ -15,6 +13,8 @@ module mdpc_msg_ram_u (
   input  logic [VAR_W-1:0] wr_var,
   input  logic [MSG_W-1:0] wr_msgs [0:W-1]
 );
+
+  import mdpc_demo_pkg::*;
 
   logic [MSG_W-1:0] mem [0:N-1][0:W-1];
   integer var_idx;

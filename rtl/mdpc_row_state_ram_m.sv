@@ -1,5 +1,3 @@
-import mdpc_demo_pkg::*;
-
 module mdpc_row_state_ram_m (
   input  logic clk,
   input  logic rst_n,
@@ -19,6 +17,8 @@ module mdpc_row_state_ram_m (
   input  logic [ROW_W-1:0] wr_addr1,
   input  logic [ROW_STATE_W-1:0] wr_data1
 );
+
+  import mdpc_demo_pkg::*;
 
   logic [ROW_STATE_W-1:0] mem [0:R-1];
   integer row_idx;

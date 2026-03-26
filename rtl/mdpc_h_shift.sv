@@ -1,11 +1,11 @@
-import mdpc_demo_pkg::*;
-
 module mdpc_h_shift (
   input  logic [VAR_W-1:0] var_idx,
   input  logic [I_ENTRY_W-1:0] lane_entries [0:L-1][0:W-1],
   input  logic [1:0] lane_count [0:L-1],
   output logic [LANE_EDGE_W-1:0] lane_edges [0:L-1][0:W-1]
 );
+
+  import mdpc_demo_pkg::*;
 
   always_comb begin
     integer lane_idx_local;

@@ -1,5 +1,3 @@
-import mdpc_demo_pkg::*;
-
 module mdpc_vnu (
   input  logic signed [APP_W-1:0] gamma_in,
   input  logic [MSG_W-1:0] c2v_in [0:W-1],
@@ -7,6 +5,8 @@ module mdpc_vnu (
   output logic x_out,
   output logic [MSG_W-1:0] u_next_out [0:W-1]
 );
+
+  import mdpc_demo_pkg::*;
 
   integer edge_idx;
   integer sum_c2v;

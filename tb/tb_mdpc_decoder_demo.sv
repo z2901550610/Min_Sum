@@ -1,8 +1,8 @@
 `timescale 1ns/1ps
 
-import mdpc_demo_pkg::*;
-
 module tb_mdpc_decoder_demo;
+  import mdpc_demo_pkg::*;
+
   `include "tb/generated/mdpc_demo_vectors.svh"
 
   logic clk;

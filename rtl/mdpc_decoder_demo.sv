@@ -1,5 +1,3 @@
-import mdpc_demo_pkg::*;
-
 module mdpc_decoder_demo (
   input  logic clk,
   input  logic rst_n,
@@ -10,6 +8,8 @@ module mdpc_decoder_demo (
   output logic [N-1:0] x_out,
   output logic [$clog2(I_MAX + 1)-1:0] iter_count
 );
+
+  import mdpc_demo_pkg::*;
 
   localparam logic [VAR_W-1:0] LAST_VAR = VAR_W'(N - 1);
   localparam int ITER_W = $clog2(I_MAX + 1);

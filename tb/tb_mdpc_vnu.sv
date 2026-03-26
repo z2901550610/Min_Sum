@@ -1,8 +1,8 @@
 `timescale 1ns/1ps
 
-import mdpc_demo_pkg::*;
-
 module tb_mdpc_vnu;
+  import mdpc_demo_pkg::*;
+
   logic signed [APP_W-1:0] gamma_in;
   logic [MSG_W-1:0] c2v_in [0:W-1];
   logic signed [APP_W-1:0] app_out;
