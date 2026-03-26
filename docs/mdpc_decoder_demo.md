@@ -66,7 +66,6 @@
 - `min2`
 - `min_id`
 - `sign_xor`
-- `valid_count`
 
 ### `RAM S`
 
@@ -126,20 +125,29 @@
 
 输入：
 
+- `clk/rst_n/clear_en`
+- `in_valid`
 - 单条 `u_i,j`
 - 当前 `var_idx`
 - 当前 row 的压缩状态
 
 输出：
 
-- 更新后的 row state
-- 当前边的 sign bit
+- 单拍后输出更新后的 row state
+- 单拍后输出当前边的 sign bit
+- `out_valid`
 
 功能：
 
+- 每周期处理一条 `u_i,j`
 - 更新 `min1/min2/min_id`
 - 累积 `sign_xor`
-- 更新 `valid_count`
+
+这里直接对应论文 Fig. 6(a) 里的 `CNU A`：
+
+- 行状态本体保存在 `RAM M`
+- `mdpc_cnu_a` 负责对当前输入边做一次时序更新
+- 不再引入论文中没有的 `valid_count`
 
 ### `mdpc_cnu_b`
 
@@ -214,7 +222,7 @@
 - `mdpc_h_shift` 生成两条 lane 的边描述
 - `U RAM` 读出当前边的 `u_i,j`
 - `M RAM` 读出对应 row state
-- `mdpc_cnu_a` 生成更新后的 row state 和 sign
+- `mdpc_cnu_a` 在时钟边沿锁存这条边，并在下一拍给出更新后的 row state 和 sign
 - row state 写回 `M RAM`
 - sign 写入 `S RAM`
 - 一列处理完成后，`I RAM` 对当前 bank 做列移位

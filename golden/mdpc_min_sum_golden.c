@@ -30,7 +30,6 @@ typedef struct {
     int min2;
     int min_id;
     int sign_xor;
-    int valid_count;
 } row_state_t;
 
 typedef struct {
@@ -99,7 +98,6 @@ static row_state_t row_state_init(void) {
     state.min2 = MDPC_MAG_MAX;
     state.min_id = 0;
     state.sign_xor = 0;
-    state.valid_count = 0;
     return state;
 }
 
@@ -165,21 +163,9 @@ static void build_lane_edges(int var_idx, lane_edge_t lane_edges[MDPC_L][MDPC_W]
 
 static void cnu_a_step(msg_t u_in, int var_idx, row_state_t *state) {
     int abs_mag = u_in.mag;
-    if (state->valid_count == 0) {
-        state->min1 = abs_mag;
-        state->min2 = MDPC_MAG_MAX;
-        state->min_id = var_idx;
-        state->sign_xor = u_in.sign;
-        state->valid_count = 1;
-        return;
-    }
-
     state->sign_xor ^= u_in.sign;
-    if (state->valid_count < MDPC_W) {
-        state->valid_count += 1;
-    }
 
-    if (abs_mag < state->min1) {
+    if (abs_mag <= state->min1) {
         state->min2 = state->min1;
         state->min1 = abs_mag;
         state->min_id = var_idx;
@@ -357,19 +343,16 @@ static void emit_row_state_arrays(FILE *fp, const mdpc_trace_t *trace) {
     int min2[MDPC_R];
     int min_id[MDPC_R];
     int sign_xor[MDPC_R];
-    int valid_count[MDPC_R];
     for (idx = 0; idx < MDPC_R; ++idx) {
         min1[idx] = trace->first_row_state[idx].min1;
         min2[idx] = trace->first_row_state[idx].min2;
         min_id[idx] = trace->first_row_state[idx].min_id;
         sign_xor[idx] = trace->first_row_state[idx].sign_xor;
-        valid_count[idx] = trace->first_row_state[idx].valid_count;
     }
     emit_int_array(fp, "CASE1_FIRST_ROW_MIN1", min1, MDPC_R);
     emit_int_array(fp, "CASE1_FIRST_ROW_MIN2", min2, MDPC_R);
     emit_int_array(fp, "CASE1_FIRST_ROW_MIN_ID", min_id, MDPC_R);
     emit_int_array(fp, "CASE1_FIRST_ROW_SIGN_XOR", sign_xor, MDPC_R);
-    emit_int_array(fp, "CASE1_FIRST_ROW_VALID_COUNT", valid_count, MDPC_R);
 }
 
 static void emit_msg_arrays(FILE *fp, const char *sign_name, const char *mag_name, msg_t values[MDPC_N][MDPC_W]) {

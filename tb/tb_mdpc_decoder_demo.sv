@@ -86,7 +86,6 @@ module tb_mdpc_decoder_demo;
       if (int'(dut.u_m_ram.mem[idx][ROW_STATE_MIN2_LSB +: D]) != CASE1_FIRST_ROW_MIN2[idx]) $fatal(1, "CASE1 row min2[%0d] mismatch", idx);
       if (int'(dut.u_m_ram.mem[idx][ROW_STATE_MIN_ID_LSB +: VAR_W]) != CASE1_FIRST_ROW_MIN_ID[idx]) $fatal(1, "CASE1 row min_id[%0d] mismatch", idx);
       if (int'(dut.u_m_ram.mem[idx][ROW_STATE_SIGN_XOR_BIT]) != CASE1_FIRST_ROW_SIGN_XOR[idx]) $fatal(1, "CASE1 row sign_xor[%0d] mismatch", idx);
-      if (int'(dut.u_m_ram.mem[idx][ROW_STATE_VALID_COUNT_LSB +: 2]) != CASE1_FIRST_ROW_VALID_COUNT[idx]) $fatal(1, "CASE1 row valid_count[%0d] mismatch", idx);
     end
 
     wait (dut.state == DEC_VNU && dut.active_var_idx == 0);

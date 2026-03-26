@@ -32,8 +32,13 @@ package mdpc_demo_pkg;
   localparam int ROW_STATE_MIN2_LSB = ROW_STATE_MIN1_LSB + D;
   localparam int ROW_STATE_MIN_ID_LSB = ROW_STATE_MIN2_LSB + D;
   localparam int ROW_STATE_SIGN_XOR_BIT = ROW_STATE_MIN_ID_LSB + VAR_W;
-  localparam int ROW_STATE_VALID_COUNT_LSB = ROW_STATE_SIGN_XOR_BIT + 1;
-  localparam int ROW_STATE_W = ROW_STATE_VALID_COUNT_LSB + 2;
+  localparam int ROW_STATE_W = ROW_STATE_SIGN_XOR_BIT + 1;
+  localparam logic [ROW_STATE_W-1:0] ROW_STATE_INIT = {
+    1'b0,
+    VAR_W'(0),
+    D'(MAG_MAX),
+    D'(MAG_MAX)
+  };
 
   localparam int LANE_EDGE_VALID_BIT = 0;
   localparam int LANE_EDGE_ROW_LOCAL_LSB = LANE_EDGE_VALID_BIT + 1;

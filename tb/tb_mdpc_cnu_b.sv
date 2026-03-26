@@ -16,7 +16,7 @@ module tb_mdpc_cnu_b;
   );
 
   initial begin
-    c2v_compact_msg_in = {2'd3, 1'b1, 4'd4, D'(5), D'(2)};
+    c2v_compact_msg_in = {1'b1, 4'd4, D'(5), D'(2)};
 
     v2c_sign_in = 1;
     src_var_idx = 4;

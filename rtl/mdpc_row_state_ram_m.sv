@@ -31,11 +31,11 @@ module mdpc_row_state_ram_m (
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       for (row_idx = 0; row_idx < R; row_idx++) begin
-        mem[row_idx] <= {2'd0, 1'b0, {VAR_W{1'b0}}, D'(MAG_MAX), D'(MAG_MAX)};
+        mem[row_idx] <= ROW_STATE_INIT;
       end
     end else if (clear_en) begin
       for (row_idx = 0; row_idx < R; row_idx++) begin
-        mem[row_idx] <= {2'd0, 1'b0, {VAR_W{1'b0}}, D'(MAG_MAX), D'(MAG_MAX)};
+        mem[row_idx] <= ROW_STATE_INIT;
       end
     end else begin
       if (wr_en0) begin
