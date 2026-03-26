@@ -38,23 +38,23 @@ module mdpc_decoder_demo (
   logic c0_rd_bit;
   logic [N-1:0] c0_bits;
   logic [N-1:0] c1_bits;
-  logic [ROW_STATE_W-1:0] m_row_state_a0;
-  logic [ROW_STATE_W-1:0] m_row_state_a1;
-  logic [ROW_STATE_W-1:0] m_row_state_b0;
-  logic [ROW_STATE_W-1:0] m_row_state_b1;
-  logic [MSG_W-1:0] u_msg0;
-  logic [MSG_W-1:0] u_msg1;
-  logic s_sign0;
-  logic s_sign1;
+  logic [ROW_STATE_W-1:0] c2v_compact_msg_rd_a0;
+  logic [ROW_STATE_W-1:0] c2v_compact_msg_rd_a1;
+  logic [ROW_STATE_W-1:0] c2v_compact_msg_rd_b0;
+  logic [ROW_STATE_W-1:0] c2v_compact_msg_rd_b1;
+  logic [MSG_W-1:0] v2c_msg0;
+  logic [MSG_W-1:0] v2c_msg1;
+  logic v2c_sign0;
+  logic v2c_sign1;
   logic c1_rd_unused;
   logic [MSG_W-1:0] t_msgs [0:W-1];
 
-  logic [ROW_STATE_W-1:0] cnu_a_state0;
-  logic [ROW_STATE_W-1:0] cnu_a_state1;
-  logic cnu_a_sign0;
-  logic cnu_a_sign1;
-  logic [MSG_W-1:0] cnu_b_v0;
-  logic [MSG_W-1:0] cnu_b_v1;
+  logic [ROW_STATE_W-1:0] c2v_compact_msg_wr0;
+  logic [ROW_STATE_W-1:0] c2v_compact_msg_wr1;
+  logic v2c_sign_wr0;
+  logic v2c_sign_wr1;
+  logic [MSG_W-1:0] c2v_msg0;
+  logic [MSG_W-1:0] c2v_msg1;
   logic signed [APP_W-1:0] vnu_gamma;
   logic signed [APP_W-1:0] vnu_app;
   logic vnu_x_out;
@@ -201,16 +201,16 @@ module mdpc_decoder_demo (
     .rd_addr_a1(lane_edge1_row_global),
     .rd_addr_b0(lane_edge0_row_global),
     .rd_addr_b1(lane_edge1_row_global),
-    .rd_data_a0(m_row_state_a0),
-    .rd_data_a1(m_row_state_a1),
-    .rd_data_b0(m_row_state_b0),
-    .rd_data_b1(m_row_state_b1),
+    .rd_data_a0(c2v_compact_msg_rd_a0),
+    .rd_data_a1(c2v_compact_msg_rd_a1),
+    .rd_data_b0(c2v_compact_msg_rd_b0),
+    .rd_data_b1(c2v_compact_msg_rd_b1),
     .wr_en0(m_wr_en0),
     .wr_addr0(lane_edge0_row_global),
-    .wr_data0(cnu_a_state0),
+    .wr_data0(c2v_compact_msg_wr0),
     .wr_en1(m_wr_en1),
     .wr_addr1(lane_edge1_row_global),
-    .wr_data1(cnu_a_state1)
+    .wr_data1(c2v_compact_msg_wr1)
   );
 
   mdpc_sign_ram_s u_s_ram (
@@ -221,16 +221,16 @@ module mdpc_decoder_demo (
     .rd_edge0(lane_edge0_edge_slot),
     .rd_var1(active_var_idx),
     .rd_edge1(lane_edge1_edge_slot),
-    .rd_sign0(s_sign0),
-    .rd_sign1(s_sign1),
+    .rd_sign0(v2c_sign0),
+    .rd_sign1(v2c_sign1),
     .wr_en0(s_wr_en0),
     .wr_var0(active_var_idx),
     .wr_edge0(lane_edge0_edge_slot),
-    .wr_sign0(cnu_a_sign0),
+    .wr_sign0(v2c_sign_wr0),
     .wr_en1(s_wr_en1),
     .wr_var1(active_var_idx),
     .wr_edge1(lane_edge1_edge_slot),
-    .wr_sign1(cnu_a_sign1)
+    .wr_sign1(v2c_sign_wr1)
   );
 
   mdpc_msg_ram_t u_t_ram (
@@ -242,11 +242,11 @@ module mdpc_decoder_demo (
     .wr_en0(t_wr_en0),
     .wr_var0(active_var_idx),
     .wr_edge0(lane_edge0_edge_slot),
-    .wr_msg0(cnu_b_v0),
+    .wr_msg0(c2v_msg0),
     .wr_en1(t_wr_en1),
     .wr_var1(active_var_idx),
     .wr_edge1(lane_edge1_edge_slot),
-    .wr_msg1(cnu_b_v1)
+    .wr_msg1(c2v_msg1)
   );
 
   mdpc_msg_ram_u u_u_ram (
@@ -258,41 +258,41 @@ module mdpc_decoder_demo (
     .rd_edge0(lane_edge0_edge_slot),
     .rd_var1(active_var_idx),
     .rd_edge1(lane_edge1_edge_slot),
-    .rd_msg0(u_msg0),
-    .rd_msg1(u_msg1),
+    .rd_msg0(v2c_msg0),
+    .rd_msg1(v2c_msg1),
     .wr_en(u_wr_en),
     .wr_var(active_var_idx),
     .wr_msgs(vnu_u_next)
   );
 
   mdpc_cnu_a u_cnu_a_lane0 (
-    .u_in(u_msg0),
-    .var_idx(active_var_idx),
-    .row_state_in(m_row_state_a0),
-    .row_state_out(cnu_a_state0),
-    .sign_bit_out(cnu_a_sign0)
+    .v2c_msg_in(v2c_msg0),
+    .src_var_idx(active_var_idx),
+    .c2v_compact_msg_in(c2v_compact_msg_rd_a0),
+    .c2v_compact_msg_out(c2v_compact_msg_wr0),
+    .v2c_sign_out(v2c_sign_wr0)
   );
 
   mdpc_cnu_a u_cnu_a_lane1 (
-    .u_in(u_msg1),
-    .var_idx(active_var_idx),
-    .row_state_in(m_row_state_a1),
-    .row_state_out(cnu_a_state1),
-    .sign_bit_out(cnu_a_sign1)
+    .v2c_msg_in(v2c_msg1),
+    .src_var_idx(active_var_idx),
+    .c2v_compact_msg_in(c2v_compact_msg_rd_a1),
+    .c2v_compact_msg_out(c2v_compact_msg_wr1),
+    .v2c_sign_out(v2c_sign_wr1)
   );
 
   mdpc_cnu_b u_cnu_b_lane0 (
-    .row_state_in(m_row_state_b0),
-    .u_sign_in(s_sign0),
-    .var_idx(active_var_idx),
-    .v_out(cnu_b_v0)
+    .c2v_compact_msg_in(c2v_compact_msg_rd_b0),
+    .v2c_sign_in(v2c_sign0),
+    .src_var_idx(active_var_idx),
+    .c2v_msg_out(c2v_msg0)
   );
 
   mdpc_cnu_b u_cnu_b_lane1 (
-    .row_state_in(m_row_state_b1),
-    .u_sign_in(s_sign1),
-    .var_idx(active_var_idx),
-    .v_out(cnu_b_v1)
+    .c2v_compact_msg_in(c2v_compact_msg_rd_b1),
+    .v2c_sign_in(v2c_sign1),
+    .src_var_idx(active_var_idx),
+    .c2v_msg_out(c2v_msg1)
   );
 
   mdpc_vnu u_vnu (
