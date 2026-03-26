@@ -1,24 +1,30 @@
-# Build outputs
-obj_dir/
+# Verilator / simulation build outputs
+/obj_dir/
 *.o
 *.d
 *.a
 *.so
 *.gch
 *.mk
+*.gcda
+*.gcno
+*.gcov
 
-# Generated executables
+# Generated simulation binaries and support files
 /golden/mdpc_min_sum_golden
-/obj_dir/V*
+/tb/generated/
 
-# Generated test vectors
-/tb/generated/*.svh
-
-# Waveforms and logs
+# Waveforms, traces, and logs
 *.vcd
 *.fst
 *.wlf
 *.log
+*.jou
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
 
 # Editor / OS files
 .DS_Store

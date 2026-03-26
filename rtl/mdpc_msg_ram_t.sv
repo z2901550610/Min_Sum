@@ -32,13 +32,13 @@ module mdpc_msg_ram_t (
     if (!rst_n) begin
       for (var_idx_local = 0; var_idx_local < N; var_idx_local++) begin
         for (edge_idx_local = 0; edge_idx_local < W; edge_idx_local++) begin
-          mem[var_idx_local][edge_idx_local] <= msg_from_signed(0);
+          mem[var_idx_local][edge_idx_local] <= '0;
         end
       end
     end else if (clear_en) begin
       for (var_idx_local = 0; var_idx_local < N; var_idx_local++) begin
         for (edge_idx_local = 0; edge_idx_local < W; edge_idx_local++) begin
-          mem[var_idx_local][edge_idx_local] <= msg_from_signed(0);
+          mem[var_idx_local][edge_idx_local] <= '0;
         end
       end
     end else begin

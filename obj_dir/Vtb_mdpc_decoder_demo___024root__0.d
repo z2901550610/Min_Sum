@@ -1,2 +1,0 @@
-Vtb_mdpc_decoder_demo___024root__0.o: \
- Vtb_mdpc_decoder_demo___024root__0.cpp Vtb_mdpc_decoder_demo__pch.h

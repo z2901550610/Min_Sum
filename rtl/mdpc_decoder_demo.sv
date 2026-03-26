@@ -11,7 +11,7 @@ module mdpc_decoder_demo (
   output logic [$clog2(I_MAX + 1)-1:0] iter_count
 );
 
-  localparam logic [VAR_W-1:0] LAST_VAR = var_idx_from_int(N - 1);
+  localparam logic [VAR_W-1:0] LAST_VAR = VAR_W'(N - 1);
   localparam int ITER_W = $clog2(I_MAX + 1);
   localparam int HIST_IDX_W = (I_MAX > 1) ? $clog2(I_MAX) : 1;
 
@@ -28,6 +28,12 @@ module mdpc_decoder_demo (
   logic [LANE_EDGE_W-1:0] current_lane_edges [0:L-1][0:W-1];
   logic [LANE_EDGE_W-1:0] lane_edge0;
   logic [LANE_EDGE_W-1:0] lane_edge1;
+  logic lane_edge0_valid;
+  logic lane_edge1_valid;
+  logic [ROW_W-1:0] lane_edge0_row_global;
+  logic [ROW_W-1:0] lane_edge1_row_global;
+  logic [EDGE_W-1:0] lane_edge0_edge_slot;
+  logic [EDGE_W-1:0] lane_edge1_edge_slot;
 
   logic c0_rd_bit;
   logic [N-1:0] c0_bits;
@@ -82,8 +88,13 @@ module mdpc_decoder_demo (
     (current_lane_count[0] >= current_lane_count[1]) ? current_lane_count[0] : current_lane_count[1];
   assign lane_edge0 = current_lane_edges[0][scan_slot];
   assign lane_edge1 = current_lane_edges[1][scan_slot];
-  assign vnu_gamma = app_from_int(gamma_from_bit(c0_rd_bit));
-  assign syndrome_next = syndrome_vector(c1_bits);
+  assign lane_edge0_valid = lane_edge0[LANE_EDGE_VALID_BIT];
+  assign lane_edge1_valid = lane_edge1[LANE_EDGE_VALID_BIT];
+  assign lane_edge0_row_global = lane_edge0[LANE_EDGE_ROW_GLOBAL_LSB +: ROW_W];
+  assign lane_edge1_row_global = lane_edge1[LANE_EDGE_ROW_GLOBAL_LSB +: ROW_W];
+  assign lane_edge0_edge_slot = lane_edge0[LANE_EDGE_EDGE_SLOT_LSB +: EDGE_W];
+  assign lane_edge1_edge_slot = lane_edge1[LANE_EDGE_EDGE_SLOT_LSB +: EDGE_W];
+  assign vnu_gamma = c0_rd_bit ? -$signed(APP_W'(C_VAL)) : $signed(APP_W'(C_VAL));
   assign next_iter_count = iter_count + 1'b1;
   assign c0_load_en = (state == DEC_LOAD);
   assign c1_load_en = (state == DEC_LOAD);
@@ -92,13 +103,37 @@ module mdpc_decoder_demo (
   assign t_clear_en = (state == DEC_LOAD);
   assign u_init_en = (state == DEC_LOAD);
   assign i_load_first_col_en = (state == DEC_LOAD);
-  assign m_wr_en0 = (state == DEC_CNU_A) && lane_edge_valid(lane_edge0);
-  assign m_wr_en1 = (state == DEC_CNU_A) && lane_edge_valid(lane_edge1);
-  assign s_wr_en0 = (state == DEC_CNU_A) && lane_edge_valid(lane_edge0);
-  assign s_wr_en1 = (state == DEC_CNU_A) && lane_edge_valid(lane_edge1);
-  assign t_wr_en0 = (state == DEC_CNU_B) && lane_edge_valid(lane_edge0);
-  assign t_wr_en1 = (state == DEC_CNU_B) && lane_edge_valid(lane_edge1);
+  assign m_wr_en0 = (state == DEC_CNU_A) && lane_edge0_valid;
+  assign m_wr_en1 = (state == DEC_CNU_A) && lane_edge1_valid;
+  assign s_wr_en0 = (state == DEC_CNU_A) && lane_edge0_valid;
+  assign s_wr_en1 = (state == DEC_CNU_A) && lane_edge1_valid;
+  assign t_wr_en0 = (state == DEC_CNU_B) && lane_edge0_valid;
+  assign t_wr_en1 = (state == DEC_CNU_B) && lane_edge1_valid;
   assign u_wr_en = (state == DEC_VNU);
+
+  always_comb begin
+    integer row_idx_local;
+    integer var_idx_local;
+    integer bank_idx_local;
+    integer col_idx_local;
+    integer edge_idx_local;
+    logic parity_local;
+
+    syndrome_next = '0;
+    for (row_idx_local = 0; row_idx_local < R; row_idx_local++) begin
+      parity_local = 1'b0;
+      for (var_idx_local = 0; var_idx_local < N; var_idx_local++) begin
+        bank_idx_local = var_idx_local / R;
+        col_idx_local = var_idx_local % R;
+        for (edge_idx_local = 0; edge_idx_local < W; edge_idx_local++) begin
+          if (((H_BASE[bank_idx_local][edge_idx_local] + col_idx_local) % R) == row_idx_local) begin
+            parity_local ^= c1_bits[var_idx_local];
+          end
+        end
+      end
+      syndrome_next[row_idx_local] = parity_local;
+    end
+  end
 
   always_comb begin
     advance_var = ((scan_slot + 1'b1) >= current_scan_limit);
@@ -162,19 +197,19 @@ module mdpc_decoder_demo (
     .clk(clk),
     .rst_n(rst_n),
     .clear_en(m_clear_en),
-    .rd_addr_a0(lane_edge_row_global(lane_edge0)),
-    .rd_addr_a1(lane_edge_row_global(lane_edge1)),
-    .rd_addr_b0(lane_edge_row_global(lane_edge0)),
-    .rd_addr_b1(lane_edge_row_global(lane_edge1)),
+    .rd_addr_a0(lane_edge0_row_global),
+    .rd_addr_a1(lane_edge1_row_global),
+    .rd_addr_b0(lane_edge0_row_global),
+    .rd_addr_b1(lane_edge1_row_global),
     .rd_data_a0(m_row_state_a0),
     .rd_data_a1(m_row_state_a1),
     .rd_data_b0(m_row_state_b0),
     .rd_data_b1(m_row_state_b1),
     .wr_en0(m_wr_en0),
-    .wr_addr0(lane_edge_row_global(lane_edge0)),
+    .wr_addr0(lane_edge0_row_global),
     .wr_data0(cnu_a_state0),
     .wr_en1(m_wr_en1),
-    .wr_addr1(lane_edge_row_global(lane_edge1)),
+    .wr_addr1(lane_edge1_row_global),
     .wr_data1(cnu_a_state1)
   );
 
@@ -183,18 +218,18 @@ module mdpc_decoder_demo (
     .rst_n(rst_n),
     .clear_en(s_clear_en),
     .rd_var0(active_var_idx),
-    .rd_edge0(lane_edge_edge_slot(lane_edge0)),
+    .rd_edge0(lane_edge0_edge_slot),
     .rd_var1(active_var_idx),
-    .rd_edge1(lane_edge_edge_slot(lane_edge1)),
+    .rd_edge1(lane_edge1_edge_slot),
     .rd_sign0(s_sign0),
     .rd_sign1(s_sign1),
     .wr_en0(s_wr_en0),
     .wr_var0(active_var_idx),
-    .wr_edge0(lane_edge_edge_slot(lane_edge0)),
+    .wr_edge0(lane_edge0_edge_slot),
     .wr_sign0(cnu_a_sign0),
     .wr_en1(s_wr_en1),
     .wr_var1(active_var_idx),
-    .wr_edge1(lane_edge_edge_slot(lane_edge1)),
+    .wr_edge1(lane_edge1_edge_slot),
     .wr_sign1(cnu_a_sign1)
   );
 
@@ -206,11 +241,11 @@ module mdpc_decoder_demo (
     .rd_msgs(t_msgs),
     .wr_en0(t_wr_en0),
     .wr_var0(active_var_idx),
-    .wr_edge0(lane_edge_edge_slot(lane_edge0)),
+    .wr_edge0(lane_edge0_edge_slot),
     .wr_msg0(cnu_b_v0),
     .wr_en1(t_wr_en1),
     .wr_var1(active_var_idx),
-    .wr_edge1(lane_edge_edge_slot(lane_edge1)),
+    .wr_edge1(lane_edge1_edge_slot),
     .wr_msg1(cnu_b_v1)
   );
 
@@ -220,9 +255,9 @@ module mdpc_decoder_demo (
     .init_en(u_init_en),
     .init_bits(x_in),
     .rd_var0(active_var_idx),
-    .rd_edge0(lane_edge_edge_slot(lane_edge0)),
+    .rd_edge0(lane_edge0_edge_slot),
     .rd_var1(active_var_idx),
-    .rd_edge1(lane_edge_edge_slot(lane_edge1)),
+    .rd_edge1(lane_edge1_edge_slot),
     .rd_msg0(u_msg0),
     .rd_msg1(u_msg1),
     .wr_en(u_wr_en),

@@ -27,13 +27,13 @@ module mdpc_msg_ram_u (
     if (!rst_n) begin
       for (var_idx = 0; var_idx < N; var_idx++) begin
         for (edge_idx = 0; edge_idx < W; edge_idx++) begin
-          mem[var_idx][edge_idx] <= msg_from_signed(0);
+          mem[var_idx][edge_idx] <= '0;
         end
       end
     end else if (init_en) begin
       for (var_idx = 0; var_idx < N; var_idx++) begin
         for (edge_idx = 0; edge_idx < W; edge_idx++) begin
-          mem[var_idx][edge_idx] <= msg_from_signed(gamma_from_bit(init_bits[var_idx]));
+          mem[var_idx][edge_idx] <= {init_bits[var_idx], D'(C_VAL)};
         end
       end
     end else if (wr_en) begin

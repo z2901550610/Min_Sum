@@ -1,3 +1,0 @@
-Vtb_mdpc_decoder_demo_mdpc_demo_pkg__0__Slow.o: \
- Vtb_mdpc_decoder_demo_mdpc_demo_pkg__0__Slow.cpp \
- Vtb_mdpc_decoder_demo__pch.h
