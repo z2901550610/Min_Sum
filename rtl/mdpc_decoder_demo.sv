@@ -48,7 +48,7 @@ module mdpc_decoder_demo (
   logic v2c_sign0;
   logic v2c_sign1;
   logic c1_rd_unused;
-  logic [MSG_W-1:0] t_msgs [0:W-1];
+  logic signed [MSG_W-1:0] t_msgs [0:W-1];
 
   logic [ROW_STATE_W-1:0] c2v_compact_msg_wr0;
   logic [ROW_STATE_W-1:0] c2v_compact_msg_wr1;
@@ -58,6 +58,8 @@ module mdpc_decoder_demo (
   logic cnu_a_out_valid1;
   logic [MSG_W-1:0] c2v_msg0;
   logic [MSG_W-1:0] c2v_msg1;
+  logic signed [MSG_W-1:0] c2v_msg_tc0;
+  logic signed [MSG_W-1:0] c2v_msg_tc1;
   logic signed [APP_W-1:0] prior_msg;
   logic signed [APP_W-1:0] vnu_app;
   logic vnu_x_out;
@@ -66,8 +68,8 @@ module mdpc_decoder_demo (
   logic vnu_last_accum;
   logic vnu_accum_valid0;
   logic vnu_accum_valid1;
-  logic [MSG_W-1:0] vnu_accum_c2v0;
-  logic [MSG_W-1:0] vnu_accum_c2v1;
+  logic signed [MSG_W-1:0] vnu_accum_c2v0;
+  logic signed [MSG_W-1:0] vnu_accum_c2v1;
   logic [MSG_W-1:0] vnu_u_next [0:W-1];
   logic [R-1:0] syndrome_next;
   logic cnu_a_flush_pending;
@@ -101,6 +103,12 @@ module mdpc_decoder_demo (
   logic i_load_first_col_en;
   logic i_shift_en;
 
+  // Top-level message-format convention:
+  // - RAM U and the CNU-side interfaces use sign-magnitude messages.
+  // - RAM T and the VNU-side interfaces use signed 2's-complement messages.
+  // The only sign-magnitude <-> 2's-complement conversions are placed on
+  // those two boundaries.
+
   assign current_bank = active_var_idx[VAR_W-1];
   assign current_scan_limit =
     (current_lane_count[0] >= current_lane_count[1]) ? current_lane_count[0] : current_lane_count[1];
@@ -131,6 +139,20 @@ module mdpc_decoder_demo (
   assign u_wr_en = (state == DEC_VNU) && vnu_result_valid;
   assign vnu_start_var = (state == DEC_VNU) && (scan_slot == '0);
   assign vnu_last_accum = (state == DEC_VNU) && (scan_slot == VNU_LAST_SLOT);
+
+  function automatic logic signed [MSG_W-1:0] signmag_to_tc_msg(
+    input logic [MSG_W-1:0] signmag_msg
+  );
+    logic signed [MSG_W-1:0] mag_tc;
+    begin
+      mag_tc = $signed({1'b0, signmag_msg[MSG_MAG_LSB +: D]});
+      if (signmag_msg[MSG_SIGN_BIT] && (signmag_msg[MSG_MAG_LSB +: D] != '0)) begin
+        signmag_to_tc_msg = -mag_tc;
+      end else begin
+        signmag_to_tc_msg = mag_tc;
+      end
+    end
+  endfunction
 
   always_comb begin
     integer row_idx_local;
@@ -186,6 +208,10 @@ module mdpc_decoder_demo (
       vnu_accum_c2v1 = t_msgs[edge_linear_idx];
     end
   end
+
+  // Convert CNU_B's sign-magnitude c2v output once before caching it in RAM T.
+  assign c2v_msg_tc0 = signmag_to_tc_msg(c2v_msg0);
+  assign c2v_msg_tc1 = signmag_to_tc_msg(c2v_msg1);
 
   assign m_clear_en = (state == DEC_LOAD) || continue_decode;
   assign i_shift_en = (cnu_a_issue_phase || (state == DEC_CNU_B)) && advance_var;
@@ -309,11 +335,11 @@ module mdpc_decoder_demo (
     .wr_en0(t_wr_en0),
     .wr_var0(active_var_idx),
     .wr_edge0(lane_edge0_edge_slot),
-    .wr_msg0(c2v_msg0),
+    .wr_msg0(c2v_msg_tc0),
     .wr_en1(t_wr_en1),
     .wr_var1(active_var_idx),
     .wr_edge1(lane_edge1_edge_slot),
-    .wr_msg1(c2v_msg1)
+    .wr_msg1(c2v_msg_tc1)
   );
 
   mdpc_msg_ram_u u_u_ram (

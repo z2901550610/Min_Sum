@@ -10,8 +10,9 @@
 #define MDPC_L 2
 #define MDPC_I_MAX 4
 #define MDPC_C_VAL 9
-#define MDPC_ALPHA_NUM 3
-#define MDPC_ALPHA_SHIFT 5
+#define MDPC_ALPHA_FRAC_W 6
+#define MDPC_ALPHA_SHIFT_0 4
+#define MDPC_ALPHA_SHIFT_1 5
 #define MDPC_MAG_MAX 15
 #define MDPC_ROW_SPLIT (MDPC_R / 2)
 
@@ -88,7 +89,11 @@ static int gamma_from_bit(uint8_t bit_value) {
 
 static int alpha_scale(int value) {
     int abs_value = value < 0 ? -value : value;
-    int scaled_abs = ((MDPC_ALPHA_NUM * abs_value) + (1 << (MDPC_ALPHA_SHIFT - 1))) >> MDPC_ALPHA_SHIFT;
+    int scaled_abs = 0;
+    scaled_abs += abs_value << (MDPC_ALPHA_FRAC_W - MDPC_ALPHA_SHIFT_0);
+    scaled_abs += abs_value << (MDPC_ALPHA_FRAC_W - MDPC_ALPHA_SHIFT_1);
+    scaled_abs += 1 << (MDPC_ALPHA_FRAC_W - 1);
+    scaled_abs >>= MDPC_ALPHA_FRAC_W;
     return value < 0 ? -scaled_abs : scaled_abs;
 }
 

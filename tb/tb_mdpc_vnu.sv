@@ -3,6 +3,8 @@
 module tb_mdpc_vnu;
   import mdpc_demo_pkg::*;
 
+  localparam int VNU_TC_W = APP_W + ((W > 1) ? $clog2(W + 1) : 1);
+
   logic clk;
   logic rst_n;
   logic clear_en;
@@ -10,14 +12,29 @@ module tb_mdpc_vnu;
   logic last_accum;
   logic signed [APP_W-1:0] prior_msg_in;
   logic accum_valid0;
-  logic [MSG_W-1:0] accum_c2v0;
+  logic signed [MSG_W-1:0] accum_c2v0;
   logic accum_valid1;
-  logic [MSG_W-1:0] accum_c2v1;
-  logic [MSG_W-1:0] cached_c2v_in [0:W-1];
+  logic signed [MSG_W-1:0] accum_c2v1;
+  logic signed [MSG_W-1:0] cached_c2v_in [0:W-1];
   logic result_valid;
   logic signed [APP_W-1:0] app_out;
   logic x_out;
   logic [MSG_W-1:0] u_next_out [0:W-1];
+
+  function automatic logic signed [MSG_W-1:0] msg_tc(
+    input logic msg_sign,
+    input logic [D-1:0] msg_mag
+  );
+    logic signed [MSG_W-1:0] mag_tc;
+    begin
+      mag_tc = $signed({1'b0, msg_mag});
+      if (msg_sign && (msg_mag != '0)) begin
+        msg_tc = -mag_tc;
+      end else begin
+        msg_tc = mag_tc;
+      end
+    end
+  endfunction
 
   mdpc_vnu dut (
     .clk(clk),
@@ -43,23 +60,32 @@ module tb_mdpc_vnu;
   task automatic load_case0;
     begin
       prior_msg_in = 9;
-      cached_c2v_in[0] = {1'b0, D'(15)};
-      cached_c2v_in[1] = {1'b0, D'(15)};
-      cached_c2v_in[2] = {1'b1, D'(9)};
+      cached_c2v_in[0] = msg_tc(1'b0, D'(15));
+      cached_c2v_in[1] = msg_tc(1'b0, D'(15));
+      cached_c2v_in[2] = msg_tc(1'b1, D'(9));
     end
   endtask
 
   task automatic load_case1;
     begin
       prior_msg_in = 31;
-      cached_c2v_in[0] = {1'b1, D'(15)};
-      cached_c2v_in[1] = {1'b1, D'(15)};
-      cached_c2v_in[2] = {1'b1, D'(15)};
+      cached_c2v_in[0] = msg_tc(1'b1, D'(15));
+      cached_c2v_in[1] = msg_tc(1'b1, D'(15));
+      cached_c2v_in[2] = msg_tc(1'b1, D'(15));
     end
   endtask
 
   task automatic run_two_cycle_accum;
+    logic signed [VNU_TC_W-1:0] expected_partial_sum;
     begin
+      expected_partial_sum = {
+        {(VNU_TC_W - MSG_W){cached_c2v_in[0][MSG_W-1]}},
+        cached_c2v_in[0]
+      } + {
+        {(VNU_TC_W - MSG_W){cached_c2v_in[1][MSG_W-1]}},
+        cached_c2v_in[1]
+      };
+
       start_var = 1'b1;
       last_accum = 1'b0;
       accum_valid0 = 1'b1;
@@ -69,6 +95,8 @@ module tb_mdpc_vnu;
       @(posedge clk);
       #1;
       if (result_valid !== 1'b0) $fatal(1, "result_valid should stay low before last accumulation cycle");
+      if (dut.accum_sum_reg !== expected_partial_sum) $fatal(1, "partial accumulation mismatch: got %0d exp %0d", dut.accum_sum_reg, expected_partial_sum);
+      if (app_out !== '0) $fatal(1, "app_out should stay idle before last accumulation cycle");
 
       start_var = 1'b0;
       last_accum = 1'b1;

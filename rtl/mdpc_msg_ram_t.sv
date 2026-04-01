@@ -3,20 +3,24 @@ module mdpc_msg_ram_t (
   input  logic rst_n,
   input  logic clear_en,
   input  logic [VAR_W-1:0] rd_var,
-  output logic [MSG_W-1:0] rd_msgs [0:W-1],
+  output logic signed [MSG_W-1:0] rd_msgs [0:W-1],
   input  logic wr_en0,
   input  logic [VAR_W-1:0] wr_var0,
   input  logic [EDGE_W-1:0] wr_edge0,
-  input  logic [MSG_W-1:0] wr_msg0,
+  input  logic signed [MSG_W-1:0] wr_msg0,
   input  logic wr_en1,
   input  logic [VAR_W-1:0] wr_var1,
   input  logic [EDGE_W-1:0] wr_edge1,
-  input  logic [MSG_W-1:0] wr_msg1
+  input  logic signed [MSG_W-1:0] wr_msg1
 );
 
   import mdpc_demo_pkg::*;
 
-  logic [MSG_W-1:0] mem [0:N-1][0:W-1];
+  // RAM T stores c2v messages in signed 2's-complement form. The only
+  // sign-magnitude -> 2's-complement conversion happens before writes into
+  // this RAM, and VNU consumes the stored values directly.
+
+  logic signed [MSG_W-1:0] mem [0:N-1][0:W-1];
   always_comb begin
     integer edge_idx_local;
 

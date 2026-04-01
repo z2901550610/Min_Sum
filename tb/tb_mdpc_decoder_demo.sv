@@ -60,6 +60,19 @@ module tb_mdpc_decoder_demo;
     end
   endtask
 
+  function automatic int c2v_signmag_to_tc(
+    input int msg_sign,
+    input int msg_mag
+  );
+    begin
+      if (msg_sign != 0 && msg_mag != 0) begin
+        c2v_signmag_to_tc = -msg_mag;
+      end else begin
+        c2v_signmag_to_tc = msg_mag;
+      end
+    end
+  endfunction
+
   initial begin
     int case0_hist [0:I_MAX-1];
     int case1_hist [0:I_MAX-1];
@@ -94,8 +107,7 @@ module tb_mdpc_decoder_demo;
     for (idx = 0; idx < N; idx++) begin
       int edge_idx;
       for (edge_idx = 0; edge_idx < W; edge_idx++) begin
-        if (int'(dut.u_t_ram.mem[idx][edge_idx][MSG_SIGN_BIT]) != CASE1_FIRST_C2V_SIGN[flat_idx]) $fatal(1, "CASE1 c2v sign[%0d] mismatch", flat_idx);
-        if (int'(dut.u_t_ram.mem[idx][edge_idx][MSG_MAG_LSB +: D]) != CASE1_FIRST_C2V_MAG[flat_idx]) $fatal(1, "CASE1 c2v mag[%0d] mismatch", flat_idx);
+        if (int'($signed(dut.u_t_ram.mem[idx][edge_idx])) != c2v_signmag_to_tc(CASE1_FIRST_C2V_SIGN[flat_idx], CASE1_FIRST_C2V_MAG[flat_idx])) $fatal(1, "CASE1 c2v tc[%0d] mismatch", flat_idx);
         flat_idx += 1;
       end
     end
