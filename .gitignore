@@ -11,7 +11,7 @@
 *.gcov
 
 # Generated simulation binaries and support files
-/golden/mdpc_min_sum_golden
+/golden/*_golden
 /tb/generated/
 
 # Waveforms, traces, and logs
