@@ -18,9 +18,8 @@ module mdpc_vnu (
 
   import mdpc_demo_pkg::*;
 
-  // VNU operates internally in signed 2's-complement. Incoming c2v values are
-  // already converted and outgoing u/v2c values are converted
-  // back to sign-magnitude only at the VNU output boundary.
+  // VNU stays in signed 2's-complement: RAM T already holds signed c2v, and
+  // only the final u_next values are converted back to sign-magnitude.
 
   localparam int VNU_TC_W = APP_W + ((W > 1) ? $clog2(W + 1) : 1);
   localparam int SCALE_W = VNU_TC_W + ALPHA_FRAC_W;
@@ -69,7 +68,7 @@ module mdpc_vnu (
     end
   endfunction
 
-  // using two nonzero fractional bits and a rounding bias. 
+  // alpha is represented as two fractional shifts plus round-to-nearest bias.
   function automatic logic [VNU_TC_W-1:0] alpha_scale_mag(
     input logic [VNU_TC_W-1:0] mag_value
   );
@@ -88,7 +87,7 @@ module mdpc_vnu (
     end
   endfunction
 
-  // Apply alpha scaling with rounding in 2's-complement domain.
+  // Preserve sign while scaling the magnitude.
   function automatic logic signed [VNU_TC_W-1:0] alpha_scale(
     input logic signed [VNU_TC_W-1:0] tc_value
   );
@@ -101,8 +100,8 @@ module mdpc_vnu (
     end
   endfunction
 
-  // Convert a signed 2's-complement result back to sign-magnitude and
-  // saturate the magnitude before writing u_ij back to RAM U.
+  // RAM U has D magnitude bits, so clamp the VNU result before crossing back
+  // to sign-magnitude.
   function automatic logic [MSG_W-1:0] tc_to_signmag_sat(
     input logic signed [VNU_TC_W-1:0] tc_value
   );
@@ -133,8 +132,7 @@ module mdpc_vnu (
     logic signed [VNU_TC_W-1:0] scaled_cached_c2v_signed;
     logic signed [VNU_TC_W-1:0] next_u_signed;
 
-    // Accumulate up to two already-converted 2's-complement c2v messages
-    // per cycle.
+    // Accumulate up to L=2 c2v messages per cycle.
     cycle_accum_sum = '0;
     accum_valid_any = 1'b0;
     if (accum_valid0) begin
@@ -146,16 +144,14 @@ module mdpc_vnu (
       accum_valid_any = 1'b1;
     end
 
-    // Start a fresh variable-node accumulation on the first cycle; otherwise
-    // keep accumulating on top of the registered partial sum.
+    // start_var selects the first cycle of a variable-node accumulation.
     if (start_var) begin
       accum_sum_next = cycle_accum_sum;
     end else begin
       accum_sum_next = accum_sum_reg + cycle_accum_sum;
     end
 
-    // Per Fig. 7 in the paper, the column sum is accumulated first and only
-    // the completed sum is scaled and combined with gamma_j.
+    // Scale the completed c2v sum once, then add the channel prior gamma_j.
     prior_msg_sign_extend = {{(VNU_TC_W - APP_W){prior_msg_in[APP_W-1]}}, prior_msg_in};
     final_accum_cycle = last_accum && accum_valid_any;
     result_valid = final_accum_cycle;
@@ -167,9 +163,7 @@ module mdpc_vnu (
     app_out = '0;
     x_out = 1'b0;
 
-    // Reuse the cached 2's-complement c2v messages from RAM T to form every
-    // next-iteration u_ij = app - alpha * v_ij without any internal
-    // sign-magnitude conversions.
+    // cached_c2v_in is reused to form u_next = app - alpha * c2v for every edge.
     for (edge_idx = 0; edge_idx < W; edge_idx++) begin
       u_next_out[edge_idx] = '0;
     end
@@ -194,8 +188,7 @@ module mdpc_vnu (
       accum_sum_reg <= '0;
     end else if (clear_en) begin
       accum_sum_reg <= '0;
-    // The last accumulation cycle consumes the current partial sum directly,
-    // so there is no need to write it back into the running-sum register.
+    // The final cycle consumes accum_sum_next directly; no register writeback.
     end else if ((start_var || accum_valid_any) && !last_accum) begin
       accum_sum_reg <= accum_sum_next;
     end

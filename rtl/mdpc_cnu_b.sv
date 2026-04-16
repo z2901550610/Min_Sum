@@ -7,8 +7,9 @@ module mdpc_cnu_b (
 
   import mdpc_demo_pkg::*;
 
-  // CNU_B stays in sign-magnitude domain so it can emit the outgoing c2v sign
-  // and selected min magnitude directly from the row-state summary.
+  // CNU_B reconstructs each c2v from the compressed row state: use min2 for
+  // the variable that supplied min1, otherwise min1; sign removes this edge's
+  // original v2c/u sign from the row parity.
 
   logic [D-1:0] c2v_min1_mag;
   logic [D-1:0] c2v_min2_mag;

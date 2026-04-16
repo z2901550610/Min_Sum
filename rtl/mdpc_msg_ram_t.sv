@@ -16,9 +16,8 @@ module mdpc_msg_ram_t (
 
   import mdpc_demo_pkg::*;
 
-  // RAM T stores c2v messages in signed 2's-complement form. The only
-  // sign-magnitude -> 2's-complement conversion happens before writes into
-  // this RAM, and VNU consumes the stored values directly.
+  // RAM T caches c2v in signed 2's-complement so VNU can accumulate and form
+  // u_next without per-cycle sign-magnitude decoding.
 
   logic signed [MSG_W-1:0] mem [0:N-1][0:W-1];
   always_comb begin

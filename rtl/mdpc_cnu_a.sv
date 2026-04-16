@@ -13,8 +13,9 @@ module mdpc_cnu_a (
 
   import mdpc_demo_pkg::*;
 
-  // CNU datapath uses sign-magnitude messages: the sign bit feeds the row
-  // parity xor, while the magnitude bits feed the min1/min2 comparison tree.
+  // CNU_A compresses one check row into {min1, min2, min_id, sign_xor}. The
+  // sign-magnitude v2c/u format lets sign feed sign_xor and magnitude feed the
+  // min1/min2 update without conversion.
 
   logic               v2c_sign;
   logic [D-1:0]       v2c_mag;

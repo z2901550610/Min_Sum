@@ -16,8 +16,8 @@ module mdpc_msg_ram_u (
 
   import mdpc_demo_pkg::*;
 
-  // RAM U stores v2c/u messages in sign-magnitude form because the CNU side
-  // consumes sign and magnitude separately for xor/min operations.
+  // RAM U stores v2c/u in sign-magnitude, matching CNU_A's sign_xor and
+  // min-magnitude datapath.
 
   logic [MSG_W-1:0] mem [0:N-1][0:W-1];
   integer var_idx;

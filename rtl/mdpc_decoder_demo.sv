@@ -104,11 +104,9 @@ module mdpc_decoder_demo (
   logic i_load_first_col_en;
   logic i_shift_en;
 
-  // Top-level message-format convention:
-  // - RAM U and the CNU-side interfaces use sign-magnitude messages.
-  // - RAM T and the VNU-side interfaces use signed 2's-complement messages.
-  // The only sign-magnitude <-> 2's-complement conversions are placed on
-  // those two boundaries.
+  // Message-format boundary: RAM U and CNU-side paths use sign-magnitude;
+  // RAM T and VNU-side paths use signed 2's-complement. Keep conversions at
+  // CNU_B -> RAM T and VNU -> RAM U so each datapath has one internal format.
 
   assign current_bank = BANK_W'(int'(active_var_idx) / R);
   assign current_scan_limit =
@@ -209,13 +207,15 @@ module mdpc_decoder_demo (
     end
   end
 
-  // Convert CNU_B's sign-magnitude c2v output once before caching it in RAM T.
+  // CNU_B emits sign-magnitude; RAM T caches c2v in the VNU's signed domain.
   assign c2v_msg_tc0 = signmag_to_tc_msg(c2v_msg0);
   assign c2v_msg_tc1 = signmag_to_tc_msg(c2v_msg1);
 
   assign m_clear_en = (state == DEC_LOAD) || continue_decode;
   assign i_shift_en = (cnu_a_issue_phase || (state == DEC_CNU_B)) && advance_var;
 
+  // CNU_A returns row-state updates one cycle after issue, so the writeback
+  // address and edge metadata are delayed to match out_valid.
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       cnu_a_wr_row0 <= '0;
@@ -417,6 +417,9 @@ module mdpc_decoder_demo (
     .u_next_out(vnu_u_next)
   );
 
+  // Iteration schedule: LOAD initializes memories, CNU_A compresses all rows,
+  // CNU_B expands c2v into RAM T, VNU updates C1/RAM U, and CHECK tests the
+  // end-of-iteration syndrome before either stopping or starting the next pass.
   always_ff @(posedge clk or negedge rst_n) begin
     integer row_idx_local;
 

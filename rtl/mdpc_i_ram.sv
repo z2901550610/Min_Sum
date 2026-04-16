@@ -18,6 +18,8 @@ module mdpc_i_ram (
   logic [I_ENTRY_W-1:0] shifted_entries [0:L-1][0:W-1];
   logic [LANE_COUNT_W-1:0] shifted_count [0:L-1];
 
+  // RAM I stores only the current QC column's nonzero row indices. Rows are
+  // split into lane-local addresses so each lane can drive its RAM M segment.
   always_comb begin
     integer bank_idx_local;
     integer lane_idx_local;
@@ -54,6 +56,8 @@ module mdpc_i_ram (
     end
   end
 
+  // Advancing one QC column is a +1 mod R row rotation for the selected bank.
+  // Entries may cross the lane split, so the next lane-local lists are rebuilt.
   always_comb begin
     integer lane_idx_local;
     integer slot_idx_local;

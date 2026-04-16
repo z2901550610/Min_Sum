@@ -7,6 +7,9 @@ module mdpc_h_shift (
 
   import mdpc_demo_pkg::*;
 
+  // Expand lane-local RAM I entries into global edge descriptors used by the
+  // top-level scheduler. row_local addresses lane memories; row_global indexes
+  // the full parity-check row space.
   always_comb begin
     integer lane_idx_local;
     integer edge_idx_local;
