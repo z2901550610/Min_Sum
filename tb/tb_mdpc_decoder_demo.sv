@@ -8,6 +8,7 @@ module tb_mdpc_decoder_demo;
   logic clk;
   logic rst_n;
   logic start;
+  logic [H_SEL_W-1:0] h_sel;
   logic [N-1:0] x_in;
   logic done;
   logic success;
@@ -20,6 +21,7 @@ module tb_mdpc_decoder_demo;
     .clk(clk),
     .rst_n(rst_n),
     .start(start),
+    .h_sel(h_sel),
     .x_in(x_in),
     .done(done),
     .success(success),
@@ -34,6 +36,7 @@ module tb_mdpc_decoder_demo;
     begin
       rst_n = 1'b0;
       start = 1'b0;
+      h_sel = '0;
       x_in = '0;
       repeat (2) @(posedge clk);
       rst_n = 1'b1;

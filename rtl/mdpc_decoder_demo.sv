@@ -2,6 +2,7 @@ module mdpc_decoder_demo (
   input  logic clk,
   input  logic rst_n,
   input  logic start,
+  input  logic [H_SEL_W-1:0] h_sel,
   input  logic [N-1:0] x_in,
   output logic done,
   output logic success,
@@ -22,10 +23,10 @@ module mdpc_decoder_demo (
 
   logic [VAR_W-1:0] active_var_idx;
   logic [EDGE_W-1:0] scan_slot;
-  logic [0:0] current_bank;
+  logic [BANK_W-1:0] current_bank;
   logic [I_ENTRY_W-1:0] current_lane_entries [0:L-1][0:W-1];
-  logic [1:0] current_lane_count [0:L-1];
-  logic [1:0] current_scan_limit;
+  logic [LANE_COUNT_W-1:0] current_lane_count [0:L-1];
+  logic [LANE_COUNT_W-1:0] current_scan_limit;
   logic [LANE_EDGE_W-1:0] current_lane_edges [0:L-1][0:W-1];
   logic [LANE_EDGE_W-1:0] lane_edge0;
   logic [LANE_EDGE_W-1:0] lane_edge1;
@@ -109,7 +110,7 @@ module mdpc_decoder_demo (
   // The only sign-magnitude <-> 2's-complement conversions are placed on
   // those two boundaries.
 
-  assign current_bank = active_var_idx[VAR_W-1];
+  assign current_bank = BANK_W'(int'(active_var_idx) / R);
   assign current_scan_limit =
     (current_lane_count[0] >= current_lane_count[1]) ? current_lane_count[0] : current_lane_count[1];
   assign lane_edge0 = current_lane_edges[0][scan_slot];
@@ -155,26 +156,25 @@ module mdpc_decoder_demo (
   endfunction
 
   always_comb begin
-    integer row_idx_local;
     integer var_idx_local;
     integer bank_idx_local;
     integer col_idx_local;
     integer edge_idx_local;
-    logic parity_local;
+    integer row_idx_local;
 
     syndrome_next = '0;
-    for (row_idx_local = 0; row_idx_local < R; row_idx_local++) begin
-      parity_local = 1'b0;
-      for (var_idx_local = 0; var_idx_local < N; var_idx_local++) begin
+    bank_idx_local = 0;
+    col_idx_local = 0;
+    row_idx_local = 0;
+    for (var_idx_local = 0; var_idx_local < N; var_idx_local++) begin
+      if (c1_bits[var_idx_local]) begin
         bank_idx_local = var_idx_local / R;
         col_idx_local = var_idx_local % R;
         for (edge_idx_local = 0; edge_idx_local < W; edge_idx_local++) begin
-          if (((H_BASE[bank_idx_local][edge_idx_local] + col_idx_local) % R) == row_idx_local) begin
-            parity_local ^= c1_bits[var_idx_local];
-          end
+          row_idx_local = (H_BASE[h_sel][bank_idx_local][edge_idx_local] + col_idx_local) % R;
+          syndrome_next[row_idx_local] ^= 1'b1;
         end
       end
-      syndrome_next[row_idx_local] = parity_local;
     end
   end
 
@@ -246,6 +246,7 @@ module mdpc_decoder_demo (
     .rst_n(rst_n),
     .load_first_col_en(i_load_first_col_en),
     .shift_en(i_shift_en),
+    .h_sel(h_sel),
     .bank_sel(current_bank),
     .lane_entries(current_lane_entries),
     .lane_count(current_lane_count)

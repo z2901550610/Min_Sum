@@ -13,9 +13,13 @@ package mdpc_demo_pkg;
   parameter int MAG_MAX = (1 << D) - 1;
   parameter int ROW_SPLIT = R / 2;
   parameter int APP_W = 8;
-  parameter int VAR_W = 4;
-  parameter int ROW_W = 3;
-  parameter int EDGE_W = 2;
+  parameter int VAR_W = (N > 1) ? $clog2(N) : 1;
+  parameter int ROW_W = (R > 1) ? $clog2(R) : 1;
+  parameter int EDGE_W = (W > 1) ? $clog2(W) : 1;
+  parameter int BANK_W = (N0 > 1) ? $clog2(N0) : 1;
+  parameter int LANE_COUNT_W = (W > 1) ? $clog2(W + 1) : 1;
+  parameter int H_NUM = 1;
+  parameter int H_SEL_W = (H_NUM > 1) ? $clog2(H_NUM) : 1;
   localparam int DEC_STATE_W = 3;
   localparam logic [DEC_STATE_W-1:0] DEC_IDLE  = 3'd0;
   localparam logic [DEC_STATE_W-1:0] DEC_LOAD  = 3'd1;
@@ -51,8 +55,10 @@ package mdpc_demo_pkg;
   localparam int I_ENTRY_EDGE_SLOT_LSB = I_ENTRY_ROW_LOCAL_LSB + ROW_W;
   localparam int I_ENTRY_W = I_ENTRY_EDGE_SLOT_LSB + EDGE_W;
 
-  localparam int unsigned H_BASE [0:N0-1][0:W-1] = '{
-    '{0, 1, 3},
-    '{0, 2, 5}
+  localparam int unsigned H_BASE [0:H_NUM-1][0:N0-1][0:W-1] = '{
+    '{
+      '{0, 1, 3},
+      '{0, 2, 5}
+    }
   };
 endpackage

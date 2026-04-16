@@ -5,9 +5,11 @@ VERILATOR_FLAGS ?= --binary --sv -Wall -Wno-fatal -I./tb
 
 GOLDEN_BIN := golden/mdpc_min_sum_golden
 VECTOR_SVH := tb/generated/mdpc_demo_vectors.svh
-RTL := rtl/mdpc_demo_pkg.sv rtl/mdpc_i_ram.sv rtl/mdpc_bit_ram_c.sv rtl/mdpc_row_state_ram_m.sv rtl/mdpc_sign_ram_s.sv rtl/mdpc_msg_ram_t.sv rtl/mdpc_msg_ram_u.sv rtl/mdpc_h_shift.sv rtl/mdpc_cnu_a.sv rtl/mdpc_cnu_b.sv rtl/mdpc_vnu.sv rtl/mdpc_decoder_demo.sv
+RTL_CORE := rtl/mdpc_i_ram.sv rtl/mdpc_bit_ram_c.sv rtl/mdpc_row_state_ram_m.sv rtl/mdpc_sign_ram_s.sv rtl/mdpc_msg_ram_t.sv rtl/mdpc_msg_ram_u.sv rtl/mdpc_h_shift.sv rtl/mdpc_cnu_a.sv rtl/mdpc_cnu_b.sv rtl/mdpc_vnu.sv rtl/mdpc_decoder_demo.sv
+RTL := rtl/mdpc_demo_pkg.sv $(RTL_CORE)
+PAPER_RTL := tb/mdpc_paper_pkg.sv $(RTL_CORE)
 
-.PHONY: all golden sim test test-unit test-integration
+.PHONY: all golden sim test test-unit test-integration test-paper test-paper-random
 
 all: test
 
@@ -32,5 +34,12 @@ test-unit: $(VECTOR_SVH)
 test-integration: $(VECTOR_SVH)
 	$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_mdpc_decoder_demo $(RTL) tb/tb_mdpc_decoder_demo.sv
 	./obj_dir/Vtb_mdpc_decoder_demo
+
+test-paper:
+	$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_mdpc_decoder_paper $(PAPER_RTL) tb/tb_mdpc_decoder_paper.sv
+	./obj_dir/Vtb_mdpc_decoder_paper
+
+test-paper-random:
+	python3 scripts/run_paper_random.py
 
 sim: test

@@ -3,19 +3,20 @@ module mdpc_i_ram (
   input  logic rst_n,
   input  logic load_first_col_en,
   input  logic shift_en,
-  input  logic [0:0] bank_sel,
+  input  logic [H_SEL_W-1:0] h_sel,
+  input  logic [BANK_W-1:0] bank_sel,
   output logic [I_ENTRY_W-1:0] lane_entries [0:L-1][0:W-1],
-  output logic [1:0] lane_count [0:L-1]
+  output logic [LANE_COUNT_W-1:0] lane_count [0:L-1]
 );
 
   import mdpc_demo_pkg::*;
 
   logic [I_ENTRY_W-1:0] mem [0:N0-1][0:L-1][0:W-1];
-  logic [1:0] count_mem [0:N0-1][0:L-1];
+  logic [LANE_COUNT_W-1:0] count_mem [0:N0-1][0:L-1];
   logic [I_ENTRY_W-1:0] first_col_entries [0:N0-1][0:L-1][0:W-1];
-  logic [1:0] first_col_count [0:N0-1][0:L-1];
+  logic [LANE_COUNT_W-1:0] first_col_count [0:N0-1][0:L-1];
   logic [I_ENTRY_W-1:0] shifted_entries [0:L-1][0:W-1];
-  logic [1:0] shifted_count [0:L-1];
+  logic [LANE_COUNT_W-1:0] shifted_count [0:L-1];
 
   always_comb begin
     integer bank_idx_local;
@@ -34,7 +35,7 @@ module mdpc_i_ram (
       end
 
       for (edge_idx_local = 0; edge_idx_local < W; edge_idx_local++) begin
-        row_value_local = H_BASE[bank_idx_local][edge_idx_local];
+        row_value_local = H_BASE[h_sel][bank_idx_local][edge_idx_local];
         if (row_value_local < ROW_SPLIT) begin
           lane_idx_local = 0;
           row_local_value = row_value_local;
