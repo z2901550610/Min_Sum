@@ -1,3 +1,9 @@
+`ifdef MDPC_PAPER_CFG
+import mdpc_paper_pkg::*;
+`else
+import mdpc_demo_pkg::*;
+`endif
+
 module mdpc_i_ram (
   input  logic clk,
   input  logic rst_n,
@@ -9,7 +15,11 @@ module mdpc_i_ram (
   output logic [LANE_COUNT_W-1:0] lane_count [0:L-1]
 );
 
+`ifdef MDPC_PAPER_CFG
+  import mdpc_paper_pkg::*;
+`else
   import mdpc_demo_pkg::*;
+`endif
 
   logic [I_ENTRY_W-1:0] mem [0:N0-1][0:L-1][0:W-1];
   logic [LANE_COUNT_W-1:0] count_mem [0:N0-1][0:L-1];

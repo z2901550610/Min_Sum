@@ -1,3 +1,9 @@
+`ifdef MDPC_PAPER_CFG
+import mdpc_paper_pkg::*;
+`else
+import mdpc_demo_pkg::*;
+`endif
+
 module mdpc_sign_ram_s (
   input  logic clk,
   input  logic rst_n,
@@ -18,7 +24,11 @@ module mdpc_sign_ram_s (
   input  logic wr_sign1
 );
 
+`ifdef MDPC_PAPER_CFG
+  import mdpc_paper_pkg::*;
+`else
   import mdpc_demo_pkg::*;
+`endif
 
   logic mem [0:N-1][0:W-1];
   integer var_idx;

@@ -1,3 +1,9 @@
+`ifdef MDPC_PAPER_CFG
+import mdpc_paper_pkg::*;
+`else
+import mdpc_demo_pkg::*;
+`endif
+
 module mdpc_h_shift (
   input  logic [VAR_W-1:0] var_idx,
   input  logic [I_ENTRY_W-1:0] lane_entries [0:L-1][0:W-1],
@@ -5,7 +11,11 @@ module mdpc_h_shift (
   output logic [LANE_EDGE_W-1:0] lane_edges [0:L-1][0:W-1]
 );
 
+`ifdef MDPC_PAPER_CFG
+  import mdpc_paper_pkg::*;
+`else
   import mdpc_demo_pkg::*;
+`endif
 
   // Expand lane-local RAM I entries into global edge descriptors used by the
   // top-level scheduler. row_local addresses lane memories; row_global indexes

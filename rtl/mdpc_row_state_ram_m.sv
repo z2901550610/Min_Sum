@@ -1,3 +1,9 @@
+`ifdef MDPC_PAPER_CFG
+import mdpc_paper_pkg::*;
+`else
+import mdpc_demo_pkg::*;
+`endif
+
 module mdpc_row_state_ram_m (
   input  logic clk,
   input  logic rst_n,
@@ -18,7 +24,11 @@ module mdpc_row_state_ram_m (
   input  logic [ROW_STATE_W-1:0] wr_data1
 );
 
+`ifdef MDPC_PAPER_CFG
+  import mdpc_paper_pkg::*;
+`else
   import mdpc_demo_pkg::*;
+`endif
 
   logic [ROW_STATE_W-1:0] mem [0:R-1];
   integer row_idx;

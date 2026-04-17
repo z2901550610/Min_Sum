@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
 
 module tb_mdpc_decoder_paper;
-  import mdpc_demo_pkg::*;
+  import mdpc_paper_pkg::*;
 
   localparam int ERR_COUNT = 84;
   localparam int TIMEOUT_CYCLES = 50_000_000;

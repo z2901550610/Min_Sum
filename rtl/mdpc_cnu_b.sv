@@ -1,3 +1,9 @@
+`ifdef MDPC_PAPER_CFG
+import mdpc_paper_pkg::*;
+`else
+import mdpc_demo_pkg::*;
+`endif
+
 module mdpc_cnu_b (
   input  logic [ROW_STATE_W-1:0] c2v_compact_msg_in,
   input  logic v2c_sign_in,
@@ -5,7 +11,11 @@ module mdpc_cnu_b (
   output logic [MSG_W-1:0] c2v_msg_out
 );
 
+`ifdef MDPC_PAPER_CFG
+  import mdpc_paper_pkg::*;
+`else
   import mdpc_demo_pkg::*;
+`endif
 
   // CNU_B reconstructs each c2v from the compressed row state: use min2 for
   // the variable that supplied min1, otherwise min1; sign removes this edge's

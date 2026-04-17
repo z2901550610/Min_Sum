@@ -1,3 +1,9 @@
+`ifdef MDPC_PAPER_CFG
+import mdpc_paper_pkg::*;
+`else
+import mdpc_demo_pkg::*;
+`endif
+
 module mdpc_cnu_a (
   input  logic clk,
   input  logic rst_n,
@@ -11,7 +17,11 @@ module mdpc_cnu_a (
   output logic out_valid
 );
 
+`ifdef MDPC_PAPER_CFG
+  import mdpc_paper_pkg::*;
+`else
   import mdpc_demo_pkg::*;
+`endif
 
   // CNU_A compresses one check row into {min1, min2, min_id, sign_xor}. The
   // sign-magnitude v2c/u format lets sign feed sign_xor and magnitude feed the

@@ -69,7 +69,7 @@ test-integration: $(VECTOR_SVH)
 	./obj_dir/Vtb_mdpc_decoder_demo
 
 test-paper:
-	$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_mdpc_decoder_paper $(PAPER_RTL) tb/tb_mdpc_decoder_paper.sv
+	$(VERILATOR) $(VERILATOR_FLAGS) -DMDPC_PAPER_CFG --top-module tb_mdpc_decoder_paper $(PAPER_RTL) tb/tb_mdpc_decoder_paper.sv
 	./obj_dir/Vtb_mdpc_decoder_paper
 
 test-paper-random:

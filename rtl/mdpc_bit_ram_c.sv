@@ -1,3 +1,9 @@
+`ifdef MDPC_PAPER_CFG
+import mdpc_paper_pkg::*;
+`else
+import mdpc_demo_pkg::*;
+`endif
+
 module mdpc_bit_ram_c (
   input  logic clk,
   input  logic rst_n,
@@ -12,7 +18,11 @@ module mdpc_bit_ram_c (
   output logic [N-1:0] bits_out
 );
 
+`ifdef MDPC_PAPER_CFG
+  import mdpc_paper_pkg::*;
+`else
   import mdpc_demo_pkg::*;
+`endif
 
   logic [N-1:0] mem;
 

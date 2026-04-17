@@ -1,3 +1,9 @@
+`ifdef MDPC_PAPER_CFG
+import mdpc_paper_pkg::*;
+`else
+import mdpc_demo_pkg::*;
+`endif
+
 module mdpc_decoder_demo (
   input  logic clk,
   input  logic rst_n,
@@ -10,7 +16,11 @@ module mdpc_decoder_demo (
   output logic [$clog2(I_MAX + 1)-1:0] iter_count
 );
 
+`ifdef MDPC_PAPER_CFG
+  import mdpc_paper_pkg::*;
+`else
   import mdpc_demo_pkg::*;
+`endif
 
   localparam logic [VAR_W-1:0] LAST_VAR = VAR_W'(N - 1);
   localparam int ITER_W = $clog2(I_MAX + 1);

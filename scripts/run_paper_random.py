@@ -66,7 +66,7 @@ def build_cases(case_count: int, base_seed: int, error_count: int) -> list[dict[
 
 def emit_pkg(path: Path, cases: list[dict[str, object]]) -> None:
     lines = [
-        "package mdpc_demo_pkg;",
+        "package mdpc_paper_pkg;",
         f"  parameter int N0 = {N0};",
         f"  parameter int R = {R};",
         f"  parameter int W = {W};",
@@ -145,7 +145,7 @@ def emit_tb(path: Path, cases: list[dict[str, object]], error_count: int, timeou
         "`timescale 1ns/1ps",
         "",
         "module tb_mdpc_decoder_random;",
-        "  import mdpc_demo_pkg::*;",
+        "  import mdpc_paper_pkg::*;",
         "",
         f"  localparam int ERR_COUNT = {error_count};",
         f"  localparam int TIMEOUT_CYCLES = {timeout_cycles};",
@@ -333,6 +333,7 @@ def main() -> int:
         "-Wall",
         "-Wno-fatal",
         "-I./tb",
+        "-DMDPC_PAPER_CFG",
         "--top-module",
         "tb_mdpc_decoder_random",
         str(pkg_path.relative_to(repo_root)),

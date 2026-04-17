@@ -1,3 +1,9 @@
+`ifdef MDPC_PAPER_CFG
+import mdpc_paper_pkg::*;
+`else
+import mdpc_demo_pkg::*;
+`endif
+
 module mdpc_vnu (
   input  logic clk,
   input  logic rst_n,
@@ -16,7 +22,11 @@ module mdpc_vnu (
   output logic [MSG_W-1:0] u_next_out [0:W-1]
 );
 
+`ifdef MDPC_PAPER_CFG
+  import mdpc_paper_pkg::*;
+`else
   import mdpc_demo_pkg::*;
+`endif
 
   // VNU stays in signed 2's-complement: RAM T already holds signed c2v, and
   // only the final u_next values are converted back to sign-magnitude.

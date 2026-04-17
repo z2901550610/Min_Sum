@@ -1,4 +1,4 @@
-package mdpc_demo_pkg;
+package mdpc_paper_pkg;
   parameter int N0 = 2;
   parameter int R = 4801;
   parameter int W = 45;

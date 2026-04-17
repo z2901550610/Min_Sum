@@ -1,3 +1,9 @@
+`ifdef MDPC_PAPER_CFG
+import mdpc_paper_pkg::*;
+`else
+import mdpc_demo_pkg::*;
+`endif
+
 module mdpc_msg_ram_u (
   input  logic clk,
   input  logic rst_n,
@@ -14,7 +20,11 @@ module mdpc_msg_ram_u (
   input  logic [MSG_W-1:0] wr_msgs [0:W-1]
 );
 
+`ifdef MDPC_PAPER_CFG
+  import mdpc_paper_pkg::*;
+`else
   import mdpc_demo_pkg::*;
+`endif
 
   // RAM U stores v2c/u in sign-magnitude, matching CNU_A's sign_xor and
   // min-magnitude datapath.
