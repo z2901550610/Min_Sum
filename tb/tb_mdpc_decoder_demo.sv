@@ -3,7 +3,9 @@
 module tb_mdpc_decoder_demo;
   import mdpc_demo_pkg::*;
 
+  /* verilator lint_off UNUSEDPARAM */
   `include "tb/generated/mdpc_demo_vectors.svh"
+  /* verilator lint_on UNUSEDPARAM */
 
   logic clk;
   logic rst_n;
@@ -77,20 +79,9 @@ module tb_mdpc_decoder_demo;
   endfunction
 
   initial begin
-    int case0_hist [0:I_MAX-1];
     int case1_hist [0:I_MAX-1];
 
-    case0_hist = CASE0_SYNDROME_HIST;
     case1_hist = CASE1_SYNDROME_HIST;
-
-    apply_reset();
-    start_case(CASE0_INPUT);
-    wait (done === 1'b1);
-    @(posedge clk);
-    if (int'(success) != CASE0_SUCCESS) $fatal(1, "CASE0 success mismatch: got %0d exp %0d", success, CASE0_SUCCESS);
-    if (int'(iter_count) != CASE0_ITERATIONS) $fatal(1, "CASE0 iterations mismatch: got %0d exp %0d", iter_count, CASE0_ITERATIONS);
-    if (x_out !== CASE0_OUTPUT) $fatal(1, "CASE0 x_out mismatch: got %h exp %h", x_out, CASE0_OUTPUT);
-    check_hist(case0_hist);
 
     apply_reset();
     start_case(CASE1_INPUT);

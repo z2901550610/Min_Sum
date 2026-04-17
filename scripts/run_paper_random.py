@@ -140,7 +140,14 @@ def emit_pkg(path: Path, cases: list[dict[str, object]]) -> None:
     path.write_text("\n".join(lines))
 
 
-def emit_tb(path: Path, cases: list[dict[str, object]], error_count: int, timeout_cycles: int) -> None:
+def emit_tb(path: Path, case: dict[str, object], error_count: int, timeout_cycles: int) -> None:
+    case_idx = case["idx"]
+    seed = case["seed"]
+    errors = case["errors"]
+    assert isinstance(case_idx, int)
+    assert isinstance(seed, int)
+    assert isinstance(errors, list)
+
     lines = [
         "`timescale 1ns/1ps",
         "",
@@ -149,27 +156,13 @@ def emit_tb(path: Path, cases: list[dict[str, object]], error_count: int, timeou
         "",
         f"  localparam int ERR_COUNT = {error_count};",
         f"  localparam int TIMEOUT_CYCLES = {timeout_cycles};",
-        "  localparam longint unsigned CASE_SEED [0:H_NUM-1] = '{",
+        f"  localparam int CASE_INDEX = {case_idx};",
+        f"  localparam longint unsigned CASE_SEED = 64'h{seed:016X};",
+        "  localparam int ERR_POS [0:ERR_COUNT-1] = '{",
     ]
 
-    for case_idx, case in enumerate(cases):
-        seed = case["seed"]
-        assert isinstance(seed, int)
-        lines.append(f"    64'h{seed:016X}" + ("," if case_idx != len(cases) - 1 else ""))
-
     lines += [
-        "  };",
-        "  localparam int ERR_POS [0:H_NUM-1][0:ERR_COUNT-1] = '{",
-    ]
-
-    for case_idx, case in enumerate(cases):
-        errors = case["errors"]
-        assert isinstance(errors, list)
-        lines.append("    '{")
-        lines.append(format_values(errors, per_line=12, indent="      "))
-        lines.append("    }" + ("," if case_idx != len(cases) - 1 else ""))
-
-    lines += [
+        format_values(errors, per_line=12, indent="    "),
         "  };",
         "",
         "  logic clk;",
@@ -208,66 +201,47 @@ def emit_tb(path: Path, cases: list[dict[str, object]], error_count: int, timeou
         "    end",
         "  endtask",
         "",
-        "  task automatic run_case(input int case_idx, output int case_passed);",
-        "    int idx;",
+        "  initial begin",
+        "    int case_passed;",
         "    int cycles;",
         "    int out_weight;",
-        "    begin",
-        "      h_sel = H_SEL_W'(case_idx);",
-        "      apply_reset();",
-        "",
-        "      x_in = '0;",
-        "      for (idx = 0; idx < ERR_COUNT; idx++) begin",
-        "        x_in[ERR_POS[case_idx][idx]] = 1'b1;",
-        "      end",
-        "",
-        "      start = 1'b1;",
-        "      @(posedge clk);",
-        "      start = 1'b0;",
-        "",
-        "      cycles = 0;",
-        "      while ((done !== 1'b1) && (cycles < TIMEOUT_CYCLES)) begin",
-        "        @(posedge clk);",
-        "        cycles++;",
-        "      end",
-        "",
-        "      if (done !== 1'b1) begin",
-        "        case_passed = 0;",
-        "        $display(\"random case %0d seed=0x%016h: TIMEOUT cycles=%0d\",",
-        "                 case_idx, CASE_SEED[case_idx], cycles);",
-        "      end else begin",
-        "        @(posedge clk);",
-        "        out_weight = 0;",
-        "        for (idx = 0; idx < N; idx++) begin",
-        "          out_weight += int'(x_out[idx]);",
-        "        end",
-        "",
-        "        case_passed = ((success === 1'b1) && (out_weight == 0)) ? 1 : 0;",
-        "        $display(\"random case %0d seed=0x%016h: pass=%0d success=%0d iterations=%0d out_weight=%0d cycles=%0d\",",
-        "                 case_idx, CASE_SEED[case_idx], case_passed, success, iter_count, out_weight, cycles);",
-        "      end",
-        "    end",
-        "  endtask",
-        "",
-        "  initial begin",
-        "    int case_idx;",
-        "    int case_passed;",
-        "    int pass_count;",
         "",
         "    h_sel = '0;",
         "    rst_n = 1'b0;",
         "    start = 1'b0;",
         "    x_in = '0;",
-        "    pass_count = 0;",
+        "    apply_reset();",
         "",
-        "    for (case_idx = 0; case_idx < H_NUM; case_idx++) begin",
-        "      run_case(case_idx, case_passed);",
-        "      pass_count += case_passed;",
+        "    for (int idx = 0; idx < ERR_COUNT; idx++) begin",
+        "      x_in[ERR_POS[idx]] = 1'b1;",
         "    end",
         "",
-        "    $display(\"tb_mdpc_decoder_random summary: %0d/%0d random H matrices decoded\", pass_count, H_NUM);",
-        "    if (pass_count != H_NUM) begin",
-        "      $fatal(1, \"random paper test had %0d failures\", H_NUM - pass_count);",
+        "    start = 1'b1;",
+        "    @(posedge clk);",
+        "    start = 1'b0;",
+        "",
+        "    cycles = 0;",
+        "    while ((done !== 1'b1) && (cycles < TIMEOUT_CYCLES)) begin",
+        "      @(posedge clk);",
+        "      cycles++;",
+        "    end",
+        "",
+        "    if (done !== 1'b1) begin",
+        "      $fatal(1, \"random case %0d seed=0x%016h timed out after %0d cycles\",",
+        "             CASE_INDEX, CASE_SEED, cycles);",
+        "    end",
+        "",
+        "    @(posedge clk);",
+        "    out_weight = 0;",
+        "    for (int idx = 0; idx < N; idx++) begin",
+        "      out_weight += int'(x_out[idx]);",
+        "    end",
+        "    case_passed = ((success === 1'b1) && (out_weight == 0)) ? 1 : 0;",
+        "    $display(\"random case %0d seed=0x%016h: pass=%0d success=%0d iterations=%0d out_weight=%0d cycles=%0d\",",
+        "             CASE_INDEX, CASE_SEED, case_passed, success, iter_count, out_weight, cycles);",
+        "",
+        "    if (case_passed != 1) begin",
+        "      $fatal(1, \"random case %0d failed\", CASE_INDEX);",
         "    end",
         "    $finish;",
         "  end",
@@ -309,41 +283,52 @@ def main() -> int:
     repo_root = Path(__file__).resolve().parents[1]
     out_dir = (repo_root / args.out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
-    pkg_path = out_dir / "mdpc_random_pkg.sv"
+    pkg_path = out_dir / "mdpc_paper_pkg.sv"
     tb_path = out_dir / "tb_mdpc_decoder_random.sv"
 
     base_seed = args.seed if args.seed is not None else secrets.randbits(64)
     cases = build_cases(args.cases, base_seed, args.errors)
-    emit_pkg(pkg_path, cases)
-    emit_tb(tb_path, cases, args.errors, args.timeout_cycles)
-
     print(f"Generated {args.cases} case(s) with base seed {base_seed} ({base_seed:#x})")
-    print(f"Package: {pkg_path.relative_to(repo_root)}")
-    print(f"Testbench: {tb_path.relative_to(repo_root)}")
     for case in cases:
         print(f"case {case['idx']:>3}: seed=0x{case['seed']:016X}")
 
     if args.generate_only:
+        for case in cases:
+            case_out_dir = out_dir if args.cases == 1 else out_dir / f"case_{int(case['idx']):03d}"
+            case_out_dir.mkdir(parents=True, exist_ok=True)
+            emit_pkg(case_out_dir / pkg_path.name, [case])
+            emit_tb(case_out_dir / tb_path.name, case, args.errors, args.timeout_cycles)
+            print(f"generated case {case['idx']}: {case_out_dir.relative_to(repo_root)}")
         return 0
 
-    verilator_cmd = [
-        args.verilator,
-        "--binary",
-        "--sv",
-        "-Wall",
-        "-Wno-fatal",
-        "-I./tb",
-        "-DMDPC_PAPER_CFG",
-        "--top-module",
-        "tb_mdpc_decoder_random",
-        str(pkg_path.relative_to(repo_root)),
-        *RTL_CORE,
-        str(tb_path.relative_to(repo_root)),
-    ]
-    run_command(verilator_cmd, repo_root)
+    for case in cases:
+        print(f"\n=== random case {case['idx']} seed=0x{case['seed']:016X} ===", flush=True)
+        emit_pkg(pkg_path, [case])
+        emit_tb(tb_path, case, args.errors, args.timeout_cycles)
+        print(f"Package: {pkg_path.relative_to(repo_root)}")
+        print(f"Testbench: {tb_path.relative_to(repo_root)}")
 
-    if not args.compile_only:
-        run_command(["./obj_dir/Vtb_mdpc_decoder_random"], repo_root)
+        verilator_cmd = [
+            args.verilator,
+            "--binary",
+            "--sv",
+            "-Wall",
+            "-Wno-fatal",
+            "-I./tb",
+            "-DMDPC_PAPER_CFG",
+            "--top-module",
+            "tb_mdpc_decoder_random",
+            str(pkg_path.relative_to(repo_root)),
+            *RTL_CORE,
+            str(tb_path.relative_to(repo_root)),
+        ]
+        run_command(verilator_cmd, repo_root)
+
+        if not args.compile_only:
+            run_command(["./obj_dir/Vtb_mdpc_decoder_random"], repo_root)
+
+    mode = "compiled" if args.compile_only else "passed"
+    print(f"\nrandom paper summary: {args.cases}/{args.cases} case(s) {mode}")
 
     return 0
 
