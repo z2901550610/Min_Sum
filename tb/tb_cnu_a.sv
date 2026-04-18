@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 
-module tb_mdpc_cnu_a;
+module tb_cnu_a;
   import mdpc_demo_pkg::*;
 
   logic clk;
@@ -14,17 +14,17 @@ module tb_mdpc_cnu_a;
   logic v2c_sign_out;
   logic out_valid;
 
-  mdpc_cnu_a dut (
-    .clk(clk),
-    .rst_n(rst_n),
-    .clear_en(clear_en),
-    .in_valid(in_valid),
-    .v2c_msg_in(v2c_msg_in),
-    .src_var_idx(src_var_idx),
-    .c2v_compact_msg_in(c2v_compact_msg_in),
-    .c2v_compact_msg_out(c2v_compact_msg_out),
-    .v2c_sign_out(v2c_sign_out),
-    .out_valid(out_valid)
+  cnu_a dut (
+    .i_clk(clk),
+    .i_rst_n(rst_n),
+    .i_clear(clear_en),
+    .i_en(in_valid),
+    .i_v2c(v2c_msg_in),
+    .i_idx(src_var_idx),
+    .i_comp_c2v(c2v_compact_msg_in),
+    .o_comp_c2v(c2v_compact_msg_out),
+    .o_sign(v2c_sign_out),
+    .o_valid(out_valid)
   );
 
   initial clk = 1'b0;
@@ -88,7 +88,7 @@ module tb_mdpc_cnu_a;
     #1;
     if (out_valid !== 1'b0) $fatal(1, "expected out_valid=0 after idle cycle");
 
-    $display("tb_mdpc_cnu_a PASS");
+    $display("tb_cnu_a PASS");
     $finish;
   end
 endmodule

@@ -25,16 +25,16 @@ module tb_mdpc_decoder_paper;
   logic [N-1:0] x_out;
   logic [$clog2(I_MAX + 1)-1:0] iter_count;
 
-  mdpc_decoder_demo dut (
-    .clk(clk),
-    .rst_n(rst_n),
-    .start(start),
-    .h_sel(h_sel),
-    .x_in(x_in),
-    .done(done),
-    .success(success),
-    .x_out(x_out),
-    .iter_count(iter_count)
+  decoder_top dut (
+    .i_clk(clk),
+    .i_rst_n(rst_n),
+    .i_start(start),
+    .i_h_sel(h_sel),
+    .i_x(x_in),
+    .o_done(done),
+    .o_success(success),
+    .o_x(x_out),
+    .o_iter_count(iter_count)
   );
 
   initial clk = 1'b0;

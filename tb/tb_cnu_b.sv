@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 
-module tb_mdpc_cnu_b;
+module tb_cnu_b;
   import mdpc_demo_pkg::*;
 
   logic [ROW_STATE_W-1:0] c2v_compact_msg_in;
@@ -8,11 +8,11 @@ module tb_mdpc_cnu_b;
   logic [VAR_W-1:0] src_var_idx;
   logic [MSG_W-1:0] c2v_msg_out;
 
-  mdpc_cnu_b dut (
-    .c2v_compact_msg_in(c2v_compact_msg_in),
-    .v2c_sign_in(v2c_sign_in),
-    .src_var_idx(src_var_idx),
-    .c2v_msg_out(c2v_msg_out)
+  cnu_b dut (
+    .i_comp_c2v(c2v_compact_msg_in),
+    .i_sign(v2c_sign_in),
+    .i_idx(src_var_idx),
+    .o_c2v(c2v_msg_out)
   );
 
   initial begin
@@ -30,7 +30,7 @@ module tb_mdpc_cnu_b;
     if (int'(c2v_msg_out[MSG_MAG_LSB +: D]) != 2) $fatal(1, "expected min1 path mag=2, got %0d", int'(c2v_msg_out[MSG_MAG_LSB +: D]));
     if (int'(c2v_msg_out[MSG_SIGN_BIT]) != 1) $fatal(1, "expected sign xor result 1, got %0d", int'(c2v_msg_out[MSG_SIGN_BIT]));
 
-    $display("tb_mdpc_cnu_b PASS");
+    $display("tb_cnu_b PASS");
     $finish;
   end
 endmodule

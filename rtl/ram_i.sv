@@ -4,15 +4,15 @@ import mdpc_paper_pkg::*;
 import mdpc_demo_pkg::*;
 `endif
 
-module mdpc_i_ram (
-  input  logic clk,
-  input  logic rst_n,
-  input  logic load_first_col_en,
-  input  logic shift_en,
-  input  logic [H_SEL_W-1:0] h_sel,
-  input  logic [BANK_W-1:0] bank_sel,
-  output logic [I_ENTRY_W-1:0] lane_entries [0:L-1][0:W-1],
-  output logic [LANE_COUNT_W-1:0] lane_count [0:L-1]
+module ram_i (
+  input  logic i_clk,
+  input  logic i_rst_n,
+  input  logic i_load_first_col,
+  input  logic i_shift,
+  input  logic [H_SEL_W-1:0] i_h_sel,
+  input  logic [BANK_W-1:0] i_bank_sel,
+  output logic [I_ENTRY_W-1:0] o_lane_entries [0:L-1][0:W-1],
+  output logic [LANE_COUNT_W-1:0] o_lane_count [0:L-1]
 );
 
 `ifdef MDPC_PAPER_CFG
@@ -47,13 +47,13 @@ module mdpc_i_ram (
       end
 
       for (edge_idx_local = 0; edge_idx_local < W; edge_idx_local++) begin
-        row_value_local = H_BASE[h_sel][bank_idx_local][edge_idx_local];
-        if (row_value_local < ROW_SPLIT) begin
+        row_value_local = H_BASE[i_h_sel][bank_idx_local][edge_idx_local];
+        if (row_value_local < ROW_SEG_SIZE) begin
           lane_idx_local = 0;
           row_local_value = row_value_local;
         end else begin
           lane_idx_local = 1;
-          row_local_value = row_value_local - ROW_SPLIT;
+          row_local_value = row_value_local - ROW_SEG_SIZE;
         end
         slot_idx_local = int'(first_col_count[bank_idx_local][lane_idx_local]);
         first_col_entries[bank_idx_local][lane_idx_local][slot_idx_local] = {
@@ -94,24 +94,24 @@ module mdpc_i_ram (
 
     for (lane_idx_local = 0; lane_idx_local < L; lane_idx_local++) begin
       for (slot_idx_local = 0; slot_idx_local < W; slot_idx_local++) begin
-        if (slot_idx_local < count_mem[bank_sel][lane_idx_local]) begin
-          row_local_value = int'(mem[bank_sel][lane_idx_local][slot_idx_local][I_ENTRY_ROW_LOCAL_LSB +: ROW_W]);
+        if (slot_idx_local < count_mem[i_bank_sel][lane_idx_local]) begin
+          row_local_value = int'(mem[i_bank_sel][lane_idx_local][slot_idx_local][I_ENTRY_ROW_LOCAL_LSB +: ROW_W]);
           if (lane_idx_local == 0) begin
             row_value_local = row_local_value;
           end else begin
-            row_value_local = ROW_SPLIT + row_local_value;
+            row_value_local = ROW_SEG_SIZE + row_local_value;
           end
           next_row_value_local = (row_value_local + 1) % R;
-          if (next_row_value_local < ROW_SPLIT) begin
+          if (next_row_value_local < ROW_SEG_SIZE) begin
             next_lane_idx_local = 0;
             next_row_local_value = next_row_value_local;
           end else begin
             next_lane_idx_local = 1;
-            next_row_local_value = next_row_value_local - ROW_SPLIT;
+            next_row_local_value = next_row_value_local - ROW_SEG_SIZE;
           end
           next_slot_idx_local = int'(shifted_count[next_lane_idx_local]);
           shifted_entries[next_lane_idx_local][next_slot_idx_local] = {
-            mem[bank_sel][lane_idx_local][slot_idx_local][I_ENTRY_EDGE_SLOT_LSB +: EDGE_W],
+            mem[i_bank_sel][lane_idx_local][slot_idx_local][I_ENTRY_EDGE_SLOT_LSB +: EDGE_W],
             next_row_local_value[ROW_W-1:0]
           };
           shifted_count[next_lane_idx_local] = shifted_count[next_lane_idx_local] + 1'b1;
@@ -125,19 +125,19 @@ module mdpc_i_ram (
     integer slot_idx_local;
 
     for (lane_idx_local = 0; lane_idx_local < L; lane_idx_local++) begin
-      lane_count[lane_idx_local] = count_mem[bank_sel][lane_idx_local];
+      o_lane_count[lane_idx_local] = count_mem[i_bank_sel][lane_idx_local];
       for (slot_idx_local = 0; slot_idx_local < W; slot_idx_local++) begin
-        lane_entries[lane_idx_local][slot_idx_local] = mem[bank_sel][lane_idx_local][slot_idx_local];
+        o_lane_entries[lane_idx_local][slot_idx_local] = mem[i_bank_sel][lane_idx_local][slot_idx_local];
       end
     end
   end
 
-  always_ff @(posedge clk or negedge rst_n) begin
+  always_ff @(posedge i_clk or negedge i_rst_n) begin
     integer bank_idx_local;
     integer lane_idx_local;
     integer slot_idx_local;
 
-    if (!rst_n) begin
+    if (!i_rst_n) begin
       for (bank_idx_local = 0; bank_idx_local < N0; bank_idx_local++) begin
         for (lane_idx_local = 0; lane_idx_local < L; lane_idx_local++) begin
           count_mem[bank_idx_local][lane_idx_local] <= first_col_count[bank_idx_local][lane_idx_local];
@@ -147,7 +147,7 @@ module mdpc_i_ram (
           end
         end
       end
-    end else if (load_first_col_en) begin
+    end else if (i_load_first_col) begin
       for (bank_idx_local = 0; bank_idx_local < N0; bank_idx_local++) begin
         for (lane_idx_local = 0; lane_idx_local < L; lane_idx_local++) begin
           count_mem[bank_idx_local][lane_idx_local] <= first_col_count[bank_idx_local][lane_idx_local];
@@ -157,11 +157,11 @@ module mdpc_i_ram (
           end
         end
       end
-    end else if (shift_en) begin
+    end else if (i_shift) begin
       for (lane_idx_local = 0; lane_idx_local < L; lane_idx_local++) begin
-        count_mem[bank_sel][lane_idx_local] <= shifted_count[lane_idx_local];
+        count_mem[i_bank_sel][lane_idx_local] <= shifted_count[lane_idx_local];
         for (slot_idx_local = 0; slot_idx_local < W; slot_idx_local++) begin
-          mem[bank_sel][lane_idx_local][slot_idx_local] <= shifted_entries[lane_idx_local][slot_idx_local];
+          mem[i_bank_sel][lane_idx_local][slot_idx_local] <= shifted_entries[lane_idx_local][slot_idx_local];
         end
       end
     end

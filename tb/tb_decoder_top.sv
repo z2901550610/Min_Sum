@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 
-module tb_mdpc_decoder_demo;
+module tb_decoder_top;
   import mdpc_demo_pkg::*;
 
   /* verilator lint_off UNUSEDPARAM */
@@ -19,16 +19,16 @@ module tb_mdpc_decoder_demo;
   integer idx;
   integer flat_idx;
 
-  mdpc_decoder_demo dut (
-    .clk(clk),
-    .rst_n(rst_n),
-    .start(start),
-    .h_sel(h_sel),
-    .x_in(x_in),
-    .done(done),
-    .success(success),
-    .x_out(x_out),
-    .iter_count(iter_count)
+  decoder_top dut (
+    .i_clk(clk),
+    .i_rst_n(rst_n),
+    .i_start(start),
+    .i_h_sel(h_sel),
+    .i_x(x_in),
+    .o_done(done),
+    .o_success(success),
+    .o_x(x_out),
+    .o_iter_count(iter_count)
   );
 
   initial clk = 1'b0;
@@ -95,7 +95,7 @@ module tb_mdpc_decoder_demo;
       if (int'(dut.u_m_ram.mem[idx][ROW_STATE_SIGN_XOR_BIT]) != CASE1_FIRST_ROW_SIGN_XOR[idx]) $fatal(1, "CASE1 row sign_xor[%0d] mismatch", idx);
     end
 
-    wait (dut.state == DEC_VNU && dut.active_var_idx == 0);
+    wait (dut.state == DEC_VNU_ACCUM && dut.active_var_idx == 0);
     #1;
     flat_idx = 0;
     for (idx = 0; idx < N; idx++) begin
@@ -106,7 +106,7 @@ module tb_mdpc_decoder_demo;
       end
     end
 
-    wait (dut.state == DEC_CHECK && dut.iter_count == 0);
+    wait (dut.state == DEC_CHECK && iter_count == 0);
     #1;
     flat_idx = 0;
     for (idx = 0; idx < N; idx++) begin
@@ -125,7 +125,7 @@ module tb_mdpc_decoder_demo;
     if (x_out !== CASE1_OUTPUT) $fatal(1, "CASE1 x_out mismatch: got %h exp %h", x_out, CASE1_OUTPUT);
     check_hist(case1_hist);
 
-    $display("tb_mdpc_decoder_demo PASS");
+    $display("tb_decoder_top PASS");
     $finish;
   end
 endmodule

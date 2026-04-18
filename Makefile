@@ -6,7 +6,7 @@ VERILATOR_FLAGS ?= --binary --sv -Wall -Wno-fatal -I./tb
 GOLDEN_BIN := golden/mdpc_min_sum_golden
 BIKE_GOLDEN_BIN := golden/bike_l1_min_sum_golden
 VECTOR_SVH := tb/generated/mdpc_demo_vectors.svh
-RTL_CORE := rtl/mdpc_i_ram.sv rtl/mdpc_bit_ram_c.sv rtl/mdpc_row_state_ram_m.sv rtl/mdpc_sign_ram_s.sv rtl/mdpc_msg_ram_t.sv rtl/mdpc_msg_ram_u.sv rtl/mdpc_h_shift.sv rtl/mdpc_cnu_a.sv rtl/mdpc_cnu_b.sv rtl/mdpc_vnu.sv rtl/mdpc_decoder_demo.sv
+RTL_CORE := rtl/ram_i.sv rtl/ram_c.sv rtl/ram_m.sv rtl/ram_s.sv rtl/ram_t.sv rtl/ram_u.sv rtl/h_shift.sv rtl/cnu_a.sv rtl/cnu_b.sv rtl/vnu.sv rtl/decoder_top.sv
 RTL := rtl/mdpc_demo_pkg.sv $(RTL_CORE)
 PAPER_RTL := tb/mdpc_paper_pkg.sv $(RTL_CORE)
 PAPER80_SEED ?= 1
@@ -57,16 +57,16 @@ bike-golden-calibrate: $(BIKE_GOLDEN_BIN)
 test: test-unit test-integration
 
 test-unit: $(VECTOR_SVH)
-	$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_mdpc_cnu_a rtl/mdpc_demo_pkg.sv rtl/mdpc_cnu_a.sv tb/tb_mdpc_cnu_a.sv
-	./obj_dir/Vtb_mdpc_cnu_a
-	$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_mdpc_cnu_b rtl/mdpc_demo_pkg.sv rtl/mdpc_cnu_b.sv tb/tb_mdpc_cnu_b.sv
-	./obj_dir/Vtb_mdpc_cnu_b
-	$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_mdpc_vnu rtl/mdpc_demo_pkg.sv rtl/mdpc_vnu.sv tb/tb_mdpc_vnu.sv
-	./obj_dir/Vtb_mdpc_vnu
+	$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_cnu_a rtl/mdpc_demo_pkg.sv rtl/cnu_a.sv tb/tb_cnu_a.sv
+	./obj_dir/Vtb_cnu_a
+	$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_cnu_b rtl/mdpc_demo_pkg.sv rtl/cnu_b.sv tb/tb_cnu_b.sv
+	./obj_dir/Vtb_cnu_b
+	$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_vnu rtl/mdpc_demo_pkg.sv rtl/vnu.sv tb/tb_vnu.sv
+	./obj_dir/Vtb_vnu
 
 test-integration: $(VECTOR_SVH)
-	$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_mdpc_decoder_demo $(RTL) tb/tb_mdpc_decoder_demo.sv
-	./obj_dir/Vtb_mdpc_decoder_demo
+	$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_decoder_top $(RTL) tb/tb_decoder_top.sv
+	./obj_dir/Vtb_decoder_top
 
 test-paper:
 	$(VERILATOR) $(VERILATOR_FLAGS) -DMDPC_PAPER_CFG --top-module tb_mdpc_decoder_paper $(PAPER_RTL) tb/tb_mdpc_decoder_paper.sv

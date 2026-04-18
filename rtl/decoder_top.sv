@@ -4,16 +4,16 @@ import mdpc_paper_pkg::*;
 import mdpc_demo_pkg::*;
 `endif
 
-module mdpc_decoder_demo (
-  input  logic clk,
-  input  logic rst_n,
-  input  logic start,
-  input  logic [H_SEL_W-1:0] h_sel,
-  input  logic [N-1:0] x_in,
-  output logic done,
-  output logic success,
-  output logic [N-1:0] x_out,
-  output logic [$clog2(I_MAX + 1)-1:0] iter_count
+module decoder_top (
+  input  logic i_clk,
+  input  logic i_rst_n,
+  input  logic i_start,
+  input  logic [H_SEL_W-1:0] i_h_sel,
+  input  logic [N-1:0] i_x,
+  output logic o_done,
+  output logic o_success,
+  output logic [N-1:0] o_x,
+  output logic [$clog2(I_MAX + 1)-1:0] o_iter_count
 );
 
 `ifdef MDPC_PAPER_CFG
@@ -28,7 +28,6 @@ module mdpc_decoder_demo (
   localparam logic [EDGE_W-1:0] VNU_LAST_SLOT = EDGE_W'(((W + L) - 1) / L - 1);
 
   logic [DEC_STATE_W-1:0] state;
-  logic [R-1:0] syndrome_reg;
   logic [R-1:0] syndrome_hist [0:I_MAX-1];
 
   logic [VAR_W-1:0] active_var_idx;
@@ -48,7 +47,6 @@ module mdpc_decoder_demo (
   logic [EDGE_W-1:0] lane_edge1_edge_slot;
 
   logic c0_rd_bit;
-  logic [N-1:0] c0_bits;
   logic [N-1:0] c1_bits;
   logic [ROW_STATE_W-1:0] c2v_compact_msg_rd_a0;
   logic [ROW_STATE_W-1:0] c2v_compact_msg_rd_a1;
@@ -59,7 +57,6 @@ module mdpc_decoder_demo (
   logic v2c_sign0;
   logic v2c_sign1;
   logic c1_rd_unused;
-  logic signed [MSG_W-1:0] t_msgs [0:W-1];
 
   logic [ROW_STATE_W-1:0] c2v_compact_msg_wr0;
   logic [ROW_STATE_W-1:0] c2v_compact_msg_wr1;
@@ -72,16 +69,26 @@ module mdpc_decoder_demo (
   logic signed [MSG_W-1:0] c2v_msg_tc0;
   logic signed [MSG_W-1:0] c2v_msg_tc1;
   logic signed [APP_W-1:0] prior_msg;
-  logic signed [APP_W-1:0] vnu_app;
   logic vnu_x_out;
-  logic vnu_result_valid;
-  logic vnu_start_var;
-  logic vnu_last_accum;
+  logic vnu_col_start;
+  logic vnu_col_end;
   logic vnu_accum_valid0;
   logic vnu_accum_valid1;
-  logic signed [MSG_W-1:0] vnu_accum_c2v0;
-  logic signed [MSG_W-1:0] vnu_accum_c2v1;
-  logic [MSG_W-1:0] vnu_u_next [0:W-1];
+  logic vnu_accum_sign0;
+  logic vnu_accum_sign1;
+  logic [D-1:0] vnu_accum_mag0;
+  logic [D-1:0] vnu_accum_mag1;
+  logic vnu_emit_en;
+  logic vnu_v2c_valid0;
+  logic vnu_v2c_valid1;
+  logic [MSG_W-1:0] vnu_v2c0;
+  logic [MSG_W-1:0] vnu_v2c1;
+  logic signed [MSG_W-1:0] t_rd_msg0;
+  logic signed [MSG_W-1:0] t_rd_msg1;
+  logic [EDGE_W-1:0] vnu_edge0_slot;
+  logic [EDGE_W-1:0] vnu_edge1_slot;
+  logic vnu_edge0_valid;
+  logic vnu_edge1_valid;
   logic [R-1:0] syndrome_next;
   logic cnu_a_flush_pending;
   logic cnu_a_issue_phase;
@@ -110,13 +117,10 @@ module mdpc_decoder_demo (
   logic t_wr_en0;
   logic t_wr_en1;
   logic u_init_en;
-  logic u_wr_en;
+  logic u_wr_en0;
+  logic u_wr_en1;
   logic i_load_first_col_en;
   logic i_shift_en;
-
-  // Message-format boundary: RAM U and CNU-side paths use sign-magnitude;
-  // RAM T and VNU-side paths use signed 2's-complement. Keep conversions at
-  // CNU_B -> RAM T and VNU -> RAM U so each datapath has one internal format.
 
   assign current_bank = BANK_W'(int'(active_var_idx) / R);
   assign current_scan_limit =
@@ -130,11 +134,11 @@ module mdpc_decoder_demo (
   assign lane_edge0_edge_slot = lane_edge0[LANE_EDGE_EDGE_SLOT_LSB +: EDGE_W];
   assign lane_edge1_edge_slot = lane_edge1[LANE_EDGE_EDGE_SLOT_LSB +: EDGE_W];
   assign prior_msg = c0_rd_bit ? -$signed(APP_W'(C_VAL)) : $signed(APP_W'(C_VAL));
-  assign next_iter_count = iter_count + 1'b1;
+  assign next_iter_count = o_iter_count + 1'b1;
   assign cnu_a_issue_phase = (state == DEC_CNU_A) && !cnu_a_flush_pending;
   assign c0_load_en = (state == DEC_LOAD);
   assign c1_load_en = (state == DEC_LOAD);
-  assign c1_wr_en = (state == DEC_VNU) && vnu_result_valid;
+  assign c1_wr_en = (state == DEC_VNU_EMIT) && (scan_slot == '0);
   assign s_clear_en = (state == DEC_LOAD);
   assign t_clear_en = (state == DEC_LOAD);
   assign u_init_en = (state == DEC_LOAD);
@@ -145,9 +149,15 @@ module mdpc_decoder_demo (
   assign s_wr_en1 = cnu_a_out_valid1;
   assign t_wr_en0 = (state == DEC_CNU_B) && lane_edge0_valid;
   assign t_wr_en1 = (state == DEC_CNU_B) && lane_edge1_valid;
-  assign u_wr_en = (state == DEC_VNU) && vnu_result_valid;
-  assign vnu_start_var = (state == DEC_VNU) && (scan_slot == '0);
-  assign vnu_last_accum = (state == DEC_VNU) && (scan_slot == VNU_LAST_SLOT);
+  assign u_wr_en0 = vnu_v2c_valid0;
+  assign u_wr_en1 = vnu_v2c_valid1;
+  assign vnu_col_start = (state == DEC_VNU_ACCUM) && (scan_slot == '0);
+  assign vnu_col_end = (state == DEC_VNU_ACCUM) && (scan_slot == VNU_LAST_SLOT);
+  assign vnu_emit_en = (state == DEC_VNU_EMIT);
+  assign vnu_edge0_slot = EDGE_W'(int'(scan_slot) * L);
+  assign vnu_edge1_slot = EDGE_W'((int'(scan_slot) * L) + 1);
+  assign vnu_edge0_valid = (int'(scan_slot) * L) < W;
+  assign vnu_edge1_valid = ((int'(scan_slot) * L) + 1) < W;
 
   function automatic logic signed [MSG_W-1:0] signmag_to_tc_msg(
     input logic [MSG_W-1:0] signmag_msg
@@ -160,6 +170,23 @@ module mdpc_decoder_demo (
       end else begin
         signmag_to_tc_msg = mag_tc;
       end
+    end
+  endfunction
+
+  function automatic logic [MSG_W-1:0] tc_to_signmag_msg(
+    input logic signed [MSG_W-1:0] tc_msg
+  );
+    logic [D-1:0] abs_mag;
+    logic [MSG_W-1:0] abs_full;
+    begin
+      if (tc_msg[MSG_W-1]) begin
+        abs_full = (~tc_msg) + {{(MSG_W - 1){1'b0}}, 1'b1};
+        abs_mag = abs_full[D-1:0];
+      end else begin
+        abs_full = tc_msg[MSG_W-1:0];
+        abs_mag = tc_msg[D-1:0];
+      end
+      tc_to_signmag_msg = {tc_msg[MSG_W-1] && (abs_mag != '0), abs_mag};
     end
   endfunction
 
@@ -179,7 +206,7 @@ module mdpc_decoder_demo (
         bank_idx_local = var_idx_local / R;
         col_idx_local = var_idx_local % R;
         for (edge_idx_local = 0; edge_idx_local < W; edge_idx_local++) begin
-          row_idx_local = (H_BASE[h_sel][bank_idx_local][edge_idx_local] + col_idx_local) % R;
+          row_idx_local = (H_BASE[i_h_sel][bank_idx_local][edge_idx_local] + col_idx_local) % R;
           syndrome_next[row_idx_local] ^= 1'b1;
         end
       end
@@ -187,6 +214,9 @@ module mdpc_decoder_demo (
   end
 
   always_comb begin
+    logic [MSG_W-1:0] t_signmag0;
+    logic [MSG_W-1:0] t_signmag1;
+
     advance_var = ((scan_slot + 1'b1) >= current_scan_limit);
     stop_decode = 1'b0;
     continue_decode = 1'b0;
@@ -194,40 +224,24 @@ module mdpc_decoder_demo (
       stop_decode = (syndrome_next == '0) || (int'(next_iter_count) >= I_MAX);
       continue_decode = !stop_decode;
     end
+
+    t_signmag0 = tc_to_signmag_msg(t_rd_msg0);
+    t_signmag1 = tc_to_signmag_msg(t_rd_msg1);
+    vnu_accum_valid0 = (state == DEC_VNU_ACCUM) && vnu_edge0_valid;
+    vnu_accum_valid1 = (state == DEC_VNU_ACCUM) && vnu_edge1_valid;
+    vnu_accum_sign0 = t_signmag0[MSG_SIGN_BIT];
+    vnu_accum_sign1 = t_signmag1[MSG_SIGN_BIT];
+    vnu_accum_mag0 = t_signmag0[MSG_MAG_LSB +: D];
+    vnu_accum_mag1 = t_signmag1[MSG_MAG_LSB +: D];
   end
 
-  always_comb begin
-    integer edge_linear_idx;
-
-    vnu_accum_valid0 = 1'b0;
-    vnu_accum_valid1 = 1'b0;
-    vnu_accum_c2v0 = '0;
-    vnu_accum_c2v1 = '0;
-
-    edge_linear_idx = int'(scan_slot) * L;
-    if ((state == DEC_VNU) && (edge_linear_idx < W)) begin
-      vnu_accum_valid0 = 1'b1;
-      vnu_accum_c2v0 = t_msgs[edge_linear_idx];
-    end
-
-    edge_linear_idx = (int'(scan_slot) * L) + 1;
-    if ((state == DEC_VNU) && (edge_linear_idx < W)) begin
-      vnu_accum_valid1 = 1'b1;
-      vnu_accum_c2v1 = t_msgs[edge_linear_idx];
-    end
-  end
-
-  // CNU_B emits sign-magnitude; RAM T caches c2v in the VNU's signed domain.
   assign c2v_msg_tc0 = signmag_to_tc_msg(c2v_msg0);
   assign c2v_msg_tc1 = signmag_to_tc_msg(c2v_msg1);
-
   assign m_clear_en = (state == DEC_LOAD) || continue_decode;
   assign i_shift_en = (cnu_a_issue_phase || (state == DEC_CNU_B)) && advance_var;
 
-  // CNU_A returns row-state updates one cycle after issue, so the writeback
-  // address and edge metadata are delayed to match out_valid.
-  always_ff @(posedge clk or negedge rst_n) begin
-    if (!rst_n) begin
+  always_ff @(posedge i_clk or negedge i_rst_n) begin
+    if (!i_rst_n) begin
       cnu_a_wr_row0 <= '0;
       cnu_a_wr_row1 <= '0;
       cnu_a_wr_edge0 <= '0;
@@ -251,198 +265,216 @@ module mdpc_decoder_demo (
     end
   end
 
-  mdpc_i_ram u_i_ram (
-    .clk(clk),
-    .rst_n(rst_n),
-    .load_first_col_en(i_load_first_col_en),
-    .shift_en(i_shift_en),
-    .h_sel(h_sel),
-    .bank_sel(current_bank),
-    .lane_entries(current_lane_entries),
-    .lane_count(current_lane_count)
+  ram_i u_i_ram (
+    .i_clk(i_clk),
+    .i_rst_n(i_rst_n),
+    .i_load_first_col(i_load_first_col_en),
+    .i_shift(i_shift_en),
+    .i_h_sel(i_h_sel),
+    .i_bank_sel(current_bank),
+    .o_lane_entries(current_lane_entries),
+    .o_lane_count(current_lane_count)
   );
 
-  mdpc_h_shift u_h_shift (
-    .var_idx(active_var_idx),
-    .lane_entries(current_lane_entries),
-    .lane_count(current_lane_count),
-    .lane_edges(current_lane_edges)
+  h_shift u_h_shift (
+    .i_var_idx(active_var_idx),
+    .i_lane_entries(current_lane_entries),
+    .i_lane_count(current_lane_count),
+    .o_lane_edges(current_lane_edges)
   );
 
-  mdpc_bit_ram_c u_c0_ram (
-    .clk(clk),
-    .rst_n(rst_n),
-    .clear_en(1'b0),
-    .load_en(c0_load_en),
-    .load_bits(x_in),
-    .wr_en(1'b0),
-    .wr_addr('0),
-    .wr_bit(1'b0),
-    .rd_addr(active_var_idx),
-    .rd_bit(c0_rd_bit),
-    .bits_out(c0_bits)
+  ram_c u_c0_ram (
+    .i_clk(i_clk),
+    .i_rst_n(i_rst_n),
+    .i_clear(1'b0),
+    .i_load(c0_load_en),
+    .i_load_bits(i_x),
+    .i_we(1'b0),
+    .i_w_addr('0),
+    .i_din(1'b0),
+    .i_r_addr(active_var_idx),
+    .o_dout(c0_rd_bit),
+    .o_bits()
   );
 
-  mdpc_bit_ram_c u_c1_ram (
-    .clk(clk),
-    .rst_n(rst_n),
-    .clear_en(1'b0),
-    .load_en(c1_load_en),
-    .load_bits(x_in),
-    .wr_en(c1_wr_en),
-    .wr_addr(active_var_idx),
-    .wr_bit(vnu_x_out),
-    .rd_addr(active_var_idx),
-    .rd_bit(c1_rd_unused),
-    .bits_out(c1_bits)
+  ram_c u_c1_ram (
+    .i_clk(i_clk),
+    .i_rst_n(i_rst_n),
+    .i_clear(1'b0),
+    .i_load(c1_load_en),
+    .i_load_bits(i_x),
+    .i_we(c1_wr_en),
+    .i_w_addr(active_var_idx),
+    .i_din(vnu_x_out),
+    .i_r_addr(active_var_idx),
+    .o_dout(c1_rd_unused),
+    .o_bits(c1_bits)
   );
 
-  mdpc_row_state_ram_m u_m_ram (
-    .clk(clk),
-    .rst_n(rst_n),
-    .clear_en(m_clear_en),
-    .rd_addr_a0(lane_edge0_row_global),
-    .rd_addr_a1(lane_edge1_row_global),
-    .rd_addr_b0(lane_edge0_row_global),
-    .rd_addr_b1(lane_edge1_row_global),
-    .rd_data_a0(c2v_compact_msg_rd_a0),
-    .rd_data_a1(c2v_compact_msg_rd_a1),
-    .rd_data_b0(c2v_compact_msg_rd_b0),
-    .rd_data_b1(c2v_compact_msg_rd_b1),
-    .wr_en0(m_wr_en0),
-    .wr_addr0(cnu_a_wr_row0),
-    .wr_data0(c2v_compact_msg_wr0),
-    .wr_en1(m_wr_en1),
-    .wr_addr1(cnu_a_wr_row1),
-    .wr_data1(c2v_compact_msg_wr1)
+  ram_m u_m_ram (
+    .i_clk(i_clk),
+    .i_rst_n(i_rst_n),
+    .i_clear(m_clear_en),
+    .i_r_addr_a0(lane_edge0_row_global),
+    .i_r_addr_a1(lane_edge1_row_global),
+    .i_r_addr_b0(lane_edge0_row_global),
+    .i_r_addr_b1(lane_edge1_row_global),
+    .o_dout_a0(c2v_compact_msg_rd_a0),
+    .o_dout_a1(c2v_compact_msg_rd_a1),
+    .o_dout_b0(c2v_compact_msg_rd_b0),
+    .o_dout_b1(c2v_compact_msg_rd_b1),
+    .i_we0(m_wr_en0),
+    .i_w_addr0(cnu_a_wr_row0),
+    .i_din0(c2v_compact_msg_wr0),
+    .i_we1(m_wr_en1),
+    .i_w_addr1(cnu_a_wr_row1),
+    .i_din1(c2v_compact_msg_wr1)
   );
 
-  mdpc_sign_ram_s u_s_ram (
-    .clk(clk),
-    .rst_n(rst_n),
-    .clear_en(s_clear_en),
-    .rd_var0(active_var_idx),
-    .rd_edge0(lane_edge0_edge_slot),
-    .rd_var1(active_var_idx),
-    .rd_edge1(lane_edge1_edge_slot),
-    .rd_sign0(v2c_sign0),
-    .rd_sign1(v2c_sign1),
-    .wr_en0(s_wr_en0),
-    .wr_var0(cnu_a_wr_var0),
-    .wr_edge0(cnu_a_wr_edge0),
-    .wr_sign0(v2c_sign_wr0),
-    .wr_en1(s_wr_en1),
-    .wr_var1(cnu_a_wr_var1),
-    .wr_edge1(cnu_a_wr_edge1),
-    .wr_sign1(v2c_sign_wr1)
+  ram_s u_s_ram (
+    .i_clk(i_clk),
+    .i_rst_n(i_rst_n),
+    .i_clear(s_clear_en),
+    .i_r_var0(active_var_idx),
+    .i_r_edge0(lane_edge0_edge_slot),
+    .i_r_var1(active_var_idx),
+    .i_r_edge1(lane_edge1_edge_slot),
+    .o_sign0(v2c_sign0),
+    .o_sign1(v2c_sign1),
+    .i_we0(s_wr_en0),
+    .i_w_var0(cnu_a_wr_var0),
+    .i_w_edge0(cnu_a_wr_edge0),
+    .i_din0(v2c_sign_wr0),
+    .i_we1(s_wr_en1),
+    .i_w_var1(cnu_a_wr_var1),
+    .i_w_edge1(cnu_a_wr_edge1),
+    .i_din1(v2c_sign_wr1)
   );
 
-  mdpc_msg_ram_t u_t_ram (
-    .clk(clk),
-    .rst_n(rst_n),
-    .clear_en(t_clear_en),
-    .rd_var(active_var_idx),
-    .rd_msgs(t_msgs),
-    .wr_en0(t_wr_en0),
-    .wr_var0(active_var_idx),
-    .wr_edge0(lane_edge0_edge_slot),
-    .wr_msg0(c2v_msg_tc0),
-    .wr_en1(t_wr_en1),
-    .wr_var1(active_var_idx),
-    .wr_edge1(lane_edge1_edge_slot),
-    .wr_msg1(c2v_msg_tc1)
+  ram_t u_t_ram (
+    .i_clk(i_clk),
+    .i_rst_n(i_rst_n),
+    .i_clear(t_clear_en),
+    .i_re0((state == DEC_VNU_ACCUM || state == DEC_VNU_EMIT) && vnu_edge0_valid),
+    .i_r_var0(active_var_idx),
+    .i_r_edge0(vnu_edge0_slot),
+    .o_dout0(t_rd_msg0),
+    .i_re1((state == DEC_VNU_ACCUM || state == DEC_VNU_EMIT) && vnu_edge1_valid),
+    .i_r_var1(active_var_idx),
+    .i_r_edge1(vnu_edge1_slot),
+    .o_dout1(t_rd_msg1),
+    .i_we0(t_wr_en0),
+    .i_w_var0(active_var_idx),
+    .i_w_edge0(lane_edge0_edge_slot),
+    .i_din0(c2v_msg_tc0),
+    .i_we1(t_wr_en1),
+    .i_w_var1(active_var_idx),
+    .i_w_edge1(lane_edge1_edge_slot),
+    .i_din1(c2v_msg_tc1)
   );
 
-  mdpc_msg_ram_u u_u_ram (
-    .clk(clk),
-    .rst_n(rst_n),
-    .init_en(u_init_en),
-    .init_bits(x_in),
-    .rd_var0(active_var_idx),
-    .rd_edge0(lane_edge0_edge_slot),
-    .rd_var1(active_var_idx),
-    .rd_edge1(lane_edge1_edge_slot),
-    .rd_msg0(v2c_msg0),
-    .rd_msg1(v2c_msg1),
-    .wr_en(u_wr_en),
-    .wr_var(active_var_idx),
-    .wr_msgs(vnu_u_next)
+  ram_u u_u_ram (
+    .i_clk(i_clk),
+    .i_rst_n(i_rst_n),
+    .i_init(u_init_en),
+    .i_init_bits(i_x),
+    .i_re0((state == DEC_CNU_A) && lane_edge0_valid),
+    .i_r_var0(active_var_idx),
+    .i_r_edge0(lane_edge0_edge_slot),
+    .o_dout0(v2c_msg0),
+    .i_re1((state == DEC_CNU_A) && lane_edge1_valid),
+    .i_r_var1(active_var_idx),
+    .i_r_edge1(lane_edge1_edge_slot),
+    .o_dout1(v2c_msg1),
+    .i_we0(u_wr_en0),
+    .i_w_var0(active_var_idx),
+    .i_w_edge0(vnu_edge0_slot),
+    .i_din0(vnu_v2c0),
+    .i_we1(u_wr_en1),
+    .i_w_var1(active_var_idx),
+    .i_w_edge1(vnu_edge1_slot),
+    .i_din1(vnu_v2c1)
   );
 
-  mdpc_cnu_a u_cnu_a_lane0 (
-    .clk(clk),
-    .rst_n(rst_n),
-    .clear_en(m_clear_en),
-    .in_valid(cnu_a_issue_phase && lane_edge0_valid),
-    .v2c_msg_in(v2c_msg0),
-    .src_var_idx(active_var_idx),
-    .c2v_compact_msg_in(c2v_compact_msg_rd_a0),
-    .c2v_compact_msg_out(c2v_compact_msg_wr0),
-    .v2c_sign_out(v2c_sign_wr0),
-    .out_valid(cnu_a_out_valid0)
+  cnu_a u_cnu_a_lane0 (
+    .i_clk(i_clk),
+    .i_rst_n(i_rst_n),
+    .i_clear(m_clear_en),
+    .i_en(cnu_a_issue_phase && lane_edge0_valid),
+    .i_v2c(v2c_msg0),
+    .i_idx(active_var_idx),
+    .i_comp_c2v(c2v_compact_msg_rd_a0),
+    .o_comp_c2v(c2v_compact_msg_wr0),
+    .o_sign(v2c_sign_wr0),
+    .o_valid(cnu_a_out_valid0)
   );
 
-  mdpc_cnu_a u_cnu_a_lane1 (
-    .clk(clk),
-    .rst_n(rst_n),
-    .clear_en(m_clear_en),
-    .in_valid(cnu_a_issue_phase && lane_edge1_valid),
-    .v2c_msg_in(v2c_msg1),
-    .src_var_idx(active_var_idx),
-    .c2v_compact_msg_in(c2v_compact_msg_rd_a1),
-    .c2v_compact_msg_out(c2v_compact_msg_wr1),
-    .v2c_sign_out(v2c_sign_wr1),
-    .out_valid(cnu_a_out_valid1)
+  cnu_a u_cnu_a_lane1 (
+    .i_clk(i_clk),
+    .i_rst_n(i_rst_n),
+    .i_clear(m_clear_en),
+    .i_en(cnu_a_issue_phase && lane_edge1_valid),
+    .i_v2c(v2c_msg1),
+    .i_idx(active_var_idx),
+    .i_comp_c2v(c2v_compact_msg_rd_a1),
+    .o_comp_c2v(c2v_compact_msg_wr1),
+    .o_sign(v2c_sign_wr1),
+    .o_valid(cnu_a_out_valid1)
   );
 
-  mdpc_cnu_b u_cnu_b_lane0 (
-    .c2v_compact_msg_in(c2v_compact_msg_rd_b0),
-    .v2c_sign_in(v2c_sign0),
-    .src_var_idx(active_var_idx),
-    .c2v_msg_out(c2v_msg0)
+  cnu_b u_cnu_b_lane0 (
+    .i_comp_c2v(c2v_compact_msg_rd_b0),
+    .i_sign(v2c_sign0),
+    .i_idx(active_var_idx),
+    .o_c2v(c2v_msg0)
   );
 
-  mdpc_cnu_b u_cnu_b_lane1 (
-    .c2v_compact_msg_in(c2v_compact_msg_rd_b1),
-    .v2c_sign_in(v2c_sign1),
-    .src_var_idx(active_var_idx),
-    .c2v_msg_out(c2v_msg1)
+  cnu_b u_cnu_b_lane1 (
+    .i_comp_c2v(c2v_compact_msg_rd_b1),
+    .i_sign(v2c_sign1),
+    .i_idx(active_var_idx),
+    .o_c2v(c2v_msg1)
   );
 
-  mdpc_vnu u_vnu (
-    .clk(clk),
-    .rst_n(rst_n),
-    .clear_en((state == DEC_LOAD) || continue_decode),
-    .start_var(vnu_start_var),
-    .last_accum(vnu_last_accum),
-    .prior_msg_in(prior_msg),
-    .accum_valid0(vnu_accum_valid0),
-    .accum_c2v0(vnu_accum_c2v0),
-    .accum_valid1(vnu_accum_valid1),
-    .accum_c2v1(vnu_accum_c2v1),
-    .cached_c2v_in(t_msgs),
-    .result_valid(vnu_result_valid),
-    .app_out(vnu_app),
-    .x_out(vnu_x_out),
-    .u_next_out(vnu_u_next)
+  vnu u_vnu (
+    .i_clk(i_clk),
+    .i_rst_n(i_rst_n),
+    .i_clear((state == DEC_LOAD) || continue_decode),
+    .i_col_start(vnu_col_start),
+    .i_col_end(vnu_col_end),
+    .i_initial_llr(prior_msg),
+    .i_c2v_valid0(vnu_accum_valid0),
+    .i_c2v_sign0(vnu_accum_sign0),
+    .i_c2v_mag0(vnu_accum_mag0),
+    .i_c2v_valid1(vnu_accum_valid1),
+    .i_c2v_sign1(vnu_accum_sign1),
+    .i_c2v_mag1(vnu_accum_mag1),
+    .o_app_valid(),
+    .o_app(),
+    .o_bit_decision(vnu_x_out),
+    .i_emit_en(vnu_emit_en),
+    .i_c2v_t_valid0(vnu_edge0_valid),
+    .i_c2v_t0(t_rd_msg0),
+    .i_c2v_t_valid1(vnu_edge1_valid),
+    .i_c2v_t1(t_rd_msg1),
+    .o_v2c_valid0(vnu_v2c_valid0),
+    .o_v2c0(vnu_v2c0),
+    .o_v2c_valid1(vnu_v2c_valid1),
+    .o_v2c1(vnu_v2c1)
   );
 
-  // Iteration schedule: LOAD initializes memories, CNU_A compresses all rows,
-  // CNU_B expands c2v into RAM T, VNU updates C1/RAM U, and CHECK tests the
-  // end-of-iteration syndrome before either stopping or starting the next pass.
-  always_ff @(posedge clk or negedge rst_n) begin
+  always_ff @(posedge i_clk or negedge i_rst_n) begin
     integer row_idx_local;
 
-    if (!rst_n) begin
+    if (!i_rst_n) begin
       state <= DEC_IDLE;
-      done <= 1'b0;
-      success <= 1'b0;
-      x_out <= '0;
-      iter_count <= '0;
+      o_done <= 1'b0;
+      o_success <= 1'b0;
+      o_x <= '0;
+      o_iter_count <= '0;
       active_var_idx <= '0;
       scan_slot <= '0;
       cnu_a_flush_pending <= 1'b0;
-      syndrome_reg <= '0;
 
       for (row_idx_local = 0; row_idx_local < I_MAX; row_idx_local++) begin
         syndrome_hist[row_idx_local] <= '0;
@@ -450,22 +482,21 @@ module mdpc_decoder_demo (
     end else begin
       case (state)
         DEC_IDLE: begin
-          done <= 1'b0;
-          success <= 1'b0;
-          if (start) begin
+          o_done <= 1'b0;
+          o_success <= 1'b0;
+          if (i_start) begin
             state <= DEC_LOAD;
           end
         end
 
         DEC_LOAD: begin
-          done <= 1'b0;
-          success <= 1'b0;
-          x_out <= x_in;
-          iter_count <= '0;
+          o_done <= 1'b0;
+          o_success <= 1'b0;
+          o_x <= i_x;
+          o_iter_count <= '0;
           active_var_idx <= '0;
           scan_slot <= '0;
           cnu_a_flush_pending <= 1'b0;
-          syndrome_reg <= '0;
           for (row_idx_local = 0; row_idx_local < I_MAX; row_idx_local++) begin
             syndrome_hist[row_idx_local] <= '0;
           end
@@ -495,7 +526,7 @@ module mdpc_decoder_demo (
             scan_slot <= '0;
             if (active_var_idx == LAST_VAR) begin
               active_var_idx <= '0;
-              state <= DEC_VNU;
+              state <= DEC_VNU_ACCUM;
             end else begin
               active_var_idx <= active_var_idx + 1'b1;
             end
@@ -504,15 +535,27 @@ module mdpc_decoder_demo (
           end
         end
 
-        DEC_VNU: begin
-          if (vnu_result_valid) begin
-            x_out[active_var_idx] <= vnu_x_out;
+        DEC_VNU_ACCUM: begin
+          if (scan_slot == VNU_LAST_SLOT) begin
+            scan_slot <= '0;
+            state <= DEC_VNU_EMIT;
+          end else begin
+            scan_slot <= scan_slot + 1'b1;
+          end
+        end
+
+        DEC_VNU_EMIT: begin
+          if (scan_slot == '0) begin
+            o_x[active_var_idx] <= vnu_x_out;
+          end
+          if (scan_slot == VNU_LAST_SLOT) begin
             scan_slot <= '0;
             if (active_var_idx == LAST_VAR) begin
               active_var_idx <= '0;
               state <= DEC_CHECK;
             end else begin
               active_var_idx <= active_var_idx + 1'b1;
+              state <= DEC_VNU_ACCUM;
             end
           end else begin
             scan_slot <= scan_slot + 1'b1;
@@ -520,14 +563,13 @@ module mdpc_decoder_demo (
         end
 
         DEC_CHECK: begin
-          syndrome_reg <= syndrome_next;
-          syndrome_hist[iter_count[HIST_IDX_W-1:0]] <= syndrome_next;
-          iter_count <= next_iter_count;
+          syndrome_hist[o_iter_count[HIST_IDX_W-1:0]] <= syndrome_next;
+          o_iter_count <= next_iter_count;
 
           if (stop_decode) begin
-            done <= 1'b1;
-            success <= (syndrome_next == '0);
-            x_out <= c1_bits;
+            o_done <= 1'b1;
+            o_success <= (syndrome_next == '0);
+            o_x <= c1_bits;
             state <= DEC_DONE;
           end else begin
             active_var_idx <= '0;
@@ -538,8 +580,8 @@ module mdpc_decoder_demo (
         end
 
         DEC_DONE: begin
-          done <= 1'b1;
-          x_out <= c1_bits;
+          o_done <= 1'b1;
+          o_x <= c1_bits;
         end
 
         default: begin

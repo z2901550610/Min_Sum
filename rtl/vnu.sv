@@ -4,22 +4,31 @@ import mdpc_paper_pkg::*;
 import mdpc_demo_pkg::*;
 `endif
 
-module mdpc_vnu (
-  input  logic clk,
-  input  logic rst_n,
-  input  logic clear_en,
-  input  logic start_var,
-  input  logic last_accum,
-  input  logic signed [APP_W-1:0] prior_msg_in,
-  input  logic accum_valid0,
-  input  logic signed [MSG_W-1:0] accum_c2v0,
-  input  logic accum_valid1,
-  input  logic signed [MSG_W-1:0] accum_c2v1,
-  input  logic signed [MSG_W-1:0] cached_c2v_in [0:W-1],
-  output logic result_valid,
-  output logic signed [APP_W-1:0] app_out,
-  output logic x_out,
-  output logic [MSG_W-1:0] u_next_out [0:W-1]
+module vnu (
+  input  logic i_clk,
+  input  logic i_rst_n,
+  input  logic i_clear,
+  input  logic i_col_start,
+  input  logic i_col_end,
+  input  logic signed [APP_W-1:0] i_initial_llr,
+  input  logic i_c2v_valid0,
+  input  logic i_c2v_sign0,
+  input  logic [D-1:0] i_c2v_mag0,
+  input  logic i_c2v_valid1,
+  input  logic i_c2v_sign1,
+  input  logic [D-1:0] i_c2v_mag1,
+  output logic o_app_valid,
+  output logic signed [APP_W-1:0] o_app,
+  output logic o_bit_decision,
+  input  logic i_emit_en,
+  input  logic i_c2v_t_valid0,
+  input  logic signed [MSG_W-1:0] i_c2v_t0,
+  input  logic i_c2v_t_valid1,
+  input  logic signed [MSG_W-1:0] i_c2v_t1,
+  output logic o_v2c_valid0,
+  output logic [MSG_W-1:0] o_v2c0,
+  output logic o_v2c_valid1,
+  output logic [MSG_W-1:0] o_v2c1
 );
 
 `ifdef MDPC_PAPER_CFG
@@ -28,20 +37,16 @@ module mdpc_vnu (
   import mdpc_demo_pkg::*;
 `endif
 
-  // VNU stays in signed 2's-complement: RAM T already holds signed c2v, and
-  // only the final u_next values are converted back to sign-magnitude.
-
   localparam int VNU_TC_W = APP_W + ((W > 1) ? $clog2(W + 1) : 1);
   localparam int SCALE_W = VNU_TC_W + ALPHA_FRAC_W;
 
   logic signed [VNU_TC_W-1:0] cycle_accum_sum;
   logic signed [VNU_TC_W-1:0] accum_sum_reg;
   logic signed [VNU_TC_W-1:0] accum_sum_next;
+  logic signed [VNU_TC_W-1:0] posterior_reg;
+  logic signed [VNU_TC_W-1:0] posterior_next;
   logic signed [VNU_TC_W-1:0] prior_msg_sign_extend;
-  logic signed [VNU_TC_W-1:0] scaled_accum_sum;
-  logic signed [VNU_TC_W-1:0] posterior_msg;
   logic accum_valid_any;
-  logic final_accum_cycle;
 
   function automatic logic [VNU_TC_W-1:0] tc_abs(
     input logic signed [VNU_TC_W-1:0] tc_value
@@ -78,7 +83,21 @@ module mdpc_vnu (
     end
   endfunction
 
-  // alpha is represented as two fractional shifts plus round-to-nearest bias.
+  function automatic logic signed [MSG_W-1:0] signmag_to_tc_msg(
+    input logic msg_sign,
+    input logic [D-1:0] msg_mag
+  );
+    logic signed [MSG_W-1:0] mag_tc;
+    begin
+      mag_tc = $signed({1'b0, msg_mag});
+      if (msg_sign && (msg_mag != '0)) begin
+        signmag_to_tc_msg = -mag_tc;
+      end else begin
+        signmag_to_tc_msg = mag_tc;
+      end
+    end
+  endfunction
+
   function automatic logic [VNU_TC_W-1:0] alpha_scale_mag(
     input logic [VNU_TC_W-1:0] mag_value
   );
@@ -97,7 +116,6 @@ module mdpc_vnu (
     end
   endfunction
 
-  // Preserve sign while scaling the magnitude.
   function automatic logic signed [VNU_TC_W-1:0] alpha_scale(
     input logic signed [VNU_TC_W-1:0] tc_value
   );
@@ -110,8 +128,6 @@ module mdpc_vnu (
     end
   endfunction
 
-  // RAM U has D magnitude bits, so clamp the VNU result before crossing back
-  // to sign-magnitude.
   function automatic logic [MSG_W-1:0] tc_to_signmag_sat(
     input logic signed [VNU_TC_W-1:0] tc_value
   );
@@ -137,70 +153,59 @@ module mdpc_vnu (
   endfunction
 
   always_comb begin
-    integer edge_idx;
-    logic signed [VNU_TC_W-1:0] cached_c2v_signed;
-    logic signed [VNU_TC_W-1:0] scaled_cached_c2v_signed;
-    logic signed [VNU_TC_W-1:0] next_u_signed;
+    logic signed [VNU_TC_W-1:0] scaled_sum;
+    logic signed [VNU_TC_W-1:0] next_u0;
+    logic signed [VNU_TC_W-1:0] next_u1;
 
-    // Accumulate up to L=2 c2v messages per cycle.
     cycle_accum_sum = '0;
     accum_valid_any = 1'b0;
-    if (accum_valid0) begin
-      cycle_accum_sum = cycle_accum_sum + sign_extend(accum_c2v0);
+    if (i_c2v_valid0) begin
+      cycle_accum_sum = cycle_accum_sum + sign_extend(signmag_to_tc_msg(i_c2v_sign0, i_c2v_mag0));
       accum_valid_any = 1'b1;
     end
-    if (accum_valid1) begin
-      cycle_accum_sum = cycle_accum_sum + sign_extend(accum_c2v1);
+    if (i_c2v_valid1) begin
+      cycle_accum_sum = cycle_accum_sum + sign_extend(signmag_to_tc_msg(i_c2v_sign1, i_c2v_mag1));
       accum_valid_any = 1'b1;
     end
 
-    // start_var selects the first cycle of a variable-node accumulation.
-    if (start_var) begin
+    if (i_col_start) begin
       accum_sum_next = cycle_accum_sum;
     end else begin
       accum_sum_next = accum_sum_reg + cycle_accum_sum;
     end
 
-    // Scale the completed c2v sum once, then add the channel prior gamma_j.
-    prior_msg_sign_extend = {{(VNU_TC_W - APP_W){prior_msg_in[APP_W-1]}}, prior_msg_in};
-    final_accum_cycle = last_accum && accum_valid_any;
-    result_valid = final_accum_cycle;
-    scaled_accum_sum = '0;
-    posterior_msg = '0;
-    cached_c2v_signed = '0;
-    scaled_cached_c2v_signed = '0;
-    next_u_signed = '0;
-    app_out = '0;
-    x_out = 1'b0;
+    prior_msg_sign_extend = {{(VNU_TC_W - APP_W){i_initial_llr[APP_W-1]}}, i_initial_llr};
+    scaled_sum = alpha_scale(accum_sum_next);
+    posterior_next = prior_msg_sign_extend + scaled_sum;
 
-    // cached_c2v_in is reused to form u_next = app - alpha * c2v for every edge.
-    for (edge_idx = 0; edge_idx < W; edge_idx++) begin
-      u_next_out[edge_idx] = '0;
-    end
-
-    if (final_accum_cycle) begin
-      scaled_accum_sum = alpha_scale(accum_sum_next);
-      posterior_msg = prior_msg_sign_extend + scaled_accum_sum;
-      app_out = posterior_msg[APP_W-1:0];
-      x_out = posterior_msg[VNU_TC_W-1];
-
-      for (edge_idx = 0; edge_idx < W; edge_idx++) begin
-        cached_c2v_signed = sign_extend(cached_c2v_in[edge_idx]);
-        scaled_cached_c2v_signed = alpha_scale(cached_c2v_signed);
-        next_u_signed = posterior_msg - scaled_cached_c2v_signed;
-        u_next_out[edge_idx] = tc_to_signmag_sat(next_u_signed);
-      end
-    end
+    next_u0 = posterior_reg - alpha_scale(sign_extend(i_c2v_t0));
+    next_u1 = posterior_reg - alpha_scale(sign_extend(i_c2v_t1));
+    o_v2c_valid0 = i_emit_en && i_c2v_t_valid0;
+    o_v2c_valid1 = i_emit_en && i_c2v_t_valid1;
+    o_v2c0 = o_v2c_valid0 ? tc_to_signmag_sat(next_u0) : '0;
+    o_v2c1 = o_v2c_valid1 ? tc_to_signmag_sat(next_u1) : '0;
   end
 
-  always_ff @(posedge clk or negedge rst_n) begin
-    if (!rst_n) begin
+  assign o_app = posterior_reg[APP_W-1:0];
+  assign o_bit_decision = posterior_reg[VNU_TC_W-1];
+
+  always_ff @(posedge i_clk or negedge i_rst_n) begin
+    if (!i_rst_n) begin
       accum_sum_reg <= '0;
-    end else if (clear_en) begin
+      posterior_reg <= '0;
+      o_app_valid <= 1'b0;
+    end else if (i_clear) begin
       accum_sum_reg <= '0;
-    // The final cycle consumes accum_sum_next directly; no register writeback.
-    end else if ((start_var || accum_valid_any) && !last_accum) begin
-      accum_sum_reg <= accum_sum_next;
+      posterior_reg <= '0;
+      o_app_valid <= 1'b0;
+    end else begin
+      o_app_valid <= i_col_end && accum_valid_any;
+      if (i_col_end && accum_valid_any) begin
+        posterior_reg <= posterior_next;
+      end
+      if ((i_col_start || accum_valid_any) && !i_col_end) begin
+        accum_sum_reg <= accum_sum_next;
+      end
     end
   end
 endmodule
