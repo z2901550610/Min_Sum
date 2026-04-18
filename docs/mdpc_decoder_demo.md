@@ -66,6 +66,9 @@
 作用：
 
 - 保存每个 check row 的压缩状态
+- 内部是两组 ping-pong bank，每组按 `L=2` 个 row segment 分成 lane-local RAM
+- CNU B 从当前迭代 read bank 读压缩状态，CNU A 向下一迭代 write bank 累积新状态
+- 每次 `CHECK` 后若继续迭代，read/write bank 交换，并只清空新的 write bank
 
 每行状态包含：
 
@@ -96,7 +99,8 @@
 - 保存 `c2v` 消息
 - 作为论文 Fig. 7 中的中间 `c2v` 缓存
 - 以 signed 2's complement 形式保存
-- `VNU` 每拍从中取最多 `L=2` 条消息做累加
+- CNU B 生成 `c2v` 时写入
+- VNU emit 上一列时每拍从中取最多 `L=2` 条消息做 `app - alpha*c2v`
 
 ### `RAM U`
 
@@ -107,7 +111,7 @@
 - 保存下一轮送回 CNU A 的 `u_i,j`
 - 以 sign-magnitude 形式保存
 - `LOAD` 阶段用先验消息初始化
-- `VNU_EMIT` 阶段每拍最多写回两条 `v2c`
+- 流水阶段 VNU emit 每拍最多写回两条 `v2c`，同时这些 `v2c` 直连 CNU A
 
 ## 模块说明
 
@@ -217,16 +221,19 @@
 顶层负责：
 
 - 驱动 `RAM I / C / M / S / T / U`
-- 组织 `CNU_A -> CNU_B -> VNU_ACCUM -> VNU_EMIT -> CHECK`
+- 组织论文 Fig. 8 风格的列级流水
+- 在 `CNU_B(iter k, col j+1)` 运行时，同时让 VNU emit `col j` 并把新 `v2c` 直连 `CNU_A(iter k+1, col j)`
 - 维护 `active_var_idx`、`scan_slot`、`iter_count`
 
 状态机包括：
 
 - `LOAD`
-- `CNU_A`
-- `CNU_B`
-- `VNU_ACCUM`
-- `VNU_EMIT`
+- `INIT_CNU_A`
+- `INIT_CNU_A_FLUSH`
+- `PIPE_PREP`
+- `PIPE`
+- `PIPE_DRAIN`
+- `PIPE_FLUSH`
 - `CHECK`
 - `DONE`
 
@@ -240,47 +247,43 @@
 - `M RAM` 清零到初始 row state
 - `S RAM` 和 `T RAM` 清零
 
-### `CNU_A`
+### `INIT_CNU_A`
 
 - `I RAM` 给出当前列非零边
 - `h_shift` 生成两条 lane 的边描述
 - `U RAM` 读出当前边的 `u_i,j`
-- `M RAM` 读出对应 row state
+- `M RAM` 的初始 read bank 读出对应 row state
 - `cnu_a` 在时钟边沿锁存这条边，并在下一拍给出更新后的 row state 和 sign
-- row state 写回 `M RAM`
+- row state 写回初始 read bank，形成第 0 次迭代 CNU B 要读取的压缩 c2v
 - sign 写入 `S RAM`
 - 一列处理完成后，`I RAM` 对当前 bank 做列移位
 
-### `CNU_B`
+### `PIPE_PREP`
 
-- 继续按当前列顺序读取 `I RAM`
-- `M RAM` 读出压缩 row state
+- 处理第 0 列，只运行 CNU B 和 VNU accumulation
+- `M RAM` read bank 读出压缩 row state
 - `S RAM` 读出当前边 sign
-- `cnu_b` 生成单条 `c2v`
-- 顶层把 `c2v` 从 sign-magnitude 转成 signed 2's complement
-- 转换后的 `c2v` 写入 `T RAM`
-- 一列处理完成后，`I RAM` 对当前 bank 做列移位
+- `cnu_b` 生成 `c2v`，直接送入 VNU accumulation，同时写入 `T RAM`
+- 顶层按 `edge_slot` 缓存当前列 edge descriptor，供下一列 emit/CNU A 使用
 
-### `VNU_ACCUM`
+### `PIPE`
 
-- `C0 RAM` 提供先验消息 `prior_j`
-- `T RAM` 以 signed 2's complement 保存该变量节点的全部 `c2v`
-- `vnu` 每拍累加最多两条 `c2v`
-- 最后一拍生成并寄存 `app` 和 `x_j`
+- 当前列执行 CNU B 并累加当前列 `c2v`
+- 上一列执行 VNU emit：从 `T RAM` 读缓存 `c2v`，计算 `u = app - alpha*c2v`
+- VNU emit 的 `u` 同周期送入 CNU A，CNU A 更新下一迭代 write bank 的 row state
+- `u` 同时写回 `RAM U`，`x_j` 写回 `RAM C1`
+- 当前列结束后 edge descriptor buffer 轮换，下一列继续流水
 
-### `VNU_EMIT`
+### `PIPE_DRAIN / PIPE_FLUSH`
 
-- `T RAM` 继续逐拍读出最多两条缓存 `c2v`
-- `vnu` 逐拍计算 `u = app - alpha * c2v`
-- `u` 在写回 `U RAM` 前从 2's complement 转回 sign-magnitude
-- `x_j` 写回 `C1 RAM`
-- 当前拍最多两条 `u` 写回 `U RAM`
+- 所有 CNU B 列处理完后，`PIPE_DRAIN` 补最后一列的 VNU emit/CNU A
+- `PIPE_FLUSH` 给 CNU A 的寄存输出留一拍写回 `RAM M`
 
 ### `CHECK`
 
 - 对 `C1 RAM` 当前硬判决做 syndrome 计算
 - syndrome 为零则结束
-- 否则 `iter_count` 加一，清空 `M RAM`，返回 `CNU_A`
+- 否则 `iter_count` 加一，RAM M read/write bank 交换，清空新的 write bank，返回 `PIPE_PREP`
 
 ## 验证
 

@@ -199,8 +199,8 @@ module vnu (
       posterior_reg <= '0;
       o_app_valid <= 1'b0;
     end else begin
-      o_app_valid <= i_col_end && accum_valid_any;
-      if (i_col_end && accum_valid_any) begin
+      o_app_valid <= i_col_end;
+      if (i_col_end) begin
         posterior_reg <= posterior_next;
       end
       if ((i_col_start || accum_valid_any) && !i_col_end) begin

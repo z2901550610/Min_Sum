@@ -173,6 +173,41 @@ module tb_vnu;
     end
   endtask
 
+  task automatic run_overlap_case;
+    begin
+      initial_llr = 9;
+      drive_accum_pair(1'b1, 1'b0, 1'b0, D'(15), 1'b1, 1'b0, D'(15));
+      drive_accum_pair(1'b0, 1'b1, 1'b1, D'(9), 1'b0, 1'b0, '0);
+      if (app !== 11) $fatal(1, "overlap setup app mismatch: got %0d exp 11", app);
+
+      idle_inputs();
+      col_start = 1'b1;
+      col_end = 1'b0;
+      c2v_valid0 = 1'b1;
+      c2v_sign0 = 1'b0;
+      c2v_mag0 = D'(15);
+      c2v_valid1 = 1'b1;
+      c2v_sign1 = 1'b0;
+      c2v_mag1 = D'(15);
+      emit_en = 1'b1;
+      c2v_t_valid0 = 1'b1;
+      c2v_t0 = msg_tc(1'b0, D'(15));
+      c2v_t_valid1 = 1'b0;
+      #1;
+      if (v2c_valid0 !== 1'b1 || v2c0 !== {1'b0, D'(10)}) $fatal(1, "overlap emit used wrong posterior");
+      @(posedge clk);
+      #1;
+
+      idle_inputs();
+      col_end = 1'b1;
+      @(posedge clk);
+      #1;
+      if (app_valid !== 1'b1) $fatal(1, "overlap delayed col_end should assert app_valid");
+      if (app !== 12) $fatal(1, "overlap delayed posterior mismatch: got %0d exp 12", app);
+      idle_inputs();
+    end
+  endtask
+
   initial begin
     rst_n = 1'b0;
     clear_en = 1'b0;
@@ -184,6 +219,13 @@ module tb_vnu;
     @(posedge clk);
 
     run_case0();
+
+    clear_en = 1'b1;
+    @(posedge clk);
+    clear_en = 1'b0;
+    #1;
+
+    run_overlap_case();
 
     clear_en = 1'b1;
     @(posedge clk);
