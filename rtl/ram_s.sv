@@ -2,9 +2,9 @@
 module ram_s
   import bike_pkg::*;
 (
-  input  logic i_clk,                   // Storage clock.
-  input  logic i_rst_n,                 // Active-low reset.
-  input  logic i_clear,                 // Clears all stored sign bits.
+  input  logic i_clk,
+  input  logic i_rst_n,
+  input  logic i_clear,
   input  logic [VAR_W-1:0] i_r_var0,    // Variable index for read port 0.
   input  logic [EDGE_W-1:0] i_r_edge0,  // Edge slot for read port 0.
   input  logic [VAR_W-1:0] i_r_var1,    // Variable index for read port 1.

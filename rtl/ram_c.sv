@@ -2,9 +2,9 @@
 module ram_c
   import bike_pkg::*;
 (
-  input  logic i_clk,                    // Storage clock.
-  input  logic i_rst_n,                  // Active-low reset.
-  input  logic i_clear,                  // Clears the full estimate vector.
+  input  logic i_clk,
+  input  logic i_rst_n,
+  input  logic i_clear,
   input  logic i_load,                   // Bulk-load enable for the estimate vector.
   input  logic [N-1:0] i_load_bits,      // Bulk-load data.
   input  logic i_we,                     // Single-bit write enable.

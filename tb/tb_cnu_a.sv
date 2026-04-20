@@ -9,8 +9,8 @@ module tb_cnu_a;
   logic in_valid;
   logic [MSG_W-1:0] v2c_msg_in;
   logic [VAR_W-1:0] src_var_idx;
-  logic [ROW_STATE_W-1:0] c2v_compact_msg_in;
-  logic [ROW_STATE_W-1:0] c2v_compact_msg_out;
+  logic [COMP_C2V_W-1:0] comp_c2v_in;
+  logic [COMP_C2V_W-1:0] comp_c2v_out;
   logic v2c_sign_out;
   logic out_valid;
 
@@ -21,8 +21,8 @@ module tb_cnu_a;
     .i_en(in_valid),
     .i_v2c(v2c_msg_in),
     .i_var_idx(src_var_idx),
-    .i_comp_c2v(c2v_compact_msg_in),
-    .o_comp_c2v(c2v_compact_msg_out),
+    .i_comp_c2v(comp_c2v_in),
+    .o_comp_c2v(comp_c2v_out),
     .o_sign(v2c_sign_out),
     .o_valid(out_valid)
   );
@@ -31,12 +31,12 @@ module tb_cnu_a;
   always #5 clk = ~clk;
 
   task automatic drive_step(
-    input logic [ROW_STATE_W-1:0] row_state_in,
+    input logic [COMP_C2V_W-1:0] comp_c2v_state_in,
     input logic [MSG_W-1:0] msg_in,
     input logic [VAR_W-1:0] var_idx
   );
     begin
-      c2v_compact_msg_in = row_state_in;
+      comp_c2v_in = comp_c2v_state_in;
       v2c_msg_in = msg_in;
       src_var_idx = var_idx;
       in_valid = 1'b1;
@@ -54,10 +54,10 @@ module tb_cnu_a;
     input int exp_sign_bit
   );
     begin
-      if (int'(c2v_compact_msg_out[ROW_STATE_MIN1_LSB +: D]) != exp_min1) $fatal(1, "min1 mismatch: got %0d exp %0d", int'(c2v_compact_msg_out[ROW_STATE_MIN1_LSB +: D]), exp_min1);
-      if (int'(c2v_compact_msg_out[ROW_STATE_MIN2_LSB +: D]) != exp_min2) $fatal(1, "min2 mismatch: got %0d exp %0d", int'(c2v_compact_msg_out[ROW_STATE_MIN2_LSB +: D]), exp_min2);
-      if (int'(c2v_compact_msg_out[ROW_STATE_MIN_ID_LSB +: VAR_W]) != exp_min_id) $fatal(1, "min_id mismatch: got %0d exp %0d", int'(c2v_compact_msg_out[ROW_STATE_MIN_ID_LSB +: VAR_W]), exp_min_id);
-      if (int'(c2v_compact_msg_out[ROW_STATE_SIGN_XOR_BIT]) != exp_sign_xor) $fatal(1, "sign_xor mismatch: got %0d exp %0d", int'(c2v_compact_msg_out[ROW_STATE_SIGN_XOR_BIT]), exp_sign_xor);
+      if (int'(comp_c2v_out[COMP_C2V_MIN1_LSB +: D]) != exp_min1) $fatal(1, "min1 mismatch: got %0d exp %0d", int'(comp_c2v_out[COMP_C2V_MIN1_LSB +: D]), exp_min1);
+      if (int'(comp_c2v_out[COMP_C2V_MIN2_LSB +: D]) != exp_min2) $fatal(1, "min2 mismatch: got %0d exp %0d", int'(comp_c2v_out[COMP_C2V_MIN2_LSB +: D]), exp_min2);
+      if (int'(comp_c2v_out[COMP_C2V_MIN_ID_LSB +: VAR_W]) != exp_min_id) $fatal(1, "min_id mismatch: got %0d exp %0d", int'(comp_c2v_out[COMP_C2V_MIN_ID_LSB +: VAR_W]), exp_min_id);
+      if (int'(comp_c2v_out[COMP_C2V_SIGN_XOR_BIT]) != exp_sign_xor) $fatal(1, "sign_xor mismatch: got %0d exp %0d", int'(comp_c2v_out[COMP_C2V_SIGN_XOR_BIT]), exp_sign_xor);
       if (int'(v2c_sign_out) != exp_sign_bit) $fatal(1, "sign_bit mismatch: got %0d exp %0d", int'(v2c_sign_out), exp_sign_bit);
     end
   endtask
@@ -68,19 +68,19 @@ module tb_cnu_a;
     in_valid = 1'b0;
     v2c_msg_in = '0;
     src_var_idx = '0;
-    c2v_compact_msg_in = ROW_STATE_INIT;
+    comp_c2v_in = COMP_C2V_INIT;
 
     repeat (2) @(posedge clk);
     rst_n = 1'b1;
     @(posedge clk);
 
-    drive_step(ROW_STATE_INIT, {1'b0, D'(5)}, VAR_W'(4));
+    drive_step(COMP_C2V_INIT, {1'b0, D'(5)}, VAR_W'(4));
     expect_state(5, MAG_MAX, 4, 0, 0);
 
-    drive_step(c2v_compact_msg_out, {1'b1, D'(2)}, VAR_W'(3));
+    drive_step(comp_c2v_out, {1'b1, D'(2)}, VAR_W'(3));
     expect_state(2, 5, 3, 1, 1);
 
-    drive_step(c2v_compact_msg_out, {1'b0, D'(2)}, VAR_W'(7));
+    drive_step(comp_c2v_out, {1'b0, D'(2)}, VAR_W'(7));
     expect_state(2, 2, 7, 1, 0);
 
     in_valid = 1'b0;

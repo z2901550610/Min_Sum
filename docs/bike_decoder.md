@@ -36,7 +36,7 @@ The decoder starts from the all-zero error estimate.
 - `ram_c` stores the running error estimate / hard decision bits.
 - `RAM U` is initialized to `{sign=0, mag=C_VAL}` for every edge.
 - The VNU prior is always `+C_VAL`.
-- `CNU_A` accumulates only the incoming `u` signs in each row state.
+- `CNU_A` accumulates only the incoming `u` signs in each compressed c2v state.
 - `CNU_B` computes each outgoing sign as:
 
 ```text

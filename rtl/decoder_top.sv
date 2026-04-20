@@ -2,8 +2,8 @@
 module decoder_top
   import bike_pkg::*;
 (
-  input  logic i_clk,                           // Core decoder clock.
-  input  logic i_rst_n,                         // Active-low reset.
+  input  logic i_clk,
+  input  logic i_rst_n,
   input  logic i_start,                         // Starts a new decode operation.
   input  logic [R-1:0] i_syndrome,              // Input syndrome to be cancelled by the estimate.
   output logic o_done,                          // High when decoding has finished.
@@ -30,8 +30,8 @@ module decoder_top
   logic [VAR_W-1:0] c2v_var_idx;
   logic [VAR_W-1:0] v2c_var_idx;
   logic [EDGE_W-1:0] col_slot_idx;
-  logic row_state_read_bank;
-  logic row_state_write_bank;
+  logic comp_c2v_read_bank;
+  logic comp_c2v_write_bank;
   logic c2v_edge_list_buf_sel;
   logic v2c_edge_list_buf_sel;
   /* verilator lint_off UNUSEDSIGNAL */
@@ -82,12 +82,12 @@ module decoder_top
 
   logic [N-1:0] error_estimate_bits;
   logic error_estimate_rd_unused;
-  logic [ROW_STATE_W-1:0] c2v_compact_msg_rd_a0;
-  logic [ROW_STATE_W-1:0] c2v_compact_msg_rd_a1;
-  logic [ROW_STATE_W-1:0] c2v_compact_msg_rd_b0;
-  logic [ROW_STATE_W-1:0] c2v_compact_msg_rd_b1;
-  logic [ROW_STATE_W-1:0] c2v_compact_msg_wr0;
-  logic [ROW_STATE_W-1:0] c2v_compact_msg_wr1;
+  logic [COMP_C2V_W-1:0] comp_c2v_rd_a0;
+  logic [COMP_C2V_W-1:0] comp_c2v_rd_a1;
+  logic [COMP_C2V_W-1:0] comp_c2v_rd_b0;
+  logic [COMP_C2V_W-1:0] comp_c2v_rd_b1;
+  logic [COMP_C2V_W-1:0] comp_c2v_wr0;
+  logic [COMP_C2V_W-1:0] comp_c2v_wr1;
   logic [MSG_W-1:0] u_init_msg0;
   logic [MSG_W-1:0] u_init_msg1;
   logic [MSG_W-1:0] cnu_a_v2c_msg0;
@@ -443,8 +443,8 @@ module decoder_top
     .o_c2v_var_idx(c2v_var_idx),
     .o_v2c_var_idx(v2c_var_idx),
     .o_col_slot_idx(col_slot_idx),
-    .o_row_state_read_bank(row_state_read_bank),
-    .o_row_state_write_bank(row_state_write_bank),
+    .o_comp_c2v_read_bank(comp_c2v_read_bank),
+    .o_comp_c2v_write_bank(comp_c2v_write_bank),
     .o_c2v_edge_list_buf_sel(c2v_edge_list_buf_sel),
     .o_v2c_edge_list_buf_sel(v2c_edge_list_buf_sel),
     .o_done(done_ctrl),
@@ -491,31 +491,31 @@ module decoder_top
     .i_rst_n(i_rst_n),
     .i_clear_all(m_clear_all_en),
     .i_clear_bank(m_clear_bank_en),
-    .i_clear_bank_sel(row_state_read_bank),
-    .i_r_bank_a(init_row_accum_active ? row_state_read_bank : row_state_write_bank),
+    .i_clear_bank_sel(comp_c2v_read_bank),
+    .i_r_bank_a(init_row_accum_active ? comp_c2v_read_bank : comp_c2v_write_bank),
     .i_r_lane_a0(init_row_accum_active ? LANE_IDX_W'(0) : emit_edge0_lane),
     .i_r_addr_a0(init_row_accum_active ? lane_edge0_row_local : emit_edge0_row_local),
     .i_r_lane_a1(init_row_accum_active ? LANE_IDX_W'(1) : emit_edge1_lane),
     .i_r_addr_a1(init_row_accum_active ? lane_edge1_row_local : emit_edge1_row_local),
-    .i_r_bank_b(row_state_read_bank),
+    .i_r_bank_b(comp_c2v_read_bank),
     .i_r_lane_b0(LANE_IDX_W'(0)),
     .i_r_addr_b0(lane_edge0_row_local),
     .i_r_lane_b1(LANE_IDX_W'(1)),
     .i_r_addr_b1(lane_edge1_row_local),
-    .o_dout_a0(c2v_compact_msg_rd_a0),
-    .o_dout_a1(c2v_compact_msg_rd_a1),
-    .o_dout_b0(c2v_compact_msg_rd_b0),
-    .o_dout_b1(c2v_compact_msg_rd_b1),
+    .o_dout_a0(comp_c2v_rd_a0),
+    .o_dout_a1(comp_c2v_rd_a1),
+    .o_dout_b0(comp_c2v_rd_b0),
+    .o_dout_b1(comp_c2v_rd_b1),
     .i_we0(m_wr_en0),
     .i_w_bank0(cnu_a_wr_bank0),
     .i_w_lane0(cnu_a_wr_lane0),
     .i_w_addr0(cnu_a_wr_row0),
-    .i_din0(c2v_compact_msg_wr0),
+    .i_din0(comp_c2v_wr0),
     .i_we1(m_wr_en1),
     .i_w_bank1(cnu_a_wr_bank1),
     .i_w_lane1(cnu_a_wr_lane1),
     .i_w_addr1(cnu_a_wr_row1),
-    .i_din1(c2v_compact_msg_wr1)
+    .i_din1(comp_c2v_wr1)
   );
 
   ram_s u_s_ram (
@@ -589,8 +589,8 @@ module decoder_top
     .i_en(cnu_a_en0),
     .i_v2c(cnu_a_v2c_msg0),
     .i_var_idx(init_row_accum_active ? c2v_var_idx : v2c_var_idx),
-    .i_comp_c2v(c2v_compact_msg_rd_a0),
-    .o_comp_c2v(c2v_compact_msg_wr0),
+    .i_comp_c2v(comp_c2v_rd_a0),
+    .o_comp_c2v(comp_c2v_wr0),
     .o_sign(v2c_sign_wr0),
     .o_valid(cnu_a_out_valid0)
   );
@@ -602,14 +602,14 @@ module decoder_top
     .i_en(cnu_a_en1),
     .i_v2c(cnu_a_v2c_msg1),
     .i_var_idx(init_row_accum_active ? c2v_var_idx : v2c_var_idx),
-    .i_comp_c2v(c2v_compact_msg_rd_a1),
-    .o_comp_c2v(c2v_compact_msg_wr1),
+    .i_comp_c2v(comp_c2v_rd_a1),
+    .o_comp_c2v(comp_c2v_wr1),
     .o_sign(v2c_sign_wr1),
     .o_valid(cnu_a_out_valid1)
   );
 
   cnu_b u_cnu_b_lane0 (
-    .i_comp_c2v(c2v_compact_msg_rd_b0),
+    .i_comp_c2v(comp_c2v_rd_b0),
     .i_v2c_sign(v2c_sign0),
     .i_syndrome_bit(i_syndrome[lane_edge0_row_global]),
     .i_var_idx(c2v_var_idx),
@@ -617,7 +617,7 @@ module decoder_top
   );
 
   cnu_b u_cnu_b_lane1 (
-    .i_comp_c2v(c2v_compact_msg_rd_b1),
+    .i_comp_c2v(comp_c2v_rd_b1),
     .i_v2c_sign(v2c_sign1),
     .i_syndrome_bit(i_syndrome[lane_edge1_row_global]),
     .i_var_idx(c2v_var_idx),
@@ -712,14 +712,14 @@ module decoder_top
         cnu_a_wr_edge0 <= init_row_accum_active ? lane_edge0_edge_slot : emit_edge0_slot;
         cnu_a_wr_var0 <= init_row_accum_active ? c2v_var_idx : v2c_var_idx;
         cnu_a_wr_lane0 <= init_row_accum_active ? LANE_IDX_W'(0) : emit_edge0_lane;
-        cnu_a_wr_bank0 <= init_row_accum_active ? row_state_read_bank : row_state_write_bank;
+        cnu_a_wr_bank0 <= init_row_accum_active ? comp_c2v_read_bank : comp_c2v_write_bank;
       end
       if (cnu_a_en1) begin
         cnu_a_wr_row1 <= init_row_accum_active ? lane_edge1_row_local : emit_edge1_row_local;
         cnu_a_wr_edge1 <= init_row_accum_active ? lane_edge1_edge_slot : emit_edge1_slot;
         cnu_a_wr_var1 <= init_row_accum_active ? c2v_var_idx : v2c_var_idx;
         cnu_a_wr_lane1 <= init_row_accum_active ? LANE_IDX_W'(1) : emit_edge1_lane;
-        cnu_a_wr_bank1 <= init_row_accum_active ? row_state_read_bank : row_state_write_bank;
+        cnu_a_wr_bank1 <= init_row_accum_active ? comp_c2v_read_bank : comp_c2v_write_bank;
       end
     end
   end

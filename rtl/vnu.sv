@@ -2,9 +2,9 @@
 module vnu
   import bike_pkg::*;
 (
-  input  logic i_clk,                               // Sequential update clock.
-  input  logic i_rst_n,                             // Active-low reset.
-  input  logic i_clear,                             // Clears the running accumulation state.
+  input  logic i_clk,
+  input  logic i_rst_n,
+  input  logic i_clear,
   input  logic i_col_start,                         // Marks the first c2v input slot of a variable column.
   input  logic i_col_end,                           // Marks the final c2v input slot of a variable column.
   input  logic signed [APP_W-1:0] i_initial_llr,    // Prior LLR contribution for the variable node.

@@ -3,14 +3,14 @@
 module tb_cnu_b;
   import bike_pkg::*;
 
-  logic [ROW_STATE_W-1:0] c2v_compact_msg_in;
+  logic [COMP_C2V_W-1:0] comp_c2v_in;
   logic v2c_sign_in;
   logic syndrome_bit;
   logic [VAR_W-1:0] src_var_idx;
   logic [MSG_W-1:0] c2v_msg_out;
 
   cnu_b dut (
-    .i_comp_c2v(c2v_compact_msg_in),
+    .i_comp_c2v(comp_c2v_in),
     .i_v2c_sign(v2c_sign_in),
     .i_syndrome_bit(syndrome_bit),
     .i_var_idx(src_var_idx),
@@ -18,7 +18,7 @@ module tb_cnu_b;
   );
 
   initial begin
-    c2v_compact_msg_in = {1'b1, 4'd4, D'(5), D'(2)};
+    comp_c2v_in = {1'b1, 4'd4, D'(5), D'(2)};
 
     v2c_sign_in = 1;
     syndrome_bit = 0;

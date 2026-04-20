@@ -175,12 +175,12 @@ def emit_pkg(
   localparam int MSG_MAG_LSB = 0;
   localparam int MSG_SIGN_BIT = D;
 
-  localparam int ROW_STATE_MIN1_LSB = 0;
-  localparam int ROW_STATE_MIN2_LSB = ROW_STATE_MIN1_LSB + D;
-  localparam int ROW_STATE_MIN_ID_LSB = ROW_STATE_MIN2_LSB + D;
-  localparam int ROW_STATE_SIGN_XOR_BIT = ROW_STATE_MIN_ID_LSB + VAR_W;
-  localparam int ROW_STATE_W = ROW_STATE_SIGN_XOR_BIT + 1;
-  localparam logic [ROW_STATE_W-1:0] ROW_STATE_INIT = {{
+  localparam int COMP_C2V_MIN1_LSB = 0;
+  localparam int COMP_C2V_MIN2_LSB = COMP_C2V_MIN1_LSB + D;
+  localparam int COMP_C2V_MIN_ID_LSB = COMP_C2V_MIN2_LSB + D;
+  localparam int COMP_C2V_SIGN_XOR_BIT = COMP_C2V_MIN_ID_LSB + VAR_W;
+  localparam int COMP_C2V_W = COMP_C2V_SIGN_XOR_BIT + 1;
+  localparam logic [COMP_C2V_W-1:0] COMP_C2V_INIT = {{
     1'b0,
     VAR_W'(0),
     D'(MAG_MAX),

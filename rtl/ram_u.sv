@@ -2,9 +2,9 @@
 module ram_u
   import bike_pkg::*;
 (
-  input  logic i_clk,                         // Storage clock.
-  input  logic i_rst_n,                       // Active-low reset.
-  input  logic i_init,                        // Initializes every entry to the fixed prior C_VAL.
+  input  logic i_clk,
+  input  logic i_rst_n,
+  input  logic i_init,
   input  logic i_rd_en0,                      // Read enable for port 0.
   input  logic [VAR_W-1:0] i_rd_var_idx0,     // Variable index for read port 0.
   input  logic [EDGE_W-1:0] i_rd_edge_slot0,  // Edge slot for read port 0.

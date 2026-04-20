@@ -97,12 +97,12 @@ module tb_decoder_top;
 
     wait (dut.state == DEC_ITER_C2V_PRIME && dut.c2v_var_idx == 0 && dut.col_slot_idx == 0);
     #1;
-    if (dut.row_state_read_bank === dut.row_state_write_bank) $fatal(1, "RAM M ping-pong banks should differ");
+    if (dut.comp_c2v_read_bank === dut.comp_c2v_write_bank) $fatal(1, "RAM M ping-pong banks should differ");
     for (idx = 0; idx < R; idx++) begin
-      if (int'(dut.u_m_ram.mem[dut.row_state_read_bank][row_lane(idx)][row_local(idx)][ROW_STATE_MIN1_LSB +: D]) != CASE1_FIRST_ROW_MIN1[idx]) $fatal(1, "CASE1 row min1[%0d] mismatch", idx);
-      if (int'(dut.u_m_ram.mem[dut.row_state_read_bank][row_lane(idx)][row_local(idx)][ROW_STATE_MIN2_LSB +: D]) != CASE1_FIRST_ROW_MIN2[idx]) $fatal(1, "CASE1 row min2[%0d] mismatch", idx);
-      if (int'(dut.u_m_ram.mem[dut.row_state_read_bank][row_lane(idx)][row_local(idx)][ROW_STATE_MIN_ID_LSB +: VAR_W]) != CASE1_FIRST_ROW_MIN_ID[idx]) $fatal(1, "CASE1 row min_id[%0d] mismatch", idx);
-      if (int'(dut.u_m_ram.mem[dut.row_state_read_bank][row_lane(idx)][row_local(idx)][ROW_STATE_SIGN_XOR_BIT]) != CASE1_FIRST_ROW_SIGN_XOR[idx]) $fatal(1, "CASE1 row sign_xor[%0d] mismatch", idx);
+      if (int'(dut.u_m_ram.mem[dut.comp_c2v_read_bank][row_lane(idx)][row_local(idx)][COMP_C2V_MIN1_LSB +: D]) != CASE1_FIRST_ROW_MIN1[idx]) $fatal(1, "CASE1 row min1[%0d] mismatch", idx);
+      if (int'(dut.u_m_ram.mem[dut.comp_c2v_read_bank][row_lane(idx)][row_local(idx)][COMP_C2V_MIN2_LSB +: D]) != CASE1_FIRST_ROW_MIN2[idx]) $fatal(1, "CASE1 row min2[%0d] mismatch", idx);
+      if (int'(dut.u_m_ram.mem[dut.comp_c2v_read_bank][row_lane(idx)][row_local(idx)][COMP_C2V_MIN_ID_LSB +: VAR_W]) != CASE1_FIRST_ROW_MIN_ID[idx]) $fatal(1, "CASE1 row min_id[%0d] mismatch", idx);
+      if (int'(dut.u_m_ram.mem[dut.comp_c2v_read_bank][row_lane(idx)][row_local(idx)][COMP_C2V_SIGN_XOR_BIT]) != CASE1_FIRST_ROW_SIGN_XOR[idx]) $fatal(1, "CASE1 row sign_xor[%0d] mismatch", idx);
     end
 
     wait (dut.state == DEC_ITER_OVERLAP && dut.c2v_v2c_overlap_seen === 1'b1);
@@ -130,7 +130,7 @@ module tb_decoder_top;
       end
     end
 
-    if (dut.row_state_read_bank === dut.row_state_write_bank) $fatal(1, "RAM M banks collapsed before iteration swap");
+    if (dut.comp_c2v_read_bank === dut.comp_c2v_write_bank) $fatal(1, "RAM M banks collapsed before iteration swap");
 
     wait (done === 1'b1);
     @(posedge clk);

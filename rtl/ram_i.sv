@@ -2,9 +2,9 @@
 module ram_i
   import bike_pkg::*;
 (
-  input  logic i_clk,                                           // Storage clock.
-  input  logic i_rst_n,                                         // Active-low reset.
-  input  logic i_clear,                                         // Clears all stored bank columns.
+  input  logic i_clk,
+  input  logic i_rst_n,
+  input  logic i_clear,
   input  logic [BANK_W-1:0] i_rd_bank,                          // Bank selected for combinational readout.
   output logic [I_ENTRY_W-1:0] o_rd_lane_entries [0:L-1][0:W-1],// Lane-packed entries for the selected bank.
   output logic [LANE_COUNT_W-1:0] o_rd_lane_count [0:L-1],      // Valid lane counts for the selected bank.

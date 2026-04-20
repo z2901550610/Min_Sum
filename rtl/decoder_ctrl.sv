@@ -2,8 +2,8 @@
 module decoder_ctrl
   import bike_pkg::*;
 (
-  input  logic i_clk,                                          // Control clock.
-  input  logic i_rst_n,                                        // Active-low reset.
+  input  logic i_clk,
+  input  logic i_rst_n,
   input  logic i_start,                                        // Starts a new decode pass.
   input  logic i_slot_last,                                    // Marks the last active slot in the current phase.
   input  logic i_finish_decode,                                // Requests transition to DONE after the check phase.
@@ -12,8 +12,8 @@ module decoder_ctrl
   output logic [VAR_W-1:0] o_c2v_var_idx,                      // Variable index for the active c2v scan.
   output logic [VAR_W-1:0] o_v2c_var_idx,                      // Variable index for the active v2c emission.
   output logic [EDGE_W-1:0] o_col_slot_idx,                    // Slot index within the current lane-packed column.
-  output logic o_row_state_read_bank,                          // RAM M bank selected for row-state reads.
-  output logic o_row_state_write_bank,                         // RAM M bank selected for row-state writes.
+  output logic o_comp_c2v_read_bank,                          // RAM M bank selected for compressed-c2v reads.
+  output logic o_comp_c2v_write_bank,                         // RAM M bank selected for compressed-c2v writes.
   output logic o_c2v_edge_list_buf_sel,                        // Edge-list buffer being filled by the c2v phase.
   output logic o_v2c_edge_list_buf_sel,                        // Edge-list buffer being drained by the v2c phase.
   output logic o_done,                                         // Decode completion flag.
@@ -40,8 +40,8 @@ module decoder_ctrl
       o_c2v_var_idx <= '0;
       o_v2c_var_idx <= '0;
       o_col_slot_idx <= '0;
-      o_row_state_read_bank <= 1'b0;
-      o_row_state_write_bank <= 1'b1;
+      o_comp_c2v_read_bank <= 1'b0;
+      o_comp_c2v_write_bank <= 1'b1;
       o_c2v_edge_list_buf_sel <= 1'b0;
       o_v2c_edge_list_buf_sel <= 1'b0;
     end else begin
@@ -61,8 +61,8 @@ module decoder_ctrl
           o_c2v_var_idx <= '0;
           o_v2c_var_idx <= '0;
           o_col_slot_idx <= '0;
-          o_row_state_read_bank <= 1'b0;
-          o_row_state_write_bank <= 1'b1;
+          o_comp_c2v_read_bank <= 1'b0;
+          o_comp_c2v_write_bank <= 1'b1;
           o_c2v_edge_list_buf_sel <= 1'b0;
           o_v2c_edge_list_buf_sel <= 1'b0;
           o_state <= DEC_INIT_ROW_ACCUM;
@@ -149,8 +149,8 @@ module decoder_ctrl
             o_c2v_var_idx <= '0;
             o_v2c_var_idx <= '0;
             o_col_slot_idx <= '0;
-            o_row_state_read_bank <= o_row_state_write_bank;
-            o_row_state_write_bank <= o_row_state_read_bank;
+            o_comp_c2v_read_bank <= o_comp_c2v_write_bank;
+            o_comp_c2v_write_bank <= o_comp_c2v_read_bank;
             o_c2v_edge_list_buf_sel <= 1'b0;
             o_v2c_edge_list_buf_sel <= 1'b0;
             o_state <= DEC_ITER_C2V_PRIME;
