@@ -98,15 +98,15 @@ def emit_pkg(
   parameter int H_SEL_W = (H_NUM > 1) ? $clog2(H_NUM) : 1;
 
   localparam int DEC_STATE_W = 4;
-  localparam logic [DEC_STATE_W-1:0] DEC_IDLE             = 4'd0;
-  localparam logic [DEC_STATE_W-1:0] DEC_LOAD             = 4'd1;
-  localparam logic [DEC_STATE_W-1:0] DEC_INIT_CNU_A       = 4'd2;
-  localparam logic [DEC_STATE_W-1:0] DEC_INIT_CNU_A_FLUSH = 4'd3;
-  localparam logic [DEC_STATE_W-1:0] DEC_PIPE_PREP        = 4'd4;
-  localparam logic [DEC_STATE_W-1:0] DEC_PIPE             = 4'd5;
-  localparam logic [DEC_STATE_W-1:0] DEC_PIPE_DRAIN       = 4'd6;
-  localparam logic [DEC_STATE_W-1:0] DEC_PIPE_FLUSH       = 4'd7;
-  localparam logic [DEC_STATE_W-1:0] DEC_CHECK            = 4'd8;
+  localparam logic [DEC_STATE_W-1:0] DEC_WAIT_START       = 4'd0;
+  localparam logic [DEC_STATE_W-1:0] DEC_INIT_DECODER     = 4'd1;
+  localparam logic [DEC_STATE_W-1:0] DEC_INIT_ROW_ACCUM   = 4'd2;
+  localparam logic [DEC_STATE_W-1:0] DEC_INIT_ROW_FLUSH   = 4'd3;
+  localparam logic [DEC_STATE_W-1:0] DEC_ITER_C2V_PRIME   = 4'd4;
+  localparam logic [DEC_STATE_W-1:0] DEC_ITER_OVERLAP     = 4'd5;
+  localparam logic [DEC_STATE_W-1:0] DEC_ITER_V2C_DRAIN   = 4'd6;
+  localparam logic [DEC_STATE_W-1:0] DEC_ITER_WRITE_FLUSH = 4'd7;
+  localparam logic [DEC_STATE_W-1:0] DEC_ITER_CHECK       = 4'd8;
   localparam logic [DEC_STATE_W-1:0] DEC_DONE             = 4'd9;
 
   localparam int MSG_W = D + 1;

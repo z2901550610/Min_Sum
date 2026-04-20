@@ -98,21 +98,21 @@ module tb_decoder_top;
     apply_reset();
     start_case(CASE1_SYNDROME);
 
-    wait (dut.state == DEC_PIPE_PREP && dut.active_var_idx == 0 && dut.scan_slot == 0);
+    wait (dut.state == DEC_ITER_C2V_PRIME && dut.c2v_var_idx == 0 && dut.col_slot_idx == 0);
     #1;
-    if (dut.m_read_bank === dut.m_write_bank) $fatal(1, "RAM M ping-pong banks should differ");
+    if (dut.row_state_read_bank === dut.row_state_write_bank) $fatal(1, "RAM M ping-pong banks should differ");
     for (idx = 0; idx < R; idx++) begin
-      if (int'(dut.u_m_ram.mem[dut.m_read_bank][row_lane(idx)][row_local(idx)][ROW_STATE_MIN1_LSB +: D]) != CASE1_FIRST_ROW_MIN1[idx]) $fatal(1, "CASE1 row min1[%0d] mismatch", idx);
-      if (int'(dut.u_m_ram.mem[dut.m_read_bank][row_lane(idx)][row_local(idx)][ROW_STATE_MIN2_LSB +: D]) != CASE1_FIRST_ROW_MIN2[idx]) $fatal(1, "CASE1 row min2[%0d] mismatch", idx);
-      if (int'(dut.u_m_ram.mem[dut.m_read_bank][row_lane(idx)][row_local(idx)][ROW_STATE_MIN_ID_LSB +: VAR_W]) != CASE1_FIRST_ROW_MIN_ID[idx]) $fatal(1, "CASE1 row min_id[%0d] mismatch", idx);
-      if (int'(dut.u_m_ram.mem[dut.m_read_bank][row_lane(idx)][row_local(idx)][ROW_STATE_SIGN_XOR_BIT]) != CASE1_FIRST_ROW_SIGN_XOR[idx]) $fatal(1, "CASE1 row sign_xor[%0d] mismatch", idx);
+      if (int'(dut.u_m_ram.mem[dut.row_state_read_bank][row_lane(idx)][row_local(idx)][ROW_STATE_MIN1_LSB +: D]) != CASE1_FIRST_ROW_MIN1[idx]) $fatal(1, "CASE1 row min1[%0d] mismatch", idx);
+      if (int'(dut.u_m_ram.mem[dut.row_state_read_bank][row_lane(idx)][row_local(idx)][ROW_STATE_MIN2_LSB +: D]) != CASE1_FIRST_ROW_MIN2[idx]) $fatal(1, "CASE1 row min2[%0d] mismatch", idx);
+      if (int'(dut.u_m_ram.mem[dut.row_state_read_bank][row_lane(idx)][row_local(idx)][ROW_STATE_MIN_ID_LSB +: VAR_W]) != CASE1_FIRST_ROW_MIN_ID[idx]) $fatal(1, "CASE1 row min_id[%0d] mismatch", idx);
+      if (int'(dut.u_m_ram.mem[dut.row_state_read_bank][row_lane(idx)][row_local(idx)][ROW_STATE_SIGN_XOR_BIT]) != CASE1_FIRST_ROW_SIGN_XOR[idx]) $fatal(1, "CASE1 row sign_xor[%0d] mismatch", idx);
     end
 
-    wait (dut.state == DEC_PIPE && dut.pipeline_overlap_seen === 1'b1);
+    wait (dut.state == DEC_ITER_OVERLAP && dut.c2v_v2c_overlap_seen === 1'b1);
     #1;
-    if (!(dut.cnu_b_active && dut.emit_active)) $fatal(1, "pipeline did not expose simultaneous CNU_B and VNU/CNU_A work");
+    if (!(dut.c2v_phase_active && dut.v2c_phase_active)) $fatal(1, "pipeline did not expose simultaneous CNU_B and VNU/CNU_A work");
 
-    wait (dut.state == DEC_CHECK && iter_count == 0);
+    wait (dut.state == DEC_ITER_CHECK && iter_count == 0);
     #1;
     flat_idx = 0;
     for (idx = 0; idx < N; idx++) begin
@@ -133,7 +133,7 @@ module tb_decoder_top;
       end
     end
 
-    if (dut.m_read_bank === dut.m_write_bank) $fatal(1, "RAM M banks collapsed before iteration swap");
+    if (dut.row_state_read_bank === dut.row_state_write_bank) $fatal(1, "RAM M banks collapsed before iteration swap");
 
     wait (done === 1'b1);
     @(posedge clk);

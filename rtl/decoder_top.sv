@@ -28,27 +28,27 @@ module decoder_top
   logic [R-1:0] syndrome_hist [0:I_MAX-1];
   /* verilator lint_on UNUSEDSIGNAL */
 
-  // active_var_idx scans the variable being read by CNU_B; emit_var_idx follows
+  // c2v_var_idx scans the variable being read by CNU_B; v2c_var_idx follows
   // one buffered column behind while VNU emits updated V2C messages to CNU_A.
-  logic [VAR_W-1:0] active_var_idx;
-  logic [VAR_W-1:0] emit_var_idx;
-  logic [EDGE_W-1:0] scan_slot;
-  logic m_read_bank;
-  logic m_write_bank;
-  logic fill_edge_buf_sel;
-  logic emit_edge_buf_sel;
+  logic [VAR_W-1:0] c2v_var_idx;
+  logic [VAR_W-1:0] v2c_var_idx;
+  logic [EDGE_W-1:0] col_slot_idx;
+  logic row_state_read_bank;
+  logic row_state_write_bank;
+  logic c2v_edge_list_buf_sel;
+  logic v2c_edge_list_buf_sel;
   /* verilator lint_off UNUSEDSIGNAL */
-  logic pipeline_overlap_seen;
+  logic c2v_v2c_overlap_seen;
   /* verilator lint_on UNUSEDSIGNAL */
 
-  logic [BANK_W-1:0] current_bank;
-  logic [I_ENTRY_W-1:0] current_lane_entries [0:L-1][0:W-1];
-  logic [LANE_COUNT_W-1:0] current_lane_count [0:L-1];
-  logic [LANE_COUNT_W-1:0] current_scan_limit;
-  logic [LANE_EDGE_W-1:0] current_lane_edges [0:L-1][0:W-1];
+  logic [BANK_W-1:0] c2v_bank_idx;
+  logic [I_ENTRY_W-1:0] c2v_lane_entries [0:L-1][0:W-1];
+  logic [LANE_COUNT_W-1:0] c2v_lane_count [0:L-1];
+  logic [LANE_COUNT_W-1:0] c2v_slot_limit;
+  logic [LANE_EDGE_W-1:0] c2v_lane_edges [0:L-1][0:W-1];
   // Two small column buffers let CNU_B fill one variable's edge list while VNU
   // and CNU_A consume the previous variable's edge list.
-  logic [LANE_EDGE_W-1:0] edge_buf [0:1][0:W-1];
+  logic [LANE_EDGE_W-1:0] edge_list_buf [0:1][0:W-1];
 
   logic [LANE_EDGE_W-1:0] lane_edge0;
   logic [LANE_EDGE_W-1:0] lane_edge1;
@@ -74,8 +74,8 @@ module decoder_top
   logic [ROW_W-1:0] emit_edge0_row_local;
   logic [ROW_W-1:0] emit_edge1_row_local;
 
-  logic [N-1:0] c1_bits;
-  logic c1_rd_unused;
+  logic [N-1:0] error_estimate_bits;
+  logic error_estimate_rd_unused;
   logic [ROW_STATE_W-1:0] c2v_compact_msg_rd_a0;
   logic [ROW_STATE_W-1:0] c2v_compact_msg_rd_a1;
   logic [ROW_STATE_W-1:0] c2v_compact_msg_rd_b0;
@@ -125,9 +125,9 @@ module decoder_top
   logic cnu_a_wr_bank0;
   logic cnu_a_wr_bank1;
 
-  logic init_cnu_a_active;
-  logic cnu_b_active;
-  logic emit_active;
+  logic init_row_accum_active;
+  logic c2v_phase_active;
+  logic v2c_phase_active;
   logic cnu_a_en0;
   logic cnu_a_en1;
   logic c1_wr_en;
@@ -148,19 +148,19 @@ module decoder_top
   logic i_shift_en;
   logic slot_last;
   logic [ITER_W-1:0] next_iter_count;
-  logic stop_decode;
-  logic continue_decode;
-  logic [R-1:0] syndrome_next;
+  logic finish_decode;
+  logic continue_iterations;
+  logic [R-1:0] residual_syndrome_next;
 
-  assign current_bank = BANK_W'(int'(active_var_idx) / R);
-  assign current_scan_limit =
-    (current_lane_count[0] >= current_lane_count[1]) ? current_lane_count[0] : current_lane_count[1];
-  assign lane_edge0 = current_lane_edges[0][scan_slot];
-  assign lane_edge1 = current_lane_edges[1][scan_slot];
+  assign c2v_bank_idx = BANK_W'(int'(c2v_var_idx) / R);
+  assign c2v_slot_limit =
+    (c2v_lane_count[0] >= c2v_lane_count[1]) ? c2v_lane_count[0] : c2v_lane_count[1];
+  assign lane_edge0 = c2v_lane_edges[0][col_slot_idx];
+  assign lane_edge1 = c2v_lane_edges[1][col_slot_idx];
   assign lane_edge0_present = lane_edge0[LANE_EDGE_VALID_BIT];
   assign lane_edge1_present = lane_edge1[LANE_EDGE_VALID_BIT];
-  assign lane_edge0_valid = cnu_b_active && lane_edge0_present;
-  assign lane_edge1_valid = cnu_b_active && lane_edge1_present;
+  assign lane_edge0_valid = c2v_phase_active && lane_edge0_present;
+  assign lane_edge1_valid = c2v_phase_active && lane_edge1_present;
   assign lane_edge0_row_local = lane_edge0[LANE_EDGE_ROW_LOCAL_LSB +: ROW_W];
   assign lane_edge1_row_local = lane_edge1[LANE_EDGE_ROW_LOCAL_LSB +: ROW_W];
   assign lane_edge0_row_global = lane_edge0[LANE_EDGE_ROW_GLOBAL_LSB +: ROW_W];
@@ -168,12 +168,12 @@ module decoder_top
   assign lane_edge0_edge_slot = lane_edge0[LANE_EDGE_EDGE_SLOT_LSB +: EDGE_W];
   assign lane_edge1_edge_slot = lane_edge1[LANE_EDGE_EDGE_SLOT_LSB +: EDGE_W];
 
-  assign emit_edge0_slot = EDGE_W'(int'(scan_slot) * L);
-  assign emit_edge1_slot = EDGE_W'((int'(scan_slot) * L) + 1);
-  assign emit_edge0 = edge_buf[emit_edge_buf_sel][emit_edge0_slot];
-  assign emit_edge1 = edge_buf[emit_edge_buf_sel][emit_edge1_slot];
-  assign emit_edge0_valid = emit_active && ((int'(scan_slot) * L) < W) && emit_edge0[LANE_EDGE_VALID_BIT];
-  assign emit_edge1_valid = emit_active && (((int'(scan_slot) * L) + 1) < W) && emit_edge1[LANE_EDGE_VALID_BIT];
+  assign emit_edge0_slot = EDGE_W'(int'(col_slot_idx) * L);
+  assign emit_edge1_slot = EDGE_W'((int'(col_slot_idx) * L) + 1);
+  assign emit_edge0 = edge_list_buf[v2c_edge_list_buf_sel][emit_edge0_slot];
+  assign emit_edge1 = edge_list_buf[v2c_edge_list_buf_sel][emit_edge1_slot];
+  assign emit_edge0_valid = v2c_phase_active && ((int'(col_slot_idx) * L) < W) && emit_edge0[LANE_EDGE_VALID_BIT];
+  assign emit_edge1_valid = v2c_phase_active && (((int'(col_slot_idx) * L) + 1) < W) && emit_edge1[LANE_EDGE_VALID_BIT];
   assign emit_edge0_lane = edge_lane(emit_edge0[LANE_EDGE_ROW_GLOBAL_LSB +: ROW_W]);
   assign emit_edge1_lane = edge_lane(emit_edge1[LANE_EDGE_ROW_GLOBAL_LSB +: ROW_W]);
   assign emit_edge0_row_local = emit_edge0[LANE_EDGE_ROW_LOCAL_LSB +: ROW_W];
@@ -183,42 +183,42 @@ module decoder_top
   // bit has the same positive prior instead of being loaded from a received word.
   assign prior_msg = $signed(APP_W'(C_VAL));
   assign next_iter_count = o_iter_count + 1'b1;
-  assign init_cnu_a_active = (state == DEC_INIT_CNU_A) && (int'(scan_slot) < int'(current_scan_limit));
-  assign cnu_b_active =
-    ((state == DEC_PIPE_PREP) || (state == DEC_PIPE)) && (int'(scan_slot) < int'(current_scan_limit));
-  assign emit_active =
-    ((state == DEC_PIPE) || (state == DEC_PIPE_DRAIN)) && (int'(scan_slot) < VNU_SLOT_COUNT);
-  assign cnu_a_en0 = init_cnu_a_active ? lane_edge0_present : (vnu_v2c_valid0 && emit_edge0_valid);
-  assign cnu_a_en1 = init_cnu_a_active ? lane_edge1_present : (vnu_v2c_valid1 && emit_edge1_valid);
-  assign cnu_a_v2c0 = init_cnu_a_active ? u_init_msg0 : vnu_v2c0;
-  assign cnu_a_v2c1 = init_cnu_a_active ? u_init_msg1 : vnu_v2c1;
+  assign init_row_accum_active = (state == DEC_INIT_ROW_ACCUM) && (int'(col_slot_idx) < int'(c2v_slot_limit));
+  assign c2v_phase_active =
+    ((state == DEC_ITER_C2V_PRIME) || (state == DEC_ITER_OVERLAP)) && (int'(col_slot_idx) < int'(c2v_slot_limit));
+  assign v2c_phase_active =
+    ((state == DEC_ITER_OVERLAP) || (state == DEC_ITER_V2C_DRAIN)) && (int'(col_slot_idx) < VNU_SLOT_COUNT);
+  assign cnu_a_en0 = init_row_accum_active ? lane_edge0_present : (vnu_v2c_valid0 && emit_edge0_valid);
+  assign cnu_a_en1 = init_row_accum_active ? lane_edge1_present : (vnu_v2c_valid1 && emit_edge1_valid);
+  assign cnu_a_v2c0 = init_row_accum_active ? u_init_msg0 : vnu_v2c0;
+  assign cnu_a_v2c1 = init_row_accum_active ? u_init_msg1 : vnu_v2c1;
 
-  assign vnu_col_start = cnu_b_active && (scan_slot == '0);
-  assign vnu_col_end = ((state == DEC_PIPE_PREP) || (state == DEC_PIPE)) && slot_last;
+  assign vnu_col_start = c2v_phase_active && (col_slot_idx == '0);
+  assign vnu_col_end = ((state == DEC_ITER_C2V_PRIME) || (state == DEC_ITER_OVERLAP)) && slot_last;
   assign vnu_accum_valid0 = lane_edge0_valid;
   assign vnu_accum_valid1 = lane_edge1_valid;
-  assign vnu_emit_en = emit_active;
+  assign vnu_emit_en = v2c_phase_active;
 
-  assign c1_wr_en = emit_active && (scan_slot == '0);
-  assign m_clear_all_en = (state == DEC_LOAD);
-  assign m_clear_bank_en = (state == DEC_CHECK) && continue_decode;
+  assign c1_wr_en = v2c_phase_active && (col_slot_idx == '0);
+  assign m_clear_all_en = (state == DEC_INIT_DECODER);
+  assign m_clear_bank_en = (state == DEC_ITER_CHECK) && continue_iterations;
   assign m_wr_en0 = cnu_a_out_valid0;
   assign m_wr_en1 = cnu_a_out_valid1;
-  assign s_clear_en = (state == DEC_LOAD);
+  assign s_clear_en = (state == DEC_INIT_DECODER);
   assign s_wr_en0 = cnu_a_out_valid0;
   assign s_wr_en1 = cnu_a_out_valid1;
-  assign t_clear_en = (state == DEC_LOAD);
+  assign t_clear_en = (state == DEC_INIT_DECODER);
   assign t_wr_en0 = lane_edge0_valid;
   assign t_wr_en1 = lane_edge1_valid;
-  assign u_init_en = (state == DEC_LOAD);
+  assign u_init_en = (state == DEC_INIT_DECODER);
   assign u_wr_en0 = vnu_v2c_valid0;
   assign u_wr_en1 = vnu_v2c_valid1;
   assign i_load_first_col_en =
-    (state == DEC_LOAD) || (state == DEC_INIT_CNU_A_FLUSH) ||
-    ((state == DEC_CHECK) && continue_decode);
+    (state == DEC_INIT_DECODER) || (state == DEC_INIT_ROW_FLUSH) ||
+    ((state == DEC_ITER_CHECK) && continue_iterations);
   assign i_shift_en =
-    ((state == DEC_INIT_CNU_A) || (state == DEC_PIPE_PREP) || (state == DEC_PIPE)) &&
-    slot_last && (active_var_idx != LAST_VAR);
+    ((state == DEC_INIT_ROW_ACCUM) || (state == DEC_ITER_C2V_PRIME) || (state == DEC_ITER_OVERLAP)) &&
+    slot_last && (c2v_var_idx != LAST_VAR);
 
   function automatic logic signed [MSG_W-1:0] signmag_to_tc_msg(
     input logic [MSG_W-1:0] signmag_msg
@@ -255,19 +255,19 @@ module decoder_top
     integer edge_idx_local;
     logic [ROW_W-1:0] row_idx_local;
 
-    current_limit_local = int'(current_scan_limit);
+    current_limit_local = int'(c2v_slot_limit);
     slot_limit_local = 1;
     case (state)
-      DEC_INIT_CNU_A, DEC_PIPE_PREP: begin
+      DEC_INIT_ROW_ACCUM, DEC_ITER_C2V_PRIME: begin
         slot_limit_local = current_limit_local;
       end
-      DEC_PIPE: begin
+      DEC_ITER_OVERLAP: begin
         slot_limit_local = current_limit_local;
         if (slot_limit_local < VNU_SLOT_COUNT) begin
           slot_limit_local = VNU_SLOT_COUNT;
         end
       end
-      DEC_PIPE_DRAIN: begin
+      DEC_ITER_V2C_DRAIN: begin
         slot_limit_local = VNU_SLOT_COUNT;
       end
       default: begin
@@ -277,29 +277,29 @@ module decoder_top
     if (slot_limit_local <= 0) begin
       slot_limit_local = 1;
     end
-    slot_last = ((int'(scan_slot) + 1) >= slot_limit_local);
+    slot_last = ((int'(col_slot_idx) + 1) >= slot_limit_local);
 
     // Residual stop check for BIKE: residual = input syndrome xor H*e_hat.
-    syndrome_next = i_syndrome;
+    residual_syndrome_next = i_syndrome;
     bank_idx_local = 0;
     col_idx_local = 0;
     row_idx_local = 0;
     for (var_idx_local = 0; var_idx_local < N; var_idx_local++) begin
-      if (c1_bits[var_idx_local]) begin
+      if (error_estimate_bits[var_idx_local]) begin
         bank_idx_local = BANK_W'(var_idx_local / R);
         col_idx_local = var_idx_local % R;
         for (edge_idx_local = 0; edge_idx_local < W; edge_idx_local++) begin
           row_idx_local = ROW_W'((H_BASE[i_h_sel][bank_idx_local][edge_idx_local] + col_idx_local) % R);
-          syndrome_next[row_idx_local] ^= 1'b1;
+          residual_syndrome_next[row_idx_local] ^= 1'b1;
         end
       end
     end
 
-    stop_decode = 1'b0;
-    continue_decode = 1'b0;
-    if (state == DEC_CHECK) begin
-      stop_decode = (syndrome_next == '0) || (int'(next_iter_count) >= I_MAX);
-      continue_decode = !stop_decode;
+    finish_decode = 1'b0;
+    continue_iterations = 1'b0;
+    if (state == DEC_ITER_CHECK) begin
+      finish_decode = (residual_syndrome_next == '0) || (int'(next_iter_count) >= I_MAX);
+      continue_iterations = !finish_decode;
     end
   end
 
@@ -318,7 +318,7 @@ module decoder_top
       cnu_a_wr_lane1 <= '0;
       cnu_a_wr_bank0 <= 1'b0;
       cnu_a_wr_bank1 <= 1'b0;
-    end else if (state == DEC_LOAD) begin
+    end else if (state == DEC_INIT_DECODER) begin
       cnu_a_wr_row0 <= '0;
       cnu_a_wr_row1 <= '0;
       cnu_a_wr_edge0 <= '0;
@@ -331,18 +331,18 @@ module decoder_top
       cnu_a_wr_bank1 <= 1'b0;
     end else begin
       if (cnu_a_en0) begin
-        cnu_a_wr_row0 <= init_cnu_a_active ? lane_edge0_row_local : emit_edge0_row_local;
-        cnu_a_wr_edge0 <= init_cnu_a_active ? lane_edge0_edge_slot : emit_edge0_slot;
-        cnu_a_wr_var0 <= init_cnu_a_active ? active_var_idx : emit_var_idx;
-        cnu_a_wr_lane0 <= init_cnu_a_active ? LANE_IDX_W'(0) : emit_edge0_lane;
-        cnu_a_wr_bank0 <= init_cnu_a_active ? m_read_bank : m_write_bank;
+        cnu_a_wr_row0 <= init_row_accum_active ? lane_edge0_row_local : emit_edge0_row_local;
+        cnu_a_wr_edge0 <= init_row_accum_active ? lane_edge0_edge_slot : emit_edge0_slot;
+        cnu_a_wr_var0 <= init_row_accum_active ? c2v_var_idx : v2c_var_idx;
+        cnu_a_wr_lane0 <= init_row_accum_active ? LANE_IDX_W'(0) : emit_edge0_lane;
+        cnu_a_wr_bank0 <= init_row_accum_active ? row_state_read_bank : row_state_write_bank;
       end
       if (cnu_a_en1) begin
-        cnu_a_wr_row1 <= init_cnu_a_active ? lane_edge1_row_local : emit_edge1_row_local;
-        cnu_a_wr_edge1 <= init_cnu_a_active ? lane_edge1_edge_slot : emit_edge1_slot;
-        cnu_a_wr_var1 <= init_cnu_a_active ? active_var_idx : emit_var_idx;
-        cnu_a_wr_lane1 <= init_cnu_a_active ? LANE_IDX_W'(1) : emit_edge1_lane;
-        cnu_a_wr_bank1 <= init_cnu_a_active ? m_read_bank : m_write_bank;
+        cnu_a_wr_row1 <= init_row_accum_active ? lane_edge1_row_local : emit_edge1_row_local;
+        cnu_a_wr_edge1 <= init_row_accum_active ? lane_edge1_edge_slot : emit_edge1_slot;
+        cnu_a_wr_var1 <= init_row_accum_active ? c2v_var_idx : v2c_var_idx;
+        cnu_a_wr_lane1 <= init_row_accum_active ? LANE_IDX_W'(1) : emit_edge1_lane;
+        cnu_a_wr_bank1 <= init_row_accum_active ? row_state_read_bank : row_state_write_bank;
       end
     end
   end
@@ -353,30 +353,30 @@ module decoder_top
     .i_load_first_col(i_load_first_col_en),
     .i_shift(i_shift_en),
     .i_h_sel(i_h_sel),
-    .i_bank_sel(current_bank),
-    .o_lane_entries(current_lane_entries),
-    .o_lane_count(current_lane_count)
+    .i_bank_sel(c2v_bank_idx),
+    .o_lane_entries(c2v_lane_entries),
+    .o_lane_count(c2v_lane_count)
   );
 
   h_shift u_h_shift (
-    .i_var_idx(active_var_idx),
-    .i_lane_entries(current_lane_entries),
-    .i_lane_count(current_lane_count),
-    .o_lane_edges(current_lane_edges)
+    .i_var_idx(c2v_var_idx),
+    .i_lane_entries(c2v_lane_entries),
+    .i_lane_count(c2v_lane_count),
+    .o_lane_edges(c2v_lane_edges)
   );
 
   ram_c u_c1_ram (
     .i_clk(i_clk),
     .i_rst_n(i_rst_n),
     .i_clear(1'b0),
-    .i_load(state == DEC_LOAD),
+    .i_load(state == DEC_INIT_DECODER),
     .i_load_bits('0),
     .i_we(c1_wr_en),
-    .i_w_addr(emit_var_idx),
+    .i_w_addr(v2c_var_idx),
     .i_din(vnu_x_out),
-    .i_r_addr(emit_var_idx),
-    .o_dout(c1_rd_unused),
-    .o_bits(c1_bits)
+    .i_r_addr(v2c_var_idx),
+    .o_dout(error_estimate_rd_unused),
+    .o_bits(error_estimate_bits)
   );
 
   ram_m u_m_ram (
@@ -384,13 +384,13 @@ module decoder_top
     .i_rst_n(i_rst_n),
     .i_clear_all(m_clear_all_en),
     .i_clear_bank(m_clear_bank_en),
-    .i_clear_bank_sel(m_read_bank),
-    .i_r_bank_a(init_cnu_a_active ? m_read_bank : m_write_bank),
-    .i_r_lane_a0(init_cnu_a_active ? LANE_IDX_W'(0) : emit_edge0_lane),
-    .i_r_addr_a0(init_cnu_a_active ? lane_edge0_row_local : emit_edge0_row_local),
-    .i_r_lane_a1(init_cnu_a_active ? LANE_IDX_W'(1) : emit_edge1_lane),
-    .i_r_addr_a1(init_cnu_a_active ? lane_edge1_row_local : emit_edge1_row_local),
-    .i_r_bank_b(m_read_bank),
+    .i_clear_bank_sel(row_state_read_bank),
+    .i_r_bank_a(init_row_accum_active ? row_state_read_bank : row_state_write_bank),
+    .i_r_lane_a0(init_row_accum_active ? LANE_IDX_W'(0) : emit_edge0_lane),
+    .i_r_addr_a0(init_row_accum_active ? lane_edge0_row_local : emit_edge0_row_local),
+    .i_r_lane_a1(init_row_accum_active ? LANE_IDX_W'(1) : emit_edge1_lane),
+    .i_r_addr_a1(init_row_accum_active ? lane_edge1_row_local : emit_edge1_row_local),
+    .i_r_bank_b(row_state_read_bank),
     .i_r_lane_b0(LANE_IDX_W'(0)),
     .i_r_addr_b0(lane_edge0_row_local),
     .i_r_lane_b1(LANE_IDX_W'(1)),
@@ -415,9 +415,9 @@ module decoder_top
     .i_clk(i_clk),
     .i_rst_n(i_rst_n),
     .i_clear(s_clear_en),
-    .i_r_var0(active_var_idx),
+    .i_r_var0(c2v_var_idx),
     .i_r_edge0(lane_edge0_edge_slot),
-    .i_r_var1(active_var_idx),
+    .i_r_var1(c2v_var_idx),
     .i_r_edge1(lane_edge1_edge_slot),
     .o_sign0(v2c_sign0),
     .o_sign1(v2c_sign1),
@@ -436,19 +436,19 @@ module decoder_top
     .i_rst_n(i_rst_n),
     .i_clear(t_clear_en),
     .i_re0(emit_edge0_valid),
-    .i_r_var0(emit_var_idx),
+    .i_r_var0(v2c_var_idx),
     .i_r_edge0(emit_edge0_slot),
     .o_dout0(t_rd_msg0),
     .i_re1(emit_edge1_valid),
-    .i_r_var1(emit_var_idx),
+    .i_r_var1(v2c_var_idx),
     .i_r_edge1(emit_edge1_slot),
     .o_dout1(t_rd_msg1),
     .i_we0(t_wr_en0),
-    .i_w_var0(active_var_idx),
+    .i_w_var0(c2v_var_idx),
     .i_w_edge0(lane_edge0_edge_slot),
     .i_din0(c2v_msg_tc0),
     .i_we1(t_wr_en1),
-    .i_w_var1(active_var_idx),
+    .i_w_var1(c2v_var_idx),
     .i_w_edge1(lane_edge1_edge_slot),
     .i_din1(c2v_msg_tc1)
   );
@@ -457,20 +457,20 @@ module decoder_top
     .i_clk(i_clk),
     .i_rst_n(i_rst_n),
     .i_init(u_init_en),
-    .i_re0(init_cnu_a_active && lane_edge0_present),
-    .i_r_var0(active_var_idx),
+    .i_re0(init_row_accum_active && lane_edge0_present),
+    .i_r_var0(c2v_var_idx),
     .i_r_edge0(lane_edge0_edge_slot),
     .o_dout0(u_init_msg0),
-    .i_re1(init_cnu_a_active && lane_edge1_present),
-    .i_r_var1(active_var_idx),
+    .i_re1(init_row_accum_active && lane_edge1_present),
+    .i_r_var1(c2v_var_idx),
     .i_r_edge1(lane_edge1_edge_slot),
     .o_dout1(u_init_msg1),
     .i_we0(u_wr_en0),
-    .i_w_var0(emit_var_idx),
+    .i_w_var0(v2c_var_idx),
     .i_w_edge0(emit_edge0_slot),
     .i_din0(vnu_v2c0),
     .i_we1(u_wr_en1),
-    .i_w_var1(emit_var_idx),
+    .i_w_var1(v2c_var_idx),
     .i_w_edge1(emit_edge1_slot),
     .i_din1(vnu_v2c1)
   );
@@ -478,10 +478,10 @@ module decoder_top
   cnu_a u_cnu_a_lane0 (
     .i_clk(i_clk),
     .i_rst_n(i_rst_n),
-    .i_clear(state == DEC_LOAD),
+    .i_clear(state == DEC_INIT_DECODER),
     .i_en(cnu_a_en0),
     .i_v2c(cnu_a_v2c0),
-    .i_idx(init_cnu_a_active ? active_var_idx : emit_var_idx),
+    .i_idx(init_row_accum_active ? c2v_var_idx : v2c_var_idx),
     .i_comp_c2v(c2v_compact_msg_rd_a0),
     .o_comp_c2v(c2v_compact_msg_wr0),
     .o_sign(v2c_sign_wr0),
@@ -491,10 +491,10 @@ module decoder_top
   cnu_a u_cnu_a_lane1 (
     .i_clk(i_clk),
     .i_rst_n(i_rst_n),
-    .i_clear(state == DEC_LOAD),
+    .i_clear(state == DEC_INIT_DECODER),
     .i_en(cnu_a_en1),
     .i_v2c(cnu_a_v2c1),
-    .i_idx(init_cnu_a_active ? active_var_idx : emit_var_idx),
+    .i_idx(init_row_accum_active ? c2v_var_idx : v2c_var_idx),
     .i_comp_c2v(c2v_compact_msg_rd_a1),
     .o_comp_c2v(c2v_compact_msg_wr1),
     .o_sign(v2c_sign_wr1),
@@ -505,7 +505,7 @@ module decoder_top
     .i_comp_c2v(c2v_compact_msg_rd_b0),
     .i_sign(v2c_sign0),
     .i_syndrome_bit(i_syndrome[lane_edge0_row_global]),
-    .i_idx(active_var_idx),
+    .i_idx(c2v_var_idx),
     .o_c2v(c2v_msg0)
   );
 
@@ -513,14 +513,14 @@ module decoder_top
     .i_comp_c2v(c2v_compact_msg_rd_b1),
     .i_sign(v2c_sign1),
     .i_syndrome_bit(i_syndrome[lane_edge1_row_global]),
-    .i_idx(active_var_idx),
+    .i_idx(c2v_var_idx),
     .o_c2v(c2v_msg1)
   );
 
   vnu u_vnu (
     .i_clk(i_clk),
     .i_rst_n(i_rst_n),
-    .i_clear(state == DEC_LOAD),
+    .i_clear(state == DEC_INIT_DECODER),
     .i_col_start(vnu_col_start),
     .i_col_end(vnu_col_end),
     .i_initial_llr(prior_msg),
@@ -549,22 +549,22 @@ module decoder_top
     integer edge_idx_local;
 
     if (!i_rst_n) begin
-      state <= DEC_IDLE;
+      state <= DEC_WAIT_START;
       o_done <= 1'b0;
       o_success <= 1'b0;
       o_e <= '0;
       o_iter_count <= '0;
-      active_var_idx <= '0;
-      emit_var_idx <= '0;
-      scan_slot <= '0;
-      m_read_bank <= 1'b0;
-      m_write_bank <= 1'b1;
-      fill_edge_buf_sel <= 1'b0;
-      emit_edge_buf_sel <= 1'b0;
-      pipeline_overlap_seen <= 1'b0;
+      c2v_var_idx <= '0;
+      v2c_var_idx <= '0;
+      col_slot_idx <= '0;
+      row_state_read_bank <= 1'b0;
+      row_state_write_bank <= 1'b1;
+      c2v_edge_list_buf_sel <= 1'b0;
+      v2c_edge_list_buf_sel <= 1'b0;
+      c2v_v2c_overlap_seen <= 1'b0;
       for (edge_idx_local = 0; edge_idx_local < W; edge_idx_local++) begin
-        edge_buf[0][edge_idx_local] <= '0;
-        edge_buf[1][edge_idx_local] <= '0;
+        edge_list_buf[0][edge_idx_local] <= '0;
+        edge_list_buf[1][edge_idx_local] <= '0;
       end
       for (row_idx_local = 0; row_idx_local < I_MAX; row_idx_local++) begin
         syndrome_hist[row_idx_local] <= '0;
@@ -573,173 +573,173 @@ module decoder_top
       // Edge buffering is tied to the CNU_B side of the pipeline. At the start
       // of each new active variable, clear the fill buffer, then record all
       // valid edges that CNU_B sees for that variable.
-      if (((state == DEC_PIPE_PREP) || (state == DEC_PIPE)) && (scan_slot == '0)) begin
+      if (((state == DEC_ITER_C2V_PRIME) || (state == DEC_ITER_OVERLAP)) && (col_slot_idx == '0)) begin
         for (edge_idx_local = 0; edge_idx_local < W; edge_idx_local++) begin
-          edge_buf[fill_edge_buf_sel][edge_idx_local] <= '0;
+          edge_list_buf[c2v_edge_list_buf_sel][edge_idx_local] <= '0;
         end
       end
       if (lane_edge0_valid) begin
-        edge_buf[fill_edge_buf_sel][lane_edge0_edge_slot] <= lane_edge0;
+        edge_list_buf[c2v_edge_list_buf_sel][lane_edge0_edge_slot] <= lane_edge0;
       end
       if (lane_edge1_valid) begin
-        edge_buf[fill_edge_buf_sel][lane_edge1_edge_slot] <= lane_edge1;
+        edge_list_buf[c2v_edge_list_buf_sel][lane_edge1_edge_slot] <= lane_edge1;
       end
-      if ((state == DEC_PIPE) && cnu_b_active && emit_active) begin
-        pipeline_overlap_seen <= 1'b1;
+      if ((state == DEC_ITER_OVERLAP) && c2v_phase_active && v2c_phase_active) begin
+        c2v_v2c_overlap_seen <= 1'b1;
       end
 
       case (state)
-        DEC_IDLE: begin
+        DEC_WAIT_START: begin
           // Wait for a one-cycle start pulse.
           o_done <= 1'b0;
           o_success <= 1'b0;
           if (i_start) begin
-            state <= DEC_LOAD;
+            state <= DEC_INIT_DECODER;
           end
         end
 
-        DEC_LOAD: begin
+        DEC_INIT_DECODER: begin
           // Initialize BIKE decoding: clear the error estimate, message RAMs,
           // history, and schedule pointers. C1 starts from all zeros.
           o_done <= 1'b0;
           o_success <= 1'b0;
           o_e <= '0;
           o_iter_count <= '0;
-          active_var_idx <= '0;
-          emit_var_idx <= '0;
-          scan_slot <= '0;
-          m_read_bank <= 1'b0;
-          m_write_bank <= 1'b1;
-          fill_edge_buf_sel <= 1'b0;
-          emit_edge_buf_sel <= 1'b0;
-          pipeline_overlap_seen <= 1'b0;
+          c2v_var_idx <= '0;
+          v2c_var_idx <= '0;
+          col_slot_idx <= '0;
+          row_state_read_bank <= 1'b0;
+          row_state_write_bank <= 1'b1;
+          c2v_edge_list_buf_sel <= 1'b0;
+          v2c_edge_list_buf_sel <= 1'b0;
+          c2v_v2c_overlap_seen <= 1'b0;
           for (edge_idx_local = 0; edge_idx_local < W; edge_idx_local++) begin
-            edge_buf[0][edge_idx_local] <= '0;
-            edge_buf[1][edge_idx_local] <= '0;
+            edge_list_buf[0][edge_idx_local] <= '0;
+            edge_list_buf[1][edge_idx_local] <= '0;
           end
           for (row_idx_local = 0; row_idx_local < I_MAX; row_idx_local++) begin
             syndrome_hist[row_idx_local] <= '0;
           end
-          state <= DEC_INIT_CNU_A;
+          state <= DEC_INIT_ROW_ACCUM;
         end
 
-        DEC_INIT_CNU_A: begin
+        DEC_INIT_ROW_ACCUM: begin
           // First pass over all variables seeds each row's compact CNU state
           // from the fixed +C_VAL initial V2C messages stored in RAM U.
           if (slot_last) begin
-            scan_slot <= '0;
-            if (active_var_idx == LAST_VAR) begin
-              active_var_idx <= '0;
-              state <= DEC_INIT_CNU_A_FLUSH;
+            col_slot_idx <= '0;
+            if (c2v_var_idx == LAST_VAR) begin
+              c2v_var_idx <= '0;
+              state <= DEC_INIT_ROW_FLUSH;
             end else begin
-              active_var_idx <= active_var_idx + 1'b1;
+              c2v_var_idx <= c2v_var_idx + 1'b1;
             end
           end else begin
-            scan_slot <= scan_slot + 1'b1;
+            col_slot_idx <= col_slot_idx + 1'b1;
           end
         end
 
-        DEC_INIT_CNU_A_FLUSH: begin
+        DEC_INIT_ROW_FLUSH: begin
           // Give the last CNU_A updates time to land, then start iterative
           // decoding with CNU_B reading from the initialized row state.
-          active_var_idx <= '0;
-          emit_var_idx <= '0;
-          scan_slot <= '0;
-          fill_edge_buf_sel <= 1'b0;
-          emit_edge_buf_sel <= 1'b0;
-          state <= DEC_PIPE_PREP;
+          c2v_var_idx <= '0;
+          v2c_var_idx <= '0;
+          col_slot_idx <= '0;
+          c2v_edge_list_buf_sel <= 1'b0;
+          v2c_edge_list_buf_sel <= 1'b0;
+          state <= DEC_ITER_C2V_PRIME;
         end
 
-        DEC_PIPE_PREP: begin
+        DEC_ITER_C2V_PRIME: begin
           // Prime the column buffer: run CNU_B for the first active variable.
           // Nothing is emitted yet because no previous column has been buffered.
           if (slot_last) begin
-            scan_slot <= '0;
-            emit_var_idx <= active_var_idx;
-            emit_edge_buf_sel <= fill_edge_buf_sel;
-            fill_edge_buf_sel <= ~fill_edge_buf_sel;
-            if (active_var_idx == LAST_VAR) begin
-              active_var_idx <= '0;
-              state <= DEC_PIPE_DRAIN;
+            col_slot_idx <= '0;
+            v2c_var_idx <= c2v_var_idx;
+            v2c_edge_list_buf_sel <= c2v_edge_list_buf_sel;
+            c2v_edge_list_buf_sel <= ~c2v_edge_list_buf_sel;
+            if (c2v_var_idx == LAST_VAR) begin
+              c2v_var_idx <= '0;
+              state <= DEC_ITER_V2C_DRAIN;
             end else begin
-              active_var_idx <= active_var_idx + 1'b1;
-              state <= DEC_PIPE;
+              c2v_var_idx <= c2v_var_idx + 1'b1;
+              state <= DEC_ITER_OVERLAP;
             end
           end else begin
-            scan_slot <= scan_slot + 1'b1;
+            col_slot_idx <= col_slot_idx + 1'b1;
           end
         end
 
-        DEC_PIPE: begin
+        DEC_ITER_OVERLAP: begin
           // Steady-state iteration. CNU_B reads one variable and fills a buffer
           // while VNU emits the previous variable's decisions/messages and CNU_A
           // accumulates those V2C messages into the next RAM M bank.
           if (slot_last) begin
-            scan_slot <= '0;
-            emit_var_idx <= active_var_idx;
-            emit_edge_buf_sel <= fill_edge_buf_sel;
-            fill_edge_buf_sel <= ~fill_edge_buf_sel;
-            if (active_var_idx == LAST_VAR) begin
-              active_var_idx <= '0;
-              state <= DEC_PIPE_DRAIN;
+            col_slot_idx <= '0;
+            v2c_var_idx <= c2v_var_idx;
+            v2c_edge_list_buf_sel <= c2v_edge_list_buf_sel;
+            c2v_edge_list_buf_sel <= ~c2v_edge_list_buf_sel;
+            if (c2v_var_idx == LAST_VAR) begin
+              c2v_var_idx <= '0;
+              state <= DEC_ITER_V2C_DRAIN;
             end else begin
-              active_var_idx <= active_var_idx + 1'b1;
+              c2v_var_idx <= c2v_var_idx + 1'b1;
             end
           end else begin
-            scan_slot <= scan_slot + 1'b1;
+            col_slot_idx <= col_slot_idx + 1'b1;
           end
         end
 
-        DEC_PIPE_DRAIN: begin
+        DEC_ITER_V2C_DRAIN: begin
           // Last variable has no following CNU_B column, so drain the final VNU
           // emit slots before checking the residual syndrome.
-          if (scan_slot == '0) begin
-            o_e[emit_var_idx] <= vnu_x_out;
+          if (col_slot_idx == '0) begin
+            o_e[v2c_var_idx] <= vnu_x_out;
           end
           if (slot_last) begin
-            scan_slot <= '0;
-            state <= DEC_PIPE_FLUSH;
+            col_slot_idx <= '0;
+            state <= DEC_ITER_WRITE_FLUSH;
           end else begin
-            scan_slot <= scan_slot + 1'b1;
+            col_slot_idx <= col_slot_idx + 1'b1;
           end
         end
 
-        DEC_PIPE_FLUSH: begin
+        DEC_ITER_WRITE_FLUSH: begin
           // One-cycle guard for registered RAM/CNU outputs before CHECK samples
           // the completed estimate.
-          state <= DEC_CHECK;
+          state <= DEC_ITER_CHECK;
         end
 
-        DEC_CHECK: begin
+        DEC_ITER_CHECK: begin
           // End-of-iteration stop point. Success means the current estimate
           // satisfies the input syndrome; otherwise swap RAM M banks and iterate.
-          syndrome_hist[o_iter_count[HIST_IDX_W-1:0]] <= syndrome_next;
+          syndrome_hist[o_iter_count[HIST_IDX_W-1:0]] <= residual_syndrome_next;
           o_iter_count <= next_iter_count;
-          if (stop_decode) begin
+          if (finish_decode) begin
             o_done <= 1'b1;
-            o_success <= (syndrome_next == '0);
-            o_e <= c1_bits;
+            o_success <= (residual_syndrome_next == '0);
+            o_e <= error_estimate_bits;
             state <= DEC_DONE;
           end else begin
-            active_var_idx <= '0;
-            emit_var_idx <= '0;
-            scan_slot <= '0;
-            m_read_bank <= m_write_bank;
-            m_write_bank <= m_read_bank;
-            fill_edge_buf_sel <= 1'b0;
-            emit_edge_buf_sel <= 1'b0;
-            state <= DEC_PIPE_PREP;
+            c2v_var_idx <= '0;
+            v2c_var_idx <= '0;
+            col_slot_idx <= '0;
+            row_state_read_bank <= row_state_write_bank;
+            row_state_write_bank <= row_state_read_bank;
+            c2v_edge_list_buf_sel <= 1'b0;
+            v2c_edge_list_buf_sel <= 1'b0;
+            state <= DEC_ITER_C2V_PRIME;
           end
         end
 
         DEC_DONE: begin
           // Hold the final error estimate stable until reset or a new start.
           o_done <= 1'b1;
-          o_e <= c1_bits;
+          o_e <= error_estimate_bits;
         end
 
         default: begin
-          state <= DEC_IDLE;
+          state <= DEC_WAIT_START;
         end
       endcase
     end
