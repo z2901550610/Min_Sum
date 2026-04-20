@@ -1,10 +1,6 @@
-`ifdef MDPC_PAPER_CFG
-import mdpc_paper_pkg::*;
-`else
-import mdpc_demo_pkg::*;
-`endif
-
-module ram_c (
+module ram_c
+  import bike_pkg::*;
+(
   input  logic i_clk,
   input  logic i_rst_n,
   input  logic i_clear,
@@ -18,11 +14,8 @@ module ram_c (
   output logic [N-1:0] o_bits
 );
 
-`ifdef MDPC_PAPER_CFG
-  import mdpc_paper_pkg::*;
-`else
-  import mdpc_demo_pkg::*;
-`endif
+  timeunit 1ns;
+  timeprecision 1ps;
 
   logic [N-1:0] mem;
 

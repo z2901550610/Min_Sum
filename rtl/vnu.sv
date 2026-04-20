@@ -1,10 +1,6 @@
-`ifdef MDPC_PAPER_CFG
-import mdpc_paper_pkg::*;
-`else
-import mdpc_demo_pkg::*;
-`endif
-
-module vnu (
+module vnu
+  import bike_pkg::*;
+(
   input  logic i_clk,
   input  logic i_rst_n,
   input  logic i_clear,
@@ -31,11 +27,8 @@ module vnu (
   output logic [MSG_W-1:0] o_v2c1
 );
 
-`ifdef MDPC_PAPER_CFG
-  import mdpc_paper_pkg::*;
-`else
-  import mdpc_demo_pkg::*;
-`endif
+  timeunit 1ns;
+  timeprecision 1ps;
 
   localparam int VNU_TC_W = APP_W + ((W > 1) ? $clog2(W + 1) : 1);
   localparam int SCALE_W = VNU_TC_W + ALPHA_FRAC_W;

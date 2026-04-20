@@ -1,21 +1,14 @@
-`ifdef MDPC_PAPER_CFG
-import mdpc_paper_pkg::*;
-`else
-import mdpc_demo_pkg::*;
-`endif
-
-module h_shift (
+module h_shift
+  import bike_pkg::*;
+(
   input  logic [VAR_W-1:0] i_var_idx,
   input  logic [I_ENTRY_W-1:0] i_lane_entries [0:L-1][0:W-1],
   input  logic [LANE_COUNT_W-1:0] i_lane_count [0:L-1],
   output logic [LANE_EDGE_W-1:0] o_lane_edges [0:L-1][0:W-1]
 );
 
-`ifdef MDPC_PAPER_CFG
-  import mdpc_paper_pkg::*;
-`else
-  import mdpc_demo_pkg::*;
-`endif
+  timeunit 1ns;
+  timeprecision 1ps;
 
   // Expand lane-local RAM I entries into global edge descriptors used by the
   // top-level scheduler. row_local addresses lane memories; row_global indexes

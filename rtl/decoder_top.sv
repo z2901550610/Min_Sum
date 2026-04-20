@@ -1,35 +1,35 @@
-`ifdef MDPC_PAPER_CFG
-import mdpc_paper_pkg::*;
-`else
-import mdpc_demo_pkg::*;
-`endif
-
-module decoder_top (
+module decoder_top
+  import bike_pkg::*;
+(
   input  logic i_clk,
   input  logic i_rst_n,
   input  logic i_start,
   input  logic [H_SEL_W-1:0] i_h_sel,
-  input  logic [N-1:0] i_x,
+  input  logic [R-1:0] i_syndrome,
   output logic o_done,
   output logic o_success,
-  output logic [N-1:0] o_x,
+  output logic [N-1:0] o_e,
   output logic [$clog2(I_MAX + 1)-1:0] o_iter_count
 );
 
-`ifdef MDPC_PAPER_CFG
-  import mdpc_paper_pkg::*;
-`else
-  import mdpc_demo_pkg::*;
-`endif
+  timeunit 1ns;
+  timeprecision 1ps;
 
   localparam logic [VAR_W-1:0] LAST_VAR = VAR_W'(N - 1);
   localparam int ITER_W = $clog2(I_MAX + 1);
   localparam int HIST_IDX_W = (I_MAX > 1) ? $clog2(I_MAX) : 1;
+  // VNU emits up to L edge messages per cycle, so each variable needs this
+  // many emit slots after all C2V messages for the variable have been read.
   localparam int VNU_SLOT_COUNT = (W + L - 1) / L;
 
   logic [DEC_STATE_W-1:0] state;
+  /* verilator lint_off UNUSEDSIGNAL */
+  // Debug/verification trace: residual syndrome after each completed iteration.
   logic [R-1:0] syndrome_hist [0:I_MAX-1];
+  /* verilator lint_on UNUSEDSIGNAL */
 
+  // active_var_idx scans the variable being read by CNU_B; emit_var_idx follows
+  // one buffered column behind while VNU emits updated V2C messages to CNU_A.
   logic [VAR_W-1:0] active_var_idx;
   logic [VAR_W-1:0] emit_var_idx;
   logic [EDGE_W-1:0] scan_slot;
@@ -37,13 +37,17 @@ module decoder_top (
   logic m_write_bank;
   logic fill_edge_buf_sel;
   logic emit_edge_buf_sel;
+  /* verilator lint_off UNUSEDSIGNAL */
   logic pipeline_overlap_seen;
+  /* verilator lint_on UNUSEDSIGNAL */
 
   logic [BANK_W-1:0] current_bank;
   logic [I_ENTRY_W-1:0] current_lane_entries [0:L-1][0:W-1];
   logic [LANE_COUNT_W-1:0] current_lane_count [0:L-1];
   logic [LANE_COUNT_W-1:0] current_scan_limit;
   logic [LANE_EDGE_W-1:0] current_lane_edges [0:L-1][0:W-1];
+  // Two small column buffers let CNU_B fill one variable's edge list while VNU
+  // and CNU_A consume the previous variable's edge list.
   logic [LANE_EDGE_W-1:0] edge_buf [0:1][0:W-1];
 
   logic [LANE_EDGE_W-1:0] lane_edge0;
@@ -54,6 +58,8 @@ module decoder_top (
   logic lane_edge1_valid;
   logic [ROW_W-1:0] lane_edge0_row_local;
   logic [ROW_W-1:0] lane_edge1_row_local;
+  logic [ROW_W-1:0] lane_edge0_row_global;
+  logic [ROW_W-1:0] lane_edge1_row_global;
   logic [EDGE_W-1:0] lane_edge0_edge_slot;
   logic [EDGE_W-1:0] lane_edge1_edge_slot;
 
@@ -68,7 +74,6 @@ module decoder_top (
   logic [ROW_W-1:0] emit_edge0_row_local;
   logic [ROW_W-1:0] emit_edge1_row_local;
 
-  logic c0_rd_bit;
   logic [N-1:0] c1_bits;
   logic c1_rd_unused;
   logic [ROW_STATE_W-1:0] c2v_compact_msg_rd_a0;
@@ -94,6 +99,10 @@ module decoder_top (
   logic signed [MSG_W-1:0] t_rd_msg0;
   logic signed [MSG_W-1:0] t_rd_msg1;
   logic signed [APP_W-1:0] prior_msg;
+  /* verilator lint_off UNUSEDSIGNAL */
+  logic vnu_app_valid_unused;
+  logic signed [APP_W-1:0] vnu_app_unused;
+  /* verilator lint_on UNUSEDSIGNAL */
   logic vnu_x_out;
   logic vnu_col_start;
   logic vnu_col_end;
@@ -154,6 +163,8 @@ module decoder_top (
   assign lane_edge1_valid = cnu_b_active && lane_edge1_present;
   assign lane_edge0_row_local = lane_edge0[LANE_EDGE_ROW_LOCAL_LSB +: ROW_W];
   assign lane_edge1_row_local = lane_edge1[LANE_EDGE_ROW_LOCAL_LSB +: ROW_W];
+  assign lane_edge0_row_global = lane_edge0[LANE_EDGE_ROW_GLOBAL_LSB +: ROW_W];
+  assign lane_edge1_row_global = lane_edge1[LANE_EDGE_ROW_GLOBAL_LSB +: ROW_W];
   assign lane_edge0_edge_slot = lane_edge0[LANE_EDGE_EDGE_SLOT_LSB +: EDGE_W];
   assign lane_edge1_edge_slot = lane_edge1[LANE_EDGE_EDGE_SLOT_LSB +: EDGE_W];
 
@@ -163,12 +174,14 @@ module decoder_top (
   assign emit_edge1 = edge_buf[emit_edge_buf_sel][emit_edge1_slot];
   assign emit_edge0_valid = emit_active && ((int'(scan_slot) * L) < W) && emit_edge0[LANE_EDGE_VALID_BIT];
   assign emit_edge1_valid = emit_active && (((int'(scan_slot) * L) + 1) < W) && emit_edge1[LANE_EDGE_VALID_BIT];
-  assign emit_edge0_lane = edge_lane(emit_edge0);
-  assign emit_edge1_lane = edge_lane(emit_edge1);
+  assign emit_edge0_lane = edge_lane(emit_edge0[LANE_EDGE_ROW_GLOBAL_LSB +: ROW_W]);
+  assign emit_edge1_lane = edge_lane(emit_edge1[LANE_EDGE_ROW_GLOBAL_LSB +: ROW_W]);
   assign emit_edge0_row_local = emit_edge0[LANE_EDGE_ROW_LOCAL_LSB +: ROW_W];
   assign emit_edge1_row_local = emit_edge1[LANE_EDGE_ROW_LOCAL_LSB +: ROW_W];
 
-  assign prior_msg = c0_rd_bit ? -$signed(APP_W'(C_VAL)) : $signed(APP_W'(C_VAL));
+  // BIKE syndrome decoding starts from the all-zero error estimate, so every
+  // bit has the same positive prior instead of being loaded from a received word.
+  assign prior_msg = $signed(APP_W'(C_VAL));
   assign next_iter_count = o_iter_count + 1'b1;
   assign init_cnu_a_active = (state == DEC_INIT_CNU_A) && (int'(scan_slot) < int'(current_scan_limit));
   assign cnu_b_active =
@@ -222,11 +235,9 @@ module decoder_top (
   endfunction
 
   function automatic logic [LANE_IDX_W-1:0] edge_lane(
-    input logic [LANE_EDGE_W-1:0] edge_desc
+    input logic [ROW_W-1:0] row_global
   );
-    logic [ROW_W-1:0] row_global;
     begin
-      row_global = edge_desc[LANE_EDGE_ROW_GLOBAL_LSB +: ROW_W];
       if (row_global < ROW_W'(ROW_SEG_SIZE)) begin
         edge_lane = LANE_IDX_W'(0);
       end else begin
@@ -239,10 +250,10 @@ module decoder_top (
     integer slot_limit_local;
     integer current_limit_local;
     integer var_idx_local;
-    integer bank_idx_local;
+    logic [BANK_W-1:0] bank_idx_local;
     integer col_idx_local;
     integer edge_idx_local;
-    integer row_idx_local;
+    logic [ROW_W-1:0] row_idx_local;
 
     current_limit_local = int'(current_scan_limit);
     slot_limit_local = 1;
@@ -268,16 +279,17 @@ module decoder_top (
     end
     slot_last = ((int'(scan_slot) + 1) >= slot_limit_local);
 
-    syndrome_next = '0;
+    // Residual stop check for BIKE: residual = input syndrome xor H*e_hat.
+    syndrome_next = i_syndrome;
     bank_idx_local = 0;
     col_idx_local = 0;
     row_idx_local = 0;
     for (var_idx_local = 0; var_idx_local < N; var_idx_local++) begin
       if (c1_bits[var_idx_local]) begin
-        bank_idx_local = var_idx_local / R;
+        bank_idx_local = BANK_W'(var_idx_local / R);
         col_idx_local = var_idx_local % R;
         for (edge_idx_local = 0; edge_idx_local < W; edge_idx_local++) begin
-          row_idx_local = (H_BASE[i_h_sel][bank_idx_local][edge_idx_local] + col_idx_local) % R;
+          row_idx_local = ROW_W'((H_BASE[i_h_sel][bank_idx_local][edge_idx_local] + col_idx_local) % R);
           syndrome_next[row_idx_local] ^= 1'b1;
         end
       end
@@ -353,26 +365,12 @@ module decoder_top (
     .o_lane_edges(current_lane_edges)
   );
 
-  ram_c u_c0_ram (
-    .i_clk(i_clk),
-    .i_rst_n(i_rst_n),
-    .i_clear(1'b0),
-    .i_load(state == DEC_LOAD),
-    .i_load_bits(i_x),
-    .i_we(1'b0),
-    .i_w_addr('0),
-    .i_din(1'b0),
-    .i_r_addr(active_var_idx),
-    .o_dout(c0_rd_bit),
-    .o_bits()
-  );
-
   ram_c u_c1_ram (
     .i_clk(i_clk),
     .i_rst_n(i_rst_n),
     .i_clear(1'b0),
     .i_load(state == DEC_LOAD),
-    .i_load_bits(i_x),
+    .i_load_bits('0),
     .i_we(c1_wr_en),
     .i_w_addr(emit_var_idx),
     .i_din(vnu_x_out),
@@ -459,7 +457,6 @@ module decoder_top (
     .i_clk(i_clk),
     .i_rst_n(i_rst_n),
     .i_init(u_init_en),
-    .i_init_bits(i_x),
     .i_re0(init_cnu_a_active && lane_edge0_present),
     .i_r_var0(active_var_idx),
     .i_r_edge0(lane_edge0_edge_slot),
@@ -507,6 +504,7 @@ module decoder_top (
   cnu_b u_cnu_b_lane0 (
     .i_comp_c2v(c2v_compact_msg_rd_b0),
     .i_sign(v2c_sign0),
+    .i_syndrome_bit(i_syndrome[lane_edge0_row_global]),
     .i_idx(active_var_idx),
     .o_c2v(c2v_msg0)
   );
@@ -514,6 +512,7 @@ module decoder_top (
   cnu_b u_cnu_b_lane1 (
     .i_comp_c2v(c2v_compact_msg_rd_b1),
     .i_sign(v2c_sign1),
+    .i_syndrome_bit(i_syndrome[lane_edge1_row_global]),
     .i_idx(active_var_idx),
     .o_c2v(c2v_msg1)
   );
@@ -531,8 +530,8 @@ module decoder_top (
     .i_c2v_valid1(vnu_accum_valid1),
     .i_c2v_sign1(c2v_msg1[MSG_SIGN_BIT]),
     .i_c2v_mag1(c2v_msg1[MSG_MAG_LSB +: D]),
-    .o_app_valid(),
-    .o_app(),
+    .o_app_valid(vnu_app_valid_unused),
+    .o_app(vnu_app_unused),
     .o_bit_decision(vnu_x_out),
     .i_emit_en(vnu_emit_en),
     .i_c2v_t_valid0(emit_edge0_valid),
@@ -553,7 +552,7 @@ module decoder_top (
       state <= DEC_IDLE;
       o_done <= 1'b0;
       o_success <= 1'b0;
-      o_x <= '0;
+      o_e <= '0;
       o_iter_count <= '0;
       active_var_idx <= '0;
       emit_var_idx <= '0;
@@ -571,6 +570,9 @@ module decoder_top (
         syndrome_hist[row_idx_local] <= '0;
       end
     end else begin
+      // Edge buffering is tied to the CNU_B side of the pipeline. At the start
+      // of each new active variable, clear the fill buffer, then record all
+      // valid edges that CNU_B sees for that variable.
       if (((state == DEC_PIPE_PREP) || (state == DEC_PIPE)) && (scan_slot == '0)) begin
         for (edge_idx_local = 0; edge_idx_local < W; edge_idx_local++) begin
           edge_buf[fill_edge_buf_sel][edge_idx_local] <= '0;
@@ -588,6 +590,7 @@ module decoder_top (
 
       case (state)
         DEC_IDLE: begin
+          // Wait for a one-cycle start pulse.
           o_done <= 1'b0;
           o_success <= 1'b0;
           if (i_start) begin
@@ -596,9 +599,11 @@ module decoder_top (
         end
 
         DEC_LOAD: begin
+          // Initialize BIKE decoding: clear the error estimate, message RAMs,
+          // history, and schedule pointers. C1 starts from all zeros.
           o_done <= 1'b0;
           o_success <= 1'b0;
-          o_x <= i_x;
+          o_e <= '0;
           o_iter_count <= '0;
           active_var_idx <= '0;
           emit_var_idx <= '0;
@@ -619,6 +624,8 @@ module decoder_top (
         end
 
         DEC_INIT_CNU_A: begin
+          // First pass over all variables seeds each row's compact CNU state
+          // from the fixed +C_VAL initial V2C messages stored in RAM U.
           if (slot_last) begin
             scan_slot <= '0;
             if (active_var_idx == LAST_VAR) begin
@@ -633,6 +640,8 @@ module decoder_top (
         end
 
         DEC_INIT_CNU_A_FLUSH: begin
+          // Give the last CNU_A updates time to land, then start iterative
+          // decoding with CNU_B reading from the initialized row state.
           active_var_idx <= '0;
           emit_var_idx <= '0;
           scan_slot <= '0;
@@ -642,6 +651,8 @@ module decoder_top (
         end
 
         DEC_PIPE_PREP: begin
+          // Prime the column buffer: run CNU_B for the first active variable.
+          // Nothing is emitted yet because no previous column has been buffered.
           if (slot_last) begin
             scan_slot <= '0;
             emit_var_idx <= active_var_idx;
@@ -660,6 +671,9 @@ module decoder_top (
         end
 
         DEC_PIPE: begin
+          // Steady-state iteration. CNU_B reads one variable and fills a buffer
+          // while VNU emits the previous variable's decisions/messages and CNU_A
+          // accumulates those V2C messages into the next RAM M bank.
           if (slot_last) begin
             scan_slot <= '0;
             emit_var_idx <= active_var_idx;
@@ -677,8 +691,10 @@ module decoder_top (
         end
 
         DEC_PIPE_DRAIN: begin
+          // Last variable has no following CNU_B column, so drain the final VNU
+          // emit slots before checking the residual syndrome.
           if (scan_slot == '0) begin
-            o_x[emit_var_idx] <= vnu_x_out;
+            o_e[emit_var_idx] <= vnu_x_out;
           end
           if (slot_last) begin
             scan_slot <= '0;
@@ -689,16 +705,20 @@ module decoder_top (
         end
 
         DEC_PIPE_FLUSH: begin
+          // One-cycle guard for registered RAM/CNU outputs before CHECK samples
+          // the completed estimate.
           state <= DEC_CHECK;
         end
 
         DEC_CHECK: begin
+          // End-of-iteration stop point. Success means the current estimate
+          // satisfies the input syndrome; otherwise swap RAM M banks and iterate.
           syndrome_hist[o_iter_count[HIST_IDX_W-1:0]] <= syndrome_next;
           o_iter_count <= next_iter_count;
           if (stop_decode) begin
             o_done <= 1'b1;
             o_success <= (syndrome_next == '0);
-            o_x <= c1_bits;
+            o_e <= c1_bits;
             state <= DEC_DONE;
           end else begin
             active_var_idx <= '0;
@@ -713,8 +733,9 @@ module decoder_top (
         end
 
         DEC_DONE: begin
+          // Hold the final error estimate stable until reset or a new start.
           o_done <= 1'b1;
-          o_x <= c1_bits;
+          o_e <= c1_bits;
         end
 
         default: begin

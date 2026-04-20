@@ -1,5 +1,3 @@
-#include <errno.h>
-#include <inttypes.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,16 +14,6 @@
 #define TOY_MDPC_ALPHA_SHIFT_0 4
 #define TOY_MDPC_ALPHA_SHIFT_1 5
 #define TOY_MDPC_MAG_MAX 15
-
-#define PAPER80_MDPC_N0 2
-#define PAPER80_MDPC_R 4801
-#define PAPER80_MDPC_W 45
-#define PAPER80_MDPC_N (PAPER80_MDPC_N0 * PAPER80_MDPC_R)
-#define PAPER80_MDPC_L 2
-#define PAPER80_MDPC_I_MAX 30
-#define PAPER80_MDPC_C_VAL 9
-#define PAPER80_MDPC_T 84
-#define PAPER80_MDPC_MAG_MAX 15
 
 static const int TOY_H_BASE[TOY_MDPC_N0][TOY_MDPC_W] = {
     {0, 1, 3},
@@ -144,78 +132,6 @@ static int mdpc_config_init_toy(mdpc_config_t *cfg) {
     return 0;
 }
 
-static uint64_t splitmix64_next(uint64_t *state) {
-    uint64_t z;
-
-    *state += UINT64_C(0x9E3779B97F4A7C15);
-    z = *state;
-    z = (z ^ (z >> 30)) * UINT64_C(0xBF58476D1CE4E5B9);
-    z = (z ^ (z >> 27)) * UINT64_C(0x94D049BB133111EB);
-    return z ^ (z >> 31);
-}
-
-static int sample_unique_positions(uint64_t *rng_state, int limit, int count, int *out) {
-    uint8_t *used;
-    int filled = 0;
-    int idx;
-    int cmp_idx;
-
-    used = (uint8_t *)calloc((size_t)limit, sizeof(uint8_t));
-    if (used == NULL) {
-        return -1;
-    }
-
-    while (filled < count) {
-        int candidate = (int)(splitmix64_next(rng_state) % (uint64_t)limit);
-        if (!used[candidate]) {
-            used[candidate] = 1;
-            out[filled++] = candidate;
-        }
-    }
-
-    for (idx = 0; idx < count; ++idx) {
-        for (cmp_idx = idx + 1; cmp_idx < count; ++cmp_idx) {
-            if (out[cmp_idx] < out[idx]) {
-                int tmp = out[idx];
-                out[idx] = out[cmp_idx];
-                out[cmp_idx] = tmp;
-            }
-        }
-    }
-
-    free(used);
-    return 0;
-}
-
-static int mdpc_config_init_paper80(mdpc_config_t *cfg, uint64_t seed) {
-    int bank;
-    uint64_t rng_state = seed;
-
-    mdpc_config_init_zero(cfg);
-    cfg->n0 = PAPER80_MDPC_N0;
-    cfg->r = PAPER80_MDPC_R;
-    cfg->w = PAPER80_MDPC_W;
-    cfg->l = PAPER80_MDPC_L;
-    cfg->i_max = PAPER80_MDPC_I_MAX;
-    cfg->c_val = PAPER80_MDPC_C_VAL;
-    cfg->mag_max = PAPER80_MDPC_MAG_MAX;
-    cfg->alpha_frac_w = TOY_MDPC_ALPHA_FRAC_W;
-    cfg->alpha_shift_0 = TOY_MDPC_ALPHA_SHIFT_0;
-    cfg->alpha_shift_1 = TOY_MDPC_ALPHA_SHIFT_1;
-    cfg->t = PAPER80_MDPC_T;
-    if (mdpc_config_alloc(cfg) != 0) {
-        return -1;
-    }
-
-    for (bank = 0; bank < cfg->n0; ++bank) {
-        if (sample_unique_positions(&rng_state, cfg->r, cfg->w, &cfg->h_base[bank * cfg->w]) != 0) {
-            mdpc_config_free(cfg);
-            return -1;
-        }
-    }
-    return 0;
-}
-
 static void mdpc_result_init_zero(mdpc_result_t *result) {
     memset(result, 0, sizeof(*result));
 }
@@ -292,10 +208,6 @@ static msg_t msg_from_signed(const mdpc_config_t *cfg, int value) {
 
 static int msg_to_signed(msg_t msg) {
     return msg.sign ? -(int)msg.mag : (int)msg.mag;
-}
-
-static int gamma_from_bit(const mdpc_config_t *cfg, uint8_t bit_value) {
-    return bit_value ? -cfg->c_val : cfg->c_val;
 }
 
 static int alpha_scale(const mdpc_config_t *cfg, int value) {
@@ -378,17 +290,16 @@ static void cnu_a_step(msg_t u_in, int var_idx, row_state_t *state) {
     }
 }
 
-static msg_t cnu_b_step(const row_state_t *state, int u_sign, int var_idx) {
+static msg_t cnu_b_step(const row_state_t *state, int u_sign, int syndrome_bit, int var_idx) {
     msg_t out;
 
-    out.sign = (uint8_t)(state->sign_xor ^ u_sign);
+    out.sign = (uint8_t)(state->sign_xor ^ u_sign ^ syndrome_bit);
     out.mag = (uint8_t)((var_idx == state->min_id) ? state->min2 : state->min1);
     return out;
 }
 
 static void vnu_step(
     const mdpc_config_t *cfg,
-    uint8_t channel_bit,
     const msg_t *c2v,
     uint8_t *x_out,
     msg_t *u_next
@@ -401,7 +312,7 @@ static void vnu_step(
         sum_c2v += msg_to_signed(c2v[edge_idx]);
     }
 
-    app = gamma_from_bit(cfg, channel_bit) + alpha_scale(cfg, sum_c2v);
+    app = cfg->c_val + alpha_scale(cfg, sum_c2v);
     *x_out = (uint8_t)(app < 0);
 
     for (edge_idx = 0; edge_idx < cfg->w; ++edge_idx) {
@@ -467,32 +378,52 @@ static void mdpc_graph_free(mdpc_graph_t *graph) {
     memset(graph, 0, sizeof(*graph));
 }
 
-static int syndrome_weight(
+static void compute_syndrome(
     const mdpc_config_t *cfg,
     const mdpc_graph_t *graph,
     const uint8_t *x_bits,
-    uint64_t *syndrome_bits_out
+    uint8_t *syndrome_out
 ) {
     int row_idx;
-    int weight = 0;
-    uint64_t syndrome_bits = 0;
 
+    memset(syndrome_out, 0, (size_t)cfg->r);
     for (row_idx = 0; row_idx < cfg->r; ++row_idx) {
         int edge_pos;
         int parity = 0;
         for (edge_pos = graph->row_offsets[row_idx]; edge_pos < graph->row_offsets[row_idx + 1]; ++edge_pos) {
             parity ^= x_bits[graph->row_edges[edge_pos].var_idx];
         }
-        if (parity) {
+        syndrome_out[row_idx] = (uint8_t)parity;
+    }
+}
+
+static int residual_syndrome_weight(
+    const mdpc_config_t *cfg,
+    const mdpc_graph_t *graph,
+    const uint8_t *x_bits,
+    const uint8_t *syndrome_in,
+    uint64_t *residual_bits_out
+) {
+    int row_idx;
+    int weight = 0;
+    uint64_t residual_bits = 0;
+
+    for (row_idx = 0; row_idx < cfg->r; ++row_idx) {
+        int edge_pos;
+        int residual = syndrome_in[row_idx] & 1u;
+        for (edge_pos = graph->row_offsets[row_idx]; edge_pos < graph->row_offsets[row_idx + 1]; ++edge_pos) {
+            residual ^= x_bits[graph->row_edges[edge_pos].var_idx];
+        }
+        if (residual) {
             weight += 1;
             if (cfg->r <= 64) {
-                syndrome_bits |= (UINT64_C(1) << row_idx);
+                residual_bits |= (UINT64_C(1) << row_idx);
             }
         }
     }
 
-    if (syndrome_bits_out != NULL) {
-        *syndrome_bits_out = syndrome_bits;
+    if (residual_bits_out != NULL) {
+        *residual_bits_out = residual_bits;
     }
     return weight;
 }
@@ -511,7 +442,7 @@ static int max_lane_count(const int *lane_count, int lane_total) {
 static int mdpc_decode_schedule(
     const mdpc_config_t *cfg,
     const mdpc_graph_t *graph,
-    const uint8_t *x_in,
+    const uint8_t *syndrome_in,
     mdpc_result_t *out,
     mdpc_trace_t *trace
 ) {
@@ -543,11 +474,10 @@ static int mdpc_decode_schedule(
         return -1;
     }
 
-    memcpy(x_work, x_in, (size_t)cfg->n);
     for (iter = 0; iter < cfg->n; ++iter) {
         int edge_idx;
         for (edge_idx = 0; edge_idx < cfg->w; ++edge_idx) {
-            u_mem[iter * cfg->w + edge_idx] = msg_from_signed(cfg, gamma_from_bit(cfg, x_in[iter]));
+            u_mem[iter * cfg->w + edge_idx] = msg_from_signed(cfg, cfg->c_val);
         }
     }
 
@@ -592,7 +522,9 @@ static int mdpc_decode_schedule(
                     if (lane_slot < lane_count[lane_idx]) {
                         const lane_edge_t *edge = &lane_edges[lane_idx * cfg->w + lane_slot];
                         int flat_idx = var_idx * cfg->w + edge->edge_slot;
-                        c2v_mem[flat_idx] = cnu_b_step(&row_state_mem[edge->row_global], sign_mem[flat_idx], var_idx);
+                        c2v_mem[flat_idx] =
+                            cnu_b_step(&row_state_mem[edge->row_global], sign_mem[flat_idx],
+                                       syndrome_in[edge->row_global], var_idx);
                     }
                 }
             }
@@ -609,7 +541,7 @@ static int mdpc_decode_schedule(
             msg_t u_next[cfg->w];
             int edge_idx;
 
-            vnu_step(cfg, x_in[var_idx], c2v_row, &x_next, u_next);
+            vnu_step(cfg, c2v_row, &x_next, u_next);
             x_work[var_idx] = x_next;
             for (edge_idx = 0; edge_idx < cfg->w; ++edge_idx) {
                 u_row[edge_idx] = u_next[edge_idx];
@@ -622,7 +554,7 @@ static int mdpc_decode_schedule(
 
         if (trace != NULL) {
             uint64_t syndrome_bits = 0;
-            int weight = syndrome_weight(cfg, graph, x_work, &syndrome_bits);
+            int weight = residual_syndrome_weight(cfg, graph, x_work, syndrome_in, &syndrome_bits);
             trace->syndrome_weight_hist[iter] = weight;
             trace->syndrome_nonzero_hist[iter] = weight != 0;
             if (trace->syndrome_bits_hist != NULL) {
@@ -635,7 +567,7 @@ static int mdpc_decode_schedule(
         }
 
         if (out != NULL || trace != NULL) {
-            int weight = syndrome_weight(cfg, graph, x_work, NULL);
+            int weight = residual_syndrome_weight(cfg, graph, x_work, syndrome_in, NULL);
             if (weight == 0) {
                 if (out != NULL) {
                     out->success = 1;
@@ -685,7 +617,7 @@ static int mdpc_decode_schedule(
 static int mdpc_decode_rowcentric(
     const mdpc_config_t *cfg,
     const mdpc_graph_t *graph,
-    const uint8_t *x_in,
+    const uint8_t *syndrome_in,
     mdpc_result_t *out,
     mdpc_trace_t *trace
 ) {
@@ -707,11 +639,10 @@ static int mdpc_decode_rowcentric(
         return -1;
     }
 
-    memcpy(x_work, x_in, (size_t)cfg->n);
     for (iter = 0; iter < cfg->n; ++iter) {
         int edge_idx;
         for (edge_idx = 0; edge_idx < cfg->w; ++edge_idx) {
-            u_mem[iter * cfg->w + edge_idx] = msg_from_signed(cfg, gamma_from_bit(cfg, x_in[iter]));
+            u_mem[iter * cfg->w + edge_idx] = msg_from_signed(cfg, cfg->c_val);
         }
     }
 
@@ -732,7 +663,7 @@ static int mdpc_decode_rowcentric(
                 const row_edge_t *edge = &graph->row_edges[var_idx];
                 msg_t u_msg = u_mem[edge->var_idx * cfg->w + edge->edge_slot];
                 c2v_mem[edge->var_idx * cfg->w + edge->edge_slot] =
-                    cnu_b_step(&row_state_mem[row_idx], u_msg.sign, edge->var_idx);
+                    cnu_b_step(&row_state_mem[row_idx], u_msg.sign, syndrome_in[row_idx], edge->var_idx);
             }
         }
 
@@ -740,7 +671,7 @@ static int mdpc_decode_rowcentric(
             uint8_t x_next = 0;
             msg_t u_next[cfg->w];
             int edge_idx;
-            vnu_step(cfg, x_in[var_idx], &c2v_mem[var_idx * cfg->w], &x_next, u_next);
+            vnu_step(cfg, &c2v_mem[var_idx * cfg->w], &x_next, u_next);
             x_work[var_idx] = x_next;
             for (edge_idx = 0; edge_idx < cfg->w; ++edge_idx) {
                 u_mem[var_idx * cfg->w + edge_idx] = u_next[edge_idx];
@@ -748,7 +679,7 @@ static int mdpc_decode_rowcentric(
         }
 
         if (trace != NULL) {
-            int weight = syndrome_weight(cfg, graph, x_work, NULL);
+            int weight = residual_syndrome_weight(cfg, graph, x_work, syndrome_in, NULL);
             trace->syndrome_weight_hist[iter] = weight;
             trace->syndrome_nonzero_hist[iter] = weight != 0;
             if (weight == 0) {
@@ -758,7 +689,7 @@ static int mdpc_decode_rowcentric(
         }
 
         if (out != NULL || trace != NULL) {
-            int weight = syndrome_weight(cfg, graph, x_work, NULL);
+            int weight = residual_syndrome_weight(cfg, graph, x_work, syndrome_in, NULL);
             if (weight == 0) {
                 if (out != NULL) {
                     out->success = 1;
@@ -888,8 +819,10 @@ static void emit_msg_arrays(FILE *fp, const char *sign_name, const char *mag_nam
 }
 
 static int mdpc_emit_svh(const mdpc_config_t *cfg, const mdpc_graph_t *graph, const char *path) {
-    uint8_t case0_bits[TOY_MDPC_N] = {0};
-    uint8_t case1_bits[TOY_MDPC_N] = {0};
+    uint8_t case0_error[TOY_MDPC_N] = {0};
+    uint8_t case1_error[TOY_MDPC_N] = {0};
+    uint8_t case0_syndrome[TOY_MDPC_R] = {0};
+    uint8_t case1_syndrome[TOY_MDPC_R] = {0};
     mdpc_result_t case0_result;
     mdpc_result_t case1_result;
     mdpc_trace_t case0_trace;
@@ -907,18 +840,22 @@ static int mdpc_emit_svh(const mdpc_config_t *cfg, const mdpc_graph_t *graph, co
     mdpc_result_init(&case1_result, cfg);
     mdpc_trace_init(&case0_trace, cfg, 1);
     mdpc_trace_init(&case1_trace, cfg, 1);
-    mdpc_decode_schedule(cfg, graph, case0_bits, &case0_result, &case0_trace);
+    compute_syndrome(cfg, graph, case0_error, case0_syndrome);
+    mdpc_decode_schedule(cfg, graph, case0_syndrome, &case0_result, &case0_trace);
 
     for (bit_idx = 0; bit_idx < cfg->n; ++bit_idx) {
-        uint8_t trial_bits[TOY_MDPC_N] = {0};
+        uint8_t trial_error[TOY_MDPC_N] = {0};
+        uint8_t trial_syndrome[TOY_MDPC_R] = {0};
         mdpc_result_t trial_result;
         mdpc_trace_t trial_trace;
-        trial_bits[bit_idx] = 1;
+        trial_error[bit_idx] = 1;
+        compute_syndrome(cfg, graph, trial_error, trial_syndrome);
         mdpc_result_init(&trial_result, cfg);
         mdpc_trace_init(&trial_trace, cfg, 1);
-        mdpc_decode_schedule(cfg, graph, trial_bits, &trial_result, &trial_trace);
+        mdpc_decode_schedule(cfg, graph, trial_syndrome, &trial_result, &trial_trace);
         if (bit_idx == 0 || (!found_success && trial_result.success)) {
-            memcpy(case1_bits, trial_bits, sizeof(case1_bits));
+            memcpy(case1_error, trial_error, sizeof(case1_error));
+            memcpy(case1_syndrome, trial_syndrome, sizeof(case1_syndrome));
             mdpc_result_free(&case1_result);
             mdpc_trace_free(&case1_trace);
             case1_result = trial_result;
@@ -943,17 +880,19 @@ static int mdpc_emit_svh(const mdpc_config_t *cfg, const mdpc_graph_t *graph, co
         return 1;
     }
 
-    fprintf(fp, "`ifndef MDPC_DEMO_VECTORS_SVH\n");
-    fprintf(fp, "`define MDPC_DEMO_VECTORS_SVH\n\n");
+    fprintf(fp, "`ifndef BIKE_DEMO_VECTORS_SVH\n");
+    fprintf(fp, "`define BIKE_DEMO_VECTORS_SVH\n\n");
 
-    emit_logic_vector(fp, "CASE0_INPUT", pack_bits16(case0_bits, cfg->n), cfg->n);
+    emit_logic_vector(fp, "CASE0_SYNDROME", pack_bits16(case0_syndrome, cfg->r), cfg->r);
+    emit_logic_vector(fp, "CASE0_ERROR", pack_bits16(case0_error, cfg->n), cfg->n);
     emit_logic_vector(fp, "CASE0_OUTPUT", pack_bits16(case0_result.x_out_bits, cfg->n), cfg->n);
     fprintf(fp, "localparam int CASE0_SUCCESS = %d;\n", case0_result.success);
     fprintf(fp, "localparam int CASE0_ITERATIONS = %d;\n", case0_result.iterations);
     emit_u64_array_as_int(fp, "CASE0_SYNDROME_HIST", case0_trace.syndrome_bits_hist, cfg->i_max);
     fprintf(fp, "\n");
 
-    emit_logic_vector(fp, "CASE1_INPUT", pack_bits16(case1_bits, cfg->n), cfg->n);
+    emit_logic_vector(fp, "CASE1_SYNDROME", pack_bits16(case1_syndrome, cfg->r), cfg->r);
+    emit_logic_vector(fp, "CASE1_ERROR", pack_bits16(case1_error, cfg->n), cfg->n);
     emit_logic_vector(fp, "CASE1_OUTPUT", pack_bits16(case1_result.x_out_bits, cfg->n), cfg->n);
     fprintf(fp, "localparam int CASE1_SUCCESS = %d;\n", case1_result.success);
     fprintf(fp, "localparam int CASE1_ITERATIONS = %d;\n", case1_result.iterations);
@@ -1012,226 +951,18 @@ static int results_match(
     return 1;
 }
 
-static int generate_error_vector(const mdpc_config_t *cfg, uint64_t seed, uint8_t *x_in) {
-    int *positions;
-    uint64_t rng_state = seed ^ UINT64_C(0xA5A5A5A5A5A5A5A5);
-    int idx;
-
-    memset(x_in, 0, (size_t)cfg->n);
-    positions = (int *)calloc((size_t)cfg->t, sizeof(int));
-    if (positions == NULL) {
-        return -1;
-    }
-    if (sample_unique_positions(&rng_state, cfg->n, cfg->t, positions) != 0) {
-        free(positions);
-        return -1;
-    }
-    for (idx = 0; idx < cfg->t; ++idx) {
-        x_in[positions[idx]] = 1;
-    }
-    free(positions);
-    return 0;
-}
-
-static void print_positions(const mdpc_config_t *cfg, int bank_limit) {
-    int bank;
-    int edge_idx;
-    for (bank = 0; bank < bank_limit; ++bank) {
-        printf("H%d first-column support:", bank);
-        for (edge_idx = 0; edge_idx < cfg->w; ++edge_idx) {
-            printf("%s%d", edge_idx == 0 ? " " : ", ", cfg->h_base[bank * cfg->w + edge_idx]);
-        }
-        printf("\n");
-    }
-}
-
-static int run_paper80_once(uint64_t seed) {
-    mdpc_config_t cfg;
-    mdpc_graph_t graph;
-    mdpc_result_t schedule_result;
-    mdpc_result_t row_result;
-    mdpc_trace_t schedule_trace;
-    mdpc_trace_t row_trace;
-    uint8_t *x_in;
-    int rc = 1;
-
-    mdpc_config_init_zero(&cfg);
-    memset(&graph, 0, sizeof(graph));
-    mdpc_result_init_zero(&schedule_result);
-    mdpc_result_init_zero(&row_result);
-    mdpc_trace_init_zero(&schedule_trace);
-    mdpc_trace_init_zero(&row_trace);
-
-    if (mdpc_config_init_paper80(&cfg, seed) != 0) {
-        fprintf(stderr, "failed to initialize paper80 config\n");
-        goto done;
-    }
-    if (mdpc_graph_build(&cfg, &graph) != 0) {
-        fprintf(stderr, "failed to build graph\n");
-        goto done;
-    }
-    if (mdpc_result_init(&schedule_result, &cfg) != 0 || mdpc_result_init(&row_result, &cfg) != 0) {
-        fprintf(stderr, "failed to allocate result buffers\n");
-        goto done;
-    }
-    if (mdpc_trace_init(&schedule_trace, &cfg, 0) != 0 || mdpc_trace_init(&row_trace, &cfg, 0) != 0) {
-        fprintf(stderr, "failed to allocate trace buffers\n");
-        goto done;
-    }
-
-    x_in = (uint8_t *)calloc((size_t)cfg.n, sizeof(uint8_t));
-    if (x_in == NULL) {
-        fprintf(stderr, "failed to allocate input buffer\n");
-        goto done;
-    }
-    if (generate_error_vector(&cfg, seed, x_in) != 0) {
-        fprintf(stderr, "failed to generate deterministic error vector\n");
-        free(x_in);
-        goto done;
-    }
-
-    if (mdpc_decode_schedule(&cfg, &graph, x_in, &schedule_result, &schedule_trace) != 0) {
-        fprintf(stderr, "schedule-aware decode failed\n");
-        free(x_in);
-        goto done;
-    }
-    if (mdpc_decode_rowcentric(&cfg, &graph, x_in, &row_result, &row_trace) != 0) {
-        fprintf(stderr, "row-centric decode failed\n");
-        free(x_in);
-        goto done;
-    }
-    free(x_in);
-
-    if (!results_match(&cfg, &schedule_result, &schedule_trace, &row_result, &row_trace)) {
-        goto done;
-    }
-
-    printf("paper80 seed=%" PRIu64 " models_agree=yes success=%d iterations=%d final_syndrome_weight=%d\n",
-        seed, schedule_result.success, schedule_result.iterations, schedule_result.final_syndrome_weight);
-    print_positions(&cfg, cfg.n0);
-    rc = 0;
-
-done:
-    mdpc_result_free(&schedule_result);
-    mdpc_result_free(&row_result);
-    mdpc_trace_free(&schedule_trace);
-    mdpc_trace_free(&row_trace);
-    mdpc_graph_free(&graph);
-    mdpc_config_free(&cfg);
-    return rc;
-}
-
-static int run_paper80_batch(uint64_t base_seed, int trials) {
-    int trial_idx;
-    int success_count = 0;
-    int failure_count = 0;
-    int first_success_iterations = 0;
-    int have_first_success = 0;
-    uint64_t first_success_seed = 0;
-
-    printf("paper80 batch base_seed=%" PRIu64 " trials=%d\n", base_seed, trials);
-    for (trial_idx = 0; trial_idx < trials; ++trial_idx) {
-        uint64_t seed = base_seed + (uint64_t)trial_idx;
-        mdpc_config_t cfg;
-        mdpc_graph_t graph;
-        mdpc_result_t schedule_result;
-        mdpc_result_t row_result;
-        mdpc_trace_t schedule_trace;
-        mdpc_trace_t row_trace;
-        uint8_t *x_in;
-
-        mdpc_config_init_zero(&cfg);
-        memset(&graph, 0, sizeof(graph));
-        mdpc_result_init_zero(&schedule_result);
-        mdpc_result_init_zero(&row_result);
-        mdpc_trace_init_zero(&schedule_trace);
-        mdpc_trace_init_zero(&row_trace);
-
-        if (mdpc_config_init_paper80(&cfg, seed) != 0 || mdpc_graph_build(&cfg, &graph) != 0 ||
-            mdpc_result_init(&schedule_result, &cfg) != 0 || mdpc_result_init(&row_result, &cfg) != 0 ||
-            mdpc_trace_init(&schedule_trace, &cfg, 0) != 0 || mdpc_trace_init(&row_trace, &cfg, 0) != 0) {
-            fprintf(stderr, "batch setup failed for seed %" PRIu64 "\n", seed);
-            mdpc_result_free(&schedule_result);
-            mdpc_result_free(&row_result);
-            mdpc_trace_free(&schedule_trace);
-            mdpc_trace_free(&row_trace);
-            mdpc_graph_free(&graph);
-            mdpc_config_free(&cfg);
-            return 1;
-        }
-
-        x_in = (uint8_t *)calloc((size_t)cfg.n, sizeof(uint8_t));
-        if (x_in == NULL || generate_error_vector(&cfg, seed, x_in) != 0 ||
-            mdpc_decode_schedule(&cfg, &graph, x_in, &schedule_result, &schedule_trace) != 0 ||
-            mdpc_decode_rowcentric(&cfg, &graph, x_in, &row_result, &row_trace) != 0) {
-            fprintf(stderr, "batch execution failed for seed %" PRIu64 "\n", seed);
-            free(x_in);
-            mdpc_result_free(&schedule_result);
-            mdpc_result_free(&row_result);
-            mdpc_trace_free(&schedule_trace);
-            mdpc_trace_free(&row_trace);
-            mdpc_graph_free(&graph);
-            mdpc_config_free(&cfg);
-            return 1;
-        }
-        free(x_in);
-
-        if (!results_match(&cfg, &schedule_result, &schedule_trace, &row_result, &row_trace)) {
-            mdpc_result_free(&schedule_result);
-            mdpc_result_free(&row_result);
-            mdpc_trace_free(&schedule_trace);
-            mdpc_trace_free(&row_trace);
-            mdpc_graph_free(&graph);
-            mdpc_config_free(&cfg);
-            return 1;
-        }
-
-        if (schedule_result.success) {
-            success_count += 1;
-            if (!have_first_success) {
-                have_first_success = 1;
-                first_success_seed = seed;
-                first_success_iterations = schedule_result.iterations;
-            }
-        } else {
-            failure_count += 1;
-        }
-
-        printf(
-            "  seed=%" PRIu64 " success=%d iterations=%d final_syndrome_weight=%d\n",
-            seed,
-            schedule_result.success,
-            schedule_result.iterations,
-            schedule_result.final_syndrome_weight
-        );
-
-        mdpc_result_free(&schedule_result);
-        mdpc_result_free(&row_result);
-        mdpc_trace_free(&schedule_trace);
-        mdpc_trace_free(&row_trace);
-        mdpc_graph_free(&graph);
-        mdpc_config_free(&cfg);
-    }
-
-    printf("paper80 batch summary: successes=%d failures=%d\n", success_count, failure_count);
-    if (have_first_success) {
-        printf("first_success_seed=%" PRIu64 " first_success_iterations=%d\n",
-            first_success_seed, first_success_iterations);
-    } else {
-        printf("first_success_seed=none\n");
-    }
-    return 0;
-}
-
 static int run_self_test(void) {
     mdpc_config_t cfg;
     mdpc_graph_t graph;
     uint8_t *x_in;
+    uint8_t *syndrome_in;
     int rc = 1;
     int bit_idx;
 
     mdpc_config_init_zero(&cfg);
     memset(&graph, 0, sizeof(graph));
+    x_in = NULL;
+    syndrome_in = NULL;
     if (mdpc_config_init_toy(&cfg) != 0 || mdpc_graph_build(&cfg, &graph) != 0) {
         fprintf(stderr, "self-test setup failed\n");
         goto done;
@@ -1251,7 +982,8 @@ static int run_self_test(void) {
     }
 
     x_in = (uint8_t *)calloc((size_t)cfg.n, sizeof(uint8_t));
-    if (x_in == NULL) {
+    syndrome_in = (uint8_t *)calloc((size_t)cfg.r, sizeof(uint8_t));
+    if (x_in == NULL || syndrome_in == NULL) {
         fprintf(stderr, "self-test allocation failed\n");
         goto done;
     }
@@ -1267,17 +999,17 @@ static int run_self_test(void) {
         mdpc_result_init_zero(&row_result);
         mdpc_trace_init_zero(&schedule_trace);
         mdpc_trace_init_zero(&row_trace);
+        compute_syndrome(&cfg, &graph, x_in, syndrome_in);
         if (mdpc_result_init(&schedule_result, &cfg) != 0 || mdpc_result_init(&row_result, &cfg) != 0 ||
             mdpc_trace_init(&schedule_trace, &cfg, 0) != 0 || mdpc_trace_init(&row_trace, &cfg, 0) != 0 ||
-            mdpc_decode_schedule(&cfg, &graph, x_in, &schedule_result, &schedule_trace) != 0 ||
-            mdpc_decode_rowcentric(&cfg, &graph, x_in, &row_result, &row_trace) != 0 ||
+            mdpc_decode_schedule(&cfg, &graph, syndrome_in, &schedule_result, &schedule_trace) != 0 ||
+            mdpc_decode_rowcentric(&cfg, &graph, syndrome_in, &row_result, &row_trace) != 0 ||
             !results_match(&cfg, &schedule_result, &schedule_trace, &row_result, &row_trace)) {
             fprintf(stderr, "self-test failed: toy single-bit case %d mismatch\n", bit_idx);
             mdpc_result_free(&schedule_result);
             mdpc_result_free(&row_result);
             mdpc_trace_free(&schedule_trace);
             mdpc_trace_free(&row_trace);
-            free(x_in);
             goto done;
         }
         mdpc_result_free(&schedule_result);
@@ -1298,17 +1030,17 @@ static int run_self_test(void) {
         mdpc_result_init_zero(&row_result);
         mdpc_trace_init_zero(&schedule_trace);
         mdpc_trace_init_zero(&row_trace);
+        compute_syndrome(&cfg, &graph, x_in, syndrome_in);
         if (mdpc_result_init(&schedule_result, &cfg) != 0 || mdpc_result_init(&row_result, &cfg) != 0 ||
             mdpc_trace_init(&schedule_trace, &cfg, 0) != 0 || mdpc_trace_init(&row_trace, &cfg, 0) != 0 ||
-            mdpc_decode_schedule(&cfg, &graph, x_in, &schedule_result, &schedule_trace) != 0 ||
-            mdpc_decode_rowcentric(&cfg, &graph, x_in, &row_result, &row_trace) != 0 ||
+            mdpc_decode_schedule(&cfg, &graph, syndrome_in, &schedule_result, &schedule_trace) != 0 ||
+            mdpc_decode_rowcentric(&cfg, &graph, syndrome_in, &row_result, &row_trace) != 0 ||
             !results_match(&cfg, &schedule_result, &schedule_trace, &row_result, &row_trace)) {
             fprintf(stderr, "self-test failed: toy two-bit case mismatch\n");
             mdpc_result_free(&schedule_result);
             mdpc_result_free(&row_result);
             mdpc_trace_free(&schedule_trace);
             mdpc_trace_free(&row_trace);
-            free(x_in);
             goto done;
         }
         mdpc_result_free(&schedule_result);
@@ -1317,50 +1049,23 @@ static int run_self_test(void) {
         mdpc_trace_free(&row_trace);
     }
 
-    free(x_in);
     printf("golden self-test PASS\n");
     rc = 0;
 
 done:
+    free(x_in);
+    free(syndrome_in);
     mdpc_graph_free(&graph);
     mdpc_config_free(&cfg);
     return rc;
-}
-
-static int parse_u64(const char *text, uint64_t *value_out) {
-    char *end_ptr = NULL;
-    unsigned long long parsed;
-
-    errno = 0;
-    parsed = strtoull(text, &end_ptr, 0);
-    if (errno != 0 || end_ptr == text || *end_ptr != '\0') {
-        return -1;
-    }
-    *value_out = (uint64_t)parsed;
-    return 0;
-}
-
-static int parse_int(const char *text, int *value_out) {
-    char *end_ptr = NULL;
-    long parsed;
-
-    errno = 0;
-    parsed = strtol(text, &end_ptr, 0);
-    if (errno != 0 || end_ptr == text || *end_ptr != '\0') {
-        return -1;
-    }
-    *value_out = (int)parsed;
-    return 0;
 }
 
 static void usage(const char *argv0) {
     fprintf(stderr,
         "Usage:\n"
         "  %s --emit-svh <path>\n"
-        "  %s --paper80-once --seed <u64>\n"
-        "  %s --paper80-batch --base-seed <u64> --trials <n>\n"
         "  %s --self-test\n",
-        argv0, argv0, argv0, argv0);
+        argv0, argv0);
 }
 
 int main(int argc, char **argv) {
@@ -1380,38 +1085,6 @@ int main(int argc, char **argv) {
         mdpc_graph_free(&graph);
         mdpc_config_free(&cfg);
         return rc;
-    }
-
-    if (argc == 4 && strcmp(argv[1], "--paper80-once") == 0 && strcmp(argv[2], "--seed") == 0) {
-        uint64_t seed;
-        if (parse_u64(argv[3], &seed) != 0) {
-            usage(argv[0]);
-            return 1;
-        }
-        return run_paper80_once(seed);
-    }
-
-    if (argc == 6 && strcmp(argv[1], "--paper80-batch") == 0) {
-        uint64_t base_seed = 0;
-        int trials = 0;
-        int idx;
-        for (idx = 2; idx < argc; idx += 2) {
-            if (strcmp(argv[idx], "--base-seed") == 0) {
-                if (parse_u64(argv[idx + 1], &base_seed) != 0) {
-                    usage(argv[0]);
-                    return 1;
-                }
-            } else if (strcmp(argv[idx], "--trials") == 0) {
-                if (parse_int(argv[idx + 1], &trials) != 0 || trials <= 0) {
-                    usage(argv[0]);
-                    return 1;
-                }
-            } else {
-                usage(argv[0]);
-                return 1;
-            }
-        }
-        return run_paper80_batch(base_seed, trials);
     }
 
     if (argc == 2 && strcmp(argv[1], "--self-test") == 0) {

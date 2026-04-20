@@ -1,10 +1,6 @@
-`ifdef MDPC_PAPER_CFG
-import mdpc_paper_pkg::*;
-`else
-import mdpc_demo_pkg::*;
-`endif
-
-module ram_m (
+module ram_m
+  import bike_pkg::*;
+(
   input  logic i_clk,
   input  logic i_rst_n,
   input  logic i_clear_all,
@@ -36,11 +32,8 @@ module ram_m (
   input  logic [ROW_STATE_W-1:0] i_din1
 );
 
-`ifdef MDPC_PAPER_CFG
-  import mdpc_paper_pkg::*;
-`else
-  import mdpc_demo_pkg::*;
-`endif
+  timeunit 1ns;
+  timeprecision 1ps;
 
   logic [ROW_STATE_W-1:0] mem [0:1][0:L-1][0:R-1];
   integer bank_idx;

@@ -1,20 +1,20 @@
 `timescale 1ns/1ps
 
 module tb_decoder_top;
-  import mdpc_demo_pkg::*;
+  import bike_pkg::*;
 
   /* verilator lint_off UNUSEDPARAM */
-  `include "tb/generated/mdpc_demo_vectors.svh"
+  `include "tb/generated/bike_demo_vectors.svh"
   /* verilator lint_on UNUSEDPARAM */
 
   logic clk;
   logic rst_n;
   logic start;
   logic [H_SEL_W-1:0] h_sel;
-  logic [N-1:0] x_in;
+  logic [R-1:0] syndrome_in;
   logic done;
   logic success;
-  logic [N-1:0] x_out;
+  logic [N-1:0] e_out;
   logic [$clog2(I_MAX + 1)-1:0] iter_count;
   integer idx;
   integer flat_idx;
@@ -24,10 +24,10 @@ module tb_decoder_top;
     .i_rst_n(rst_n),
     .i_start(start),
     .i_h_sel(h_sel),
-    .i_x(x_in),
+    .i_syndrome(syndrome_in),
     .o_done(done),
     .o_success(success),
-    .o_x(x_out),
+    .o_e(e_out),
     .o_iter_count(iter_count)
   );
 
@@ -39,16 +39,16 @@ module tb_decoder_top;
       rst_n = 1'b0;
       start = 1'b0;
       h_sel = '0;
-      x_in = '0;
+      syndrome_in = '0;
       repeat (2) @(posedge clk);
       rst_n = 1'b1;
       @(posedge clk);
     end
   endtask
 
-  task automatic start_case(input logic [N-1:0] vec);
+  task automatic start_case(input logic [R-1:0] syndrome);
     begin
-      x_in = vec;
+      syndrome_in = syndrome;
       start = 1'b1;
       @(posedge clk);
       start = 1'b0;
@@ -96,7 +96,7 @@ module tb_decoder_top;
     case1_hist = CASE1_SYNDROME_HIST;
 
     apply_reset();
-    start_case(CASE1_INPUT);
+    start_case(CASE1_SYNDROME);
 
     wait (dut.state == DEC_PIPE_PREP && dut.active_var_idx == 0 && dut.scan_slot == 0);
     #1;
@@ -139,7 +139,7 @@ module tb_decoder_top;
     @(posedge clk);
     if (int'(success) != CASE1_SUCCESS) $fatal(1, "CASE1 success mismatch: got %0d exp %0d", success, CASE1_SUCCESS);
     if (int'(iter_count) != CASE1_ITERATIONS) $fatal(1, "CASE1 iterations mismatch: got %0d exp %0d", iter_count, CASE1_ITERATIONS);
-    if (x_out !== CASE1_OUTPUT) $fatal(1, "CASE1 x_out mismatch: got %h exp %h", x_out, CASE1_OUTPUT);
+    if (e_out !== CASE1_OUTPUT) $fatal(1, "CASE1 e_out mismatch: got %h exp %h", e_out, CASE1_OUTPUT);
     check_hist(case1_hist);
 
     $display("tb_decoder_top PASS");

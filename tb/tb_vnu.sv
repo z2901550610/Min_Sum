@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
 
 module tb_vnu;
-  import mdpc_demo_pkg::*;
+  import bike_pkg::*;
 
   localparam int VNU_TC_W = APP_W + ((W > 1) ? $clog2(W + 1) : 1);
 

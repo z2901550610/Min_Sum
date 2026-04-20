@@ -1,10 +1,6 @@
-`ifdef MDPC_PAPER_CFG
-import mdpc_paper_pkg::*;
-`else
-import mdpc_demo_pkg::*;
-`endif
-
-module ram_t (
+module ram_t
+  import bike_pkg::*;
+(
   input  logic i_clk,
   input  logic i_rst_n,
   input  logic i_clear,
@@ -26,11 +22,8 @@ module ram_t (
   input  logic signed [MSG_W-1:0] i_din1
 );
 
-`ifdef MDPC_PAPER_CFG
-  import mdpc_paper_pkg::*;
-`else
-  import mdpc_demo_pkg::*;
-`endif
+  timeunit 1ns;
+  timeprecision 1ps;
 
   // RAM T caches c2v in signed 2's-complement so VNU can accumulate and form
   // u_next without per-cycle sign-magnitude decoding.

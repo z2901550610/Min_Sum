@@ -1,25 +1,20 @@
-`ifdef MDPC_PAPER_CFG
-import mdpc_paper_pkg::*;
-`else
-import mdpc_demo_pkg::*;
-`endif
-
-module cnu_b (
+module cnu_b
+  import bike_pkg::*;
+(
   input  logic [ROW_STATE_W-1:0] i_comp_c2v,
   input  logic i_sign,
+  input  logic i_syndrome_bit,
   input  logic [VAR_W-1:0] i_idx,
   output logic [MSG_W-1:0] o_c2v
 );
 
-`ifdef MDPC_PAPER_CFG
-  import mdpc_paper_pkg::*;
-`else
-  import mdpc_demo_pkg::*;
-`endif
+  timeunit 1ns;
+  timeprecision 1ps;
 
   // CNU_B reconstructs each c2v from the compressed row state: use min2 for
   // the variable that supplied min1, otherwise min1; sign removes this edge's
-  // original v2c/u sign from the row parity.
+  // original v2c/u sign from the row parity. For syndrome decoding, the check
+  // equation target also contributes to the outgoing sign.
 
   logic [D-1:0] c2v_min1_mag;
   logic [D-1:0] c2v_min2_mag;
@@ -40,7 +35,7 @@ module cnu_b (
       c2v_msg_mag = c2v_min1_mag;
     end
 
-    c2v_msg_sign = c2v_sign_xor ^ i_sign;
+    c2v_msg_sign = c2v_sign_xor ^ i_sign ^ i_syndrome_bit;
   end
 
   assign o_c2v = {c2v_msg_sign, c2v_msg_mag};

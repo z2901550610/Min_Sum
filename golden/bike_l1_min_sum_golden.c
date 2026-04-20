@@ -296,10 +296,6 @@ static int msg_to_signed(msg_t msg) {
     return msg.sign ? -(int)msg.mag : (int)msg.mag;
 }
 
-static int gamma_from_bit(const bike_config_t *cfg, uint8_t bit_value) {
-    return bit_value ? -cfg->c_val : cfg->c_val;
-}
-
 static int alpha_scale(const bike_config_t *cfg, int value) {
     int abs_value = value < 0 ? -value : value;
     int scaled_abs = 0;
@@ -375,17 +371,16 @@ static void cnu_a_step(msg_t u_in, int var_idx, row_state_t *state) {
     }
 }
 
-static msg_t cnu_b_step(const row_state_t *state, int u_sign, int var_idx) {
+static msg_t cnu_b_step(const row_state_t *state, int u_sign, int syndrome_bit, int var_idx) {
     msg_t out;
 
-    out.sign = (uint8_t)(state->sign_xor ^ u_sign);
+    out.sign = (uint8_t)(state->sign_xor ^ u_sign ^ syndrome_bit);
     out.mag = (uint8_t)((var_idx == state->min_id) ? state->min2 : state->min1);
     return out;
 }
 
 static void vnu_step(
     const bike_config_t *cfg,
-    uint8_t channel_bit,
     const msg_t *c2v,
     uint8_t *x_out,
     msg_t *u_next
@@ -398,7 +393,7 @@ static void vnu_step(
         sum_c2v += msg_to_signed(c2v[edge_idx]);
     }
 
-    app = gamma_from_bit(cfg, channel_bit) + alpha_scale(cfg, sum_c2v);
+    app = cfg->c_val + alpha_scale(cfg, sum_c2v);
     *x_out = (uint8_t)(app < 0);
     for (edge_idx = 0; edge_idx < cfg->wh; ++edge_idx) {
         int signed_c2v = msg_to_signed(c2v[edge_idx]);
@@ -463,17 +458,41 @@ static void bike_graph_free(bike_graph_t *graph) {
     memset(graph, 0, sizeof(*graph));
 }
 
-static int syndrome_weight(const bike_config_t *cfg, const bike_graph_t *graph, const uint8_t *x_bits) {
+static void compute_syndrome(
+    const bike_config_t *cfg,
+    const bike_graph_t *graph,
+    const uint8_t *x_bits,
+    uint8_t *syndrome_out
+) {
     int row_idx;
-    int weight = 0;
 
+    memset(syndrome_out, 0, (size_t)cfg->r);
     for (row_idx = 0; row_idx < cfg->r; ++row_idx) {
         int edge_pos;
         int parity = 0;
         for (edge_pos = graph->row_offsets[row_idx]; edge_pos < graph->row_offsets[row_idx + 1]; ++edge_pos) {
             parity ^= x_bits[graph->row_edges[edge_pos].var_idx];
         }
-        weight += parity;
+        syndrome_out[row_idx] = (uint8_t)parity;
+    }
+}
+
+static int residual_syndrome_weight(
+    const bike_config_t *cfg,
+    const bike_graph_t *graph,
+    const uint8_t *x_bits,
+    const uint8_t *syndrome_in
+) {
+    int row_idx;
+    int weight = 0;
+
+    for (row_idx = 0; row_idx < cfg->r; ++row_idx) {
+        int edge_pos;
+        int residual = syndrome_in[row_idx] & 1u;
+        for (edge_pos = graph->row_offsets[row_idx]; edge_pos < graph->row_offsets[row_idx + 1]; ++edge_pos) {
+            residual ^= x_bits[graph->row_edges[edge_pos].var_idx];
+        }
+        weight += residual;
     }
     return weight;
 }
@@ -492,7 +511,7 @@ static int max_lane_count(const int *lane_count, int lane_total) {
 static int bike_decode_schedule(
     const bike_config_t *cfg,
     const bike_graph_t *graph,
-    const uint8_t *x_in,
+    const uint8_t *syndrome_in,
     bike_result_t *out,
     bike_trace_t *trace
 ) {
@@ -524,11 +543,10 @@ static int bike_decode_schedule(
         return -1;
     }
 
-    memcpy(x_work, x_in, (size_t)cfg->n);
     for (iter = 0; iter < cfg->n; ++iter) {
         int edge_idx;
         for (edge_idx = 0; edge_idx < cfg->wh; ++edge_idx) {
-            u_mem[iter * cfg->wh + edge_idx] = msg_from_signed(cfg, gamma_from_bit(cfg, x_in[iter]));
+            u_mem[iter * cfg->wh + edge_idx] = msg_from_signed(cfg, cfg->c_val);
         }
     }
 
@@ -570,7 +588,9 @@ static int bike_decode_schedule(
                     if (lane_slot < lane_count[lane_idx]) {
                         const lane_edge_t *edge = &lane_edges[lane_idx * cfg->wh + lane_slot];
                         int flat_idx = var_idx * cfg->wh + edge->edge_slot;
-                        c2v_mem[flat_idx] = cnu_b_step(&row_state_mem[edge->row_global], sign_mem[flat_idx], var_idx);
+                        c2v_mem[flat_idx] =
+                            cnu_b_step(&row_state_mem[edge->row_global], sign_mem[flat_idx],
+                                       syndrome_in[edge->row_global], var_idx);
                     }
                 }
             }
@@ -581,7 +601,7 @@ static int bike_decode_schedule(
             msg_t u_next[cfg->wh];
             int edge_idx;
 
-            vnu_step(cfg, x_in[var_idx], &c2v_mem[var_idx * cfg->wh], &x_next, u_next);
+            vnu_step(cfg, &c2v_mem[var_idx * cfg->wh], &x_next, u_next);
             x_work[var_idx] = x_next;
             for (edge_idx = 0; edge_idx < cfg->wh; ++edge_idx) {
                 u_mem[var_idx * cfg->wh + edge_idx] = u_next[edge_idx];
@@ -589,13 +609,13 @@ static int bike_decode_schedule(
         }
 
         if (trace != NULL) {
-            int weight = syndrome_weight(cfg, graph, x_work);
+            int weight = residual_syndrome_weight(cfg, graph, x_work, syndrome_in);
             trace->syndrome_weight_hist[iter] = weight;
             trace->syndrome_nonzero_hist[iter] = weight != 0;
         }
 
         if (out != NULL || trace != NULL) {
-            int weight = syndrome_weight(cfg, graph, x_work);
+            int weight = residual_syndrome_weight(cfg, graph, x_work, syndrome_in);
             if (weight == 0) {
                 if (out != NULL) {
                     out->success = 1;
@@ -645,7 +665,7 @@ static int bike_decode_schedule(
 static int bike_decode_rowcentric(
     const bike_config_t *cfg,
     const bike_graph_t *graph,
-    const uint8_t *x_in,
+    const uint8_t *syndrome_in,
     bike_result_t *out,
     bike_trace_t *trace
 ) {
@@ -667,11 +687,10 @@ static int bike_decode_rowcentric(
         return -1;
     }
 
-    memcpy(x_work, x_in, (size_t)cfg->n);
     for (iter = 0; iter < cfg->n; ++iter) {
         int edge_idx;
         for (edge_idx = 0; edge_idx < cfg->wh; ++edge_idx) {
-            u_mem[iter * cfg->wh + edge_idx] = msg_from_signed(cfg, gamma_from_bit(cfg, x_in[iter]));
+            u_mem[iter * cfg->wh + edge_idx] = msg_from_signed(cfg, cfg->c_val);
         }
     }
 
@@ -692,7 +711,7 @@ static int bike_decode_rowcentric(
                 const row_edge_t *edge = &graph->row_edges[row_pos];
                 msg_t u_msg = u_mem[edge->var_idx * cfg->wh + edge->edge_slot];
                 c2v_mem[edge->var_idx * cfg->wh + edge->edge_slot] =
-                    cnu_b_step(&row_state_mem[row_idx], u_msg.sign, edge->var_idx);
+                    cnu_b_step(&row_state_mem[row_idx], u_msg.sign, syndrome_in[row_idx], edge->var_idx);
             }
         }
 
@@ -701,7 +720,7 @@ static int bike_decode_rowcentric(
             msg_t u_next[cfg->wh];
             int edge_idx;
 
-            vnu_step(cfg, x_in[row_idx], &c2v_mem[row_idx * cfg->wh], &x_next, u_next);
+            vnu_step(cfg, &c2v_mem[row_idx * cfg->wh], &x_next, u_next);
             x_work[row_idx] = x_next;
             for (edge_idx = 0; edge_idx < cfg->wh; ++edge_idx) {
                 u_mem[row_idx * cfg->wh + edge_idx] = u_next[edge_idx];
@@ -709,13 +728,13 @@ static int bike_decode_rowcentric(
         }
 
         if (trace != NULL) {
-            int weight = syndrome_weight(cfg, graph, x_work);
+            int weight = residual_syndrome_weight(cfg, graph, x_work, syndrome_in);
             trace->syndrome_weight_hist[iter] = weight;
             trace->syndrome_nonzero_hist[iter] = weight != 0;
         }
 
         if (out != NULL || trace != NULL) {
-            int weight = syndrome_weight(cfg, graph, x_work);
+            int weight = residual_syndrome_weight(cfg, graph, x_work, syndrome_in);
             if (weight == 0) {
                 if (out != NULL) {
                     out->success = 1;
@@ -857,11 +876,13 @@ static int run_single_case(
     bike_config_t cfg;
     bike_graph_t graph;
     uint8_t *x_in;
+    uint8_t *syndrome_in;
     int rc = -1;
 
     bike_config_init_zero(&cfg);
     memset(&graph, 0, sizeof(graph));
     x_in = NULL;
+    syndrome_in = NULL;
 
     if (bike_config_init(&cfg, seed, r, wh, t, candidate) != 0) {
         fprintf(stderr, "failed to initialize BIKE config\n");
@@ -877,12 +898,14 @@ static int run_single_case(
         goto done;
     }
     x_in = (uint8_t *)calloc((size_t)cfg.n, sizeof(uint8_t));
-    if (x_in == NULL || generate_error_vector(&cfg, seed, x_in) != 0) {
-        fprintf(stderr, "failed to generate BIKE error vector\n");
+    syndrome_in = (uint8_t *)calloc((size_t)cfg.r, sizeof(uint8_t));
+    if (x_in == NULL || syndrome_in == NULL || generate_error_vector(&cfg, seed, x_in) != 0) {
+        fprintf(stderr, "failed to generate BIKE syndrome input\n");
         goto done;
     }
-    if (bike_decode_schedule(&cfg, &graph, x_in, schedule_result, schedule_trace) != 0 ||
-        bike_decode_rowcentric(&cfg, &graph, x_in, row_result, row_trace) != 0) {
+    compute_syndrome(&cfg, &graph, x_in, syndrome_in);
+    if (bike_decode_schedule(&cfg, &graph, syndrome_in, schedule_result, schedule_trace) != 0 ||
+        bike_decode_rowcentric(&cfg, &graph, syndrome_in, row_result, row_trace) != 0) {
         fprintf(stderr, "BIKE decoder execution failed\n");
         goto done;
     }
@@ -894,6 +917,7 @@ static int run_single_case(
 
 done:
     free(x_in);
+    free(syndrome_in);
     bike_graph_free(&graph);
     bike_config_free(&cfg);
     return rc;
@@ -1001,7 +1025,7 @@ static int run_bike_l1_once(const cli_options_t *options) {
         goto done;
     }
 
-    printf("bike-l1 seed=%" PRIu64 " models_agree=yes success=%d iterations=%d final_syndrome_weight=%d ",
+    printf("bike-l1 seed=%" PRIu64 " models_agree=yes success=%d iterations=%d final_residual_weight=%d ",
         options->seed, schedule_result.success, schedule_result.iterations, schedule_result.final_syndrome_weight);
     print_candidate_summary(stdout, &candidate);
     printf("\n");
@@ -1069,7 +1093,7 @@ static int run_bike_l1_batch(const cli_options_t *options) {
             failure_count += 1;
         }
 
-        printf("  seed=%" PRIu64 " success=%d iterations=%d final_syndrome_weight=%d\n",
+        printf("  seed=%" PRIu64 " success=%d iterations=%d final_residual_weight=%d\n",
             seed, schedule_result.success, schedule_result.iterations, schedule_result.final_syndrome_weight);
 
         bike_result_free(&schedule_result);
@@ -1165,6 +1189,7 @@ static int run_self_test(void) {
     bike_config_t small_cfg;
     bike_graph_t small_graph;
     uint8_t *x_in = NULL;
+    uint8_t *syndrome_in = NULL;
     int rc = 1;
 
     bike_result_init_zero(&schedule_result);
@@ -1256,15 +1281,17 @@ static int run_self_test(void) {
         goto done;
     }
     x_in = (uint8_t *)calloc((size_t)small_cfg.n, sizeof(uint8_t));
-    if (x_in == NULL) {
+    syndrome_in = (uint8_t *)calloc((size_t)small_cfg.r, sizeof(uint8_t));
+    if (x_in == NULL || syndrome_in == NULL) {
         fprintf(stderr, "self-test failed: input allocation\n");
         goto done;
     }
     x_in[0] = 1;
     x_in[3] = 1;
     x_in[small_cfg.r + 4] = 1;
-    if (bike_decode_schedule(&small_cfg, &small_graph, x_in, &schedule_result, &schedule_trace) != 0 ||
-        bike_decode_rowcentric(&small_cfg, &small_graph, x_in, &row_result, &row_trace) != 0 ||
+    compute_syndrome(&small_cfg, &small_graph, x_in, syndrome_in);
+    if (bike_decode_schedule(&small_cfg, &small_graph, syndrome_in, &schedule_result, &schedule_trace) != 0 ||
+        bike_decode_rowcentric(&small_cfg, &small_graph, syndrome_in, &row_result, &row_trace) != 0 ||
         !results_match(&small_cfg, &schedule_result, &schedule_trace, &row_result, &row_trace)) {
         fprintf(stderr, "self-test failed: deterministic small-pattern mismatch\n");
         goto done;
@@ -1275,6 +1302,7 @@ static int run_self_test(void) {
 
 done:
     free(x_in);
+    free(syndrome_in);
     bike_result_free(&schedule_result);
     bike_result_free(&row_result);
     bike_trace_free(&schedule_trace);

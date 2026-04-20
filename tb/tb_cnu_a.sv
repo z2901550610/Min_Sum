@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
 
 module tb_cnu_a;
-  import mdpc_demo_pkg::*;
+  import bike_pkg::*;
 
   logic clk;
   logic rst_n;

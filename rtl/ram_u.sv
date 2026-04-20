@@ -1,14 +1,9 @@
-`ifdef MDPC_PAPER_CFG
-import mdpc_paper_pkg::*;
-`else
-import mdpc_demo_pkg::*;
-`endif
-
-module ram_u (
+module ram_u
+  import bike_pkg::*;
+(
   input  logic i_clk,
   input  logic i_rst_n,
   input  logic i_init,
-  input  logic [N-1:0] i_init_bits,
   input  logic i_re0,
   input  logic [VAR_W-1:0] i_r_var0,
   input  logic [EDGE_W-1:0] i_r_edge0,
@@ -27,11 +22,8 @@ module ram_u (
   input  logic [MSG_W-1:0] i_din1
 );
 
-`ifdef MDPC_PAPER_CFG
-  import mdpc_paper_pkg::*;
-`else
-  import mdpc_demo_pkg::*;
-`endif
+  timeunit 1ns;
+  timeprecision 1ps;
 
   // RAM U stores v2c/u in sign-magnitude, matching CNU_A's sign_xor and
   // min-magnitude datapath.
@@ -53,7 +45,7 @@ module ram_u (
     end else if (i_init) begin
       for (var_idx = 0; var_idx < N; var_idx++) begin
         for (edge_idx = 0; edge_idx < W; edge_idx++) begin
-          mem[var_idx][edge_idx] <= {i_init_bits[var_idx], D'(C_VAL)};
+          mem[var_idx][edge_idx] <= {1'b0, D'(C_VAL)};
         end
       end
     end else begin

@@ -4,12 +4,14 @@
 
 `golden/bike_l1_min_sum_golden.c` is a standalone BIKE-sized min-sum golden model.
 
-It is intentionally separate from the McEliece/paper80 golden. This keeps two different validation stories apart:
+It is the BIKE-L1-sized software reference for the RTL syndrome-decoding flow:
 
-- `golden/mdpc_min_sum_golden.c` remains the toy/RTL plus paper80 McEliece-oriented min-sum reference.
-- `golden/bike_l1_min_sum_golden.c` is a BIKE-parameterized min-sum reference for the user-requested Level1-style dimensions.
+- generate a target error vector `e`
+- compute the input syndrome `s = H*e`
+- decode from `s` with an all-zero initial error estimate
+- verify the residual syndrome `s ^ H*e_hat`
 
-This program does **not** implement the official BIKE bit-flipping decoder family. It applies the same scaled min-sum equations already used by the repo’s MDPC golden, but on a BIKE-L1-sized double-circulant matrix.
+This program does **not** implement the official BIKE bit-flipping decoder family. It applies the repository's scaled min-sum equations on a BIKE-L1-sized double-circulant matrix.
 
 ## Parameter Baseline
 
@@ -51,7 +53,8 @@ The run is accepted only if both models agree on:
 - success or failure
 - iteration count
 - final hard-decision vector
-- per-iteration syndrome zero/nonzero history
+- final residual syndrome weight
+- per-iteration residual syndrome zero/nonzero history
 
 ## CLI And Build Targets
 
@@ -82,8 +85,8 @@ make bike-golden-calibrate BIKE_CAL_BASE_SEED=1 BIKE_CAL_TRIALS=4
 The implementation was checked with the following reproducible results:
 
 - `--self-test` passed
-- `--bike-l1-once --seed 1` reported `models_agree=yes`, `success=1`, `iterations=2`, `final_syndrome_weight=0`, with defaults `C=7`, `alpha=2^-4 + 2^-6`, `Imax=6`
-- `--bike-l1-batch --base-seed 1 --trials 8` reported `successes=8`, `failures=0`, first successful seed `1`, first successful iterations `2`
+- `--bike-l1-once --seed 1` reported `models_agree=yes`, `success=1`, `iterations=3`, `final_residual_weight=0`, with defaults `C=7`, `alpha=2^-4 + 2^-6`, `Imax=6`
+- `--bike-l1-batch --base-seed 1 --trials 8` reported `successes=8`, `failures=0`, first successful seed `1`, first successful iterations `3`
 - `--bike-l1-calibrate --base-seed 1 --trials 4` ranked the fixed grid and selected `C=7`, `alpha=2^-4 + 2^-6`, `Imax=6` as the best tuple
 
-These checks establish that the BIKE-L1 min-sum golden is deterministic, cross-validated internally, and does not change the existing RTL regression path.
+These checks establish that the BIKE-L1 min-sum golden is deterministic and cross-validated internally. Regular RTL regression uses the small BIKE demo parameters in `rtl/bike_pkg.sv`; defining `BIKE_L1_PARAMS` selects the BIKE-L1 dimensions.
