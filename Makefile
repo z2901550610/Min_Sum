@@ -1,12 +1,13 @@
 CC ?= cc
 CFLAGS ?= -std=c99 -O2 -Wall -Wextra -pedantic
 VERILATOR ?= verilator
-VERILATOR_FLAGS ?= --binary --sv -Wall -Wno-fatal -I./tb
+VERILATOR_FLAGS ?= --binary --sv -Wall -Wno-fatal -I./tb -I./rtl
 
 GOLDEN_BIN := golden/mdpc_min_sum_golden
 BIKE_GOLDEN_BIN := golden/bike_l1_min_sum_golden
 VECTOR_SVH := tb/generated/bike_demo_vectors.svh
-RTL_CORE := rtl/ram_i.sv rtl/ram_c.sv rtl/ram_m.sv rtl/ram_s.sv rtl/ram_t.sv rtl/ram_u.sv rtl/h_shift.sv rtl/cnu_a.sv rtl/cnu_b.sv rtl/vnu.sv rtl/decoder_top.sv
+QC_FIRST_COL_SVH := rtl/generated/qc_first_columns.svh
+RTL_CORE := rtl/ram_i.sv rtl/h_shift.sv rtl/msg_signmag_to_tc.sv rtl/msg_tc_to_signmag_sat.sv rtl/decoder_ctrl.sv rtl/ram_c.sv rtl/ram_m.sv rtl/ram_s.sv rtl/ram_t.sv rtl/ram_u.sv rtl/cnu_a.sv rtl/cnu_b.sv rtl/vnu.sv rtl/decoder_top.sv
 RTL := rtl/bike_pkg.sv $(RTL_CORE)
 BIKE_SEED ?= 1
 BIKE_BASE_SEED ?= 1
@@ -32,6 +33,9 @@ $(BIKE_GOLDEN_BIN): golden/bike_l1_min_sum_golden.c FORCE
 $(VECTOR_SVH): $(GOLDEN_BIN)
 	./$(GOLDEN_BIN) --emit-svh $@
 
+$(QC_FIRST_COL_SVH): rtl/bike_pkg.sv scripts/gen_qc_first_columns.py
+	python3 scripts/gen_qc_first_columns.py --input rtl/bike_pkg.sv --output $@
+
 golden-self-test: $(GOLDEN_BIN)
 	./$(GOLDEN_BIN) --self-test
 
@@ -49,7 +53,13 @@ bike-golden-calibrate: $(BIKE_GOLDEN_BIN)
 
 test: test-unit test-integration
 
-test-unit: $(VECTOR_SVH)
+test-unit: $(VECTOR_SVH) $(QC_FIRST_COL_SVH)
+	$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_msg_codec rtl/bike_pkg.sv rtl/msg_signmag_to_tc.sv rtl/msg_tc_to_signmag_sat.sv tb/tb_msg_codec.sv
+	./obj_dir/Vtb_msg_codec
+	$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_i rtl/bike_pkg.sv rtl/ram_i.sv tb/tb_ram_i.sv
+	./obj_dir/Vtb_ram_i
+	$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_h_shift rtl/bike_pkg.sv rtl/h_shift.sv tb/tb_h_shift.sv
+	./obj_dir/Vtb_h_shift
 	$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_cnu_a rtl/bike_pkg.sv rtl/cnu_a.sv tb/tb_cnu_a.sv
 	./obj_dir/Vtb_cnu_a
 	$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_cnu_b rtl/bike_pkg.sv rtl/cnu_b.sv tb/tb_cnu_b.sv
@@ -57,7 +67,7 @@ test-unit: $(VECTOR_SVH)
 	$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_vnu rtl/bike_pkg.sv rtl/vnu.sv tb/tb_vnu.sv
 	./obj_dir/Vtb_vnu
 
-test-integration: $(VECTOR_SVH)
+test-integration: $(VECTOR_SVH) $(QC_FIRST_COL_SVH)
 	$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_decoder_top $(RTL) tb/tb_decoder_top.sv
 	./obj_dir/Vtb_decoder_top
 

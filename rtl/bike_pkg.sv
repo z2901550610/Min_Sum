@@ -1,3 +1,4 @@
+// Shared decoder parameters, field layouts, and matrix constants.
 package bike_pkg;
   timeunit 1ns;
   timeprecision 1ps;
@@ -29,6 +30,7 @@ package bike_pkg;
   parameter int MAG_MAX = (1 << D) - 1;
   parameter int ROW_SEG_SIZE = (R + L - 1) / L;
   parameter int APP_W = 8;
+  parameter int VNU_TC_W = APP_W + ((W > 1) ? $clog2(W + 1) : 1);
   parameter int LANE_IDX_W = (L > 1) ? $clog2(L) : 1;
   parameter int VAR_W = (N > 1) ? $clog2(N) : 1;
   parameter int ROW_W = (R > 1) ? $clog2(R) : 1;
@@ -66,12 +68,6 @@ package bike_pkg;
     D'(MAG_MAX)
   };
 
-  localparam int LANE_EDGE_VALID_BIT = 0;
-  localparam int LANE_EDGE_ROW_LOCAL_LSB = LANE_EDGE_VALID_BIT + 1;
-  localparam int LANE_EDGE_ROW_GLOBAL_LSB = LANE_EDGE_ROW_LOCAL_LSB + ROW_W;
-  localparam int LANE_EDGE_VAR_IDX_LSB = LANE_EDGE_ROW_GLOBAL_LSB + ROW_W;
-  localparam int LANE_EDGE_EDGE_SLOT_LSB = LANE_EDGE_VAR_IDX_LSB + VAR_W;
-  localparam int LANE_EDGE_W = LANE_EDGE_EDGE_SLOT_LSB + EDGE_W;
   localparam int I_ENTRY_ROW_LOCAL_LSB = 0;
   localparam int I_ENTRY_EDGE_SLOT_LSB = I_ENTRY_ROW_LOCAL_LSB + ROW_W;
   localparam int I_ENTRY_W = I_ENTRY_EDGE_SLOT_LSB + EDGE_W;
@@ -109,5 +105,6 @@ package bike_pkg;
     }
   };
 `endif
+  `include "generated/qc_first_columns.svh"
   /* verilator lint_on UNUSEDPARAM */
 endpackage

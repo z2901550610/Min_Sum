@@ -1,23 +1,24 @@
+// Stores per-edge v2c sign bits for later c2v reconstruction.
 module ram_s
   import bike_pkg::*;
 (
-  input  logic i_clk,
-  input  logic i_rst_n,
-  input  logic i_clear,
-  input  logic [VAR_W-1:0] i_r_var0,
-  input  logic [EDGE_W-1:0] i_r_edge0,
-  input  logic [VAR_W-1:0] i_r_var1,
-  input  logic [EDGE_W-1:0] i_r_edge1,
-  output logic o_sign0,
-  output logic o_sign1,
-  input  logic i_we0,
-  input  logic [VAR_W-1:0] i_w_var0,
-  input  logic [EDGE_W-1:0] i_w_edge0,
-  input  logic i_din0,
-  input  logic i_we1,
-  input  logic [VAR_W-1:0] i_w_var1,
-  input  logic [EDGE_W-1:0] i_w_edge1,
-  input  logic i_din1
+  input  logic i_clk,                   // Storage clock.
+  input  logic i_rst_n,                 // Active-low reset.
+  input  logic i_clear,                 // Clears all stored sign bits.
+  input  logic [VAR_W-1:0] i_r_var0,    // Variable index for read port 0.
+  input  logic [EDGE_W-1:0] i_r_edge0,  // Edge slot for read port 0.
+  input  logic [VAR_W-1:0] i_r_var1,    // Variable index for read port 1.
+  input  logic [EDGE_W-1:0] i_r_edge1,  // Edge slot for read port 1.
+  output logic o_sign0,                 // Sign bit returned on read port 0.
+  output logic o_sign1,                 // Sign bit returned on read port 1.
+  input  logic i_we0,                   // Write enable for write port 0.
+  input  logic [VAR_W-1:0] i_w_var0,    // Variable index for write port 0.
+  input  logic [EDGE_W-1:0] i_w_edge0,  // Edge slot for write port 0.
+  input  logic i_din0,                  // Sign bit written by port 0.
+  input  logic i_we1,                   // Write enable for write port 1.
+  input  logic [VAR_W-1:0] i_w_var1,    // Variable index for write port 1.
+  input  logic [EDGE_W-1:0] i_w_edge1,  // Edge slot for write port 1.
+  input  logic i_din1                   // Sign bit written by port 1.
 );
 
   timeunit 1ns;

@@ -10,7 +10,6 @@ module tb_decoder_top;
   logic clk;
   logic rst_n;
   logic start;
-  logic [H_SEL_W-1:0] h_sel;
   logic [R-1:0] syndrome_in;
   logic done;
   logic success;
@@ -23,7 +22,6 @@ module tb_decoder_top;
     .i_clk(clk),
     .i_rst_n(rst_n),
     .i_start(start),
-    .i_h_sel(h_sel),
     .i_syndrome(syndrome_in),
     .o_done(done),
     .o_success(success),
@@ -38,7 +36,6 @@ module tb_decoder_top;
     begin
       rst_n = 1'b0;
       start = 1'b0;
-      h_sel = '0;
       syndrome_in = '0;
       repeat (2) @(posedge clk);
       rst_n = 1'b1;

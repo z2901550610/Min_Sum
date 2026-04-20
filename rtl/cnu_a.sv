@@ -1,16 +1,17 @@
+// CNU_A updates one compressed row state from an incoming v2c/u message.
 module cnu_a
   import bike_pkg::*;
 (
-  input  logic i_clk,
-  input  logic i_rst_n,
-  input  logic i_clear,
-  input  logic i_en,
-  input  logic [MSG_W-1:0] i_v2c,
-  input  logic [VAR_W-1:0] i_idx,
-  input  logic [ROW_STATE_W-1:0] i_comp_c2v,
-  output logic [ROW_STATE_W-1:0] o_comp_c2v,
-  output logic o_sign,
-  output logic o_valid
+  input  logic i_clk,                         // Sequential state update clock.
+  input  logic i_rst_n,                       // Active-low reset.
+  input  logic i_clear,                       // Clears the row state accumulator.
+  input  logic i_en,                          // Enables this cycle's row-state update.
+  input  logic [MSG_W-1:0] i_v2c,             // Incoming v2c/u sign-magnitude message.
+  input  logic [VAR_W-1:0] i_var_idx,         // Variable index tied to the incoming edge.
+  input  logic [ROW_STATE_W-1:0] i_comp_c2v,  // Current compressed row state.
+  output logic [ROW_STATE_W-1:0] o_comp_c2v,  // Next compressed row state.
+  output logic o_sign,                        // Forwarded message sign for RAM S.
+  output logic o_valid                        // Output write-enable qualifier.
 );
 
   timeunit 1ns;
@@ -41,7 +42,7 @@ module cnu_a
     if (v2c_mag <= c2v_min1_mag) begin
       c2v_compact_msg_next[ROW_STATE_MIN2_LSB +: D] = c2v_min1_mag;
       c2v_compact_msg_next[ROW_STATE_MIN1_LSB +: D] = v2c_mag;
-      c2v_compact_msg_next[ROW_STATE_MIN_ID_LSB +: VAR_W] = i_idx;
+      c2v_compact_msg_next[ROW_STATE_MIN_ID_LSB +: VAR_W] = i_var_idx;
     end else if (v2c_mag < c2v_min2_mag) begin
       c2v_compact_msg_next[ROW_STATE_MIN2_LSB +: D] = v2c_mag;
     end

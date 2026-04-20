@@ -12,12 +12,15 @@ from pathlib import Path
 
 RTL_CORE = [
     "rtl/ram_i.sv",
+    "rtl/h_shift.sv",
+    "rtl/msg_signmag_to_tc.sv",
+    "rtl/msg_tc_to_signmag_sat.sv",
+    "rtl/decoder_ctrl.sv",
     "rtl/ram_c.sv",
     "rtl/ram_m.sv",
     "rtl/ram_s.sv",
     "rtl/ram_t.sv",
     "rtl/ram_u.sv",
-    "rtl/h_shift.sv",
     "rtl/cnu_a.sv",
     "rtl/cnu_b.sv",
     "rtl/vnu.sv",
@@ -55,6 +58,63 @@ def sv_array(values: list[int]) -> str:
     return "'{" + ", ".join(str(value) for value in values) + "}"
 
 
+def build_first_column_tables(h_base: list[list[int]], r: int) -> tuple[list[list[int]], list[list[list[tuple[int, int] | None]]]]:
+    row_seg_size = (r + 1) // 2
+    lane_counts: list[list[int]] = []
+    lane_entries: list[list[list[tuple[int, int] | None]]] = []
+
+    for bank_support in h_base:
+        bank_counts = [0, 0]
+        bank_entries: list[list[tuple[int, int] | None]] = [
+            [None for _ in range(len(bank_support))],
+            [None for _ in range(len(bank_support))],
+        ]
+        for edge_slot, row_value in enumerate(bank_support):
+            lane_idx = 0 if row_value < row_seg_size else 1
+            row_local = row_value if lane_idx == 0 else row_value - row_seg_size
+            slot_idx = bank_counts[lane_idx]
+            bank_entries[lane_idx][slot_idx] = (edge_slot, row_local)
+            bank_counts[lane_idx] += 1
+        lane_counts.append(bank_counts)
+        lane_entries.append(bank_entries)
+
+    return lane_counts, lane_entries
+
+
+def render_lane_count_param(lane_counts: list[list[int]]) -> str:
+    lines = ["  localparam logic [LANE_COUNT_W-1:0] QC_FIRST_COL_LANE_COUNT [0:N0-1][0:L-1] = '{"] 
+    for bank_idx, bank_counts in enumerate(lane_counts):
+        suffix = "," if bank_idx != len(lane_counts) - 1 else ""
+        lines.append(
+            "    '{"
+            + ", ".join(f"LANE_COUNT_W'({count})" for count in bank_counts)
+            + "}"
+            + suffix
+        )
+    lines.append("  };")
+    return "\n".join(lines)
+
+
+def render_lane_entry_param(lane_entries: list[list[list[tuple[int, int] | None]]]) -> str:
+    lines = ["  localparam logic [I_ENTRY_W-1:0] QC_FIRST_COL_LANE_ENTRY [0:N0-1][0:L-1][0:W-1] = '{"] 
+    for bank_idx, bank_entries in enumerate(lane_entries):
+        bank_suffix = "," if bank_idx != len(lane_entries) - 1 else ""
+        lines.append("    '{")
+        for lane_idx, lane_slots in enumerate(bank_entries):
+            lane_suffix = "," if lane_idx != len(bank_entries) - 1 else ""
+            slot_text = []
+            for item in lane_slots:
+                if item is None:
+                    slot_text.append("'0")
+                else:
+                    edge_slot, row_local = item
+                    slot_text.append(f"{{EDGE_W'({edge_slot}), ROW_W'({row_local})}}")
+            lines.append("      '{" + ", ".join(slot_text) + "}" + lane_suffix)
+        lines.append("    }" + bank_suffix)
+    lines.append("  };")
+    return "\n".join(lines)
+
+
 def emit_pkg(
     path: Path,
     *,
@@ -66,6 +126,7 @@ def emit_pkg(
     alpha_shift_1: int,
     h_base: list[list[int]],
 ) -> None:
+    lane_counts, lane_entries = build_first_column_tables(h_base, r)
     path.write_text(
         f"""package bike_pkg;
   timeunit 1ns;
@@ -88,6 +149,7 @@ def emit_pkg(
   parameter int MAG_MAX = (1 << D) - 1;
   parameter int ROW_SEG_SIZE = (R + L - 1) / L;
   parameter int APP_W = 8;
+  parameter int VNU_TC_W = APP_W + ((W > 1) ? $clog2(W + 1) : 1);
   parameter int LANE_IDX_W = (L > 1) ? $clog2(L) : 1;
   parameter int VAR_W = (N > 1) ? $clog2(N) : 1;
   parameter int ROW_W = (R > 1) ? $clog2(R) : 1;
@@ -125,12 +187,6 @@ def emit_pkg(
     D'(MAG_MAX)
   }};
 
-  localparam int LANE_EDGE_VALID_BIT = 0;
-  localparam int LANE_EDGE_ROW_LOCAL_LSB = LANE_EDGE_VALID_BIT + 1;
-  localparam int LANE_EDGE_ROW_GLOBAL_LSB = LANE_EDGE_ROW_LOCAL_LSB + ROW_W;
-  localparam int LANE_EDGE_VAR_IDX_LSB = LANE_EDGE_ROW_GLOBAL_LSB + ROW_W;
-  localparam int LANE_EDGE_EDGE_SLOT_LSB = LANE_EDGE_VAR_IDX_LSB + VAR_W;
-  localparam int LANE_EDGE_W = LANE_EDGE_EDGE_SLOT_LSB + EDGE_W;
   localparam int I_ENTRY_ROW_LOCAL_LSB = 0;
   localparam int I_ENTRY_EDGE_SLOT_LSB = I_ENTRY_ROW_LOCAL_LSB + ROW_W;
   localparam int I_ENTRY_W = I_ENTRY_EDGE_SLOT_LSB + EDGE_W;
@@ -141,6 +197,8 @@ def emit_pkg(
       {sv_array(h_base[1])}
     }}
   }};
+{render_lane_count_param(lane_counts)}
+{render_lane_entry_param(lane_entries)}
   /* verilator lint_on UNUSEDPARAM */
 endpackage
 """,
@@ -182,7 +240,6 @@ module tb_bike_decoder_random;
     .i_clk(clk),
     .i_rst_n(rst_n),
     .i_start(start),
-    .i_h_sel('0),
     .i_syndrome(INPUT_SYNDROME),
     .o_done(done),
     .o_success(success),

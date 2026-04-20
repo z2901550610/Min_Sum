@@ -1,11 +1,12 @@
+// CNU_B reconstructs an outgoing c2v message from compressed row state.
 module cnu_b
   import bike_pkg::*;
 (
-  input  logic [ROW_STATE_W-1:0] i_comp_c2v,
-  input  logic i_sign,
-  input  logic i_syndrome_bit,
-  input  logic [VAR_W-1:0] i_idx,
-  output logic [MSG_W-1:0] o_c2v
+  input  logic [ROW_STATE_W-1:0] i_comp_c2v,  // Compressed row state for this check node.
+  input  logic i_v2c_sign,                    // Stored sign of the edge's prior v2c/u message.
+  input  logic i_syndrome_bit,                // Syndrome target bit for this check equation.
+  input  logic [VAR_W-1:0] i_var_idx,         // Variable index of the requested edge.
+  output logic [MSG_W-1:0] o_c2v_msg          // Reconstructed c2v sign-magnitude message.
 );
 
   timeunit 1ns;
@@ -29,14 +30,14 @@ module cnu_b
   assign c2v_sign_xor = i_comp_c2v[ROW_STATE_SIGN_XOR_BIT];
 
   always_comb begin
-    if (i_idx == c2v_min_var_idx) begin
+    if (i_var_idx == c2v_min_var_idx) begin
       c2v_msg_mag = c2v_min2_mag;
     end else begin
       c2v_msg_mag = c2v_min1_mag;
     end
 
-    c2v_msg_sign = c2v_sign_xor ^ i_sign ^ i_syndrome_bit;
+    c2v_msg_sign = c2v_sign_xor ^ i_v2c_sign ^ i_syndrome_bit;
   end
 
-  assign o_c2v = {c2v_msg_sign, c2v_msg_mag};
+  assign o_c2v_msg = {c2v_msg_sign, c2v_msg_mag};
 endmodule

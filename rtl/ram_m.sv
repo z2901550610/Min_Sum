@@ -1,35 +1,36 @@
+// Dual-bank row-state RAM holding compressed check-node state.
 module ram_m
   import bike_pkg::*;
 (
-  input  logic i_clk,
-  input  logic i_rst_n,
-  input  logic i_clear_all,
-  input  logic i_clear_bank,
-  input  logic i_clear_bank_sel,
-  input  logic i_r_bank_a,
-  input  logic [LANE_IDX_W-1:0] i_r_lane_a0,
-  input  logic [ROW_W-1:0] i_r_addr_a0,
-  input  logic [LANE_IDX_W-1:0] i_r_lane_a1,
-  input  logic [ROW_W-1:0] i_r_addr_a1,
-  input  logic i_r_bank_b,
-  input  logic [LANE_IDX_W-1:0] i_r_lane_b0,
-  input  logic [ROW_W-1:0] i_r_addr_b0,
-  input  logic [LANE_IDX_W-1:0] i_r_lane_b1,
-  input  logic [ROW_W-1:0] i_r_addr_b1,
-  output logic [ROW_STATE_W-1:0] o_dout_a0,
-  output logic [ROW_STATE_W-1:0] o_dout_a1,
-  output logic [ROW_STATE_W-1:0] o_dout_b0,
-  output logic [ROW_STATE_W-1:0] o_dout_b1,
-  input  logic i_we0,
-  input  logic i_w_bank0,
-  input  logic [LANE_IDX_W-1:0] i_w_lane0,
-  input  logic [ROW_W-1:0] i_w_addr0,
-  input  logic [ROW_STATE_W-1:0] i_din0,
-  input  logic i_we1,
-  input  logic i_w_bank1,
-  input  logic [LANE_IDX_W-1:0] i_w_lane1,
-  input  logic [ROW_W-1:0] i_w_addr1,
-  input  logic [ROW_STATE_W-1:0] i_din1
+  input  logic i_clk,                               // Storage clock.
+  input  logic i_rst_n,                             // Active-low reset.
+  input  logic i_clear_all,                         // Clears both ping-pong banks.
+  input  logic i_clear_bank,                        // Clears only the selected bank.
+  input  logic i_clear_bank_sel,                    // Bank index used by i_clear_bank.
+  input  logic i_r_bank_a,                          // Bank select for read port group A.
+  input  logic [LANE_IDX_W-1:0] i_r_lane_a0,        // Lane select for read port A0.
+  input  logic [ROW_W-1:0] i_r_addr_a0,             // Row address for read port A0.
+  input  logic [LANE_IDX_W-1:0] i_r_lane_a1,        // Lane select for read port A1.
+  input  logic [ROW_W-1:0] i_r_addr_a1,             // Row address for read port A1.
+  input  logic i_r_bank_b,                          // Bank select for read port group B.
+  input  logic [LANE_IDX_W-1:0] i_r_lane_b0,        // Lane select for read port B0.
+  input  logic [ROW_W-1:0] i_r_addr_b0,             // Row address for read port B0.
+  input  logic [LANE_IDX_W-1:0] i_r_lane_b1,        // Lane select for read port B1.
+  input  logic [ROW_W-1:0] i_r_addr_b1,             // Row address for read port B1.
+  output logic [ROW_STATE_W-1:0] o_dout_a0,         // Data returned by read port A0.
+  output logic [ROW_STATE_W-1:0] o_dout_a1,         // Data returned by read port A1.
+  output logic [ROW_STATE_W-1:0] o_dout_b0,         // Data returned by read port B0.
+  output logic [ROW_STATE_W-1:0] o_dout_b1,         // Data returned by read port B1.
+  input  logic i_we0,                               // Write enable for write port 0.
+  input  logic i_w_bank0,                           // Bank select for write port 0.
+  input  logic [LANE_IDX_W-1:0] i_w_lane0,          // Lane select for write port 0.
+  input  logic [ROW_W-1:0] i_w_addr0,               // Row address for write port 0.
+  input  logic [ROW_STATE_W-1:0] i_din0,            // Row-state data for write port 0.
+  input  logic i_we1,                               // Write enable for write port 1.
+  input  logic i_w_bank1,                           // Bank select for write port 1.
+  input  logic [LANE_IDX_W-1:0] i_w_lane1,          // Lane select for write port 1.
+  input  logic [ROW_W-1:0] i_w_addr1,               // Row address for write port 1.
+  input  logic [ROW_STATE_W-1:0] i_din1             // Row-state data for write port 1.
 );
 
   timeunit 1ns;

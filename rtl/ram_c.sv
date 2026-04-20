@@ -1,17 +1,18 @@
+// Stores the running hard decision / error estimate bits.
 module ram_c
   import bike_pkg::*;
 (
-  input  logic i_clk,
-  input  logic i_rst_n,
-  input  logic i_clear,
-  input  logic i_load,
-  input  logic [N-1:0] i_load_bits,
-  input  logic i_we,
-  input  logic [VAR_W-1:0] i_w_addr,
-  input  logic i_din,
-  input  logic [VAR_W-1:0] i_r_addr,
-  output logic o_dout,
-  output logic [N-1:0] o_bits
+  input  logic i_clk,                    // Storage clock.
+  input  logic i_rst_n,                  // Active-low reset.
+  input  logic i_clear,                  // Clears the full estimate vector.
+  input  logic i_load,                   // Bulk-load enable for the estimate vector.
+  input  logic [N-1:0] i_load_bits,      // Bulk-load data.
+  input  logic i_we,                     // Single-bit write enable.
+  input  logic [VAR_W-1:0] i_w_addr,     // Write address.
+  input  logic i_din,                    // Bit written at i_w_addr.
+  input  logic [VAR_W-1:0] i_r_addr,     // Read address.
+  output logic o_dout,                   // Bit read from i_r_addr.
+  output logic [N-1:0] o_bits            // Entire stored estimate vector.
 );
 
   timeunit 1ns;

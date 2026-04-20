@@ -20,7 +20,7 @@ module tb_cnu_a;
     .i_clear(clear_en),
     .i_en(in_valid),
     .i_v2c(v2c_msg_in),
-    .i_idx(src_var_idx),
+    .i_var_idx(src_var_idx),
     .i_comp_c2v(c2v_compact_msg_in),
     .o_comp_c2v(c2v_compact_msg_out),
     .o_sign(v2c_sign_out),

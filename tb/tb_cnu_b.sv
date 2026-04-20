@@ -11,10 +11,10 @@ module tb_cnu_b;
 
   cnu_b dut (
     .i_comp_c2v(c2v_compact_msg_in),
-    .i_sign(v2c_sign_in),
+    .i_v2c_sign(v2c_sign_in),
     .i_syndrome_bit(syndrome_bit),
-    .i_idx(src_var_idx),
-    .o_c2v(c2v_msg_out)
+    .i_var_idx(src_var_idx),
+    .o_c2v_msg(c2v_msg_out)
   );
 
   initial begin

@@ -1,36 +1,34 @@
+// Variable-node unit that accumulates c2v messages and emits updated v2c.
 module vnu
   import bike_pkg::*;
 (
-  input  logic i_clk,
-  input  logic i_rst_n,
-  input  logic i_clear,
-  input  logic i_col_start,
-  input  logic i_col_end,
-  input  logic signed [APP_W-1:0] i_initial_llr,
-  input  logic i_c2v_valid0,
-  input  logic i_c2v_sign0,
-  input  logic [D-1:0] i_c2v_mag0,
-  input  logic i_c2v_valid1,
-  input  logic i_c2v_sign1,
-  input  logic [D-1:0] i_c2v_mag1,
-  output logic o_app_valid,
-  output logic signed [APP_W-1:0] o_app,
-  output logic o_bit_decision,
-  input  logic i_emit_en,
-  input  logic i_c2v_t_valid0,
-  input  logic signed [MSG_W-1:0] i_c2v_t0,
-  input  logic i_c2v_t_valid1,
-  input  logic signed [MSG_W-1:0] i_c2v_t1,
-  output logic o_v2c_valid0,
-  output logic [MSG_W-1:0] o_v2c0,
-  output logic o_v2c_valid1,
-  output logic [MSG_W-1:0] o_v2c1
+  input  logic i_clk,                               // Sequential update clock.
+  input  logic i_rst_n,                             // Active-low reset.
+  input  logic i_clear,                             // Clears the running accumulation state.
+  input  logic i_col_start,                         // Marks the first c2v input slot of a variable column.
+  input  logic i_col_end,                           // Marks the final c2v input slot of a variable column.
+  input  logic signed [APP_W-1:0] i_initial_llr,    // Prior LLR contribution for the variable node.
+  input  logic i_c2v_tc_valid0,                     // Valid qualifier for c2v input lane 0.
+  input  logic signed [MSG_W-1:0] i_c2v_tc0,        // c2v input from lane 0 in two's-complement.
+  input  logic i_c2v_tc_valid1,                     // Valid qualifier for c2v input lane 1.
+  input  logic signed [MSG_W-1:0] i_c2v_tc1,        // c2v input from lane 1 in two's-complement.
+  output logic o_app_valid,                         // Posterior APP valid qualifier.
+  output logic signed [APP_W-1:0] o_app,            // Posterior APP value after accumulation.
+  output logic o_bit_decision,                      // Hard decision derived from the posterior APP.
+  input  logic i_emit_en,                           // Enables v2c emission using cached previous c2v.
+  input  logic i_prev_c2v_tc_valid0,                // Valid qualifier for previous c2v on emit lane 0.
+  input  logic signed [MSG_W-1:0] i_prev_c2v_tc0,   // Previous c2v value for emit lane 0.
+  input  logic i_prev_c2v_tc_valid1,                // Valid qualifier for previous c2v on emit lane 1.
+  input  logic signed [MSG_W-1:0] i_prev_c2v_tc1,   // Previous c2v value for emit lane 1.
+  output logic o_v2c_tc_valid0,                     // Valid qualifier for v2c output lane 0.
+  output logic signed [VNU_TC_W-1:0] o_v2c_tc0,     // v2c output on lane 0 in two's-complement.
+  output logic o_v2c_tc_valid1,                     // Valid qualifier for v2c output lane 1.
+  output logic signed [VNU_TC_W-1:0] o_v2c_tc1      // v2c output on lane 1 in two's-complement.
 );
 
   timeunit 1ns;
   timeprecision 1ps;
 
-  localparam int VNU_TC_W = APP_W + ((W > 1) ? $clog2(W + 1) : 1);
   localparam int SCALE_W = VNU_TC_W + ALPHA_FRAC_W;
 
   logic signed [VNU_TC_W-1:0] cycle_accum_sum;
@@ -76,21 +74,6 @@ module vnu
     end
   endfunction
 
-  function automatic logic signed [MSG_W-1:0] signmag_to_tc_msg(
-    input logic msg_sign,
-    input logic [D-1:0] msg_mag
-  );
-    logic signed [MSG_W-1:0] mag_tc;
-    begin
-      mag_tc = $signed({1'b0, msg_mag});
-      if (msg_sign && (msg_mag != '0)) begin
-        signmag_to_tc_msg = -mag_tc;
-      end else begin
-        signmag_to_tc_msg = mag_tc;
-      end
-    end
-  endfunction
-
   function automatic logic [VNU_TC_W-1:0] alpha_scale_mag(
     input logic [VNU_TC_W-1:0] mag_value
   );
@@ -121,30 +104,6 @@ module vnu
     end
   endfunction
 
-  function automatic logic [MSG_W-1:0] tc_to_signmag_sat(
-    input logic signed [VNU_TC_W-1:0] tc_value
-  );
-    logic tc_sign;
-    logic [VNU_TC_W-1:0] abs_value;
-    logic [D-1:0] sat_mag;
-    begin
-      tc_sign = tc_value[VNU_TC_W-1];
-      if (tc_sign) begin
-        abs_value = (~tc_value) + {{(VNU_TC_W - 1){1'b0}}, 1'b1};
-      end else begin
-        abs_value = tc_value[VNU_TC_W-1:0];
-      end
-
-      if (|abs_value[VNU_TC_W-1:D]) begin
-        sat_mag = D'(MAG_MAX);
-      end else begin
-        sat_mag = abs_value[D-1:0];
-      end
-
-      tc_to_signmag_sat = {tc_sign && (sat_mag != '0), sat_mag};
-    end
-  endfunction
-
   always_comb begin
     logic signed [VNU_TC_W-1:0] scaled_sum;
     logic signed [VNU_TC_W-1:0] next_u0;
@@ -152,12 +111,12 @@ module vnu
 
     cycle_accum_sum = '0;
     accum_valid_any = 1'b0;
-    if (i_c2v_valid0) begin
-      cycle_accum_sum = cycle_accum_sum + sign_extend(signmag_to_tc_msg(i_c2v_sign0, i_c2v_mag0));
+    if (i_c2v_tc_valid0) begin
+      cycle_accum_sum = cycle_accum_sum + sign_extend(i_c2v_tc0);
       accum_valid_any = 1'b1;
     end
-    if (i_c2v_valid1) begin
-      cycle_accum_sum = cycle_accum_sum + sign_extend(signmag_to_tc_msg(i_c2v_sign1, i_c2v_mag1));
+    if (i_c2v_tc_valid1) begin
+      cycle_accum_sum = cycle_accum_sum + sign_extend(i_c2v_tc1);
       accum_valid_any = 1'b1;
     end
 
@@ -171,12 +130,12 @@ module vnu
     scaled_sum = alpha_scale(accum_sum_next);
     posterior_next = prior_msg_sign_extend + scaled_sum;
 
-    next_u0 = posterior_reg - alpha_scale(sign_extend(i_c2v_t0));
-    next_u1 = posterior_reg - alpha_scale(sign_extend(i_c2v_t1));
-    o_v2c_valid0 = i_emit_en && i_c2v_t_valid0;
-    o_v2c_valid1 = i_emit_en && i_c2v_t_valid1;
-    o_v2c0 = o_v2c_valid0 ? tc_to_signmag_sat(next_u0) : '0;
-    o_v2c1 = o_v2c_valid1 ? tc_to_signmag_sat(next_u1) : '0;
+    next_u0 = posterior_reg - alpha_scale(sign_extend(i_prev_c2v_tc0));
+    next_u1 = posterior_reg - alpha_scale(sign_extend(i_prev_c2v_tc1));
+    o_v2c_tc_valid0 = i_emit_en && i_prev_c2v_tc_valid0;
+    o_v2c_tc_valid1 = i_emit_en && i_prev_c2v_tc_valid1;
+    o_v2c_tc0 = o_v2c_tc_valid0 ? next_u0 : '0;
+    o_v2c_tc1 = o_v2c_tc_valid1 ? next_u1 : '0;
   end
 
   assign o_app = posterior_reg[APP_W-1:0];
