@@ -49,17 +49,27 @@ zero, or fails after `I_MAX` iterations.
 
 ## Module Split
 
-- `decoder_ctrl` owns the decode-state machine, variable scheduling, RAM-M
-  ping-pong banks, and edge-buffer selectors.
-- `decoder_top` is the decoder core datapath. It seeds `ram_i` from static
-  first-column metadata, then advances each bank with internal `h_shift`
-  logic (`+1 mod R` plus cross-lane regrouping). The runtime datapath no
-  longer depends on externally expanded per-column metadata, and `vnu`
-  no longer performs message-format conversion internally.
+- `decoder_ctrl` owns the decode-state machine, single-port RAM micro-stage
+  schedule, variable/edge counters, RAM-M ping-pong banks, RAM-I seed control,
+  and done/success bookkeeping.
+- `decoder_top` is the decoder core datapath and structural interconnect. It
+  instantiates the numbered RAM blocks, `decoder_ctrl`, `decoder_edge_meta`,
+  CNU/VNU units, and message-codec adapters; top-level logic is limited to
+  RAM port selection, data latching, and residual-syndrome recomputation.
 - `vnu` now consumes c2v in 2's-complement and emits unsaturated 2's-complement
   v2c. Sign-magnitude conversion lives in the external `msg_codec` adapters.
-- `ram_i` is a pure RAM for stored QC-column entries, and `h_shift` is a pure
-  `+1 mod R` shifter for those entries.
+- `ram_i`, `ram_m`, `ram_s`, `ram_t`, `ram_u`, and `ram_c` are paper-style
+  single-port RAM primitives with synchronous read data.  One RTL file
+  represents one numbered RAM block rather than a multi-bank wrapper with
+  several read/write ports.
+- `decoder_top` instantiates the RAM blocks explicitly by paper-style names:
+  `I0/I1`, `M0/M1/M2/M3`, `S0/S1`, `T0/T1`, `U0/U1`, and `C0/C1`.  The top
+  does not use `generate`/`genvar` for RAM instantiation.
+- The previous top-level scheduler and logical RAM mirrors have been replaced
+  by explicit read/compute/write micro-stages in `decoder_ctrl`.
+- `decoder_edge_meta` derives row, lane, and local-row metadata for the active
+  QC edge. `h_shift` remains as a standalone pure `+1 mod R` lane-packed
+  shifter used by its unit test/reference path.
 - The static first-column metadata is generated offline by
   [`scripts/gen_qc_first_columns.py`](/Users/z2901550610/Documents/Min_Sum/scripts/gen_qc_first_columns.py)
   into

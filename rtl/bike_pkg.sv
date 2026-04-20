@@ -52,6 +52,25 @@ package bike_pkg;
   localparam logic [DEC_STATE_W-1:0] DEC_ITER_CHECK       = 4'd8;
   localparam logic [DEC_STATE_W-1:0] DEC_DONE             = 4'd9;
 
+  localparam int DEC_PHASE_W = 5;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_WAIT             = 5'd0;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_SEED_I           = 5'd1;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_INIT_CLEAR       = 5'd2;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_INIT_M_READ      = 5'd3;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_INIT_CNU_A       = 5'd4;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_INIT_M_WRITE     = 5'd5;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_C2V_READ         = 5'd6;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_C2V_WRITE_T      = 5'd7;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_CLEAR_NEXT_M     = 5'd8;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_VNU_READ_T       = 5'd9;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_VNU_ACCUM_T      = 5'd10;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_VNU_PREP_WRITE   = 5'd11;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_VNU_READ_NEXT_M  = 5'd12;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_VNU_CNU_A        = 5'd13;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_VNU_WRITE_NEXT   = 5'd14;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_ITER_CHECK       = 5'd15;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_DONE             = 5'd16;
+
   localparam int MSG_W = D + 1;
   localparam int MSG_MAG_LSB = 0;
   localparam int MSG_SIGN_BIT = D;
