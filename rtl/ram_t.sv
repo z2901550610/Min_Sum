@@ -1,4 +1,4 @@
-// One paper-style RAM T block storing cached c2v messages for one lane.
+// One paper-style RAM T block storing cached c2v messages for one row_group.
 module ram_t
   import bike_pkg::*;
 (

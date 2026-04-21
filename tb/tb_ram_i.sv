@@ -8,23 +8,23 @@ module tb_ram_i;
   logic clear_en;
   logic en;
   logic we;
-  logic [BANK_W-1:0] bank;
-  logic [EDGE_W-1:0] addr;
+  logic [H_BLOCK_W-1:0] h_block_idx;
+  logic [EDGE_W-1:0] row_group_pos_addr;
   logic [I_ENTRY_W-1:0] din;
   logic count_we;
-  logic [LANE_COUNT_W-1:0] count_din;
-  logic load;
-  logic [BANK_W-1:0] load_bank;
-  logic [I_ENTRY_W-1:0] load_entries [0:W-1];
-  logic [LANE_COUNT_W-1:0] load_count;
+  logic [ROW_GROUP_COUNT_W-1:0] count_din;
+  logic replace_en;
+  logic [H_BLOCK_W-1:0] replace_h_block_idx;
+  logic [I_ENTRY_W-1:0] replace_entries [0:W-1];
+  logic [ROW_GROUP_COUNT_W-1:0] replace_count;
   logic [I_ENTRY_W-1:0] dout;
   /* verilator lint_off UNUSEDSIGNAL */
-  logic [LANE_COUNT_W-1:0] count;
+  logic [ROW_GROUP_COUNT_W-1:0] count;
   logic [I_ENTRY_W-1:0] column_entries [0:W-1];
   /* verilator lint_on UNUSEDSIGNAL */
   logic [I_ENTRY_W-1:0] debug_entries [0:N0-1][0:W-1];
-  logic [LANE_COUNT_W-1:0] debug_count [0:N0-1];
-  integer slot_idx;
+  logic [ROW_GROUP_COUNT_W-1:0] debug_count [0:N0-1];
+  integer row_group_pos_idx;
 
   ram_i dut (
     .i_clk(clk),
@@ -32,20 +32,20 @@ module tb_ram_i;
     .i_clear(clear_en),
     .i_en(en),
     .i_we(we),
-    .i_circ_idx(bank),
-    .i_edge_slot_addr(addr),
+    .i_h_block_idx(h_block_idx),
+    .i_row_group_pos_addr(row_group_pos_addr),
     .i_wdata(din),
-    .i_lane_count_we(count_we),
-    .i_lane_count_wdata(count_din),
-    .i_seed_en(load),
-    .i_seed_circ_idx(load_bank),
-    .i_seed_entries(load_entries),
-    .i_seed_lane_count(load_count),
+    .i_row_group_count_we(count_we),
+    .i_row_group_count_wdata(count_din),
+    .i_column_replace_en(replace_en),
+    .i_column_replace_h_block_idx(replace_h_block_idx),
+    .i_column_entries_wdata(replace_entries),
+    .i_column_row_group_count_wdata(replace_count),
     .o_rdata(dout),
-    .o_lane_count(count),
+    .o_row_group_count(count),
     .o_column_entries(column_entries),
     .o_debug_entries(debug_entries),
-    .o_debug_lane_count(debug_count)
+    .o_debug_row_group_count(debug_count)
   );
 
   initial clk = 1'b0;
@@ -56,16 +56,16 @@ module tb_ram_i;
     clear_en = 1'b0;
     en = 1'b0;
     we = 1'b0;
-    bank = '0;
-    addr = '0;
+    h_block_idx = '0;
+    row_group_pos_addr = '0;
     din = '0;
     count_we = 1'b0;
     count_din = '0;
-    load = 1'b0;
-    load_bank = '0;
-    load_count = '0;
-    for (slot_idx = 0; slot_idx < W; slot_idx++) begin
-      load_entries[slot_idx] = '0;
+    replace_en = 1'b0;
+    replace_h_block_idx = '0;
+    replace_count = '0;
+    for (row_group_pos_idx = 0; row_group_pos_idx < W; row_group_pos_idx++) begin
+      replace_entries[row_group_pos_idx] = '0;
     end
 
     repeat (2) @(posedge clk);
@@ -73,36 +73,36 @@ module tb_ram_i;
     #1;
     if (debug_count[0] != 0) $fatal(1, "ram_i reset should clear count");
 
-    load_bank = BANK_W'(1 % N0);
-    load_count = LANE_COUNT_W'(2);
-    load_entries[0] = {EDGE_W'(0), ROW_W'(1)};
-    load_entries[1] = {EDGE_W'(2), ROW_W'(3)};
-    load = 1'b1;
+    replace_h_block_idx = H_BLOCK_W'(1 % N0);
+    replace_count = ROW_GROUP_COUNT_W'(2);
+    replace_entries[0] = {EDGE_W'(0), ROW_W'(1)};
+    replace_entries[1] = {EDGE_W'(2), ROW_W'(3)};
+    replace_en = 1'b1;
     @(posedge clk);
     #1;
-    load = 1'b0;
-    bank = load_bank;
+    replace_en = 1'b0;
+    h_block_idx = replace_h_block_idx;
     #1;
-    if (debug_count[load_bank] != LANE_COUNT_W'(2)) $fatal(1, "ram_i load count mismatch");
-    if (debug_entries[load_bank][0] != {EDGE_W'(0), ROW_W'(1)}) $fatal(1, "ram_i load entry 0 mismatch");
-    if (count != debug_count[load_bank]) $fatal(1, "ram_i functional count view mismatch");
-    if (column_entries[1] != debug_entries[load_bank][1]) $fatal(1, "ram_i functional column view mismatch");
+    if (debug_count[replace_h_block_idx] != ROW_GROUP_COUNT_W'(2)) $fatal(1, "ram_i replace count mismatch");
+    if (debug_entries[replace_h_block_idx][0] != {EDGE_W'(0), ROW_W'(1)}) $fatal(1, "ram_i replace entry 0 mismatch");
+    if (count != debug_count[replace_h_block_idx]) $fatal(1, "ram_i functional count view mismatch");
+    if (column_entries[1] != debug_entries[replace_h_block_idx][1]) $fatal(1, "ram_i functional column view mismatch");
 
-    load_count = LANE_COUNT_W'(1);
-    load_entries[0] = {EDGE_W'(2), ROW_W'(0)};
-    load_entries[1] = '0;
-    load_entries[2] = '0;
-    load = 1'b1;
+    replace_count = ROW_GROUP_COUNT_W'(1);
+    replace_entries[0] = {EDGE_W'(2), ROW_W'(0)};
+    replace_entries[1] = '0;
+    replace_entries[2] = '0;
+    replace_en = 1'b1;
     @(posedge clk);
     #1;
-    load = 1'b0;
-    if (debug_count[load_bank] != LANE_COUNT_W'(1)) $fatal(1, "ram_i shifted bulk count mismatch");
-    if (debug_entries[load_bank][0] != {EDGE_W'(2), ROW_W'(0)}) $fatal(1, "ram_i shifted bulk entry mismatch");
+    replace_en = 1'b0;
+    if (debug_count[replace_h_block_idx] != ROW_GROUP_COUNT_W'(1)) $fatal(1, "ram_i shifted bulk count mismatch");
+    if (debug_entries[replace_h_block_idx][0] != {EDGE_W'(2), ROW_W'(0)}) $fatal(1, "ram_i shifted bulk entry mismatch");
 
-    bank = '0;
-    addr = EDGE_W'(1);
+    h_block_idx = '0;
+    row_group_pos_addr = EDGE_W'(1);
     din = {EDGE_W'(1), ROW_W'(4)};
-    count_din = LANE_COUNT_W'(1);
+    count_din = ROW_GROUP_COUNT_W'(1);
     en = 1'b1;
     we = 1'b1;
     count_we = 1'b1;
@@ -110,7 +110,7 @@ module tb_ram_i;
     #1;
     we = 1'b0;
     count_we = 1'b0;
-    if (debug_count[0] != LANE_COUNT_W'(1)) $fatal(1, "ram_i single-port count write mismatch");
+    if (debug_count[0] != ROW_GROUP_COUNT_W'(1)) $fatal(1, "ram_i single-port count write mismatch");
 
     @(posedge clk);
     #1;

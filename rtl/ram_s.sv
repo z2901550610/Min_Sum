@@ -1,4 +1,4 @@
-// One paper-style RAM S block storing v2c sign bits for one processing lane.
+// One paper-style RAM S block storing v2c sign bits for one processing row_group.
 module ram_s
   import bike_pkg::*;
 (

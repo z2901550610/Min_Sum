@@ -16,8 +16,8 @@ module tb_decoder_top;
   logic [N-1:0] e_out;
   logic [$clog2(I_MAX + 1)-1:0] iter_count;
   logic checks_active;
-  integer bank_idx;
-  integer lane_idx;
+  integer h_block_idx;
+  integer row_group_idx;
   integer idx;
   integer flat_idx;
 
@@ -80,9 +80,9 @@ module tb_decoder_top;
     end
   endfunction
 
-  function automatic int row_lane(input int row_idx_i);
+  function automatic int row_group_from_row(input int row_idx_i);
     begin
-      row_lane = (row_idx_i < ROW_SEG_SIZE) ? 0 : 1;
+      row_group_from_row = (row_idx_i < ROW_SEG_SIZE) ? 0 : 1;
     end
   endfunction
 
@@ -94,24 +94,24 @@ module tb_decoder_top;
 
   /* verilator lint_off UNUSEDSIGNAL */
   function automatic int edge_row_idx(input int var_idx_i, input int edge_idx_i);
-    int bank_local;
+    int h_block_local;
     int col_local;
     begin
-      bank_local = var_idx_i / R;
+      h_block_local = var_idx_i / R;
       col_local = var_idx_i % R;
-      edge_row_idx = (H_BASE[0][bank_local][edge_idx_i] + col_local) % R;
+      edge_row_idx = (H_BASE[0][h_block_local][edge_idx_i] + col_local) % R;
     end
   endfunction
 
   function automatic logic [COMP_C2V_W-1:0] ram_m_debug_read(
     input logic pair,
-    input int lane,
+    input int row_group,
     input int local_row
   );
     begin
-      if (!pair && lane == 0) ram_m_debug_read = dut.ram_m0_debug_mem[local_row];
+      if (!pair && row_group == 0) ram_m_debug_read = dut.ram_m0_debug_mem[local_row];
       else if (!pair) ram_m_debug_read = dut.ram_m1_debug_mem[local_row];
-      else if (lane == 0) ram_m_debug_read = dut.ram_m2_debug_mem[local_row];
+      else if (row_group == 0) ram_m_debug_read = dut.ram_m2_debug_mem[local_row];
       else ram_m_debug_read = dut.ram_m3_debug_mem[local_row];
     end
   endfunction
@@ -122,7 +122,7 @@ module tb_decoder_top;
     input int edge_idx_i
   );
     begin
-      if (row_lane(edge_row_idx(var_idx_i, edge_idx_i)) == 0) begin
+      if (row_group_from_row(edge_row_idx(var_idx_i, edge_idx_i)) == 0) begin
         ram_t_debug_read = dut.ram_t0_debug_mem[var_idx_i][edge_idx_i];
       end else begin
         ram_t_debug_read = dut.ram_t1_debug_mem[var_idx_i][edge_idx_i];
@@ -135,7 +135,7 @@ module tb_decoder_top;
     input int edge_idx_i
   );
     begin
-      if (row_lane(edge_row_idx(var_idx_i, edge_idx_i)) == 0) begin
+      if (row_group_from_row(edge_row_idx(var_idx_i, edge_idx_i)) == 0) begin
         ram_u_debug_read = dut.ram_u0_debug_mem[var_idx_i][edge_idx_i];
       end else begin
         ram_u_debug_read = dut.ram_u1_debug_mem[var_idx_i][edge_idx_i];
@@ -145,7 +145,7 @@ module tb_decoder_top;
 
   always @(posedge clk) begin
     if (checks_active && (dut.error_estimate_bits !== e_out)) begin
-      $fatal(1, "RAM C1 and o_e diverged: ram=%h out=%h", dut.error_estimate_bits, e_out);
+      $fatal(1, "decision RAM and o_e diverged: ram=%h out=%h", dut.error_estimate_bits, e_out);
     end
   end
 
@@ -157,8 +157,8 @@ module tb_decoder_top;
     fork
       begin
         repeat (20000) @(posedge clk);
-        $fatal(1, "tb_decoder_top timeout: state=%0d phase=%0d work_var=%0d work_edge_slot=%0d iter=%0d overlap=%0b c2v=%0b v2c=%0b done=%0b",
-               dut.state, dut.phase, dut.work_var, dut.work_edge_slot, iter_count,
+        $fatal(1, "tb_decoder_top timeout: state=%0d phase=%0d work_var=%0d work_row_group_pos=%0d iter=%0d overlap=%0b c2v=%0b v2c=%0b done=%0b",
+               dut.state, dut.phase, dut.work_var, dut.work_row_group_pos, iter_count,
                dut.c2v_v2c_overlap_seen, dut.c2v_phase_active, dut.v2c_phase_active, done);
       end
     join_none
@@ -166,46 +166,46 @@ module tb_decoder_top;
     apply_reset();
     start_case(CASE1_SYNDROME);
 
-    wait (dut.init_m_read && dut.c2v_var_idx == 0 && dut.col_slot_idx == 0);
+    wait (dut.init_m_read && dut.c2v_var_idx == 0 && dut.active_row_group_pos == 0);
     #1;
-    for (bank_idx = 0; bank_idx < N0; bank_idx++) begin
-      for (lane_idx = 0; lane_idx < L; lane_idx++) begin
-        if (dut.ram_i_debug_count[bank_idx][lane_idx] != QC_FIRST_COL_LANE_COUNT[bank_idx][lane_idx]) begin
-          $fatal(1, "RAM I count mismatch at bank %0d lane %0d", bank_idx, lane_idx);
+    for (h_block_idx = 0; h_block_idx < N0; h_block_idx++) begin
+      for (row_group_idx = 0; row_group_idx < L; row_group_idx++) begin
+        if (dut.ram_i_debug_count[h_block_idx][row_group_idx] != QC_FIRST_COL_ROW_GROUP_COUNT[h_block_idx][row_group_idx]) begin
+          $fatal(1, "RAM I count mismatch at H block %0d row_group %0d", h_block_idx, row_group_idx);
         end
       end
     end
 
-    wait (dut.init_m_read && dut.c2v_var_idx == 1 && dut.col_slot_idx == 0);
+    wait (dut.init_m_read && dut.c2v_var_idx == 1 && dut.active_row_group_pos == 0);
     #1;
-    if (dut.ram_i_debug_count[0][0] != LANE_COUNT_W'(2)) $fatal(1, "RAM I shifted lane0 count mismatch for column 1");
-    if (dut.ram_i_debug_count[0][1] != LANE_COUNT_W'(1)) $fatal(1, "RAM I shifted lane1 count mismatch for column 1");
-    if (!(dut.c2v_lane_valid[0] && dut.c2v_lane_valid[1])) $fatal(1, "shifted column 1 should expose two active lanes");
-    if (dut.c2v_lane_edge_slot[0] != EDGE_W'(0) || dut.c2v_lane_row_local[0] != ROW_W'(1)) $fatal(1, "shifted lane0 entry mismatch for column 1");
-    if (dut.c2v_lane_edge_slot[1] != EDGE_W'(2) || dut.c2v_lane_row_local[1] != ROW_W'(0)) $fatal(1, "shifted lane1 entry mismatch for column 1");
+    if (dut.ram_i_debug_count[0][0] != ROW_GROUP_COUNT_W'(2)) $fatal(1, "RAM I shifted row_group0 count mismatch for column 1");
+    if (dut.ram_i_debug_count[0][1] != ROW_GROUP_COUNT_W'(1)) $fatal(1, "RAM I shifted row_group1 count mismatch for column 1");
+    if (!(dut.c2v_row_group_valid[0] && dut.c2v_row_group_valid[1])) $fatal(1, "shifted column 1 should expose two active row_groups");
+    if (dut.c2v_row_group_edge_slot[0] != EDGE_W'(0) || dut.c2v_row_group_row_local[0] != ROW_W'(1)) $fatal(1, "shifted row_group0 entry mismatch for column 1");
+    if (dut.c2v_row_group_edge_slot[1] != EDGE_W'(2) || dut.c2v_row_group_row_local[1] != ROW_W'(0)) $fatal(1, "shifted row_group1 entry mismatch for column 1");
 
-    wait (dut.c2v_phase_active && !dut.v2c_phase_active && dut.c2v_var_idx == 0 && dut.col_slot_idx == 0);
+    wait (dut.c2v_phase_active && !dut.v2c_phase_active && dut.c2v_var_idx == 0 && dut.active_row_group_pos == 0);
     #1;
-    if (dut.comp_c2v_read_bank === dut.comp_c2v_write_bank) $fatal(1, "RAM M ping-pong banks should differ");
+    if (dut.m_read_pair === dut.m_write_pair) $fatal(1, "RAM M ping-pong pairs should differ");
     for (idx = 0; idx < R; idx++) begin
-      if (int'(ram_m_debug_read(dut.comp_c2v_read_bank, row_lane(idx), row_local(idx))[COMP_C2V_MIN1_LSB +: D]) != CASE1_FIRST_ROW_MIN1[idx]) $fatal(1, "CASE1 row min1[%0d] mismatch", idx);
-      if (int'(ram_m_debug_read(dut.comp_c2v_read_bank, row_lane(idx), row_local(idx))[COMP_C2V_MIN2_LSB +: D]) != CASE1_FIRST_ROW_MIN2[idx]) $fatal(1, "CASE1 row min2[%0d] mismatch", idx);
-      if (int'(ram_m_debug_read(dut.comp_c2v_read_bank, row_lane(idx), row_local(idx))[COMP_C2V_MIN_ID_LSB +: VAR_W]) != CASE1_FIRST_ROW_MIN_ID[idx]) $fatal(1, "CASE1 row min_id[%0d] mismatch", idx);
-      if (int'(ram_m_debug_read(dut.comp_c2v_read_bank, row_lane(idx), row_local(idx))[COMP_C2V_SIGN_XOR_BIT]) != CASE1_FIRST_ROW_SIGN_XOR[idx]) $fatal(1, "CASE1 row sign_xor[%0d] mismatch", idx);
+      if (int'(ram_m_debug_read(dut.m_read_pair, row_group_from_row(idx), row_local(idx))[COMP_C2V_MIN1_LSB +: D]) != CASE1_FIRST_ROW_MIN1[idx]) $fatal(1, "CASE1 row min1[%0d] mismatch", idx);
+      if (int'(ram_m_debug_read(dut.m_read_pair, row_group_from_row(idx), row_local(idx))[COMP_C2V_MIN2_LSB +: D]) != CASE1_FIRST_ROW_MIN2[idx]) $fatal(1, "CASE1 row min2[%0d] mismatch", idx);
+      if (int'(ram_m_debug_read(dut.m_read_pair, row_group_from_row(idx), row_local(idx))[COMP_C2V_MIN_ID_LSB +: VAR_W]) != CASE1_FIRST_ROW_MIN_ID[idx]) $fatal(1, "CASE1 row min_id[%0d] mismatch", idx);
+      if (int'(ram_m_debug_read(dut.m_read_pair, row_group_from_row(idx), row_local(idx))[COMP_C2V_SIGN_XOR_BIT]) != CASE1_FIRST_ROW_SIGN_XOR[idx]) $fatal(1, "CASE1 row sign_xor[%0d] mismatch", idx);
     end
 
     wait (dut.c2v_phase_active && dut.v2c_phase_active && dut.c2v_v2c_overlap_seen === 1'b1);
     #1;
     if (!(dut.c2v_phase_active && dut.v2c_phase_active)) $fatal(1, "pipeline did not expose simultaneous CNU_B and VNU/CNU_A work");
-    if (dut.c2v_var_idx != dut.v2c_var_idx + VAR_W'(1)) $fatal(1, "overlap should keep producer exactly one column ahead");
+    if (dut.c2v_var_idx != dut.v2c_var_idx + VAR_W'(1)) $fatal(1, "overlap should keep the c2v column exactly one step ahead");
 
-    wait (dut.vnu_accum_t && dut.v2c_var_idx == 1 && dut.col_slot_idx == 0);
+    wait (dut.vnu_accum_t && dut.v2c_var_idx == 1 && dut.active_row_group_pos == 0);
     #1;
-    if (!(dut.vnu_accum_valid[0] && dut.vnu_accum_valid[1])) $fatal(1, "VNU did not consume both RAM-I lanes for shifted column 1");
+    if (!(dut.vnu_accum_valid[0] && dut.vnu_accum_valid[1])) $fatal(1, "VNU did not consume both RAM-I row_groups for shifted column 1");
 
     wait (dut.v2c_phase_active && !dut.c2v_phase_active && dut.v2c_var_idx == VAR_W'(N - 1));
     #1;
-    if (dut.state != DEC_ITER_V2C_DRAIN) $fatal(1, "last consumer column should drain without producer activity");
+    if (dut.state != DEC_ITER_V2C_DRAIN) $fatal(1, "last v2c column should drain without c2v activity");
 
     wait (iter_count == 1);
     #1;
@@ -237,8 +237,8 @@ module tb_decoder_top;
       end
     end
 
-    if (dut.comp_c2v_read_bank === dut.comp_c2v_write_bank) $fatal(1, "RAM M banks collapsed before iteration swap");
-    if (dut.error_estimate_bits !== e_out) $fatal(1, "RAM C1 mirror mismatch at completion");
+    if (dut.m_read_pair === dut.m_write_pair) $fatal(1, "RAM M pairs collapsed before iteration swap");
+    if (dut.error_estimate_bits !== e_out) $fatal(1, "decision RAM mirror mismatch at completion");
 
     wait (done === 1'b1);
     @(posedge clk);

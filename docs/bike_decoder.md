@@ -50,7 +50,7 @@ zero, or fails after `I_MAX` iterations.
 
 ## Module Split
 
-- `decoder_ctrl` owns the decode controller, producer/consumer column contexts,
+- `decoder_ctrl` owns the decode controller, c2v/v2c column contexts,
   RAM-M ping-pong banks, RAM-I seed control, column-buffer handoff events, and
   done/success bookkeeping. The implementation uses a small set of macro
   states plus counters/valid-style activity flags rather than encoding the
@@ -58,9 +58,9 @@ zero, or fails after `I_MAX` iterations.
 - `decoder_top` is the decoder core datapath and structural interconnect. It
   instantiates the numbered RAM blocks, `decoder_ctrl`, `h_shift`, CNU/VNU
   units, and message-codec adapters; top-level logic is limited to RAM port
-  selection, RAM-I lane entry handling, data latching, and residual-syndrome
+  selection, RAM-I row-group entry handling, data latching, and residual-syndrome
   recomputation.
-- `vnu` now consumes c2v in 2's-complement and emits unsaturated 2's-complement
+- `vnu` now consumes c2v in 2's-complement and generates unsaturated 2's-complement
   v2c. Sign-magnitude conversion lives in the external `msg_codec` adapters.
 - `ram_i`, `ram_m`, `ram_s`, `ram_t`, `ram_u`, and `ram_c` are paper-style
   single-port RAM primitives with synchronous read data.  One RTL file
@@ -71,16 +71,16 @@ zero, or fails after `I_MAX` iterations.
   does not use `generate`/`genvar` for RAM instantiation.
 - `decoder_ctrl` follows the paper's Fig.8-style single-port schedule: each
   iteration clears the next RAM-M pair, primes column 0 into RAM-T, then runs
-  a column-overlap pipeline where the producer side computes c2v for column
-  `j+1` while the consumer side accumulates and emits v2c for column `j`, and
-  finally drains the last consumer column before `ITER_CHECK`. The exported
+  a column-overlap pipeline where the c2v side computes column `j+1` while the
+  v2c side accumulates and updates column `j`, and finally drains the last v2c
+  column before `ITER_CHECK`. The exported
   `phase` signal is now debug-only; datapath sequencing uses explicit control
   pulses and column-buffer handoff events.
-- RAM-I is seeded with first-column lane lists. During decode, the active
-  column's row/local-row/edge-slot metadata comes from the RAM-I lane lists;
-  after the producer finishes a column, `h_shift` advances those packed lists
-  by `+1 mod R` and writes them back for the next producer column. Consumer
-  metadata is buffered separately so the producer can keep RAM-I one column
+- RAM-I is seeded with first-column row-group lists. During decode, the active
+  column's row/local-row/edge-index metadata comes from the RAM-I row-group
+  lists; after the c2v side finishes a column, `h_shift` advances those packed
+  lists by `+1 mod R` and writes them back for the next c2v column. v2c
+  metadata is buffered separately so the c2v side can keep RAM-I one column
   ahead. `decoder_top` now consumes RAM-I through formal functional column-view
   outputs instead of using RAM debug arrays in the functional path. `H_BASE`
   is not used for normal CNU/VNU row-address scheduling.
@@ -92,10 +92,10 @@ zero, or fails after `I_MAX` iterations.
   [`scripts/gen_qc_first_columns.py`](/Users/z2901550610/Documents/Min_Sum/scripts/gen_qc_first_columns.py)
   into
   [`rtl/generated/qc_first_columns.svh`](/Users/z2901550610/Documents/Min_Sum/rtl/generated/qc_first_columns.svh).
-  `decoder_top` consumes only the generated tables; it no longer derives lane
+  `decoder_top` consumes only the generated tables; it no longer derives row-group
   grouping from `H_BASE` internally.
 - The current RTL keeps the practical whole-column RAM-I writeback/cache
-  scheme; it does not implement strict slot-by-slot RAM-I timing from the
+  scheme; it does not implement strict edge-by-edge RAM-I timing from the
   paper.
 - Two-stage scaling, flexible message storage selection, the paper's wide-word
   `RAM S` packing/shift-register scheme, and group-size re-balancing are not

@@ -16,7 +16,7 @@ module tb_vnu;
   logic app_valid;
   logic signed [APP_W-1:0] app;
   logic bit_decision;
-  logic emit_en;
+  logic v2c_en;
   logic prev_c2v_tc_valid0;
   logic signed [MSG_W-1:0] prev_c2v_tc0;
   logic prev_c2v_tc_valid1;
@@ -55,7 +55,7 @@ module tb_vnu;
     .o_app_valid(app_valid),
     .o_app(app),
     .o_bit_decision(bit_decision),
-    .i_emit_en(emit_en),
+    .i_v2c_en(v2c_en),
     .i_prev_c2v_tc_valid0(prev_c2v_tc_valid0),
     .i_prev_c2v_tc0(prev_c2v_tc0),
     .i_prev_c2v_tc_valid1(prev_c2v_tc_valid1),
@@ -77,7 +77,7 @@ module tb_vnu;
       c2v_tc_valid1 = 1'b0;
       c2v_tc0 = '0;
       c2v_tc1 = '0;
-      emit_en = 1'b0;
+      v2c_en = 1'b0;
       prev_c2v_tc_valid0 = 1'b0;
       prev_c2v_tc_valid1 = 1'b0;
       prev_c2v_tc0 = '0;
@@ -119,7 +119,7 @@ module tb_vnu;
       if (bit_decision !== 0) $fatal(1, "case0 bit decision mismatch");
 
       idle_inputs();
-      emit_en = 1'b1;
+      v2c_en = 1'b1;
       prev_c2v_tc_valid0 = 1'b1;
       prev_c2v_tc_valid1 = 1'b1;
       prev_c2v_tc0 = msg_tc(1'b0, D'(15));
@@ -149,7 +149,7 @@ module tb_vnu;
       if (bit_decision !== 0) $fatal(1, "case1 bit decision mismatch");
 
       idle_inputs();
-      emit_en = 1'b1;
+      v2c_en = 1'b1;
       prev_c2v_tc_valid0 = 1'b1;
       prev_c2v_tc_valid1 = 1'b1;
       prev_c2v_tc0 = msg_tc(1'b1, D'(15));
@@ -175,12 +175,12 @@ module tb_vnu;
       c2v_tc0 = msg_tc(1'b0, D'(15));
       c2v_tc_valid1 = 1'b1;
       c2v_tc1 = msg_tc(1'b0, D'(15));
-      emit_en = 1'b1;
+      v2c_en = 1'b1;
       prev_c2v_tc_valid0 = 1'b1;
       prev_c2v_tc0 = msg_tc(1'b0, D'(15));
       prev_c2v_tc_valid1 = 1'b0;
       #1;
-      if (v2c_tc_valid0 !== 1'b1 || $signed(v2c_tc0) != 10) $fatal(1, "overlap emit used wrong posterior");
+      if (v2c_tc_valid0 !== 1'b1 || $signed(v2c_tc0) != 10) $fatal(1, "overlap v2c update used wrong posterior");
       @(posedge clk);
       #1;
 

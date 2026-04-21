@@ -1,4 +1,4 @@
-// Shared decoder parameters, field layouts, and matrix constants.
+// Shared decoder parameters, field layouts, and H-block constants.
 package bike_pkg;
   timeunit 1ns;
   timeprecision 1ps;
@@ -35,10 +35,16 @@ package bike_pkg;
   parameter int VAR_W = (N > 1) ? $clog2(N) : 1;
   parameter int ROW_W = (R > 1) ? $clog2(R) : 1;
   parameter int EDGE_W = (W > 1) ? $clog2(W) : 1;
-  parameter int BANK_W = (N0 > 1) ? $clog2(N0) : 1;
+  parameter int H_BLOCK_W = (N0 > 1) ? $clog2(N0) : 1;
+  parameter int BANK_W = H_BLOCK_W;  // Compatibility alias for generated/test code.
   parameter int LANE_COUNT_W = (W > 1) ? $clog2(W + 1) : 1;
   parameter int H_NUM = 1;
   parameter int H_SEL_W = (H_NUM > 1) ? $clog2(H_NUM) : 1;
+
+  // Semantic aliases used by the current RTL. "row group" refers to one of
+  // the L row partitions that the paper processes in parallel.
+  localparam int ROW_GROUP_IDX_W = LANE_IDX_W;
+  localparam int ROW_GROUP_COUNT_W = LANE_COUNT_W;
 
   localparam int DEC_STATE_W = 4;
   localparam logic [DEC_STATE_W-1:0] DEC_WAIT_START       = 4'd0;
@@ -142,5 +148,9 @@ package bike_pkg;
   };
 `endif
   `include "generated/qc_first_columns.svh"
+  localparam logic [I_ENTRY_W-1:0] QC_FIRST_COL_ROW_GROUP_ENTRY [0:N0-1][0:L-1][0:W-1] =
+    QC_FIRST_COL_LANE_ENTRY;
+  localparam logic [ROW_GROUP_COUNT_W-1:0] QC_FIRST_COL_ROW_GROUP_COUNT [0:N0-1][0:L-1] =
+    QC_FIRST_COL_LANE_COUNT;
   /* verilator lint_on UNUSEDPARAM */
 endpackage

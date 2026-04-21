@@ -12,7 +12,7 @@ module ram_c
   input  logic [VAR_W-1:0] i_var_idx,                      // Which variable column j / hard-decision bit to access.
   input  logic i_wdata,
   output logic o_rdata,
-  output logic [N-1:0] o_debug_bits
+  output logic [N-1:0] o_bits
 );
 
   timeunit 1ns;
@@ -22,7 +22,7 @@ module ram_c
 
   logic [N-1:0] mem;
 
-  assign o_debug_bits = mem;
+  assign o_bits = mem;
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin

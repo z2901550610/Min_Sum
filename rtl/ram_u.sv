@@ -1,4 +1,4 @@
-// One paper-style RAM U block storing v2c/u messages for one lane.
+// One paper-style RAM U block storing v2c/u messages for one row_group.
 module ram_u
   import bike_pkg::*;
 (

@@ -46,10 +46,10 @@ def calc_syndrome(h_base: list[list[int]], error_bits: list[int], r: int, w: int
     for var_idx, bit in enumerate(error_bits):
         if not bit:
             continue
-        bank = var_idx // r
+        h_block_idx = var_idx // r
         col = var_idx % r
         for edge_idx in range(w):
-            row_idx = (h_base[bank][edge_idx] + col) % r
+            row_idx = (h_base[h_block_idx][edge_idx] + col) % r
             syndrome[row_idx] ^= 1
     return syndrome
 
@@ -60,34 +60,34 @@ def sv_array(values: list[int]) -> str:
 
 def build_first_column_tables(h_base: list[list[int]], r: int) -> tuple[list[list[int]], list[list[list[tuple[int, int] | None]]]]:
     row_seg_size = (r + 1) // 2
-    lane_counts: list[list[int]] = []
-    lane_entries: list[list[list[tuple[int, int] | None]]] = []
+    row_group_counts: list[list[int]] = []
+    row_group_entries: list[list[list[tuple[int, int] | None]]] = []
 
-    for bank_support in h_base:
-        bank_counts = [0, 0]
-        bank_entries: list[list[tuple[int, int] | None]] = [
-            [None for _ in range(len(bank_support))],
-            [None for _ in range(len(bank_support))],
+    for h_block_support in h_base:
+        h_block_counts = [0, 0]
+        h_block_entries: list[list[tuple[int, int] | None]] = [
+            [None for _ in range(len(h_block_support))],
+            [None for _ in range(len(h_block_support))],
         ]
-        for edge_slot, row_value in enumerate(bank_support):
-            lane_idx = 0 if row_value < row_seg_size else 1
-            row_local = row_value if lane_idx == 0 else row_value - row_seg_size
-            slot_idx = bank_counts[lane_idx]
-            bank_entries[lane_idx][slot_idx] = (edge_slot, row_local)
-            bank_counts[lane_idx] += 1
-        lane_counts.append(bank_counts)
-        lane_entries.append(bank_entries)
+        for edge_idx, row_value in enumerate(h_block_support):
+            row_group_idx = 0 if row_value < row_seg_size else 1
+            row_local = row_value if row_group_idx == 0 else row_value - row_seg_size
+            row_group_pos = h_block_counts[row_group_idx]
+            h_block_entries[row_group_idx][row_group_pos] = (edge_idx, row_local)
+            h_block_counts[row_group_idx] += 1
+        row_group_counts.append(h_block_counts)
+        row_group_entries.append(h_block_entries)
 
-    return lane_counts, lane_entries
+    return row_group_counts, row_group_entries
 
 
-def render_lane_count_param(lane_counts: list[list[int]]) -> str:
+def render_row_group_count_param(row_group_counts: list[list[int]]) -> str:
     lines = ["  localparam logic [LANE_COUNT_W-1:0] QC_FIRST_COL_LANE_COUNT [0:N0-1][0:L-1] = '{"] 
-    for bank_idx, bank_counts in enumerate(lane_counts):
-        suffix = "," if bank_idx != len(lane_counts) - 1 else ""
+    for h_block_idx, h_block_counts in enumerate(row_group_counts):
+        suffix = "," if h_block_idx != len(row_group_counts) - 1 else ""
         lines.append(
             "    '{"
-            + ", ".join(f"LANE_COUNT_W'({count})" for count in bank_counts)
+            + ", ".join(f"LANE_COUNT_W'({count})" for count in h_block_counts)
             + "}"
             + suffix
         )
@@ -95,22 +95,22 @@ def render_lane_count_param(lane_counts: list[list[int]]) -> str:
     return "\n".join(lines)
 
 
-def render_lane_entry_param(lane_entries: list[list[list[tuple[int, int] | None]]]) -> str:
+def render_row_group_entry_param(row_group_entries: list[list[list[tuple[int, int] | None]]]) -> str:
     lines = ["  localparam logic [I_ENTRY_W-1:0] QC_FIRST_COL_LANE_ENTRY [0:N0-1][0:L-1][0:W-1] = '{"] 
-    for bank_idx, bank_entries in enumerate(lane_entries):
-        bank_suffix = "," if bank_idx != len(lane_entries) - 1 else ""
+    for h_block_idx, h_block_entries in enumerate(row_group_entries):
+        h_block_suffix = "," if h_block_idx != len(row_group_entries) - 1 else ""
         lines.append("    '{")
-        for lane_idx, lane_slots in enumerate(bank_entries):
-            lane_suffix = "," if lane_idx != len(bank_entries) - 1 else ""
-            slot_text = []
-            for item in lane_slots:
+        for row_group_idx, row_group_edges in enumerate(h_block_entries):
+            row_group_suffix = "," if row_group_idx != len(h_block_entries) - 1 else ""
+            edge_text = []
+            for item in row_group_edges:
                 if item is None:
-                    slot_text.append("'0")
+                    edge_text.append("'0")
                 else:
-                    edge_slot, row_local = item
-                    slot_text.append(f"{{EDGE_W'({edge_slot}), ROW_W'({row_local})}}")
-            lines.append("      '{" + ", ".join(slot_text) + "}" + lane_suffix)
-        lines.append("    }" + bank_suffix)
+                    edge_idx, row_local = item
+                    edge_text.append(f"{{EDGE_W'({edge_idx}), ROW_W'({row_local})}}")
+            lines.append("      '{" + ", ".join(edge_text) + "}" + row_group_suffix)
+        lines.append("    }" + h_block_suffix)
     lines.append("  };")
     return "\n".join(lines)
 
@@ -126,7 +126,7 @@ def emit_pkg(
     alpha_shift_1: int,
     h_base: list[list[int]],
 ) -> None:
-    lane_counts, lane_entries = build_first_column_tables(h_base, r)
+    row_group_counts, row_group_entries = build_first_column_tables(h_base, r)
     path.write_text(
         f"""package bike_pkg;
   timeunit 1ns;
@@ -154,41 +154,60 @@ def emit_pkg(
   parameter int VAR_W = (N > 1) ? $clog2(N) : 1;
   parameter int ROW_W = (R > 1) ? $clog2(R) : 1;
   parameter int EDGE_W = (W > 1) ? $clog2(W) : 1;
-  parameter int BANK_W = (N0 > 1) ? $clog2(N0) : 1;
+  parameter int H_BLOCK_W = (N0 > 1) ? $clog2(N0) : 1;
+  parameter int BANK_W = H_BLOCK_W;
   parameter int LANE_COUNT_W = (W > 1) ? $clog2(W + 1) : 1;
   parameter int H_NUM = 1;
   parameter int H_SEL_W = (H_NUM > 1) ? $clog2(H_NUM) : 1;
+
+  localparam int ROW_GROUP_IDX_W = LANE_IDX_W;
+  localparam int ROW_GROUP_COUNT_W = LANE_COUNT_W;
 
   localparam int DEC_STATE_W = 4;
   localparam logic [DEC_STATE_W-1:0] DEC_WAIT_START       = 4'd0;
   localparam logic [DEC_STATE_W-1:0] DEC_INIT_DECODER     = 4'd1;
   localparam logic [DEC_STATE_W-1:0] DEC_INIT_ROW_ACCUM   = 4'd2;
-  localparam logic [DEC_STATE_W-1:0] DEC_INIT_ROW_FLUSH   = 4'd3;
   localparam logic [DEC_STATE_W-1:0] DEC_ITER_C2V_PRIME   = 4'd4;
   localparam logic [DEC_STATE_W-1:0] DEC_ITER_OVERLAP     = 4'd5;
   localparam logic [DEC_STATE_W-1:0] DEC_ITER_V2C_DRAIN   = 4'd6;
-  localparam logic [DEC_STATE_W-1:0] DEC_ITER_WRITE_FLUSH = 4'd7;
   localparam logic [DEC_STATE_W-1:0] DEC_ITER_CHECK       = 4'd8;
   localparam logic [DEC_STATE_W-1:0] DEC_DONE             = 4'd9;
 
   localparam int DEC_PHASE_W = 5;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_WAIT             = 5'd0;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_SEED_I           = 5'd1;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_INIT_CLEAR       = 5'd2;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_INIT_M_READ      = 5'd3;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_INIT_CNU_A       = 5'd4;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_INIT_M_WRITE     = 5'd5;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_C2V_READ         = 5'd6;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_C2V_WRITE_T      = 5'd7;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_CLEAR_NEXT_M     = 5'd8;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_VNU_READ_T       = 5'd9;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_VNU_ACCUM_T      = 5'd10;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_VNU_PREP_WRITE   = 5'd11;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_VNU_READ_NEXT_M  = 5'd12;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_VNU_CNU_A        = 5'd13;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_VNU_WRITE_NEXT   = 5'd14;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_ITER_CHECK       = 5'd15;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_DONE             = 5'd16;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_WAIT                = 5'd0;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_SEED_I              = 5'd1;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_INIT_CLEAR          = 5'd2;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_INIT_M_READ         = 5'd3;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_INIT_CNU_A          = 5'd4;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_INIT_M_WRITE        = 5'd5;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_CLEAR_NEXT_M        = 5'd6;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_PRIME_READ          = 5'd7;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_PRIME_WRITE         = 5'd8;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_OVERLAP_ACCUM_READ  = 5'd9;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_OVERLAP_ACCUM_USE   = 5'd10;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_OVERLAP_PREP        = 5'd11;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_OVERLAP_EMIT_READ   = 5'd12;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_OVERLAP_EMIT_CNU_A  = 5'd13;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_OVERLAP_EMIT_WRITE  = 5'd14;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_PROD_FINISH_READ    = 5'd15;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_PROD_FINISH_WRITE   = 5'd16;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_DRAIN_ACCUM_READ    = 5'd17;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_DRAIN_ACCUM_USE     = 5'd18;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_DRAIN_PREP          = 5'd19;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_DRAIN_EMIT_READ     = 5'd20;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_DRAIN_EMIT_CNU_A    = 5'd21;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_DRAIN_EMIT_WRITE    = 5'd22;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_ITER_CHECK          = 5'd23;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_DONE                = 5'd24;
+
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_C2V_READ        = DEC_PH_PRIME_READ;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_C2V_WRITE_T     = DEC_PH_PRIME_WRITE;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_VNU_READ_T      = DEC_PH_OVERLAP_ACCUM_READ;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_VNU_ACCUM_T     = DEC_PH_OVERLAP_ACCUM_USE;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_VNU_PREP_WRITE  = DEC_PH_OVERLAP_PREP;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_VNU_READ_NEXT_M = DEC_PH_OVERLAP_EMIT_READ;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_VNU_CNU_A       = DEC_PH_OVERLAP_EMIT_CNU_A;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_VNU_WRITE_NEXT  = DEC_PH_OVERLAP_EMIT_WRITE;
 
   localparam int MSG_W = D + 1;
   localparam int MSG_MAG_LSB = 0;
@@ -216,8 +235,12 @@ def emit_pkg(
       {sv_array(h_base[1])}
     }}
   }};
-{render_lane_count_param(lane_counts)}
-{render_lane_entry_param(lane_entries)}
+{render_row_group_count_param(row_group_counts)}
+{render_row_group_entry_param(row_group_entries)}
+  localparam logic [ROW_GROUP_COUNT_W-1:0] QC_FIRST_COL_ROW_GROUP_COUNT [0:N0-1][0:L-1] =
+    QC_FIRST_COL_LANE_COUNT;
+  localparam logic [I_ENTRY_W-1:0] QC_FIRST_COL_ROW_GROUP_ENTRY [0:N0-1][0:L-1][0:W-1] =
+    QC_FIRST_COL_LANE_ENTRY;
   /* verilator lint_on UNUSEDPARAM */
 endpackage
 """,
@@ -272,7 +295,7 @@ module tb_bike_decoder_random;
   function automatic logic [R-1:0] residual_of(input logic [N-1:0] candidate);
     logic [R-1:0] residual;
     int var_idx;
-    logic [BANK_W-1:0] bank_idx;
+    logic [H_BLOCK_W-1:0] h_block_idx;
     int col_idx;
     int edge_idx;
     logic [ROW_W-1:0] row_idx;
@@ -280,10 +303,10 @@ module tb_bike_decoder_random;
       residual = INPUT_SYNDROME;
       for (var_idx = 0; var_idx < N; var_idx++) begin
         if (candidate[var_idx]) begin
-          bank_idx = BANK_W'(var_idx / R);
+          h_block_idx = H_BLOCK_W'(var_idx / R);
           col_idx = var_idx % R;
           for (edge_idx = 0; edge_idx < W; edge_idx++) begin
-            row_idx = ROW_W'((H_BASE[0][bank_idx][edge_idx] + col_idx) % R);
+            row_idx = ROW_W'((H_BASE[0][h_block_idx][edge_idx] + col_idx) % R);
             residual[row_idx] = residual[row_idx] ^ 1'b1;
           end
         end

@@ -1,4 +1,4 @@
-// Variable-node unit that accumulates c2v messages and emits updated v2c.
+// Variable-node unit that accumulates c2v messages and generates updated v2c.
 module vnu
   import bike_pkg::*;
 (
@@ -8,22 +8,22 @@ module vnu
   input  logic i_col_start,                         // This c2v is from the first "1" in the variable column.
   input  logic i_col_end,                           // This c2v is from the last "1" in the variable column.
   input  logic signed [APP_W-1:0] i_initial_llr,    // Prior LLR contribution for the variable node.
-  input  logic i_c2v_tc_valid0,                     // Valid qualifier for c2v input lane 0.
-  input  logic signed [MSG_W-1:0] i_c2v_tc0,        // c2v input from lane 0 in two's-complement.
-  input  logic i_c2v_tc_valid1,                     // Valid qualifier for c2v input lane 1.
-  input  logic signed [MSG_W-1:0] i_c2v_tc1,        // c2v input from lane 1 in two's-complement.
+  input  logic i_c2v_tc_valid0,                     // Valid qualifier for c2v input row_group 0.
+  input  logic signed [MSG_W-1:0] i_c2v_tc0,        // c2v input from row_group 0 in two's-complement.
+  input  logic i_c2v_tc_valid1,                     // Valid qualifier for c2v input row_group 1.
+  input  logic signed [MSG_W-1:0] i_c2v_tc1,        // c2v input from row_group 1 in two's-complement.
   output logic o_app_valid,                         // Posterior APP valid qualifier.
   output logic signed [APP_W-1:0] o_app,            // Posterior APP value after accumulation.
   output logic o_bit_decision,                      // Hard decision derived from the posterior APP.
-  input  logic i_emit_en,                           // Enables v2c emission using cached previous c2v.
-  input  logic i_prev_c2v_tc_valid0,                // Valid qualifier for previous c2v on emit lane 0.
-  input  logic signed [MSG_W-1:0] i_prev_c2v_tc0,   // Previous c2v value for emit lane 0.
-  input  logic i_prev_c2v_tc_valid1,                // Valid qualifier for previous c2v on emit lane 1.
-  input  logic signed [MSG_W-1:0] i_prev_c2v_tc1,   // Previous c2v value for emit lane 1.
-  output logic o_v2c_tc_valid0,                     // Valid qualifier for v2c output lane 0.
-  output logic signed [VNU_TC_W-1:0] o_v2c_tc0,     // v2c output on lane 0 in two's-complement.
-  output logic o_v2c_tc_valid1,                     // Valid qualifier for v2c output lane 1.
-  output logic signed [VNU_TC_W-1:0] o_v2c_tc1      // v2c output on lane 1 in two's-complement.
+  input  logic i_v2c_en,                            // Enables v2c generation using cached previous c2v.
+  input  logic i_prev_c2v_tc_valid0,                // Valid qualifier for previous c2v on v2c row group 0.
+  input  logic signed [MSG_W-1:0] i_prev_c2v_tc0,   // Previous c2v value for v2c row group 0.
+  input  logic i_prev_c2v_tc_valid1,                // Valid qualifier for previous c2v on v2c row group 1.
+  input  logic signed [MSG_W-1:0] i_prev_c2v_tc1,   // Previous c2v value for v2c row group 1.
+  output logic o_v2c_tc_valid0,                     // Valid qualifier for v2c output row_group 0.
+  output logic signed [VNU_TC_W-1:0] o_v2c_tc0,     // v2c output on row_group 0 in two's-complement.
+  output logic o_v2c_tc_valid1,                     // Valid qualifier for v2c output row_group 1.
+  output logic signed [VNU_TC_W-1:0] o_v2c_tc1      // v2c output on row_group 1 in two's-complement.
 );
 
   timeunit 1ns;
@@ -132,8 +132,8 @@ module vnu
 
     next_u0 = posterior_reg - alpha_scale(sign_extend(i_prev_c2v_tc0));
     next_u1 = posterior_reg - alpha_scale(sign_extend(i_prev_c2v_tc1));
-    o_v2c_tc_valid0 = i_emit_en && i_prev_c2v_tc_valid0;
-    o_v2c_tc_valid1 = i_emit_en && i_prev_c2v_tc_valid1;
+    o_v2c_tc_valid0 = i_v2c_en && i_prev_c2v_tc_valid0;
+    o_v2c_tc_valid1 = i_v2c_en && i_prev_c2v_tc_valid1;
     o_v2c_tc0 = o_v2c_tc_valid0 ? next_u0 : '0;
     o_v2c_tc1 = o_v2c_tc_valid1 ? next_u1 : '0;
   end

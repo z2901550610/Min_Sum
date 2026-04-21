@@ -107,7 +107,7 @@ module tb_ram_blocks;
     .i_var_idx(s_var),
     .i_wdata(c_din),
     .o_rdata(c_dout),
-    .o_debug_bits(c_bits)
+    .o_bits(c_bits)
   );
 
   initial clk = 1'b0;

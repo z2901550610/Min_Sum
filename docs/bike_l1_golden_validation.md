@@ -23,7 +23,7 @@ This implementation locks the structural baseline to the user-requested set:
 - total row weight `w = 142`
 - code length `n = 24646`
 - error weight `t = 134`
-- lane count `L = 2`
+- row-group count `L = 2`
 
 The matrix is generated as `H = [H0 | H1]` from deterministic seeded first-column supports.
 
@@ -45,7 +45,7 @@ These are implementation defaults for this BIKE-sized min-sum model only. They m
 
 Every BIKE-L1 run cross-checks two independent software models on the same seeded instance:
 
-- a schedule-aware model that preserves the lane/column ordering style with `L = 2`
+- a schedule-aware model that preserves the row-group/column ordering style with `L = 2`
 - a row-centric oracle that executes the same min-sum equations directly from graph adjacency
 
 The run is accepted only if both models agree on:
