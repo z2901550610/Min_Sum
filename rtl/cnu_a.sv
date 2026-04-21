@@ -5,18 +5,17 @@ module cnu_a
   input  logic i_clk,
   input  logic i_rst_n,
   input  logic i_clear,
-  input  logic i_en,                          // Enables this cycle's comp-c2v update.
+  input  logic i_en,                          // Enables this cycle's compressed-c2v update.
   input  logic [MSG_W-1:0] i_v2c,             // Incoming v2c/u sign-magnitude message.
-  input  logic [VAR_W-1:0] i_var_idx,         // Variable index tied to the incoming edge.
+  input  logic [VAR_W-1:0] i_var_idx,         // Which variable column j sent i_v2c.
   input  logic [COMP_C2V_W-1:0] i_comp_c2v,   // Current compressed-c2v state.
   output logic [COMP_C2V_W-1:0] o_comp_c2v,   // Next compressed-c2v state.
-  output logic o_sign,                        // Forwarded message sign for RAM S.
+  output logic o_sign,                        // sign(i_v2c), stored in RAM S for CNU_B.
   output logic o_valid                   
 );
 
   timeunit 1ns;
   timeprecision 1ps;
-
 
   logic               v2c_sign;
   logic [D-1:0]       v2c_mag;

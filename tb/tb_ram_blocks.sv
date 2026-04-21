@@ -9,9 +9,9 @@ module tb_ram_blocks;
   logic m_clear;
   logic m_en;
   logic m_we;
-  logic [ROW_W-1:0] m_addr;
-  logic [COMP_C2V_W-1:0] m_din;
-  logic [COMP_C2V_W-1:0] m_dout;
+  logic [ROW_W-1:0] m_check_row_addr;
+  logic [COMP_C2V_W-1:0] m_wdata;
+  logic [COMP_C2V_W-1:0] m_rdata;
   logic [COMP_C2V_W-1:0] m_debug [0:R-1];
 
   logic s_clear;
@@ -19,22 +19,22 @@ module tb_ram_blocks;
   logic s_we;
   logic [VAR_W-1:0] s_var;
   logic [EDGE_W-1:0] s_edge;
-  logic s_din;
-  logic s_dout;
+  logic s_wdata;
+  logic s_rdata;
   logic s_debug [0:N-1][0:W-1];
 
   logic t_clear;
   logic t_en;
   logic t_we;
-  logic signed [MSG_W-1:0] t_din;
-  logic signed [MSG_W-1:0] t_dout;
-  logic signed [MSG_W-1:0] t_debug [0:N-1][0:W-1];
+  logic [MSG_W-1:0] t_wdata;
+  logic [MSG_W-1:0] t_rdata;
+  logic [MSG_W-1:0] t_debug [0:N-1][0:W-1];
 
   logic u_init;
   logic u_en;
   logic u_we;
-  logic [MSG_W-1:0] u_din;
-  logic [MSG_W-1:0] u_dout;
+  logic [MSG_W-1:0] u_wdata;
+  logic [MSG_W-1:0] u_rdata;
   logic [MSG_W-1:0] u_debug [0:N-1][0:W-1];
 
   logic c_clear;
@@ -51,9 +51,9 @@ module tb_ram_blocks;
     .i_clear(m_clear),
     .i_en(m_en),
     .i_we(m_we),
-    .i_addr(m_addr),
-    .i_din(m_din),
-    .o_dout(m_dout),
+    .i_check_row_addr(m_check_row_addr),
+    .i_wdata(m_wdata),
+    .o_rdata(m_rdata),
     .o_debug_mem(m_debug)
   );
 
@@ -63,10 +63,10 @@ module tb_ram_blocks;
     .i_clear(s_clear),
     .i_en(s_en),
     .i_we(s_we),
-    .i_var_addr(s_var),
-    .i_edge_addr(s_edge),
-    .i_din(s_din),
-    .o_dout(s_dout),
+    .i_var_idx(s_var),
+    .i_edge_slot(s_edge),
+    .i_wdata(s_wdata),
+    .o_rdata(s_rdata),
     .o_debug_mem(s_debug)
   );
 
@@ -76,10 +76,10 @@ module tb_ram_blocks;
     .i_clear(t_clear),
     .i_en(t_en),
     .i_we(t_we),
-    .i_var_addr(s_var),
-    .i_edge_addr(s_edge),
-    .i_din(t_din),
-    .o_dout(t_dout),
+    .i_var_idx(s_var),
+    .i_edge_slot(s_edge),
+    .i_wdata(t_wdata),
+    .o_rdata(t_rdata),
     .o_debug_mem(t_debug)
   );
 
@@ -89,10 +89,10 @@ module tb_ram_blocks;
     .i_init(u_init),
     .i_en(u_en),
     .i_we(u_we),
-    .i_var_addr(s_var),
-    .i_edge_addr(s_edge),
-    .i_din(u_din),
-    .o_dout(u_dout),
+    .i_var_idx(s_var),
+    .i_edge_slot(s_edge),
+    .i_wdata(u_wdata),
+    .o_rdata(u_rdata),
     .o_debug_mem(u_debug)
   );
 
@@ -101,12 +101,12 @@ module tb_ram_blocks;
     .i_rst_n(rst_n),
     .i_clear(c_clear),
     .i_load(c_load),
-    .i_load_bits('0),
+    .i_load_wdata('0),
     .i_en(c_en),
     .i_we(c_we),
-    .i_addr(s_var),
-    .i_din(c_din),
-    .o_dout(c_dout),
+    .i_var_idx(s_var),
+    .i_wdata(c_din),
+    .o_rdata(c_dout),
     .o_debug_bits(c_bits)
   );
 
@@ -118,22 +118,22 @@ module tb_ram_blocks;
     m_clear = 1'b0;
     m_en = 1'b0;
     m_we = 1'b0;
-    m_addr = '0;
-    m_din = '0;
+    m_check_row_addr = '0;
+    m_wdata = '0;
     s_clear = 1'b0;
     s_en = 1'b0;
     s_we = 1'b0;
     s_var = '0;
     s_edge = '0;
-    s_din = 1'b0;
+    s_wdata = 1'b0;
     t_clear = 1'b0;
     t_en = 1'b0;
     t_we = 1'b0;
-    t_din = '0;
+    t_wdata = '0;
     u_init = 1'b0;
     u_en = 1'b0;
     u_we = 1'b0;
-    u_din = '0;
+    u_wdata = '0;
     c_clear = 1'b0;
     c_load = 1'b0;
     c_en = 1'b0;
@@ -149,8 +149,8 @@ module tb_ram_blocks;
     if (u_debug[0][0] != '0) $fatal(1, "ram_u reset mismatch");
     if (c_bits != '0) $fatal(1, "ram_c reset mismatch");
 
-    m_addr = ROW_W'(2 % R);
-    m_din = COMP_C2V_INIT ^ COMP_C2V_W'(7);
+    m_check_row_addr = ROW_W'(2 % R);
+    m_wdata = COMP_C2V_INIT ^ COMP_C2V_W'(7);
     m_en = 1'b1;
     m_we = 1'b1;
     @(posedge clk);
@@ -158,17 +158,17 @@ module tb_ram_blocks;
     m_we = 1'b0;
     @(posedge clk);
     #1;
-    if (m_dout != m_din) $fatal(1, "ram_m read-after-write mismatch");
+    if (m_rdata != m_wdata) $fatal(1, "ram_m read-after-write mismatch");
 
     s_var = VAR_W'(3 % N);
     s_edge = EDGE_W'(1 % W);
-    s_din = 1'b1;
+    s_wdata = 1'b1;
     s_en = 1'b1;
     s_we = 1'b1;
-    t_din = -MSG_W'(2);
+    t_wdata = MSG_W'(-2);
     t_en = 1'b1;
     t_we = 1'b1;
-    u_din = {1'b0, D'(C_VAL)};
+    u_wdata = {1'b0, D'(C_VAL)};
     u_en = 1'b1;
     u_we = 1'b1;
     c_din = 1'b1;
@@ -182,9 +182,9 @@ module tb_ram_blocks;
     c_we = 1'b0;
     @(posedge clk);
     #1;
-    if (s_dout != 1'b1) $fatal(1, "ram_s read-after-write mismatch");
-    if (t_dout != -MSG_W'(2)) $fatal(1, "ram_t read-after-write mismatch");
-    if (u_dout != {1'b0, D'(C_VAL)}) $fatal(1, "ram_u read-after-write mismatch");
+    if (s_rdata != 1'b1) $fatal(1, "ram_s read-after-write mismatch");
+    if ($signed(t_rdata) != -MSG_W'(2)) $fatal(1, "ram_t read-after-write mismatch");
+    if (u_rdata != {1'b0, D'(C_VAL)}) $fatal(1, "ram_u read-after-write mismatch");
     if (c_dout != 1'b1) $fatal(1, "ram_c read-after-write mismatch");
 
     u_init = 1'b1;

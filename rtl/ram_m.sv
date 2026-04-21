@@ -7,9 +7,9 @@ module ram_m
   input  logic i_clear,
   input  logic i_en,
   input  logic i_we,
-  input  logic [ROW_W-1:0] i_addr,
-  input  logic [COMP_C2V_W-1:0] i_din,
-  output logic [COMP_C2V_W-1:0] o_dout,
+  input  logic [ROW_W-1:0] i_check_row_addr,               // Which check-row state to access inside this RAM-M lane.
+  input  logic [COMP_C2V_W-1:0] i_wdata,
+  output logic [COMP_C2V_W-1:0] o_rdata,
   output logic [COMP_C2V_W-1:0] o_debug_mem [0:R-1]
 );
 
@@ -21,23 +21,21 @@ module ram_m
   assign o_debug_mem = mem;
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
-    integer row_idx;
-
     if (!i_rst_n) begin
-      o_dout <= COMP_C2V_INIT;
-      for (row_idx = 0; row_idx < R; row_idx++) begin
+      o_rdata <= COMP_C2V_INIT;
+      for (int row_idx = 0; row_idx < R; row_idx++) begin
         mem[row_idx] <= COMP_C2V_INIT;
       end
     end else if (i_clear) begin
-      o_dout <= COMP_C2V_INIT;
-      for (row_idx = 0; row_idx < R; row_idx++) begin
+      o_rdata <= COMP_C2V_INIT;
+      for (int row_idx = 0; row_idx < R; row_idx++) begin
         mem[row_idx] <= COMP_C2V_INIT;
       end
     end else if (i_en) begin
       if (i_we) begin
-        mem[i_addr] <= i_din;
+        mem[i_check_row_addr] <= i_wdata;
       end
-      o_dout <= mem[i_addr];
+      o_rdata <= mem[i_check_row_addr];
     end
   end
 endmodule

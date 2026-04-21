@@ -3,19 +3,14 @@ module cnu_b
   import bike_pkg::*;
 (
   input  logic [COMP_C2V_W-1:0] i_comp_c2v,   // Compressed-c2v state for this check node.
-  input  logic i_v2c_sign,                    // Stored sign of the edge's prior v2c/u message.
+  input  logic i_v2c_sign,                    // Stored sign of this "1"'s prior v2c/u message.
   input  logic i_syndrome_bit,                // Syndrome target bit for this check equation.
-  input  logic [VAR_W-1:0] i_var_idx,         // Variable index of the requested edge.
+  input  logic [VAR_W-1:0] i_var_idx,         // Which variable column j requests a c2v message.
   output logic [MSG_W-1:0] o_c2v_msg          // Reconstructed c2v sign-magnitude message.
 );
 
   timeunit 1ns;
   timeprecision 1ps;
-
-  // CNU_B reconstructs each c2v from the compressed-c2v state: use min2 for
-  // the variable that supplied min1, otherwise min1; sign removes this edge's
-  // original v2c/u sign from the row parity. For syndrome decoding, the check
-  // equation target also contributes to the outgoing sign.
 
   logic [D-1:0] c2v_min1_mag;
   logic [D-1:0] c2v_min2_mag;

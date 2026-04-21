@@ -9,17 +9,17 @@ module decoder_ctrl
   input  logic i_decode_success,                               // Indicates whether the residual syndrome is zero.
   output logic [DEC_STATE_W-1:0] o_state,                      // Coarse decoder state for debug/observation.
   output logic [DEC_PHASE_W-1:0] o_phase,                      // Current single-port RAM micro-stage.
-  output logic [VAR_W-1:0] o_work_var,                         // Variable index for the active micro-stage.
-  output logic [EDGE_W-1:0] o_work_edge,                       // Edge index for the active micro-stage.
-  output logic [VAR_W-1:0] o_c2v_var_idx,                      // Alias for the active c2v variable.
-  output logic [VAR_W-1:0] o_v2c_var_idx,                      // Alias for the active v2c variable.
-  output logic [EDGE_W-1:0] o_col_slot_idx,                    // Alias for the active edge slot.
+  output logic [VAR_W-1:0] o_work_var,                         // Which variable column j is active.
+  output logic [EDGE_W-1:0] o_work_edge_slot,                  // Which "1" in o_work_var, range 0..W-1.
+  output logic [VAR_W-1:0] o_c2v_var_idx,                      // Variable column used by the c2v phase.
+  output logic [VAR_W-1:0] o_v2c_var_idx,                      // Variable column used by the v2c phase.
+  output logic [EDGE_W-1:0] o_col_slot_idx,                    // Same as o_work_edge_slot; kept for column-slot debug.
   output logic o_active_m_pair,                                // Current RAM-M read pair.
   output logic o_next_m_pair,                                  // Current RAM-M write pair.
   output logic o_comp_c2v_read_bank,                           // RAM-M pair selected for compressed-c2v reads.
   output logic o_comp_c2v_write_bank,                          // RAM-M pair selected for compressed-c2v writes.
   output logic o_seed_active,                                  // Loads static first-column RAM-I metadata.
-  output logic [BANK_W-1:0] o_seed_bank,                       // RAM-I bank being seeded.
+  output logic [BANK_W-1:0] o_seed_circ_idx,                  // Which circulant block's first-column RAM-I list is seeded.
   output logic o_init_clear,                                   // Clears/init RAMs for a new decode.
   output logic o_clear_next_m,                                 // Clears the next RAM-M pair before accumulation.
   output logic o_init_m_read,                                  // Reads RAM-M/RAM-U for initial CNU_A.
@@ -57,7 +57,7 @@ module decoder_ctrl
   assign o_comp_c2v_write_bank = o_next_m_pair;
   assign o_c2v_var_idx = o_work_var;
   assign o_v2c_var_idx = o_work_var;
-  assign o_col_slot_idx = o_work_edge;
+  assign o_col_slot_idx = o_work_edge_slot;
 
   assign o_init_clear = (o_phase == DEC_PH_INIT_CLEAR);
   assign o_clear_next_m = (o_phase == DEC_PH_CLEAR_NEXT_M);
@@ -79,10 +79,10 @@ module decoder_ctrl
       o_state <= DEC_WAIT_START;
       o_phase <= DEC_PH_WAIT;
       o_work_var <= '0;
-      o_work_edge <= '0;
+      o_work_edge_slot <= '0;
       o_active_m_pair <= 1'b0;
       o_seed_active <= 1'b0;
-      o_seed_bank <= '0;
+      o_seed_circ_idx <= '0;
       o_c2v_pipe_valid <= 1'b0;
       o_v2c_pipe_valid <= 1'b0;
       o_c2v_v2c_overlap_seen <= 1'b0;
@@ -101,10 +101,10 @@ module decoder_ctrl
           if (i_start) begin
             o_phase <= DEC_PH_SEED_I;
             o_seed_active <= 1'b1;
-            o_seed_bank <= '0;
+            o_seed_circ_idx <= '0;
             o_iter_count <= '0;
             o_work_var <= '0;
-            o_work_edge <= '0;
+            o_work_edge_slot <= '0;
             o_active_m_pair <= 1'b0;
             o_c2v_v2c_overlap_seen <= 1'b0;
           end
@@ -112,18 +112,18 @@ module decoder_ctrl
 
         DEC_PH_SEED_I: begin
           o_state <= DEC_INIT_DECODER;
-          if (o_seed_bank == BANK_W'(N0 - 1)) begin
+          if (o_seed_circ_idx == BANK_W'(N0 - 1)) begin
             o_seed_active <= 1'b0;
             o_phase <= DEC_PH_INIT_CLEAR;
           end else begin
-            o_seed_bank <= o_seed_bank + 1'b1;
+            o_seed_circ_idx <= o_seed_circ_idx + 1'b1;
           end
         end
 
         DEC_PH_INIT_CLEAR: begin
           o_state <= DEC_INIT_DECODER;
           o_work_var <= '0;
-          o_work_edge <= '0;
+          o_work_edge_slot <= '0;
           o_phase <= DEC_PH_INIT_M_READ;
         end
 
@@ -139,8 +139,8 @@ module decoder_ctrl
 
         DEC_PH_INIT_M_WRITE: begin
           o_state <= DEC_INIT_ROW_ACCUM;
-          if (o_work_edge == LAST_EDGE) begin
-            o_work_edge <= '0;
+          if (o_work_edge_slot == LAST_EDGE) begin
+            o_work_edge_slot <= '0;
             if (o_work_var == LAST_VAR) begin
               o_work_var <= '0;
               o_phase <= DEC_PH_C2V_READ;
@@ -149,7 +149,7 @@ module decoder_ctrl
               o_phase <= DEC_PH_INIT_M_READ;
             end
           end else begin
-            o_work_edge <= o_work_edge + 1'b1;
+            o_work_edge_slot <= o_work_edge_slot + 1'b1;
             o_phase <= DEC_PH_INIT_M_READ;
           end
         end
@@ -163,8 +163,8 @@ module decoder_ctrl
         DEC_PH_C2V_WRITE_T: begin
           o_state <= DEC_ITER_C2V_PRIME;
           o_c2v_pipe_valid <= 1'b1;
-          if (o_work_edge == LAST_EDGE) begin
-            o_work_edge <= '0;
+          if (o_work_edge_slot == LAST_EDGE) begin
+            o_work_edge_slot <= '0;
             if (o_work_var == LAST_VAR) begin
               o_work_var <= '0;
               o_phase <= DEC_PH_CLEAR_NEXT_M;
@@ -173,7 +173,7 @@ module decoder_ctrl
               o_phase <= DEC_PH_C2V_READ;
             end
           end else begin
-            o_work_edge <= o_work_edge + 1'b1;
+            o_work_edge_slot <= o_work_edge_slot + 1'b1;
             o_phase <= DEC_PH_C2V_READ;
           end
         end
@@ -184,7 +184,7 @@ module decoder_ctrl
           o_v2c_pipe_valid <= 1'b1;
           o_c2v_v2c_overlap_seen <= 1'b1;
           o_work_var <= '0;
-          o_work_edge <= '0;
+          o_work_edge_slot <= '0;
           o_phase <= DEC_PH_VNU_READ_T;
         end
 
@@ -197,11 +197,11 @@ module decoder_ctrl
         DEC_PH_VNU_ACCUM_T: begin
           o_state <= DEC_ITER_OVERLAP;
           o_v2c_pipe_valid <= 1'b1;
-          if (o_work_edge == LAST_EDGE) begin
-            o_work_edge <= '0;
+          if (o_work_edge_slot == LAST_EDGE) begin
+            o_work_edge_slot <= '0;
             o_phase <= DEC_PH_VNU_PREP_WRITE;
           end else begin
-            o_work_edge <= o_work_edge + 1'b1;
+            o_work_edge_slot <= o_work_edge_slot + 1'b1;
             o_phase <= DEC_PH_VNU_READ_T;
           end
         end
@@ -209,7 +209,7 @@ module decoder_ctrl
         DEC_PH_VNU_PREP_WRITE: begin
           o_state <= DEC_ITER_OVERLAP;
           o_v2c_pipe_valid <= 1'b1;
-          o_work_edge <= '0;
+          o_work_edge_slot <= '0;
           o_phase <= DEC_PH_VNU_READ_NEXT_M;
         end
 
@@ -228,8 +228,8 @@ module decoder_ctrl
         DEC_PH_VNU_WRITE_NEXT: begin
           o_state <= DEC_ITER_OVERLAP;
           o_v2c_pipe_valid <= 1'b1;
-          if (o_work_edge == LAST_EDGE) begin
-            o_work_edge <= '0;
+          if (o_work_edge_slot == LAST_EDGE) begin
+            o_work_edge_slot <= '0;
             if (o_work_var == LAST_VAR) begin
               o_work_var <= '0;
               o_phase <= DEC_PH_ITER_CHECK;
@@ -238,7 +238,7 @@ module decoder_ctrl
               o_phase <= DEC_PH_VNU_READ_T;
             end
           end else begin
-            o_work_edge <= o_work_edge + 1'b1;
+            o_work_edge_slot <= o_work_edge_slot + 1'b1;
             o_phase <= DEC_PH_VNU_READ_NEXT_M;
           end
         end
@@ -253,7 +253,7 @@ module decoder_ctrl
           end else begin
             o_active_m_pair <= o_next_m_pair;
             o_work_var <= '0;
-            o_work_edge <= '0;
+            o_work_edge_slot <= '0;
             o_phase <= DEC_PH_C2V_READ;
           end
         end
@@ -264,10 +264,10 @@ module decoder_ctrl
           if (i_start) begin
             o_phase <= DEC_PH_SEED_I;
             o_seed_active <= 1'b1;
-            o_seed_bank <= '0;
+            o_seed_circ_idx <= '0;
             o_iter_count <= '0;
             o_work_var <= '0;
-            o_work_edge <= '0;
+            o_work_edge_slot <= '0;
             o_active_m_pair <= 1'b0;
             o_c2v_v2c_overlap_seen <= 1'b0;
             o_done <= 1'b0;

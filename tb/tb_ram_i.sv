@@ -31,19 +31,19 @@ module tb_ram_i;
     .i_clear(clear_en),
     .i_en(en),
     .i_we(we),
-    .i_bank(bank),
-    .i_addr(addr),
-    .i_din(din),
-    .i_count_we(count_we),
-    .i_count_din(count_din),
-    .i_load(load),
-    .i_load_bank(load_bank),
-    .i_load_entries(load_entries),
-    .i_load_count(load_count),
-    .o_dout(dout),
-    .o_count(count),
+    .i_circ_idx(bank),
+    .i_edge_slot_addr(addr),
+    .i_wdata(din),
+    .i_lane_count_we(count_we),
+    .i_lane_count_wdata(count_din),
+    .i_seed_en(load),
+    .i_seed_circ_idx(load_bank),
+    .i_seed_entries(load_entries),
+    .i_seed_lane_count(load_count),
+    .o_rdata(dout),
+    .o_lane_count(count),
     .o_debug_entries(debug_entries),
-    .o_debug_count(debug_count)
+    .o_debug_lane_count(debug_count)
   );
 
   initial clk = 1'b0;

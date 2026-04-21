@@ -148,8 +148,8 @@ module tb_decoder_top;
     fork
       begin
         repeat (20000) @(posedge clk);
-        $fatal(1, "tb_decoder_top timeout: state=%0d phase=%0d work_var=%0d work_edge=%0d iter=%0d overlap=%0b c2v=%0b v2c=%0b done=%0b",
-               dut.state, dut.phase, dut.work_var, dut.work_edge, iter_count,
+        $fatal(1, "tb_decoder_top timeout: state=%0d phase=%0d work_var=%0d work_edge_slot=%0d iter=%0d overlap=%0b c2v=%0b v2c=%0b done=%0b",
+               dut.state, dut.phase, dut.work_var, dut.work_edge_slot, iter_count,
                dut.c2v_v2c_overlap_seen, dut.c2v_phase_active, dut.v2c_phase_active, done);
       end
     join_none

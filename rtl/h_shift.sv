@@ -1,11 +1,11 @@
-// Advances one packed QC column by +1 mod R and reassigns entries across lanes.
+// Advances every "1" in a packed QC column by +1 mod R and reassigns lanes.
 module h_shift
   import bike_pkg::*;
 (
-  input  logic [I_ENTRY_W-1:0] i_lane_entries [0:L-1][0:W-1],  // Current packed column entries for each lane.
-  input  logic [LANE_COUNT_W-1:0] i_lane_count [0:L-1],         // Valid entry count in each input lane.
-  output logic [I_ENTRY_W-1:0] o_lane_entries [0:L-1][0:W-1],   // Shifted packed column entries.
-  output logic [LANE_COUNT_W-1:0] o_lane_count [0:L-1]          // Valid entry count after shifting.
+  input  logic [I_ENTRY_W-1:0] i_lane_entries [0:L-1][0:W-1],  // Packed "1" entries for each lane before the shift.
+  input  logic [LANE_COUNT_W-1:0] i_lane_count [0:L-1],         // How many "1"s are valid in each input lane.
+  output logic [I_ENTRY_W-1:0] o_lane_entries [0:L-1][0:W-1],   // Packed "1" entries after every row index is shifted by +1 mod R.
+  output logic [LANE_COUNT_W-1:0] o_lane_count [0:L-1]          // How many "1"s are valid in each output lane.
 );
 
   timeunit 1ns;

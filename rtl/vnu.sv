@@ -5,8 +5,8 @@ module vnu
   input  logic i_clk,
   input  logic i_rst_n,
   input  logic i_clear,
-  input  logic i_col_start,                         // Marks the first c2v input slot of a variable column.
-  input  logic i_col_end,                           // Marks the final c2v input slot of a variable column.
+  input  logic i_col_start,                         // This c2v is from the first "1" in the variable column.
+  input  logic i_col_end,                           // This c2v is from the last "1" in the variable column.
   input  logic signed [APP_W-1:0] i_initial_llr,    // Prior LLR contribution for the variable node.
   input  logic i_c2v_tc_valid0,                     // Valid qualifier for c2v input lane 0.
   input  logic signed [MSG_W-1:0] i_c2v_tc0,        // c2v input from lane 0 in two's-complement.

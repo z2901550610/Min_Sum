@@ -8,19 +8,19 @@ module ram_i
   input  logic i_clear,
   input  logic i_en,
   input  logic i_we,
-  input  logic [BANK_W-1:0] i_bank,
-  input  logic [EDGE_W-1:0] i_addr,
-  input  logic [I_ENTRY_W-1:0] i_din,
-  input  logic i_count_we,
-  input  logic [LANE_COUNT_W-1:0] i_count_din,
-  input  logic i_load,
-  input  logic [BANK_W-1:0] i_load_bank,
-  input  logic [I_ENTRY_W-1:0] i_load_entries [0:W-1],
-  input  logic [LANE_COUNT_W-1:0] i_load_count,
-  output logic [I_ENTRY_W-1:0] o_dout,
-  output logic [LANE_COUNT_W-1:0] o_count,
+  input  logic [BANK_W-1:0] i_circ_idx,                    // Which circulant block of H: H0, H1, ...
+  input  logic [EDGE_W-1:0] i_edge_slot_addr,              // Which "1" in this variable column to access, range 0..W-1.
+  input  logic [I_ENTRY_W-1:0] i_wdata,
+  input  logic i_lane_count_we,
+  input  logic [LANE_COUNT_W-1:0] i_lane_count_wdata,      // How many "1"s in this variable column belong to this lane.
+  input  logic i_seed_en,
+  input  logic [BANK_W-1:0] i_seed_circ_idx,               // Which circulant block is being seeded: H0, H1, ...
+  input  logic [I_ENTRY_W-1:0] i_seed_entries [0:W-1],      // First-column "1" entries assigned to this lane.
+  input  logic [LANE_COUNT_W-1:0] i_seed_lane_count,        // How many first-column "1"s in i_seed_entries are valid.
+  output logic [I_ENTRY_W-1:0] o_rdata,
+  output logic [LANE_COUNT_W-1:0] o_lane_count,            // How many "1"s in this variable column belong to this lane.
   output logic [I_ENTRY_W-1:0] o_debug_entries [0:N0-1][0:W-1],
-  output logic [LANE_COUNT_W-1:0] o_debug_count [0:N0-1]
+  output logic [LANE_COUNT_W-1:0] o_debug_lane_count [0:N0-1]
 );
 
   timeunit 1ns;
@@ -30,43 +30,40 @@ module ram_i
   logic [LANE_COUNT_W-1:0] count_mem [0:N0-1];
 
   assign o_debug_entries = mem;
-  assign o_debug_count = count_mem;
-  assign o_count = count_mem[i_bank];
+  assign o_debug_lane_count = count_mem;
+  assign o_lane_count = count_mem[i_circ_idx];
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
-    integer bank_idx;
-    integer slot_idx;
-
     if (!i_rst_n) begin
-      o_dout <= '0;
-      for (bank_idx = 0; bank_idx < N0; bank_idx++) begin
-        count_mem[bank_idx] <= '0;
-        for (slot_idx = 0; slot_idx < W; slot_idx++) begin
-          mem[bank_idx][slot_idx] <= '0;
+      o_rdata <= '0;
+      for (int circ_idx = 0; circ_idx < N0; circ_idx++) begin
+        count_mem[circ_idx] <= '0;
+        for (int slot_idx = 0; slot_idx < W; slot_idx++) begin
+          mem[circ_idx][slot_idx] <= '0;
         end
       end
     end else if (i_clear) begin
-      o_dout <= '0;
-      for (bank_idx = 0; bank_idx < N0; bank_idx++) begin
-        count_mem[bank_idx] <= '0;
-        for (slot_idx = 0; slot_idx < W; slot_idx++) begin
-          mem[bank_idx][slot_idx] <= '0;
+      o_rdata <= '0;
+      for (int circ_idx = 0; circ_idx < N0; circ_idx++) begin
+        count_mem[circ_idx] <= '0;
+        for (int slot_idx = 0; slot_idx < W; slot_idx++) begin
+          mem[circ_idx][slot_idx] <= '0;
         end
       end
-    end else if (i_load) begin
-      count_mem[i_load_bank] <= i_load_count;
-      for (slot_idx = 0; slot_idx < W; slot_idx++) begin
-        mem[i_load_bank][slot_idx] <= i_load_entries[slot_idx];
+    end else if (i_seed_en) begin
+      count_mem[i_seed_circ_idx] <= i_seed_lane_count;
+      for (int slot_idx = 0; slot_idx < W; slot_idx++) begin
+        mem[i_seed_circ_idx][slot_idx] <= i_seed_entries[slot_idx];
       end
     end else begin
       if (i_en) begin
         if (i_we) begin
-          mem[i_bank][i_addr] <= i_din;
+          mem[i_circ_idx][i_edge_slot_addr] <= i_wdata;
         end
-        o_dout <= mem[i_bank][i_addr];
+        o_rdata <= mem[i_circ_idx][i_edge_slot_addr];
       end
-      if (i_count_we) begin
-        count_mem[i_bank] <= i_count_din;
+      if (i_lane_count_we) begin
+        count_mem[i_circ_idx] <= i_lane_count_wdata;
       end
     end
   end
