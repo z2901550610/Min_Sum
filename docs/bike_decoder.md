@@ -53,9 +53,10 @@ zero, or fails after `I_MAX` iterations.
   schedule, variable/edge counters, RAM-M ping-pong banks, RAM-I seed control,
   and done/success bookkeeping.
 - `decoder_top` is the decoder core datapath and structural interconnect. It
-  instantiates the numbered RAM blocks, `decoder_ctrl`, `decoder_edge_meta`,
-  CNU/VNU units, and message-codec adapters; top-level logic is limited to
-  RAM port selection, data latching, and residual-syndrome recomputation.
+  instantiates the numbered RAM blocks, `decoder_ctrl`, `h_shift`, CNU/VNU
+  units, and message-codec adapters; top-level logic is limited to RAM port
+  selection, RAM-I lane entry handling, data latching, and residual-syndrome
+  recomputation.
 - `vnu` now consumes c2v in 2's-complement and emits unsaturated 2's-complement
   v2c. Sign-magnitude conversion lives in the external `msg_codec` adapters.
 - `ram_i`, `ram_m`, `ram_s`, `ram_t`, `ram_u`, and `ram_c` are paper-style
@@ -67,15 +68,24 @@ zero, or fails after `I_MAX` iterations.
   does not use `generate`/`genvar` for RAM instantiation.
 - The previous top-level scheduler and logical RAM mirrors have been replaced
   by explicit read/compute/write micro-stages in `decoder_ctrl`.
-- `decoder_edge_meta` derives row, lane, and local-row metadata for the active
-  QC edge. `h_shift` remains as a standalone pure `+1 mod R` lane-packed
-  shifter used by its unit test/reference path.
+- RAM-I is seeded with first-column lane lists. During decode, the active
+  column's row/local-row/edge-slot metadata comes from the RAM-I lane lists;
+  after a column is processed, `h_shift` advances those packed lists by
+  `+1 mod R` and writes them back for the next circulant column. `H_BASE` is
+  not used for normal CNU/VNU row-address scheduling.
+- `decoder_edge_meta` and `qc_column_preprocess` are kept under
+  [`rtl/reference/`](/Users/z2901550610/Documents/Min_Sum/rtl/reference) as
+  reference helpers. They are no longer part of the decoder core because RAM-I
+  plus `h_shift` now supplies the active edge metadata.
 - The static first-column metadata is generated offline by
   [`scripts/gen_qc_first_columns.py`](/Users/z2901550610/Documents/Min_Sum/scripts/gen_qc_first_columns.py)
   into
   [`rtl/generated/qc_first_columns.svh`](/Users/z2901550610/Documents/Min_Sum/rtl/generated/qc_first_columns.svh).
   `decoder_top` consumes only the generated tables; it no longer derives lane
   grouping from `H_BASE` internally.
+- Two-stage scaling, flexible message storage selection, and group-size
+  re-balancing from the paper are not implemented yet. The RTL keeps the
+  existing single-stage VNU scaling.
 
 ## Verification
 

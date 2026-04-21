@@ -167,6 +167,14 @@ module tb_decoder_top;
       end
     end
 
+    wait (dut.state == DEC_INIT_ROW_ACCUM && dut.c2v_var_idx == 1 && dut.col_slot_idx == 0 && dut.init_m_read);
+    #1;
+    if (dut.ram_i_debug_count[0][0] != LANE_COUNT_W'(2)) $fatal(1, "RAM I shifted lane0 count mismatch for column 1");
+    if (dut.ram_i_debug_count[0][1] != LANE_COUNT_W'(1)) $fatal(1, "RAM I shifted lane1 count mismatch for column 1");
+    if (!(dut.lane_valid[0] && dut.lane_valid[1])) $fatal(1, "shifted column 1 should expose two active lanes");
+    if (dut.lane_edge_slot[0] != EDGE_W'(0) || dut.lane_row_local[0] != ROW_W'(1)) $fatal(1, "shifted lane0 entry mismatch for column 1");
+    if (dut.lane_edge_slot[1] != EDGE_W'(2) || dut.lane_row_local[1] != ROW_W'(0)) $fatal(1, "shifted lane1 entry mismatch for column 1");
+
     wait (dut.state == DEC_ITER_C2V_PRIME && dut.c2v_var_idx == 0 && dut.col_slot_idx == 0);
     #1;
     if (dut.comp_c2v_read_bank === dut.comp_c2v_write_bank) $fatal(1, "RAM M ping-pong banks should differ");
@@ -180,6 +188,10 @@ module tb_decoder_top;
     wait (dut.state == DEC_ITER_OVERLAP && dut.c2v_v2c_overlap_seen === 1'b1);
     #1;
     if (!(dut.c2v_phase_active && dut.v2c_phase_active)) $fatal(1, "pipeline did not expose simultaneous CNU_B and VNU/CNU_A work");
+
+    wait (dut.vnu_accum_t && dut.v2c_var_idx == 1 && dut.col_slot_idx == 0);
+    #1;
+    if (!(dut.vnu_accum_valid[0] && dut.vnu_accum_valid[1])) $fatal(1, "VNU did not consume both RAM-I lanes for shifted column 1");
 
     wait (dut.state == DEC_ITER_CHECK && iter_count == 1);
     #1;

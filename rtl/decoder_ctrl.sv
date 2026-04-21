@@ -7,10 +7,11 @@ module decoder_ctrl
   input  logic i_start,                                        // Starts a new decode pass.
   input  logic i_finish_decode,                                // Requests transition to DONE after the check phase.
   input  logic i_decode_success,                               // Indicates whether the residual syndrome is zero.
+  input  logic i_column_slot_last,                              // Current lane slot is the last valid slot for this H column.
   output logic [DEC_STATE_W-1:0] o_state,                      // Coarse decoder state for debug/observation.
   output logic [DEC_PHASE_W-1:0] o_phase,                      // Current single-port RAM micro-stage.
   output logic [VAR_W-1:0] o_work_var,                         // Which variable column j is active.
-  output logic [EDGE_W-1:0] o_work_edge_slot,                  // Which "1" in o_work_var, range 0..W-1.
+  output logic [EDGE_W-1:0] o_work_edge_slot,                  // Which packed RAM-I lane slot is active, range 0..W-1.
   output logic [VAR_W-1:0] o_c2v_var_idx,                      // Variable column used by the c2v phase.
   output logic [VAR_W-1:0] o_v2c_var_idx,                      // Variable column used by the v2c phase.
   output logic [EDGE_W-1:0] o_col_slot_idx,                    // Same as o_work_edge_slot; kept for column-slot debug.
@@ -47,7 +48,6 @@ module decoder_ctrl
 
   localparam int ITER_W = $clog2(I_MAX + 1);
   localparam logic [VAR_W-1:0] LAST_VAR = VAR_W'(N - 1);
-  localparam logic [EDGE_W-1:0] LAST_EDGE = EDGE_W'(W - 1);
 
   logic [ITER_W-1:0] next_iter_count;
 
@@ -139,7 +139,7 @@ module decoder_ctrl
 
         DEC_PH_INIT_M_WRITE: begin
           o_state <= DEC_INIT_ROW_ACCUM;
-          if (o_work_edge_slot == LAST_EDGE) begin
+          if (i_column_slot_last) begin
             o_work_edge_slot <= '0;
             if (o_work_var == LAST_VAR) begin
               o_work_var <= '0;
@@ -163,7 +163,7 @@ module decoder_ctrl
         DEC_PH_C2V_WRITE_T: begin
           o_state <= DEC_ITER_C2V_PRIME;
           o_c2v_pipe_valid <= 1'b1;
-          if (o_work_edge_slot == LAST_EDGE) begin
+          if (i_column_slot_last) begin
             o_work_edge_slot <= '0;
             if (o_work_var == LAST_VAR) begin
               o_work_var <= '0;
@@ -197,7 +197,7 @@ module decoder_ctrl
         DEC_PH_VNU_ACCUM_T: begin
           o_state <= DEC_ITER_OVERLAP;
           o_v2c_pipe_valid <= 1'b1;
-          if (o_work_edge_slot == LAST_EDGE) begin
+          if (i_column_slot_last) begin
             o_work_edge_slot <= '0;
             o_phase <= DEC_PH_VNU_PREP_WRITE;
           end else begin
@@ -228,7 +228,7 @@ module decoder_ctrl
         DEC_PH_VNU_WRITE_NEXT: begin
           o_state <= DEC_ITER_OVERLAP;
           o_v2c_pipe_valid <= 1'b1;
-          if (o_work_edge_slot == LAST_EDGE) begin
+          if (i_column_slot_last) begin
             o_work_edge_slot <= '0;
             if (o_work_var == LAST_VAR) begin
               o_work_var <= '0;

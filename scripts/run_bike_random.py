@@ -15,7 +15,6 @@ RTL_CORE = [
     "rtl/h_shift.sv",
     "rtl/msg_signmag_to_tc.sv",
     "rtl/msg_tc_to_signmag_sat.sv",
-    "rtl/decoder_edge_meta.sv",
     "rtl/decoder_ctrl.sv",
     "rtl/ram_c.sv",
     "rtl/ram_m.sv",

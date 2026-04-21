@@ -82,6 +82,17 @@ module tb_ram_i;
     if (debug_count[load_bank] != LANE_COUNT_W'(2)) $fatal(1, "ram_i load count mismatch");
     if (debug_entries[load_bank][0] != {EDGE_W'(0), ROW_W'(1)}) $fatal(1, "ram_i load entry 0 mismatch");
 
+    load_count = LANE_COUNT_W'(1);
+    load_entries[0] = {EDGE_W'(2), ROW_W'(0)};
+    load_entries[1] = '0;
+    load_entries[2] = '0;
+    load = 1'b1;
+    @(posedge clk);
+    #1;
+    load = 1'b0;
+    if (debug_count[load_bank] != LANE_COUNT_W'(1)) $fatal(1, "ram_i shifted bulk count mismatch");
+    if (debug_entries[load_bank][0] != {EDGE_W'(2), ROW_W'(0)}) $fatal(1, "ram_i shifted bulk entry mismatch");
+
     bank = '0;
     addr = EDGE_W'(1);
     din = {EDGE_W'(1), ROW_W'(4)};
