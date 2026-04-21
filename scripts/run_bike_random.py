@@ -367,7 +367,18 @@ endmodule
 
 
 def run_command(command: list[str], cwd: Path) -> None:
-    print("+ " + shlex.join(command), flush=True)
+    exe = Path(command[0]).name
+    if "verilator" in exe:
+        top = "unknown"
+        if "--top-module" in command:
+            top_idx = command.index("--top-module")
+            if top_idx + 1 < len(command):
+                top = command[top_idx + 1]
+        print(f"+ verilator {top}", flush=True)
+    elif exe == "run_quiet.py" and len(command) > 1:
+        print(f"+ sim {Path(command[1]).name}", flush=True)
+    else:
+        print("+ " + shlex.join(command), flush=True)
     subprocess.run(command, cwd=cwd, check=True)
 
 
@@ -427,7 +438,7 @@ def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int
         str(tb_path),
     ]
     run_command(command, repo_root)
-    run_command([str(obj_dir / "Vtb_bike_decoder_random")], repo_root)
+    run_command(["scripts/run_quiet.py", str(obj_dir / "Vtb_bike_decoder_random"), "+verilator+quiet"], repo_root)
     return True
 
 

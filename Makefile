@@ -1,7 +1,12 @@
 CC ?= cc
 CFLAGS ?= -std=c99 -O2 -Wall -Wextra -pedantic
-VERILATOR ?= verilator
+VERILATOR ?= ./scripts/verilator_quiet.py
+REAL_VERILATOR ?= verilator
+VERILATOR_LOG_DIR ?= build/logs/verilator
 VERILATOR_FLAGS ?= --binary --sv -Wall -Wno-fatal -I./tb -I./rtl
+SIM ?= ./scripts/run_quiet.py
+export REAL_VERILATOR
+export VERILATOR_LOG_DIR
 
 GOLDEN_BIN := golden/mdpc_min_sum_golden
 BIKE_GOLDEN_BIN := golden/bike_l1_min_sum_golden
@@ -25,57 +30,57 @@ all: test
 golden: $(VECTOR_SVH)
 
 $(GOLDEN_BIN): golden/mdpc_min_sum_golden.c FORCE
-	$(CC) $(CFLAGS) -o $@ $<
+	@$(CC) $(CFLAGS) -o $@ $<
 
 $(BIKE_GOLDEN_BIN): golden/bike_l1_min_sum_golden.c FORCE
-	$(CC) $(CFLAGS) -o $@ $<
+	@$(CC) $(CFLAGS) -o $@ $<
 
 $(VECTOR_SVH): $(GOLDEN_BIN)
-	./$(GOLDEN_BIN) --emit-svh $@
+	@./$(GOLDEN_BIN) --emit-svh $@
 
 $(QC_FIRST_COL_SVH): rtl/bike_pkg.sv scripts/gen_qc_first_columns.py
-	python3 scripts/gen_qc_first_columns.py --input rtl/bike_pkg.sv --output $@
+	@python3 scripts/gen_qc_first_columns.py --input rtl/bike_pkg.sv --output $@
 
 golden-self-test: $(GOLDEN_BIN)
-	./$(GOLDEN_BIN) --self-test
+	@./$(GOLDEN_BIN) --self-test
 
 bike-golden-self-test: $(BIKE_GOLDEN_BIN)
-	./$(BIKE_GOLDEN_BIN) --self-test
+	@./$(BIKE_GOLDEN_BIN) --self-test
 
 bike-golden-once: $(BIKE_GOLDEN_BIN)
-	./$(BIKE_GOLDEN_BIN) --bike-l1-once --seed $(BIKE_SEED)
+	@./$(BIKE_GOLDEN_BIN) --bike-l1-once --seed $(BIKE_SEED)
 
 bike-golden-batch: $(BIKE_GOLDEN_BIN)
-	./$(BIKE_GOLDEN_BIN) --bike-l1-batch --base-seed $(BIKE_BASE_SEED) --trials $(BIKE_TRIALS)
+	@./$(BIKE_GOLDEN_BIN) --bike-l1-batch --base-seed $(BIKE_BASE_SEED) --trials $(BIKE_TRIALS)
 
 bike-golden-calibrate: $(BIKE_GOLDEN_BIN)
-	./$(BIKE_GOLDEN_BIN) --bike-l1-calibrate --base-seed $(BIKE_CAL_BASE_SEED) --trials $(BIKE_CAL_TRIALS)
+	@./$(BIKE_GOLDEN_BIN) --bike-l1-calibrate --base-seed $(BIKE_CAL_BASE_SEED) --trials $(BIKE_CAL_TRIALS)
 
 test: test-unit test-integration
 
 test-unit: $(VECTOR_SVH) $(QC_FIRST_COL_SVH)
-	$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_msg_codec rtl/bike_pkg.sv rtl/msg_signmag_to_tc.sv rtl/msg_tc_to_signmag_sat.sv tb/tb_msg_codec.sv
-	./obj_dir/Vtb_msg_codec
-	$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_i rtl/bike_pkg.sv rtl/ram_i.sv tb/tb_ram_i.sv
-	./obj_dir/Vtb_ram_i
-	$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_blocks rtl/bike_pkg.sv rtl/ram_c.sv rtl/ram_m.sv rtl/ram_s.sv rtl/ram_t.sv rtl/ram_u.sv tb/tb_ram_blocks.sv
-	./obj_dir/Vtb_ram_blocks
-	$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_h_shift rtl/bike_pkg.sv rtl/h_shift.sv tb/tb_h_shift.sv
-	./obj_dir/Vtb_h_shift
-	$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_cnu_a rtl/bike_pkg.sv rtl/cnu_a.sv tb/tb_cnu_a.sv
-	./obj_dir/Vtb_cnu_a
-	$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_cnu_b rtl/bike_pkg.sv rtl/cnu_b.sv tb/tb_cnu_b.sv
-	./obj_dir/Vtb_cnu_b
-	$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_vnu rtl/bike_pkg.sv rtl/vnu.sv tb/tb_vnu.sv
-	./obj_dir/Vtb_vnu
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_msg_codec rtl/bike_pkg.sv rtl/msg_signmag_to_tc.sv rtl/msg_tc_to_signmag_sat.sv tb/tb_msg_codec.sv
+	@$(SIM) ./obj_dir/Vtb_msg_codec +verilator+quiet
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_i rtl/bike_pkg.sv rtl/ram_i.sv tb/tb_ram_i.sv
+	@$(SIM) ./obj_dir/Vtb_ram_i +verilator+quiet
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_blocks rtl/bike_pkg.sv rtl/ram_c.sv rtl/ram_m.sv rtl/ram_s.sv rtl/ram_t.sv rtl/ram_u.sv tb/tb_ram_blocks.sv
+	@$(SIM) ./obj_dir/Vtb_ram_blocks +verilator+quiet
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_h_shift rtl/bike_pkg.sv rtl/h_shift.sv tb/tb_h_shift.sv
+	@$(SIM) ./obj_dir/Vtb_h_shift +verilator+quiet
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_cnu_a rtl/bike_pkg.sv rtl/cnu_a.sv tb/tb_cnu_a.sv
+	@$(SIM) ./obj_dir/Vtb_cnu_a +verilator+quiet
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_cnu_b rtl/bike_pkg.sv rtl/cnu_b.sv tb/tb_cnu_b.sv
+	@$(SIM) ./obj_dir/Vtb_cnu_b +verilator+quiet
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_vnu rtl/bike_pkg.sv rtl/vnu.sv tb/tb_vnu.sv
+	@$(SIM) ./obj_dir/Vtb_vnu +verilator+quiet
 
 test-integration: $(VECTOR_SVH) $(QC_FIRST_COL_SVH)
 	@if grep -nE '\b(generate|genvar|endgenerate)\b' rtl/decoder_top.sv; then echo "decoder_top.sv must not use generate/genvar for RAM instantiation"; exit 1; fi
 	@if grep -nE '\bram_[mstu]_debug_mem\b' rtl/decoder_top.sv; then echo "decoder_top.sv must not use aggregate RAM debug mirror arrays"; exit 1; fi
-	$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_decoder_top $(RTL) tb/tb_decoder_top.sv
-	./obj_dir/Vtb_decoder_top
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_decoder_top $(RTL) tb/tb_decoder_top.sv
+	@$(SIM) ./obj_dir/Vtb_decoder_top +verilator+quiet
 
 test-bike-random:
-	python3 scripts/run_bike_random.py --base-seed $(BIKE_RANDOM_BASE_SEED) --trials $(BIKE_RANDOM_TRIALS) --error-count $(BIKE_RANDOM_ERROR_COUNT) --verilator $(VERILATOR)
+	@python3 scripts/run_bike_random.py --base-seed $(BIKE_RANDOM_BASE_SEED) --trials $(BIKE_RANDOM_TRIALS) --error-count $(BIKE_RANDOM_ERROR_COUNT) --verilator $(VERILATOR)
 
 sim: test
