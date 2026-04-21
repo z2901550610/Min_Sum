@@ -44,11 +44,9 @@ package bike_pkg;
   localparam logic [DEC_STATE_W-1:0] DEC_WAIT_START       = 4'd0;
   localparam logic [DEC_STATE_W-1:0] DEC_INIT_DECODER     = 4'd1;
   localparam logic [DEC_STATE_W-1:0] DEC_INIT_ROW_ACCUM   = 4'd2;
-  localparam logic [DEC_STATE_W-1:0] DEC_INIT_ROW_FLUSH   = 4'd3;
   localparam logic [DEC_STATE_W-1:0] DEC_ITER_C2V_PRIME   = 4'd4;
   localparam logic [DEC_STATE_W-1:0] DEC_ITER_OVERLAP     = 4'd5;
   localparam logic [DEC_STATE_W-1:0] DEC_ITER_V2C_DRAIN   = 4'd6;
-  localparam logic [DEC_STATE_W-1:0] DEC_ITER_WRITE_FLUSH = 4'd7;
   localparam logic [DEC_STATE_W-1:0] DEC_ITER_CHECK       = 4'd8;
   localparam logic [DEC_STATE_W-1:0] DEC_DONE             = 4'd9;
 
@@ -78,6 +76,17 @@ package bike_pkg;
   localparam logic [DEC_PHASE_W-1:0] DEC_PH_DRAIN_EMIT_WRITE    = 5'd22;
   localparam logic [DEC_PHASE_W-1:0] DEC_PH_ITER_CHECK          = 5'd23;
   localparam logic [DEC_PHASE_W-1:0] DEC_PH_DONE                = 5'd24;
+
+  // Generic debug-only phase aliases kept for compatibility with generated
+  // test packages that use a condensed phase encoding.
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_C2V_READ        = DEC_PH_PRIME_READ;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_C2V_WRITE_T     = DEC_PH_PRIME_WRITE;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_VNU_READ_T      = DEC_PH_OVERLAP_ACCUM_READ;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_VNU_ACCUM_T     = DEC_PH_OVERLAP_ACCUM_USE;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_VNU_PREP_WRITE  = DEC_PH_OVERLAP_PREP;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_VNU_READ_NEXT_M = DEC_PH_OVERLAP_EMIT_READ;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_VNU_CNU_A       = DEC_PH_OVERLAP_EMIT_CNU_A;
+  localparam logic [DEC_PHASE_W-1:0] DEC_PH_VNU_WRITE_NEXT  = DEC_PH_OVERLAP_EMIT_WRITE;
 
   localparam int MSG_W = D + 1;
   localparam int MSG_MAG_LSB = 0;

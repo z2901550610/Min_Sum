@@ -19,6 +19,7 @@ module ram_i
   input  logic [LANE_COUNT_W-1:0] i_seed_lane_count,        // How many first-column "1"s in i_seed_entries are valid.
   output logic [I_ENTRY_W-1:0] o_rdata,
   output logic [LANE_COUNT_W-1:0] o_lane_count,            // How many "1"s in this variable column belong to this lane.
+  output logic [I_ENTRY_W-1:0] o_column_entries [0:W-1],   // Functional full-column view for the selected circulant bank.
   output logic [I_ENTRY_W-1:0] o_debug_entries [0:N0-1][0:W-1],
   output logic [LANE_COUNT_W-1:0] o_debug_lane_count [0:N0-1]
 );
@@ -28,10 +29,17 @@ module ram_i
 
   logic [I_ENTRY_W-1:0] mem [0:N0-1][0:W-1];
   logic [LANE_COUNT_W-1:0] count_mem [0:N0-1];
+  integer slot_idx_local;
 
   assign o_debug_entries = mem;
   assign o_debug_lane_count = count_mem;
-  assign o_lane_count = count_mem[i_circ_idx];
+
+  always_comb begin
+    o_lane_count = count_mem[i_circ_idx];
+    for (slot_idx_local = 0; slot_idx_local < W; slot_idx_local++) begin
+      o_column_entries[slot_idx_local] = mem[i_circ_idx][slot_idx_local];
+    end
+  end
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin

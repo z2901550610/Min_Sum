@@ -44,14 +44,17 @@ row_sign_xor ^ edge_u_sign ^ syndrome[row]
 ```
 
 At the end of each iteration, the residual syndrome is recomputed from the
-current error estimate. The decoder stops successfully when the residual is
+contents of `RAM C1`, which is the single source of truth for the exported
+error estimate `o_e`. The decoder stops successfully when the residual is
 zero, or fails after `I_MAX` iterations.
 
 ## Module Split
 
-- `decoder_ctrl` owns the decode-state machine, single-port RAM micro-stage
-  schedule, variable/edge counters, RAM-M ping-pong banks, RAM-I seed control,
-  and done/success bookkeeping.
+- `decoder_ctrl` owns the decode controller, producer/consumer column contexts,
+  RAM-M ping-pong banks, RAM-I seed control, column-buffer handoff events, and
+  done/success bookkeeping. The implementation uses a small set of macro
+  states plus counters/valid-style activity flags rather than encoding the
+  whole schedule as a long phase-only FSM.
 - `decoder_top` is the decoder core datapath and structural interconnect. It
   instantiates the numbered RAM blocks, `decoder_ctrl`, `h_shift`, CNU/VNU
   units, and message-codec adapters; top-level logic is limited to RAM port
@@ -66,17 +69,21 @@ zero, or fails after `I_MAX` iterations.
 - `decoder_top` instantiates the RAM blocks explicitly by paper-style names:
   `I0/I1`, `M0/M1/M2/M3`, `S0/S1`, `T0/T1`, `U0/U1`, and `C0/C1`.  The top
   does not use `generate`/`genvar` for RAM instantiation.
-- `decoder_ctrl` now follows the paper's Fig.8-style single-port schedule:
-  each iteration clears the next RAM-M pair, primes column 0 into RAM-T, then
-  runs a column-overlap pipeline where the producer side computes c2v for
-  column `j+1` while the consumer side accumulates and emits v2c for column
-  `j`, and finally drains the last consumer column before `ITER_CHECK`.
+- `decoder_ctrl` follows the paper's Fig.8-style single-port schedule: each
+  iteration clears the next RAM-M pair, primes column 0 into RAM-T, then runs
+  a column-overlap pipeline where the producer side computes c2v for column
+  `j+1` while the consumer side accumulates and emits v2c for column `j`, and
+  finally drains the last consumer column before `ITER_CHECK`. The exported
+  `phase` signal is now debug-only; datapath sequencing uses explicit control
+  pulses and column-buffer handoff events.
 - RAM-I is seeded with first-column lane lists. During decode, the active
   column's row/local-row/edge-slot metadata comes from the RAM-I lane lists;
   after the producer finishes a column, `h_shift` advances those packed lists
   by `+1 mod R` and writes them back for the next producer column. Consumer
   metadata is buffered separately so the producer can keep RAM-I one column
-  ahead. `H_BASE` is not used for normal CNU/VNU row-address scheduling.
+  ahead. `decoder_top` now consumes RAM-I through formal functional column-view
+  outputs instead of using RAM debug arrays in the functional path. `H_BASE`
+  is not used for normal CNU/VNU row-address scheduling.
 - `decoder_edge_meta` and `qc_column_preprocess` are kept under
   [`rtl/reference/`](/Users/z2901550610/Documents/Min_Sum/rtl/reference) as
   reference helpers. They are no longer part of the decoder core because RAM-I
@@ -87,9 +94,12 @@ zero, or fails after `I_MAX` iterations.
   [`rtl/generated/qc_first_columns.svh`](/Users/z2901550610/Documents/Min_Sum/rtl/generated/qc_first_columns.svh).
   `decoder_top` consumes only the generated tables; it no longer derives lane
   grouping from `H_BASE` internally.
-- Two-stage scaling, flexible message storage selection, and group-size
-  re-balancing from the paper are not implemented yet. The RTL keeps the
-  existing single-stage VNU scaling.
+- The current RTL keeps the practical whole-column RAM-I writeback/cache
+  scheme; it does not implement strict slot-by-slot RAM-I timing from the
+  paper.
+- Two-stage scaling, flexible message storage selection, the paper's wide-word
+  `RAM S` packing/shift-register scheme, and group-size re-balancing are not
+  implemented yet. The RTL keeps the existing single-stage VNU scaling.
 
 ## Verification
 

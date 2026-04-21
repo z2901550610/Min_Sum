@@ -20,6 +20,7 @@ module tb_ram_i;
   logic [I_ENTRY_W-1:0] dout;
   /* verilator lint_off UNUSEDSIGNAL */
   logic [LANE_COUNT_W-1:0] count;
+  logic [I_ENTRY_W-1:0] column_entries [0:W-1];
   /* verilator lint_on UNUSEDSIGNAL */
   logic [I_ENTRY_W-1:0] debug_entries [0:N0-1][0:W-1];
   logic [LANE_COUNT_W-1:0] debug_count [0:N0-1];
@@ -42,6 +43,7 @@ module tb_ram_i;
     .i_seed_lane_count(load_count),
     .o_rdata(dout),
     .o_lane_count(count),
+    .o_column_entries(column_entries),
     .o_debug_entries(debug_entries),
     .o_debug_lane_count(debug_count)
   );
@@ -79,8 +81,12 @@ module tb_ram_i;
     @(posedge clk);
     #1;
     load = 1'b0;
+    bank = load_bank;
+    #1;
     if (debug_count[load_bank] != LANE_COUNT_W'(2)) $fatal(1, "ram_i load count mismatch");
     if (debug_entries[load_bank][0] != {EDGE_W'(0), ROW_W'(1)}) $fatal(1, "ram_i load entry 0 mismatch");
+    if (count != debug_count[load_bank]) $fatal(1, "ram_i functional count view mismatch");
+    if (column_entries[1] != debug_entries[load_bank][1]) $fatal(1, "ram_i functional column view mismatch");
 
     load_count = LANE_COUNT_W'(1);
     load_entries[0] = {EDGE_W'(2), ROW_W'(0)};

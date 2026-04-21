@@ -21,9 +21,9 @@ module decoder_top
   /* verilator lint_off UNUSEDSIGNAL */
   logic [DEC_STATE_W-1:0] state;
   logic [DEC_PHASE_W-1:0] phase;
+  logic [EDGE_W-1:0] work_edge_slot;
   /* verilator lint_on UNUSEDSIGNAL */
   logic [VAR_W-1:0] work_var;
-  logic [EDGE_W-1:0] work_edge_slot;
   /* verilator lint_off UNUSEDSIGNAL */
   logic [VAR_W-1:0] c2v_var_idx;
   logic [VAR_W-1:0] v2c_var_idx;
@@ -35,6 +35,9 @@ module decoder_top
   logic c2v_phase_active;
   logic v2c_phase_active;
   logic c2v_v2c_overlap_seen;
+  logic capture_consumer_col_now;
+  logic capture_consumer_col_next;
+  logic promote_consumer_col_next;
   logic [N-1:0] error_estimate_bits;
   logic [N-1:0] error_estimate_c0_bits_unused;
   logic error_estimate_rd_unused;
@@ -45,7 +48,7 @@ module decoder_top
   logic [I_ENTRY_W-1:0] ram_i_debug_mem [0:N0-1][0:L-1][0:W-1];
   logic [LANE_COUNT_W-1:0] ram_i_debug_count [0:N0-1][0:L-1];
   logic [I_ENTRY_W-1:0] ram_i_rdata_unused [0:L-1];
-  logic [LANE_COUNT_W-1:0] ram_i_lane_count_unused [0:L-1];
+  logic [LANE_COUNT_W-1:0] ram_i_lane_count [0:L-1];
   /* verilator lint_on UNUSEDSIGNAL */
 
   logic comp_c2v_read_bank;
@@ -116,6 +119,8 @@ module decoder_top
   logic [I_ENTRY_W-1:0] ram_i1_debug_entries [0:N0-1][0:W-1];
   logic [LANE_COUNT_W-1:0] ram_i0_debug_count [0:N0-1];
   logic [LANE_COUNT_W-1:0] ram_i1_debug_count [0:N0-1];
+  logic [I_ENTRY_W-1:0] ram_i0_column_entries [0:W-1];
+  logic [I_ENTRY_W-1:0] ram_i1_column_entries [0:W-1];
   logic [I_ENTRY_W-1:0] ram_i0_write_entries [0:W-1];
   logic [I_ENTRY_W-1:0] ram_i1_write_entries [0:W-1];
   logic [LANE_COUNT_W-1:0] ram_i0_write_lane_count;
@@ -214,6 +219,7 @@ module decoder_top
   assign decode_success = (residual_syndrome_next == '0);
   assign finish_decode = decode_success || (next_iter_count_ext >= (ITER_W + 1)'(I_MAX));
   assign c2v_circ_idx = BANK_W'(int'(c2v_var_idx) / R);
+  assign o_e = error_estimate_bits;
 
   h_shift u_h_shift (
     .i_lane_entries(c2v_column_lane_entries),
@@ -243,11 +249,11 @@ module decoder_top
       end
     end
 
-    c2v_column_lane_count[0] = ram_i0_debug_count[c2v_circ_idx];
-    c2v_column_lane_count[1] = ram_i1_debug_count[c2v_circ_idx];
+    c2v_column_lane_count[0] = ram_i_lane_count[0];
+    c2v_column_lane_count[1] = ram_i_lane_count[1];
     for (slot_idx = 0; slot_idx < W; slot_idx++) begin
-      c2v_column_lane_entries[0][slot_idx] = ram_i0_debug_entries[c2v_circ_idx][slot_idx];
-      c2v_column_lane_entries[1][slot_idx] = ram_i1_debug_entries[c2v_circ_idx][slot_idx];
+      c2v_column_lane_entries[0][slot_idx] = ram_i0_column_entries[slot_idx];
+      c2v_column_lane_entries[1][slot_idx] = ram_i1_column_entries[slot_idx];
     end
 
     c2v_max_count = int'(c2v_column_lane_count[0]);
@@ -457,7 +463,7 @@ module decoder_top
     residual_col = 0;
     residual_row = '0;
     for (var_idx = 0; var_idx < N; var_idx++) begin
-      if (o_e[var_idx]) begin
+      if (error_estimate_bits[var_idx]) begin
         residual_bank = BANK_W'(var_idx / R);
         residual_col = var_idx % R;
         for (edge_idx = 0; edge_idx < W; edge_idx++) begin
@@ -473,7 +479,6 @@ module decoder_top
     integer lane_idx;
 
     if (!i_rst_n) begin
-      o_e <= '0;
       for (lane_idx = 0; lane_idx < L; lane_idx++) begin
         v2c_column_lane_count[lane_idx] <= '0;
         v2c_next_column_lane_count[lane_idx] <= '0;
@@ -504,7 +509,6 @@ module decoder_top
       end
     end else begin
       if (init_clear) begin
-        o_e <= '0;
         for (lane_idx = 0; lane_idx < L; lane_idx++) begin
           v2c_column_lane_count[lane_idx] <= '0;
           v2c_next_column_lane_count[lane_idx] <= '0;
@@ -540,25 +544,25 @@ module decoder_top
         c2v_latched_m_pair <= comp_c2v_read_bank;
       end
 
-      if (c2v_write_t && c2v_column_slot_last) begin
-        if (phase == DEC_PH_PRIME_WRITE || phase == DEC_PH_PROD_FINISH_WRITE) begin
-          for (lane_idx = 0; lane_idx < L; lane_idx++) begin
-            v2c_column_lane_count[lane_idx] <= c2v_column_lane_count[lane_idx];
-            for (idx = 0; idx < W; idx++) begin
-              v2c_column_lane_entries[lane_idx][idx] <= c2v_column_lane_entries[lane_idx][idx];
-            end
-          end
-        end else begin
-          for (lane_idx = 0; lane_idx < L; lane_idx++) begin
-            v2c_next_column_lane_count[lane_idx] <= c2v_column_lane_count[lane_idx];
-            for (idx = 0; idx < W; idx++) begin
-              v2c_next_column_lane_entries[lane_idx][idx] <= c2v_column_lane_entries[lane_idx][idx];
-            end
+      if (capture_consumer_col_now) begin
+        for (lane_idx = 0; lane_idx < L; lane_idx++) begin
+          v2c_column_lane_count[lane_idx] <= c2v_column_lane_count[lane_idx];
+          for (idx = 0; idx < W; idx++) begin
+            v2c_column_lane_entries[lane_idx][idx] <= c2v_column_lane_entries[lane_idx][idx];
           end
         end
       end
 
-      if ((phase == DEC_PH_OVERLAP_EMIT_WRITE) && v2c_column_slot_last && (v2c_var_idx != VAR_W'(N - 1)) && !c2v_phase_active) begin
+      if (capture_consumer_col_next) begin
+        for (lane_idx = 0; lane_idx < L; lane_idx++) begin
+          v2c_next_column_lane_count[lane_idx] <= c2v_column_lane_count[lane_idx];
+          for (idx = 0; idx < W; idx++) begin
+            v2c_next_column_lane_entries[lane_idx][idx] <= c2v_column_lane_entries[lane_idx][idx];
+          end
+        end
+      end
+
+      if (promote_consumer_col_next) begin
         for (lane_idx = 0; lane_idx < L; lane_idx++) begin
           v2c_column_lane_count[lane_idx] <= v2c_next_column_lane_count[lane_idx];
           for (idx = 0; idx < W; idx++) begin
@@ -598,10 +602,6 @@ module decoder_top
             u_next_msg_reg[lane_idx] <= vnu_v2c_msg[lane_idx];
           end
         end
-      end
-
-      if (vnu_prep_write) begin
-        o_e[v2c_var_idx] <= vnu_bit_out;
       end
 
       if (iter_check) begin
@@ -770,6 +770,9 @@ module decoder_top
     .o_vnu_cnu_a(vnu_cnu_a),
     .o_vnu_write_next(vnu_write_next),
     .o_iter_check(iter_check),
+    .o_capture_consumer_col_now(capture_consumer_col_now),
+    .o_capture_consumer_col_next(capture_consumer_col_next),
+    .o_promote_consumer_col_next(promote_consumer_col_next),
     .o_c2v_pipe_valid(c2v_phase_active),
     .o_v2c_pipe_valid(v2c_phase_active),
     .o_c2v_v2c_overlap_seen(c2v_v2c_overlap_seen),
@@ -794,7 +797,8 @@ module decoder_top
     .i_seed_entries(ram_i0_write_entries),
     .i_seed_lane_count(ram_i0_write_lane_count),
     .o_rdata(ram_i_rdata_unused[0]),
-    .o_lane_count(ram_i_lane_count_unused[0]),
+    .o_lane_count(ram_i_lane_count[0]),
+    .o_column_entries(ram_i0_column_entries),
     .o_debug_entries(ram_i0_debug_entries),
     .o_debug_lane_count(ram_i0_debug_count)
   );
@@ -815,7 +819,8 @@ module decoder_top
     .i_seed_entries(ram_i1_write_entries),
     .i_seed_lane_count(ram_i1_write_lane_count),
     .o_rdata(ram_i_rdata_unused[1]),
-    .o_lane_count(ram_i_lane_count_unused[1]),
+    .o_lane_count(ram_i_lane_count[1]),
+    .o_column_entries(ram_i1_column_entries),
     .o_debug_entries(ram_i1_debug_entries),
     .o_debug_lane_count(ram_i1_debug_count)
   );

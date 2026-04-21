@@ -15,6 +15,7 @@ module tb_decoder_top;
   logic success;
   logic [N-1:0] e_out;
   logic [$clog2(I_MAX + 1)-1:0] iter_count;
+  logic checks_active;
   integer bank_idx;
   integer lane_idx;
   integer idx;
@@ -37,11 +38,13 @@ module tb_decoder_top;
   task automatic apply_reset;
     begin
       rst_n = 1'b0;
+      checks_active = 1'b0;
       start = 1'b0;
       syndrome_in = '0;
       repeat (2) @(posedge clk);
       rst_n = 1'b1;
       @(posedge clk);
+      checks_active = 1'b1;
     end
   endtask
 
@@ -140,6 +143,12 @@ module tb_decoder_top;
     end
   endfunction
 
+  always @(posedge clk) begin
+    if (checks_active && (dut.error_estimate_bits !== e_out)) begin
+      $fatal(1, "RAM C1 and o_e diverged: ram=%h out=%h", dut.error_estimate_bits, e_out);
+    end
+  end
+
   initial begin
     int case1_hist [0:I_MAX-1];
 
@@ -157,7 +166,7 @@ module tb_decoder_top;
     apply_reset();
     start_case(CASE1_SYNDROME);
 
-    wait (dut.state == DEC_INIT_ROW_ACCUM && dut.c2v_var_idx == 0 && dut.col_slot_idx == 0);
+    wait (dut.init_m_read && dut.c2v_var_idx == 0 && dut.col_slot_idx == 0);
     #1;
     for (bank_idx = 0; bank_idx < N0; bank_idx++) begin
       for (lane_idx = 0; lane_idx < L; lane_idx++) begin
@@ -167,7 +176,7 @@ module tb_decoder_top;
       end
     end
 
-    wait (dut.state == DEC_INIT_ROW_ACCUM && dut.c2v_var_idx == 1 && dut.col_slot_idx == 0 && dut.init_m_read);
+    wait (dut.init_m_read && dut.c2v_var_idx == 1 && dut.col_slot_idx == 0);
     #1;
     if (dut.ram_i_debug_count[0][0] != LANE_COUNT_W'(2)) $fatal(1, "RAM I shifted lane0 count mismatch for column 1");
     if (dut.ram_i_debug_count[0][1] != LANE_COUNT_W'(1)) $fatal(1, "RAM I shifted lane1 count mismatch for column 1");
@@ -175,7 +184,7 @@ module tb_decoder_top;
     if (dut.c2v_lane_edge_slot[0] != EDGE_W'(0) || dut.c2v_lane_row_local[0] != ROW_W'(1)) $fatal(1, "shifted lane0 entry mismatch for column 1");
     if (dut.c2v_lane_edge_slot[1] != EDGE_W'(2) || dut.c2v_lane_row_local[1] != ROW_W'(0)) $fatal(1, "shifted lane1 entry mismatch for column 1");
 
-    wait (dut.state == DEC_ITER_C2V_PRIME && dut.c2v_var_idx == 0 && dut.col_slot_idx == 0);
+    wait (dut.c2v_phase_active && !dut.v2c_phase_active && dut.c2v_var_idx == 0 && dut.col_slot_idx == 0);
     #1;
     if (dut.comp_c2v_read_bank === dut.comp_c2v_write_bank) $fatal(1, "RAM M ping-pong banks should differ");
     for (idx = 0; idx < R; idx++) begin
@@ -185,7 +194,7 @@ module tb_decoder_top;
       if (int'(ram_m_debug_read(dut.comp_c2v_read_bank, row_lane(idx), row_local(idx))[COMP_C2V_SIGN_XOR_BIT]) != CASE1_FIRST_ROW_SIGN_XOR[idx]) $fatal(1, "CASE1 row sign_xor[%0d] mismatch", idx);
     end
 
-    wait (dut.state == DEC_ITER_OVERLAP && dut.c2v_v2c_overlap_seen === 1'b1);
+    wait (dut.c2v_phase_active && dut.v2c_phase_active && dut.c2v_v2c_overlap_seen === 1'b1);
     #1;
     if (!(dut.c2v_phase_active && dut.v2c_phase_active)) $fatal(1, "pipeline did not expose simultaneous CNU_B and VNU/CNU_A work");
     if (dut.c2v_var_idx != dut.v2c_var_idx + VAR_W'(1)) $fatal(1, "overlap should keep producer exactly one column ahead");
@@ -194,8 +203,15 @@ module tb_decoder_top;
     #1;
     if (!(dut.vnu_accum_valid[0] && dut.vnu_accum_valid[1])) $fatal(1, "VNU did not consume both RAM-I lanes for shifted column 1");
 
+    wait (dut.v2c_phase_active && !dut.c2v_phase_active && dut.v2c_var_idx == VAR_W'(N - 1));
+    #1;
+    if (dut.state != DEC_ITER_V2C_DRAIN) $fatal(1, "last consumer column should drain without producer activity");
+
     wait (iter_count == 1);
     #1;
+    if (dut.syndrome_hist[0] != dut.residual_syndrome_next) begin
+      $fatal(1, "residual syndrome history mismatch after first iteration");
+    end
     flat_idx = 0;
     for (idx = 0; idx < N; idx++) begin
       int edge_idx;
@@ -222,6 +238,7 @@ module tb_decoder_top;
     end
 
     if (dut.comp_c2v_read_bank === dut.comp_c2v_write_bank) $fatal(1, "RAM M banks collapsed before iteration swap");
+    if (dut.error_estimate_bits !== e_out) $fatal(1, "RAM C1 mirror mismatch at completion");
 
     wait (done === 1'b1);
     @(posedge clk);
