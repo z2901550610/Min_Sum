@@ -66,13 +66,17 @@ zero, or fails after `I_MAX` iterations.
 - `decoder_top` instantiates the RAM blocks explicitly by paper-style names:
   `I0/I1`, `M0/M1/M2/M3`, `S0/S1`, `T0/T1`, `U0/U1`, and `C0/C1`.  The top
   does not use `generate`/`genvar` for RAM instantiation.
-- The previous top-level scheduler and logical RAM mirrors have been replaced
-  by explicit read/compute/write micro-stages in `decoder_ctrl`.
+- `decoder_ctrl` now follows the paper's Fig.8-style single-port schedule:
+  each iteration clears the next RAM-M pair, primes column 0 into RAM-T, then
+  runs a column-overlap pipeline where the producer side computes c2v for
+  column `j+1` while the consumer side accumulates and emits v2c for column
+  `j`, and finally drains the last consumer column before `ITER_CHECK`.
 - RAM-I is seeded with first-column lane lists. During decode, the active
   column's row/local-row/edge-slot metadata comes from the RAM-I lane lists;
-  after a column is processed, `h_shift` advances those packed lists by
-  `+1 mod R` and writes them back for the next circulant column. `H_BASE` is
-  not used for normal CNU/VNU row-address scheduling.
+  after the producer finishes a column, `h_shift` advances those packed lists
+  by `+1 mod R` and writes them back for the next producer column. Consumer
+  metadata is buffered separately so the producer can keep RAM-I one column
+  ahead. `H_BASE` is not used for normal CNU/VNU row-address scheduling.
 - `decoder_edge_meta` and `qc_column_preprocess` are kept under
   [`rtl/reference/`](/Users/z2901550610/Documents/Min_Sum/rtl/reference) as
   reference helpers. They are no longer part of the decoder core because RAM-I

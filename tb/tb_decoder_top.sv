@@ -171,9 +171,9 @@ module tb_decoder_top;
     #1;
     if (dut.ram_i_debug_count[0][0] != LANE_COUNT_W'(2)) $fatal(1, "RAM I shifted lane0 count mismatch for column 1");
     if (dut.ram_i_debug_count[0][1] != LANE_COUNT_W'(1)) $fatal(1, "RAM I shifted lane1 count mismatch for column 1");
-    if (!(dut.lane_valid[0] && dut.lane_valid[1])) $fatal(1, "shifted column 1 should expose two active lanes");
-    if (dut.lane_edge_slot[0] != EDGE_W'(0) || dut.lane_row_local[0] != ROW_W'(1)) $fatal(1, "shifted lane0 entry mismatch for column 1");
-    if (dut.lane_edge_slot[1] != EDGE_W'(2) || dut.lane_row_local[1] != ROW_W'(0)) $fatal(1, "shifted lane1 entry mismatch for column 1");
+    if (!(dut.c2v_lane_valid[0] && dut.c2v_lane_valid[1])) $fatal(1, "shifted column 1 should expose two active lanes");
+    if (dut.c2v_lane_edge_slot[0] != EDGE_W'(0) || dut.c2v_lane_row_local[0] != ROW_W'(1)) $fatal(1, "shifted lane0 entry mismatch for column 1");
+    if (dut.c2v_lane_edge_slot[1] != EDGE_W'(2) || dut.c2v_lane_row_local[1] != ROW_W'(0)) $fatal(1, "shifted lane1 entry mismatch for column 1");
 
     wait (dut.state == DEC_ITER_C2V_PRIME && dut.c2v_var_idx == 0 && dut.col_slot_idx == 0);
     #1;
@@ -188,12 +188,13 @@ module tb_decoder_top;
     wait (dut.state == DEC_ITER_OVERLAP && dut.c2v_v2c_overlap_seen === 1'b1);
     #1;
     if (!(dut.c2v_phase_active && dut.v2c_phase_active)) $fatal(1, "pipeline did not expose simultaneous CNU_B and VNU/CNU_A work");
+    if (dut.c2v_var_idx != dut.v2c_var_idx + VAR_W'(1)) $fatal(1, "overlap should keep producer exactly one column ahead");
 
     wait (dut.vnu_accum_t && dut.v2c_var_idx == 1 && dut.col_slot_idx == 0);
     #1;
     if (!(dut.vnu_accum_valid[0] && dut.vnu_accum_valid[1])) $fatal(1, "VNU did not consume both RAM-I lanes for shifted column 1");
 
-    wait (dut.state == DEC_ITER_CHECK && iter_count == 1);
+    wait (iter_count == 1);
     #1;
     flat_idx = 0;
     for (idx = 0; idx < N; idx++) begin
@@ -208,8 +209,14 @@ module tb_decoder_top;
     for (idx = 0; idx < N; idx++) begin
       int edge_idx;
       for (edge_idx = 0; edge_idx < W; edge_idx++) begin
-        if (int'(ram_u_debug_read(idx, edge_idx)[MSG_SIGN_BIT]) != CASE1_FIRST_U_SIGN[flat_idx]) $fatal(1, "CASE1 u sign[%0d] mismatch", flat_idx);
-        if (int'(ram_u_debug_read(idx, edge_idx)[MSG_MAG_LSB +: D]) != CASE1_FIRST_U_MAG[flat_idx]) $fatal(1, "CASE1 u mag[%0d] mismatch", flat_idx);
+        if (int'(ram_u_debug_read(idx, edge_idx)[MSG_SIGN_BIT]) != CASE1_FIRST_U_SIGN[flat_idx]) begin
+          $fatal(1, "CASE1 u sign[%0d] mismatch: got %0d exp %0d", flat_idx,
+                 int'(ram_u_debug_read(idx, edge_idx)[MSG_SIGN_BIT]), CASE1_FIRST_U_SIGN[flat_idx]);
+        end
+        if (int'(ram_u_debug_read(idx, edge_idx)[MSG_MAG_LSB +: D]) != CASE1_FIRST_U_MAG[flat_idx]) begin
+          $fatal(1, "CASE1 u mag[%0d] mismatch: got %0d exp %0d", flat_idx,
+                 int'(ram_u_debug_read(idx, edge_idx)[MSG_MAG_LSB +: D]), CASE1_FIRST_U_MAG[flat_idx]);
+        end
         flat_idx += 1;
       end
     end
