@@ -61,7 +61,9 @@ zero, or fails after `I_MAX` iterations.
   selection, RAM-I row-group entry handling, data latching, and residual-syndrome
   recomputation.
 - `vnu` now consumes c2v in 2's-complement and generates unsaturated 2's-complement
-  v2c. Sign-magnitude conversion lives in the external `msg_codec` adapters.
+  v2c. Sign-magnitude conversion happens at the VNU input/output boundaries in
+  the external `msg_codec` adapters; RAM-T and the VNU scaling datapath stay in
+  2's-complement.
 - `ram_i`, `ram_m`, `ram_s`, `ram_t`, `ram_u`, and `ram_c` are paper-style
   single-port RAM primitives with synchronous read data.  One RTL file
   represents one numbered RAM block rather than a multi-bank wrapper with
@@ -82,8 +84,10 @@ zero, or fails after `I_MAX` iterations.
   lists by `+1 mod R` and writes them back for the next c2v column. v2c
   metadata is buffered separately so the c2v side can keep RAM-I one column
   ahead. `decoder_top` now consumes RAM-I through formal functional column-view
-  outputs instead of using RAM debug arrays in the functional path. `H_BASE`
-  is not used for normal CNU/VNU row-address scheduling.
+  outputs instead of using RAM debug arrays in the functional path. Project-wide
+  RTL naming for indexes, rows, entries, lists, and counts is defined in
+  [`docs/naming_conventions.md`](/Users/z2901550610/Documents/Min_Sum/docs/naming_conventions.md).
+  `H_BASE` is not used for normal CNU/VNU row-address scheduling.
 - `decoder_edge_meta` and `qc_column_preprocess` are kept under
   [`rtl/reference/`](/Users/z2901550610/Documents/Min_Sum/rtl/reference) as
   reference helpers. They are no longer part of the decoder core because RAM-I

@@ -13,10 +13,13 @@ module tb_vnu;
   logic signed [MSG_W-1:0] c2v_tc0;
   logic c2v_tc_valid1;
   logic signed [MSG_W-1:0] c2v_tc1;
+  /* verilator lint_off UNUSEDSIGNAL */
+  logic [MSG_W-1:0] c2v_to_ram_t0;
+  logic [MSG_W-1:0] c2v_to_ram_t1;
+  /* verilator lint_on UNUSEDSIGNAL */
   logic app_valid;
   logic signed [APP_W-1:0] app;
   logic bit_decision;
-  logic v2c_en;
   logic prev_c2v_tc_valid0;
   logic signed [MSG_W-1:0] prev_c2v_tc0;
   logic prev_c2v_tc_valid1;
@@ -41,6 +44,20 @@ module tb_vnu;
     end
   endfunction
 
+  function automatic int alpha_scale_ref(input int value);
+    int abs_value;
+    int scaled_abs;
+    begin
+      abs_value = (value < 0) ? -value : value;
+      scaled_abs = 0;
+      scaled_abs += abs_value << (ALPHA_FRAC_W - ALPHA_SHIFT_0);
+      scaled_abs += abs_value << (ALPHA_FRAC_W - ALPHA_SHIFT_1);
+      scaled_abs += 1 << (ALPHA_FRAC_W - 1);
+      scaled_abs = scaled_abs >> ALPHA_FRAC_W;
+      alpha_scale_ref = (value < 0) ? -scaled_abs : scaled_abs;
+    end
+  endfunction
+
   vnu dut (
     .i_clk(clk),
     .i_rst_n(rst_n),
@@ -48,22 +65,23 @@ module tb_vnu;
     .i_col_start(col_start),
     .i_col_end(col_end),
     .i_initial_llr(initial_llr),
-    .i_c2v_tc_valid0(c2v_tc_valid0),
-    .i_c2v_tc0(c2v_tc0),
-    .i_c2v_tc_valid1(c2v_tc_valid1),
-    .i_c2v_tc1(c2v_tc1),
+    .i_c2v0_valid(c2v_tc_valid0),
+    .i_c2v0(c2v_tc0),
+    .i_c2v1_valid(c2v_tc_valid1),
+    .i_c2v1(c2v_tc1),
+    .o_c2v_to_ram_t0(c2v_to_ram_t0),
+    .o_c2v_to_ram_t1(c2v_to_ram_t1),
     .o_app_valid(app_valid),
     .o_app(app),
     .o_bit_decision(bit_decision),
-    .i_v2c_en(v2c_en),
-    .i_prev_c2v_tc_valid0(prev_c2v_tc_valid0),
-    .i_prev_c2v_tc0(prev_c2v_tc0),
-    .i_prev_c2v_tc_valid1(prev_c2v_tc_valid1),
-    .i_prev_c2v_tc1(prev_c2v_tc1),
-    .o_v2c_tc_valid0(v2c_tc_valid0),
-    .o_v2c_tc0(v2c_tc0),
-    .o_v2c_tc_valid1(v2c_tc_valid1),
-    .o_v2c_tc1(v2c_tc1)
+    .i_c2v_from_ram_t0_valid(prev_c2v_tc_valid0),
+    .i_c2v_from_ram_t0(prev_c2v_tc0),
+    .i_c2v_from_ram_t1_valid(prev_c2v_tc_valid1),
+    .i_c2v_from_ram_t1(prev_c2v_tc1),
+    .o_v2c_valid0(v2c_tc_valid0),
+    .o_v2c0(v2c_tc0),
+    .o_v2c_valid1(v2c_tc_valid1),
+    .o_v2c1(v2c_tc1)
   );
 
   initial clk = 1'b0;
@@ -77,7 +95,6 @@ module tb_vnu;
       c2v_tc_valid1 = 1'b0;
       c2v_tc0 = '0;
       c2v_tc1 = '0;
-      v2c_en = 1'b0;
       prev_c2v_tc_valid0 = 1'b0;
       prev_c2v_tc_valid1 = 1'b0;
       prev_c2v_tc0 = '0;
@@ -104,6 +121,44 @@ module tb_vnu;
     end
   endtask
 
+  task automatic check_scale_pair(
+    input logic signed [MSG_W-1:0] msg0_i,
+    input logic valid1_i,
+    input logic signed [MSG_W-1:0] msg1_i
+  );
+    int sum_i;
+    int expected_scale;
+    begin
+      idle_inputs();
+      col_start = 1'b1;
+      c2v_tc_valid0 = 1'b1;
+      c2v_tc0 = msg0_i;
+      c2v_tc_valid1 = valid1_i;
+      c2v_tc1 = msg1_i;
+      #1;
+      sum_i = int'($signed(msg0_i)) + (valid1_i ? int'($signed(msg1_i)) : 0);
+      expected_scale = alpha_scale_ref(sum_i);
+      if (int'($signed(dut.scaled_sum)) != expected_scale) begin
+        $fatal(1, "scale mismatch for sum %0d: got %0d exp %0d",
+               sum_i, $signed(dut.scaled_sum), expected_scale);
+      end
+      idle_inputs();
+    end
+  endtask
+
+  task automatic run_scale_checks;
+    begin
+      check_scale_pair(msg_tc(1'b0, D'(15)), 1'b0, '0);
+      check_scale_pair(msg_tc(1'b1, D'(15)), 1'b0, '0);
+      check_scale_pair(msg_tc(1'b0, D'(15)), 1'b1, msg_tc(1'b0, D'(15)));
+      check_scale_pair(msg_tc(1'b1, D'(15)), 1'b1, msg_tc(1'b1, D'(15)));
+      check_scale_pair(msg_tc(1'b0, D'(15)), 1'b1, msg_tc(1'b0, D'(1)));
+      check_scale_pair(msg_tc(1'b1, D'(15)), 1'b1, msg_tc(1'b1, D'(1)));
+      check_scale_pair(msg_tc(1'b0, D'(9)), 1'b1, msg_tc(1'b0, D'(8)));
+      check_scale_pair(msg_tc(1'b1, D'(9)), 1'b1, msg_tc(1'b1, D'(8)));
+    end
+  endtask
+
   task automatic run_case0;
     logic signed [VNU_TC_W-1:0] expected_partial_sum;
     begin
@@ -119,7 +174,6 @@ module tb_vnu;
       if (bit_decision !== 0) $fatal(1, "case0 bit decision mismatch");
 
       idle_inputs();
-      v2c_en = 1'b1;
       prev_c2v_tc_valid0 = 1'b1;
       prev_c2v_tc_valid1 = 1'b1;
       prev_c2v_tc0 = msg_tc(1'b0, D'(15));
@@ -149,7 +203,6 @@ module tb_vnu;
       if (bit_decision !== 0) $fatal(1, "case1 bit decision mismatch");
 
       idle_inputs();
-      v2c_en = 1'b1;
       prev_c2v_tc_valid0 = 1'b1;
       prev_c2v_tc_valid1 = 1'b1;
       prev_c2v_tc0 = msg_tc(1'b1, D'(15));
@@ -175,7 +228,6 @@ module tb_vnu;
       c2v_tc0 = msg_tc(1'b0, D'(15));
       c2v_tc_valid1 = 1'b1;
       c2v_tc1 = msg_tc(1'b0, D'(15));
-      v2c_en = 1'b1;
       prev_c2v_tc_valid0 = 1'b1;
       prev_c2v_tc0 = msg_tc(1'b0, D'(15));
       prev_c2v_tc_valid1 = 1'b0;
@@ -204,6 +256,7 @@ module tb_vnu;
     rst_n = 1'b1;
     @(posedge clk);
 
+    run_scale_checks();
     run_case0();
 
     clear_en = 1'b1;

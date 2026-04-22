@@ -43,8 +43,8 @@ module decoder_top
   logic [R-1:0] syndrome_hist [0:I_MAX-1];
   logic [ROW_GROUP_COUNT_W-1:0] ram_i_debug_count [0:N0-1][0:L-1];
   /* verilator lint_on UNUSEDSIGNAL */
-  logic [I_ENTRY_W-1:0] ram_i_rdata_unused [0:L-1];
-  logic [ROW_GROUP_COUNT_W-1:0] ram_i_row_group_count [0:L-1];
+  logic [I_ENTRY_W-1:0] ram_i_entry_rdata_unused [0:L-1];
+  logic [ROW_GROUP_COUNT_W-1:0] ram_i_count [0:L-1];
 
   logic m_read_pair;
   logic m_write_pair;
@@ -120,14 +120,14 @@ module decoder_top
   /* verilator lint_on UNUSEDSIGNAL */
   logic [ROW_GROUP_COUNT_W-1:0] ram_i0_debug_count [0:N0-1];
   logic [ROW_GROUP_COUNT_W-1:0] ram_i1_debug_count [0:N0-1];
-  logic [I_ENTRY_W-1:0] ram_i0_column_entries [0:W-1];
-  logic [I_ENTRY_W-1:0] ram_i1_column_entries [0:W-1];
-  logic [I_ENTRY_W-1:0] ram_i0_column_entries_wdata [0:W-1];
-  logic [I_ENTRY_W-1:0] ram_i1_column_entries_wdata [0:W-1];
-  logic [ROW_GROUP_COUNT_W-1:0] ram_i0_column_row_group_count_wdata;
-  logic [ROW_GROUP_COUNT_W-1:0] ram_i1_column_row_group_count_wdata;
-  logic [H_BLOCK_W-1:0] ram_i_column_replace_h_block_idx;
-  logic ram_i_column_replace_en;
+  logic [I_ENTRY_W-1:0] ram_i0_list_entries [0:W-1];
+  logic [I_ENTRY_W-1:0] ram_i1_list_entries [0:W-1];
+  logic [I_ENTRY_W-1:0] ram_i0_list_load_entries [0:W-1];
+  logic [I_ENTRY_W-1:0] ram_i1_list_load_entries [0:W-1];
+  logic [ROW_GROUP_COUNT_W-1:0] ram_i0_list_load_count;
+  logic [ROW_GROUP_COUNT_W-1:0] ram_i1_list_load_count;
+  logic [H_BLOCK_W-1:0] ram_i_list_load_hblk_idx;
+  logic ram_i_list_load_en;
 
   // Paper-style RAM port steering. Each block is single-port, so the top
   // centralizes all enables, addresses, and write data here.
@@ -202,10 +202,12 @@ module decoder_top
   logic vnu_col_start;
   logic vnu_col_end;
   logic vnu_accum_valid [0:L-1];
-  logic vnu_v2c_en;
   logic vnu_prev_c2v_valid [0:L-1];
   logic signed [MSG_W-1:0] vnu_prev_c2v [0:L-1];
   logic vnu_bit_out;
+  /* verilator lint_off UNUSEDSIGNAL */
+  logic [MSG_W-1:0] vnu_c2v_to_ram_t_unused [0:L-1];
+  /* verilator lint_on UNUSEDSIGNAL */
   logic vnu_v2c_tc_valid [0:L-1];
   logic signed [VNU_TC_W-1:0] vnu_v2c_tc [0:L-1];
   logic vnu_v2c_msg_valid [0:L-1];
@@ -242,16 +244,15 @@ module decoder_top
     end
   end
 
-  // Present the selected c2v column from the two physical RAM-I row_group
-  // blocks as one logical column.
+  // 将两个 RAM-I 实例的 group-local list/count 合成 c2v 侧当前列视图。
   always_comb begin
-    integer row_group_pos_idx;
+    integer entry_idx_local;
 
-    c2v_column_row_group_count[0] = ram_i_row_group_count[0];
-    c2v_column_row_group_count[1] = ram_i_row_group_count[1];
-    for (row_group_pos_idx = 0; row_group_pos_idx < W; row_group_pos_idx++) begin
-      c2v_column_row_group_entries[0][row_group_pos_idx] = ram_i0_column_entries[row_group_pos_idx];
-      c2v_column_row_group_entries[1][row_group_pos_idx] = ram_i1_column_entries[row_group_pos_idx];
+    c2v_column_row_group_count[0] = ram_i_count[0];
+    c2v_column_row_group_count[1] = ram_i_count[1];
+    for (entry_idx_local = 0; entry_idx_local < W; entry_idx_local++) begin
+      c2v_column_row_group_entries[0][entry_idx_local] = ram_i0_list_entries[entry_idx_local];
+      c2v_column_row_group_entries[1][entry_idx_local] = ram_i1_list_entries[entry_idx_local];
     end
   end
 
@@ -308,25 +309,24 @@ module decoder_top
     end
   end
 
-  // Select the whole-column RAM-I replacement data. The same path seeds the
-  // first column and writes the shifted metadata for later columns.
+  // 选择 RAM-I list_load 数据；同一路径用于 seed 第一列和写入 shift 后的下一列。
   always_comb begin
-    integer row_group_pos_idx;
+    integer entry_idx_local;
 
     shift_ram_i = (init_m_write || c2v_write_t) && c2v_row_group_pos_last;
-    ram_i_column_replace_en = seed_active || shift_ram_i;
-    ram_i_column_replace_h_block_idx = seed_active ? seed_h_block_idx : c2v_h_block_idx;
-    for (row_group_pos_idx = 0; row_group_pos_idx < W; row_group_pos_idx++) begin
-      ram_i0_column_entries_wdata[row_group_pos_idx] = seed_active ?
-        QC_FIRST_COL_ROW_GROUP_ENTRY[seed_h_block_idx][0][row_group_pos_idx] :
-        shifted_row_group_entries[0][row_group_pos_idx];
-      ram_i1_column_entries_wdata[row_group_pos_idx] = seed_active ?
-        QC_FIRST_COL_ROW_GROUP_ENTRY[seed_h_block_idx][1][row_group_pos_idx] :
-        shifted_row_group_entries[1][row_group_pos_idx];
+    ram_i_list_load_en = seed_active || shift_ram_i;
+    ram_i_list_load_hblk_idx = seed_active ? seed_h_block_idx : c2v_h_block_idx;
+    for (entry_idx_local = 0; entry_idx_local < W; entry_idx_local++) begin
+      ram_i0_list_load_entries[entry_idx_local] = seed_active ?
+        QC_FIRST_COL_ROW_GROUP_ENTRY[seed_h_block_idx][0][entry_idx_local] :
+        shifted_row_group_entries[0][entry_idx_local];
+      ram_i1_list_load_entries[entry_idx_local] = seed_active ?
+        QC_FIRST_COL_ROW_GROUP_ENTRY[seed_h_block_idx][1][entry_idx_local] :
+        shifted_row_group_entries[1][entry_idx_local];
     end
-    ram_i0_column_row_group_count_wdata = seed_active ?
+    ram_i0_list_load_count = seed_active ?
       QC_FIRST_COL_ROW_GROUP_COUNT[seed_h_block_idx][0] : shifted_row_group_count[0];
-    ram_i1_column_row_group_count_wdata = seed_active ?
+    ram_i1_list_load_count = seed_active ?
       QC_FIRST_COL_ROW_GROUP_COUNT[seed_h_block_idx][1] : shifted_row_group_count[1];
   end
 
@@ -736,7 +736,6 @@ module decoder_top
   assign vnu_col_end = vnu_accum_t && v2c_row_group_pos_last;
   assign vnu_accum_valid[0] = vnu_accum_t && v2c_t_latched_row_group_valid[0];
   assign vnu_accum_valid[1] = vnu_accum_t && v2c_t_latched_row_group_valid[1];
-  assign vnu_v2c_en = vnu_cnu_a;
   assign vnu_prev_c2v_valid[0] = vnu_cnu_a && v2c_m_latched_row_group_valid[0];
   assign vnu_prev_c2v_valid[1] = vnu_cnu_a && v2c_m_latched_row_group_valid[1];
   assign vnu_prev_c2v[0] = c2v_column_cache_tc[v2c_m_latched_edge_slot[0]];
@@ -749,22 +748,23 @@ module decoder_top
     .i_col_start(vnu_col_start),
     .i_col_end(vnu_col_end),
     .i_initial_llr($signed(APP_W'(C_VAL))),
-    .i_c2v_tc_valid0(vnu_accum_valid[0]),
-    .i_c2v_tc0($signed(t_rdata[0])),
-    .i_c2v_tc_valid1(vnu_accum_valid[1]),
-    .i_c2v_tc1($signed(t_rdata[1])),
+    .i_c2v0_valid(vnu_accum_valid[0]),
+    .i_c2v0($signed(t_rdata[0])),
+    .i_c2v1_valid(vnu_accum_valid[1]),
+    .i_c2v1($signed(t_rdata[1])),
+    .o_c2v_to_ram_t0(vnu_c2v_to_ram_t_unused[0]),
+    .o_c2v_to_ram_t1(vnu_c2v_to_ram_t_unused[1]),
     .o_app_valid(vnu_app_valid_unused),
     .o_app(vnu_app_unused),
     .o_bit_decision(vnu_bit_out),
-    .i_v2c_en(vnu_v2c_en),
-    .i_prev_c2v_tc_valid0(vnu_prev_c2v_valid[0]),
-    .i_prev_c2v_tc0(vnu_prev_c2v[0]),
-    .i_prev_c2v_tc_valid1(vnu_prev_c2v_valid[1]),
-    .i_prev_c2v_tc1(vnu_prev_c2v[1]),
-    .o_v2c_tc_valid0(vnu_v2c_tc_valid[0]),
-    .o_v2c_tc0(vnu_v2c_tc[0]),
-    .o_v2c_tc_valid1(vnu_v2c_tc_valid[1]),
-    .o_v2c_tc1(vnu_v2c_tc[1])
+    .i_c2v_from_ram_t0_valid(vnu_prev_c2v_valid[0]),
+    .i_c2v_from_ram_t0(vnu_prev_c2v[0]),
+    .i_c2v_from_ram_t1_valid(vnu_prev_c2v_valid[1]),
+    .i_c2v_from_ram_t1(vnu_prev_c2v[1]),
+    .o_v2c_valid0(vnu_v2c_tc_valid[0]),
+    .o_v2c0(vnu_v2c_tc[0]),
+    .o_v2c_valid1(vnu_v2c_tc_valid[1]),
+    .o_v2c1(vnu_v2c_tc[1])
   );
 
   msg_tc_to_signmag_sat #(
@@ -837,20 +837,20 @@ module decoder_top
     .i_clear(1'b0),
     .i_en(1'b0),
     .i_we(1'b0),
-    .i_h_block_idx(c2v_h_block_idx),
-    .i_row_group_pos_addr('0),
-    .i_wdata('0),
-    .i_row_group_count_we(1'b0),
-    .i_row_group_count_wdata('0),
-    .i_column_replace_en(ram_i_column_replace_en),
-    .i_column_replace_h_block_idx(ram_i_column_replace_h_block_idx),
-    .i_column_entries_wdata(ram_i0_column_entries_wdata),
-    .i_column_row_group_count_wdata(ram_i0_column_row_group_count_wdata),
-    .o_rdata(ram_i_rdata_unused[0]),
-    .o_row_group_count(ram_i_row_group_count[0]),
-    .o_column_entries(ram_i0_column_entries),
-    .o_debug_entries(ram_i0_debug_entries_unused),
-    .o_debug_row_group_count(ram_i0_debug_count)
+    .i_hblk_idx(c2v_h_block_idx),
+    .i_entry_idx('0),
+    .i_entry_wdata('0),
+    .i_count_we(1'b0),
+    .i_count_wdata('0),
+    .i_list_load_en(ram_i_list_load_en),
+    .i_list_load_hblk_idx(ram_i_list_load_hblk_idx),
+    .i_list_load_entries(ram_i0_list_load_entries),
+    .i_list_load_count(ram_i0_list_load_count),
+    .o_entry_rdata(ram_i_entry_rdata_unused[0]),
+    .o_count(ram_i_count[0]),
+    .o_list_entries(ram_i0_list_entries),
+    .o_debug_list_entries(ram_i0_debug_entries_unused),
+    .o_debug_counts(ram_i0_debug_count)
   );
 
   ram_i u_ram_i1 (
@@ -859,20 +859,20 @@ module decoder_top
     .i_clear(1'b0),
     .i_en(1'b0),
     .i_we(1'b0),
-    .i_h_block_idx(c2v_h_block_idx),
-    .i_row_group_pos_addr('0),
-    .i_wdata('0),
-    .i_row_group_count_we(1'b0),
-    .i_row_group_count_wdata('0),
-    .i_column_replace_en(ram_i_column_replace_en),
-    .i_column_replace_h_block_idx(ram_i_column_replace_h_block_idx),
-    .i_column_entries_wdata(ram_i1_column_entries_wdata),
-    .i_column_row_group_count_wdata(ram_i1_column_row_group_count_wdata),
-    .o_rdata(ram_i_rdata_unused[1]),
-    .o_row_group_count(ram_i_row_group_count[1]),
-    .o_column_entries(ram_i1_column_entries),
-    .o_debug_entries(ram_i1_debug_entries_unused),
-    .o_debug_row_group_count(ram_i1_debug_count)
+    .i_hblk_idx(c2v_h_block_idx),
+    .i_entry_idx('0),
+    .i_entry_wdata('0),
+    .i_count_we(1'b0),
+    .i_count_wdata('0),
+    .i_list_load_en(ram_i_list_load_en),
+    .i_list_load_hblk_idx(ram_i_list_load_hblk_idx),
+    .i_list_load_entries(ram_i1_list_load_entries),
+    .i_list_load_count(ram_i1_list_load_count),
+    .o_entry_rdata(ram_i_entry_rdata_unused[1]),
+    .o_count(ram_i_count[1]),
+    .o_list_entries(ram_i1_list_entries),
+    .o_debug_list_entries(ram_i1_debug_entries_unused),
+    .o_debug_counts(ram_i1_debug_count)
   );
 
   ram_c u_decision_ram (

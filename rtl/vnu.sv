@@ -1,29 +1,42 @@
-// Variable-node unit that accumulates c2v messages and generates updated v2c.
+// 变量节点单元：累加 c2v 消息，并生成更新后的 v2c。
 module vnu
   import bike_pkg::*;
 (
-  input  logic i_clk,
-  input  logic i_rst_n,
-  input  logic i_clear,
-  input  logic i_col_start,                         // This c2v is from the first "1" in the variable column.
-  input  logic i_col_end,                           // This c2v is from the last "1" in the variable column.
-  input  logic signed [APP_W-1:0] i_initial_llr,    // Prior LLR contribution for the variable node.
-  input  logic i_c2v_tc_valid0,                     // Valid qualifier for c2v input row_group 0.
-  input  logic signed [MSG_W-1:0] i_c2v_tc0,        // c2v input from row_group 0 in two's-complement.
-  input  logic i_c2v_tc_valid1,                     // Valid qualifier for c2v input row_group 1.
-  input  logic signed [MSG_W-1:0] i_c2v_tc1,        // c2v input from row_group 1 in two's-complement.
-  output logic o_app_valid,                         // Posterior APP valid qualifier.
-  output logic signed [APP_W-1:0] o_app,            // Posterior APP value after accumulation.
-  output logic o_bit_decision,                      // Hard decision derived from the posterior APP.
-  input  logic i_v2c_en,                            // Enables v2c generation using cached previous c2v.
-  input  logic i_prev_c2v_tc_valid0,                // Valid qualifier for previous c2v on v2c row group 0.
-  input  logic signed [MSG_W-1:0] i_prev_c2v_tc0,   // Previous c2v value for v2c row group 0.
-  input  logic i_prev_c2v_tc_valid1,                // Valid qualifier for previous c2v on v2c row group 1.
-  input  logic signed [MSG_W-1:0] i_prev_c2v_tc1,   // Previous c2v value for v2c row group 1.
-  output logic o_v2c_tc_valid0,                     // Valid qualifier for v2c output row_group 0.
-  output logic signed [VNU_TC_W-1:0] o_v2c_tc0,     // v2c output on row_group 0 in two's-complement.
-  output logic o_v2c_tc_valid1,                     // Valid qualifier for v2c output row_group 1.
-  output logic signed [VNU_TC_W-1:0] o_v2c_tc1      // v2c output on row_group 1 in two's-complement.
+  input  logic                          i_clk,
+  input  logic                          i_rst_n,
+  input  logic                          i_clear,
+
+  // 当前变量列的 c2v 累加控制与先验 LLR。
+  input  logic                          i_col_start,
+  input  logic                          i_col_end,
+  input  logic signed [APP_W-1:0]        i_initial_llr,
+
+  // 来自两个 row_group 的当前 c2v 输入，使用二进制补码表示。
+  input  logic                          i_c2v0_valid,
+  input  logic signed [MSG_W-1:0]        i_c2v0,
+  input  logic                          i_c2v1_valid,
+  input  logic signed [MSG_W-1:0]        i_c2v1,
+
+  // 写回 RAM-T 的 c2v 透传数据；无效输入被清零。
+  output logic        [MSG_W-1:0]        o_c2v_to_ram_t0,
+  output logic        [MSG_W-1:0]        o_c2v_to_ram_t1,
+
+  // 后验 APP 与硬判决输出。
+  output logic                          o_app_valid,
+  output logic signed [APP_W-1:0]        o_app,
+  output logic                          o_bit_decision,
+
+  // 从 RAM-T 读出的上一轮 c2v；valid 已包含 v2c 发射阶段门控。
+  input  logic                          i_c2v_from_ram_t0_valid,
+  input  logic signed [MSG_W-1:0]        i_c2v_from_ram_t0,
+  input  logic                          i_c2v_from_ram_t1_valid,
+  input  logic signed [MSG_W-1:0]        i_c2v_from_ram_t1,
+
+  // 输出给 CNU_A 的 v2c，使用未饱和的二进制补码表示。
+  output logic                          o_v2c_valid0,
+  output logic signed [VNU_TC_W-1:0]     o_v2c0,
+  output logic                          o_v2c_valid1,
+  output logic signed [VNU_TC_W-1:0]     o_v2c1
 );
 
   timeunit 1ns;
@@ -31,111 +44,112 @@ module vnu
 
   localparam int SCALE_W = VNU_TC_W + ALPHA_FRAC_W;
 
-  logic signed [VNU_TC_W-1:0] cycle_accum_sum;
+  assign o_c2v_to_ram_t0 = i_c2v0_valid ? i_c2v0 : '0;
+  assign o_c2v_to_ram_t1 = i_c2v1_valid ? i_c2v1 : '0;
+
+  logic signed [VNU_TC_W-1:0] cycle_sum;
+  logic signed [VNU_TC_W-1:0] scaled_sum;
   logic signed [VNU_TC_W-1:0] accum_sum_reg;
   logic signed [VNU_TC_W-1:0] accum_sum_next;
   logic signed [VNU_TC_W-1:0] posterior_reg;
   logic signed [VNU_TC_W-1:0] posterior_next;
   logic signed [VNU_TC_W-1:0] prior_msg_sign_extend;
-  logic accum_valid_any;
+  logic                       accum_valid_any;
 
-  function automatic logic [VNU_TC_W-1:0] tc_abs(
-    input logic signed [VNU_TC_W-1:0] tc_value
-  );
-    begin
-      if (tc_value[VNU_TC_W-1]) begin
-        tc_abs = (~tc_value) + {{(VNU_TC_W - 1){1'b0}}, 1'b1};
-      end else begin
-        tc_abs = tc_value[VNU_TC_W-1:0];
-      end
-    end
-  endfunction
-
-  function automatic logic signed [VNU_TC_W-1:0] mag_to_signed(
-    input logic tc_sign,
-    input logic [VNU_TC_W-1:0] mag_value
-  );
-    logic signed [VNU_TC_W-1:0] mag_signed;
-    begin
-      mag_signed = $signed(mag_value);
-      if (tc_sign && (mag_value != '0)) begin
-        mag_to_signed = -mag_signed;
-      end else begin
-        mag_to_signed = mag_signed;
-      end
-    end
-  endfunction
-
-  function automatic logic signed [VNU_TC_W-1:0] sign_extend(
-    input logic signed [MSG_W-1:0] tc_value
-  );
-    begin
-      sign_extend = {{(VNU_TC_W - MSG_W){tc_value[MSG_W-1]}}, tc_value};
-    end
-  endfunction
-
-  function automatic logic [VNU_TC_W-1:0] alpha_scale_mag(
-    input logic [VNU_TC_W-1:0] mag_value
-  );
-    logic [SCALE_W-1:0] mag_ext;
-    logic [SCALE_W-1:0] scaled_abs_full;
-    logic [SCALE_W-1:0] rounding_bias;
-    begin
-      mag_ext = {{(SCALE_W - VNU_TC_W){1'b0}}, mag_value};
-      scaled_abs_full = '0;
-      scaled_abs_full = scaled_abs_full + (mag_ext << (ALPHA_FRAC_W - ALPHA_SHIFT_0));
-      scaled_abs_full = scaled_abs_full + (mag_ext << (ALPHA_FRAC_W - ALPHA_SHIFT_1));
-      rounding_bias = '0;
-      rounding_bias[ALPHA_FRAC_W-1] = 1'b1;
-      scaled_abs_full = (scaled_abs_full + rounding_bias) >> ALPHA_FRAC_W;
-      alpha_scale_mag = scaled_abs_full[VNU_TC_W-1:0];
-    end
-  endfunction
-
+  // 按配置的 alpha 系数缩放二进制补码值，并四舍五入到整数。
   function automatic logic signed [VNU_TC_W-1:0] alpha_scale(
     input logic signed [VNU_TC_W-1:0] tc_value
   );
-    logic tc_sign;
-    logic [VNU_TC_W-1:0] scaled_abs_value;
+    logic signed [SCALE_W-1:0]      scale_ext;
+    logic signed [SCALE_W-1:0]      scaled_full;
+    logic signed [VNU_TC_W-1:0]     floor_tc;
+    logic signed [VNU_TC_W-1:0]     trunc_tc;
+    logic        [ALPHA_FRAC_W-1:0] frac_bits;
+    logic        [ALPHA_FRAC_W:0]   neg_frac_mag;
+    logic                           frac_nonzero;
+    logic                           round_bit;
+
     begin
-      tc_sign = tc_value[VNU_TC_W-1];
-      scaled_abs_value = alpha_scale_mag(tc_abs(tc_value));
-      alpha_scale = mag_to_signed(tc_sign, scaled_abs_value);
+      scale_ext = SCALE_W'($signed(tc_value));
+      scaled_full = '0;
+      scaled_full =
+        scaled_full + (scale_ext <<< (ALPHA_FRAC_W - ALPHA_SHIFT_0));
+      scaled_full =
+        scaled_full + (scale_ext <<< (ALPHA_FRAC_W - ALPHA_SHIFT_1));
+
+      floor_tc = scaled_full[SCALE_W-1:ALPHA_FRAC_W];
+      frac_bits = scaled_full[ALPHA_FRAC_W-1:0];
+      frac_nonzero = |frac_bits;
+
+      if (scaled_full[SCALE_W-1]) begin
+        trunc_tc = frac_nonzero ? (floor_tc + 1'b1) : floor_tc;
+        neg_frac_mag = frac_nonzero ?
+          ({1'b1, {ALPHA_FRAC_W{1'b0}}} - {1'b0, frac_bits}) :
+          '0;
+        round_bit = neg_frac_mag[ALPHA_FRAC_W-1];
+        alpha_scale = round_bit ? (trunc_tc - 1'b1) : trunc_tc;
+      end else begin
+        trunc_tc = floor_tc;
+        round_bit = frac_bits[ALPHA_FRAC_W-1];
+        alpha_scale = round_bit ? (trunc_tc + 1'b1) : trunc_tc;
+      end
     end
   endfunction
 
   always_comb begin
-    logic signed [VNU_TC_W-1:0] scaled_sum;
+    logic signed [VNU_TC_W-1:0] c2v_tc0_ext;
+    logic signed [VNU_TC_W-1:0] c2v_tc1_ext;
+    logic signed [VNU_TC_W-1:0] prev_c2v_tc0_ext;
+    logic signed [VNU_TC_W-1:0] prev_c2v_tc1_ext;
+    logic signed [VNU_TC_W-1:0] scaled_prev_c2v0;
+    logic signed [VNU_TC_W-1:0] scaled_prev_c2v1;
     logic signed [VNU_TC_W-1:0] next_u0;
     logic signed [VNU_TC_W-1:0] next_u1;
 
-    cycle_accum_sum = '0;
+    cycle_sum = '0;
     accum_valid_any = 1'b0;
-    if (i_c2v_tc_valid0) begin
-      cycle_accum_sum = cycle_accum_sum + sign_extend(i_c2v_tc0);
+    c2v_tc0_ext = VNU_TC_W'($signed(i_c2v0));
+    c2v_tc1_ext = VNU_TC_W'($signed(i_c2v1));
+    prev_c2v_tc0_ext = VNU_TC_W'($signed(i_c2v_from_ram_t0));
+    prev_c2v_tc1_ext = VNU_TC_W'($signed(i_c2v_from_ram_t1));
+    scaled_sum = '0;
+    scaled_prev_c2v0 = '0;
+    scaled_prev_c2v1 = '0;
+    next_u0 = '0;
+    next_u1 = '0;
+    posterior_next = '0;
+    o_v2c_valid0 = 1'b0;
+    o_v2c_valid1 = 1'b0;
+    o_v2c0 = '0;
+    o_v2c1 = '0;
+
+    if (i_c2v0_valid) begin
+      cycle_sum = cycle_sum + c2v_tc0_ext;
       accum_valid_any = 1'b1;
     end
-    if (i_c2v_tc_valid1) begin
-      cycle_accum_sum = cycle_accum_sum + sign_extend(i_c2v_tc1);
+    if (i_c2v1_valid) begin
+      cycle_sum = cycle_sum + c2v_tc1_ext;
       accum_valid_any = 1'b1;
     end
 
     if (i_col_start) begin
-      accum_sum_next = cycle_accum_sum;
+      accum_sum_next = cycle_sum;
     end else begin
-      accum_sum_next = accum_sum_reg + cycle_accum_sum;
+      accum_sum_next = accum_sum_reg + cycle_sum;
     end
 
-    prior_msg_sign_extend = {{(VNU_TC_W - APP_W){i_initial_llr[APP_W-1]}}, i_initial_llr};
+    prior_msg_sign_extend = VNU_TC_W'($signed(i_initial_llr));
     scaled_sum = alpha_scale(accum_sum_next);
+    scaled_prev_c2v0 = alpha_scale(prev_c2v_tc0_ext);
+    scaled_prev_c2v1 = alpha_scale(prev_c2v_tc1_ext);
     posterior_next = prior_msg_sign_extend + scaled_sum;
 
-    next_u0 = posterior_reg - alpha_scale(sign_extend(i_prev_c2v_tc0));
-    next_u1 = posterior_reg - alpha_scale(sign_extend(i_prev_c2v_tc1));
-    o_v2c_tc_valid0 = i_v2c_en && i_prev_c2v_tc_valid0;
-    o_v2c_tc_valid1 = i_v2c_en && i_prev_c2v_tc_valid1;
-    o_v2c_tc0 = o_v2c_tc_valid0 ? next_u0 : '0;
-    o_v2c_tc1 = o_v2c_tc_valid1 ? next_u1 : '0;
+    next_u0 = posterior_reg - scaled_prev_c2v0;
+    next_u1 = posterior_reg - scaled_prev_c2v1;
+    o_v2c_valid0 = i_c2v_from_ram_t0_valid;
+    o_v2c_valid1 = i_c2v_from_ram_t1_valid;
+    o_v2c0 = o_v2c_valid0 ? next_u0 : '0;
+    o_v2c1 = o_v2c_valid1 ? next_u1 : '0;
   end
 
   assign o_app = posterior_reg[APP_W-1:0];
