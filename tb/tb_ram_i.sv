@@ -5,7 +5,6 @@ module tb_ram_i;
 
   logic clk;
   logic rst_n;
-  logic clear_en;
   logic en;
   logic we;
   logic [H_BLOCK_W-1:0] hblk_idx;
@@ -29,7 +28,6 @@ module tb_ram_i;
   ram_i dut (
     .i_clk(clk),
     .i_rst_n(rst_n),
-    .i_clear(clear_en),
     .i_en(en),
     .i_we(we),
     .i_hblk_idx(hblk_idx),
@@ -53,7 +51,6 @@ module tb_ram_i;
 
   initial begin
     rst_n = 1'b0;
-    clear_en = 1'b0;
     en = 1'b0;
     we = 1'b0;
     hblk_idx = '0;
@@ -71,12 +68,12 @@ module tb_ram_i;
     repeat (2) @(posedge clk);
     rst_n = 1'b1;
     #1;
-    if (debug_counts[0] != 0) $fatal(1, "ram_i reset should clear count");
+    if (debug_counts[0] != 0) $fatal(1, "ram_i reset should zero count");
 
     list_load_hblk_idx = H_BLOCK_W'(1 % N0);
     list_load_count = ROW_GROUP_COUNT_W'(2);
-    list_load_entries[0] = {EDGE_W'(0), ROW_W'(1)};
-    list_load_entries[1] = {EDGE_W'(2), ROW_W'(3)};
+    list_load_entries[0] = {EDGE_W'(0), ROW_W'(0)};
+    list_load_entries[1] = {EDGE_W'(2), ROW_W'(1)};
     list_load_en = 1'b1;
     @(posedge clk);
     #1;
@@ -84,12 +81,12 @@ module tb_ram_i;
     hblk_idx = list_load_hblk_idx;
     #1;
     if (debug_counts[list_load_hblk_idx] != ROW_GROUP_COUNT_W'(2)) $fatal(1, "ram_i list_load count mismatch");
-    if (debug_list_entries[list_load_hblk_idx][0] != {EDGE_W'(0), ROW_W'(1)}) $fatal(1, "ram_i list_load entry 0 mismatch");
+    if (debug_list_entries[list_load_hblk_idx][0] != {EDGE_W'(0), ROW_W'(0)}) $fatal(1, "ram_i list_load entry 0 mismatch");
     if (count != debug_counts[list_load_hblk_idx]) $fatal(1, "ram_i functional count view mismatch");
     if (list_entries[1] != debug_list_entries[list_load_hblk_idx][1]) $fatal(1, "ram_i functional list view mismatch");
 
     list_load_count = ROW_GROUP_COUNT_W'(1);
-    list_load_entries[0] = {EDGE_W'(2), ROW_W'(0)};
+    list_load_entries[0] = {EDGE_W'(2), ROW_W'(2)};
     list_load_entries[1] = '0;
     list_load_entries[2] = '0;
     list_load_en = 1'b1;
@@ -97,11 +94,11 @@ module tb_ram_i;
     #1;
     list_load_en = 1'b0;
     if (debug_counts[list_load_hblk_idx] != ROW_GROUP_COUNT_W'(1)) $fatal(1, "ram_i shifted bulk count mismatch");
-    if (debug_list_entries[list_load_hblk_idx][0] != {EDGE_W'(2), ROW_W'(0)}) $fatal(1, "ram_i shifted bulk entry mismatch");
+    if (debug_list_entries[list_load_hblk_idx][0] != {EDGE_W'(2), ROW_W'(2)}) $fatal(1, "ram_i shifted bulk entry mismatch");
 
     hblk_idx = '0;
     entry_idx = EDGE_W'(1);
-    entry_wdata = {EDGE_W'(1), ROW_W'(4)};
+    entry_wdata = {EDGE_W'(1), ROW_W'(2)};
     count_wdata = ROW_GROUP_COUNT_W'(1);
     en = 1'b1;
     we = 1'b1;
@@ -114,14 +111,15 @@ module tb_ram_i;
 
     @(posedge clk);
     #1;
-    if (entry_rdata != {EDGE_W'(1), ROW_W'(4)}) $fatal(1, "ram_i single-port read mismatch");
+    if (entry_rdata != {EDGE_W'(1), ROW_W'(2)}) $fatal(1, "ram_i single-port read mismatch");
 
-    clear_en = 1'b1;
+    rst_n = 1'b0;
     en = 1'b0;
     @(posedge clk);
+    rst_n = 1'b1;
+    @(posedge clk);
     #1;
-    clear_en = 1'b0;
-    if (debug_counts[0] != 0) $fatal(1, "ram_i clear should reset count");
+    if (debug_counts[0] != 0) $fatal(1, "ram_i reset should reset count");
 
     $display("tb_ram_i PASS");
     $finish;

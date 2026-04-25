@@ -4,7 +4,6 @@ module ram_m
 (
   input  logic i_clk,
   input  logic i_rst_n,
-  input  logic i_clear,
   input  logic i_en,
   input  logic i_we,
   input  logic [ROW_W-1:0] i_check_row_addr,               // Which check-row state to access inside this RAM-M lane.
@@ -22,11 +21,6 @@ module ram_m
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin
-      o_rdata <= COMP_C2V_INIT;
-      for (int row_idx = 0; row_idx < R; row_idx++) begin
-        mem[row_idx] <= COMP_C2V_INIT;
-      end
-    end else if (i_clear) begin
       o_rdata <= COMP_C2V_INIT;
       for (int row_idx = 0; row_idx < R; row_idx++) begin
         mem[row_idx] <= COMP_C2V_INIT;

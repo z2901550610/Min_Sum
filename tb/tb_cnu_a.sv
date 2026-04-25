@@ -5,7 +5,6 @@ module tb_cnu_a;
 
   logic clk;
   logic rst_n;
-  logic clear_en;
   logic in_valid;
   logic [MSG_W-1:0] v2c_msg_in;
   logic [VAR_W-1:0] src_var_idx;
@@ -17,7 +16,6 @@ module tb_cnu_a;
   cnu_a dut (
     .i_clk(clk),
     .i_rst_n(rst_n),
-    .i_clear(clear_en),
     .i_en(in_valid),
     .i_v2c(v2c_msg_in),
     .i_var_idx(src_var_idx),
@@ -64,7 +62,6 @@ module tb_cnu_a;
 
   initial begin
     rst_n = 1'b0;
-    clear_en = 1'b0;
     in_valid = 1'b0;
     v2c_msg_in = '0;
     src_var_idx = '0;

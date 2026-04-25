@@ -59,7 +59,6 @@ def sv_array(values: list[int]) -> str:
 
 
 def build_first_column_tables(h_base: list[list[int]], r: int) -> tuple[list[list[int]], list[list[list[tuple[int, int] | None]]]]:
-    row_seg_size = (r + 1) // 2
     row_group_counts: list[list[int]] = []
     row_group_entries: list[list[list[tuple[int, int] | None]]] = []
 
@@ -70,8 +69,8 @@ def build_first_column_tables(h_base: list[list[int]], r: int) -> tuple[list[lis
             [None for _ in range(len(h_block_support))],
         ]
         for edge_idx, row_value in enumerate(h_block_support):
-            row_group_idx = 0 if row_value < row_seg_size else 1
-            row_local = row_value if row_group_idx == 0 else row_value - row_seg_size
+            row_group_idx = row_value & 1
+            row_local = row_value >> 1
             row_group_pos = h_block_counts[row_group_idx]
             h_block_entries[row_group_idx][row_group_pos] = (edge_idx, row_local)
             h_block_counts[row_group_idx] += 1
@@ -147,9 +146,9 @@ def emit_pkg(
   parameter int D = 4;
   parameter int ALPHA_FRAC_W = 6;
   parameter int MAG_MAX = (1 << D) - 1;
+  parameter int MSG_W = D + 1;
   parameter int ROW_SEG_SIZE = (R + L - 1) / L;
-  parameter int APP_W = 8;
-  parameter int VNU_TC_W = APP_W + ((W > 1) ? $clog2(W + 1) : 1);
+  parameter int VNU_TC_W = MSG_W + ((W > 1) ? $clog2(W + 1) : 1);
   parameter int LANE_IDX_W = (L > 1) ? $clog2(L) : 1;
   parameter int VAR_W = (N > 1) ? $clog2(N) : 1;
   parameter int ROW_W = (R > 1) ? $clog2(R) : 1;
@@ -209,7 +208,6 @@ def emit_pkg(
   localparam logic [DEC_PHASE_W-1:0] DEC_PH_VNU_CNU_A       = DEC_PH_OVERLAP_EMIT_CNU_A;
   localparam logic [DEC_PHASE_W-1:0] DEC_PH_VNU_WRITE_NEXT  = DEC_PH_OVERLAP_EMIT_WRITE;
 
-  localparam int MSG_W = D + 1;
   localparam int MSG_MAG_LSB = 0;
   localparam int MSG_SIGN_BIT = D;
 

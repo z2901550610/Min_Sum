@@ -18,7 +18,7 @@ block 组成；每个变量列有 `W` 条边；为了并行处理，校验行被
 | `hblk_idx` | `0..N0-1` | H 的 circulant block 编号，也就是 H0/H1/... 的 block 选择。 |
 | `var_idx` | `0..N-1` | 全局变量节点编号。 |
 | `check_row` | `0..R-1` | 全局校验行编号。 |
-| `row_local` | `0..ROW_SEG_SIZE-1` | 当前 row group 内的局部行号。 |
+| `row_local` | `0..floor((R-1)/2)` | 当前 row group 内的紧凑局部行号。当前 RTL 中等于 `floor(row_global / 2)`。 |
 | `row_global` | `0..R-1` | 绝对校验行号。需要从 `row_group` 和 `row_local` 重建。 |
 | `edge_slot` | `0..W-1` | 一个变量列内的边编号，用于访问 RAM-S/T/U 的 edge 维。 |
 | `list` | `[0:W-1]` | 一组 packed entries，通常表示当前 group-local metadata 列表。 |
@@ -53,18 +53,18 @@ list_count
 
 entry_idx   list_entries[0][entry_idx]          是否有效
 ---------   ------------------------------      --------
-0           {edge_slot=0, row_local=3}          entry_idx < count，有效
-1           {edge_slot=2, row_local=7}          entry_idx < count，有效
+0           {edge_slot=0, row_local=1}          entry_idx < count，有效
+1           {edge_slot=2, row_local=3}          entry_idx < count，有效
 2           {edge_slot=0, row_local=0}          entry_idx >= count，无效
 
 list_count[0] = 2
 ```
 
-`row_local` 转成绝对行号时，由上层根据 row group 补上偏移：
+当前 RTL 使用奇偶分组。`row_local` 转成绝对行号时，由上层按奇偶规则重建：
 
 ```text
-row_group 0: row_global = row_local
-row_group 1: row_global = ROW_SEG_SIZE + row_local
+row_group 0: row_global = 2 * row_local
+row_group 1: row_global = 2 * row_local + 1
 ```
 
 如果模块内部已经固定属于一个 row group，例如顶层实例化了两个相同 RAM 分别服务
@@ -153,7 +153,7 @@ list_load_count
 
 ```text
 row_local:
-  当前 row_group 内的局部行号
+  当前 row_group 内的紧凑局部行号
   可作为每个 row_group 私有 RAM 的行地址
 
 row_global:

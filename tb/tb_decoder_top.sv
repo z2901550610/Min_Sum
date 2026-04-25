@@ -82,13 +82,13 @@ module tb_decoder_top;
 
   function automatic int row_group_from_row(input int row_idx_i);
     begin
-      row_group_from_row = (row_idx_i < ROW_SEG_SIZE) ? 0 : 1;
+      row_group_from_row = row_idx_i & 1;
     end
   endfunction
 
   function automatic int row_local(input int row_idx_i);
     begin
-      row_local = (row_idx_i < ROW_SEG_SIZE) ? row_idx_i : (row_idx_i - ROW_SEG_SIZE);
+      row_local = row_idx_i >> 1;
     end
   endfunction
 
@@ -181,8 +181,8 @@ module tb_decoder_top;
     if (dut.ram_i_debug_count[0][0] != ROW_GROUP_COUNT_W'(2)) $fatal(1, "RAM I shifted row_group0 count mismatch for column 1");
     if (dut.ram_i_debug_count[0][1] != ROW_GROUP_COUNT_W'(1)) $fatal(1, "RAM I shifted row_group1 count mismatch for column 1");
     if (!(dut.c2v_row_group_valid[0] && dut.c2v_row_group_valid[1])) $fatal(1, "shifted column 1 should expose two active row_groups");
-    if (dut.c2v_row_group_edge_slot[0] != EDGE_W'(0) || dut.c2v_row_group_row_local[0] != ROW_W'(1)) $fatal(1, "shifted row_group0 entry mismatch for column 1");
-    if (dut.c2v_row_group_edge_slot[1] != EDGE_W'(2) || dut.c2v_row_group_row_local[1] != ROW_W'(0)) $fatal(1, "shifted row_group1 entry mismatch for column 1");
+    if (dut.c2v_row_group_edge_slot[0] != EDGE_W'(1) || dut.c2v_row_group_row_local[0] != ROW_W'(1)) $fatal(1, "shifted row_group0 entry mismatch for column 1");
+    if (dut.c2v_row_group_edge_slot[1] != EDGE_W'(0) || dut.c2v_row_group_row_local[1] != ROW_W'(0)) $fatal(1, "shifted row_group1 entry mismatch for column 1");
 
     wait (dut.c2v_phase_active && !dut.v2c_phase_active && dut.c2v_var_idx == 0 && dut.active_row_group_pos == 0);
     #1;

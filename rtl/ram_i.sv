@@ -5,7 +5,6 @@ module ram_i
 (
   input  logic i_clk,
   input  logic i_rst_n,
-  input  logic i_clear,
   input  logic i_en,
   input  logic i_we,
   input  logic [H_BLOCK_W-1:0] i_hblk_idx,                    // H block 编号，范围 0..N0-1。
@@ -42,14 +41,6 @@ module ram_i
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin
-      o_entry_rdata <= '0;
-      for (int hblk_idx_local = 0; hblk_idx_local < N0; hblk_idx_local++) begin
-        list_count_mem[hblk_idx_local] <= '0;
-        for (int entry_idx_local = 0; entry_idx_local < W; entry_idx_local++) begin
-          list_entries_mem[hblk_idx_local][entry_idx_local] <= '0;
-        end
-      end
-    end else if (i_clear) begin
       o_entry_rdata <= '0;
       for (int hblk_idx_local = 0; hblk_idx_local < N0; hblk_idx_local++) begin
         list_count_mem[hblk_idx_local] <= '0;

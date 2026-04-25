@@ -4,7 +4,6 @@ module cnu_a
 (
   input  logic i_clk,
   input  logic i_rst_n,
-  input  logic i_clear,
   input  logic i_en,                          // Enables this cycle's compressed-c2v update.
   input  logic [MSG_W-1:0] i_v2c,             // Incoming v2c/u sign-magnitude message.
   input  logic [VAR_W-1:0] i_var_idx,         // Which variable column j sent i_v2c.
@@ -46,10 +45,6 @@ module cnu_a
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin
-      o_comp_c2v <= COMP_C2V_INIT;
-      o_sign <= 1'b0;
-      o_valid <= 1'b0;
-    end else if (i_clear) begin
       o_comp_c2v <= COMP_C2V_INIT;
       o_sign <= 1'b0;
       o_valid <= 1'b0;

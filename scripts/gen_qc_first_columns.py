@@ -107,7 +107,6 @@ def extract_h_base_values(text: str) -> list[list[list[int]]]:
 
 
 def first_column_tables(banks: list[list[int]], r_value: int) -> tuple[list[list[int]], list[list[list[tuple[int, int] | None]]]]:
-    row_seg_size = (r_value + 1) // 2
     lane_count_table: list[list[int]] = []
     lane_entry_table: list[list[list[tuple[int, int] | None]]] = []
 
@@ -118,8 +117,8 @@ def first_column_tables(banks: list[list[int]], r_value: int) -> tuple[list[list
             [None for _ in range(len(bank_support))],
         ]
         for edge_slot, row_value in enumerate(bank_support):
-            lane_idx = 0 if row_value < row_seg_size else 1
-            row_local = row_value if lane_idx == 0 else row_value - row_seg_size
+            lane_idx = row_value & 1
+            row_local = row_value >> 1
             slot_idx = lane_counts[lane_idx]
             lane_entries[lane_idx][slot_idx] = (edge_slot, row_local)
             lane_counts[lane_idx] += 1

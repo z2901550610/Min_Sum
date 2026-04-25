@@ -5,7 +5,7 @@ module qc_column_preprocess
   input  logic [VAR_W-1:0] i_var_idx,                            // Which variable column j to expand.
   output logic [LANE_COUNT_W-1:0] o_col_lane_count [0:L-1],      // How many "1"s from this column belong to each lane.
   output logic o_col_one_valid [0:L-1][0:W-1],                   // Whether this output slot holds a valid "1".
-  output logic [ROW_W-1:0] o_col_one_row_local [0:L-1][0:W-1],   // Check-row index inside this lane's row segment.
+  output logic [ROW_W-1:0] o_col_one_row_local [0:L-1][0:W-1],   // Compact parity-local row index floor(row_global / 2).
   output logic [ROW_W-1:0] o_col_one_row_global [0:L-1][0:W-1], // Full check-row index hit by this "1", range 0..R-1.
   output logic [EDGE_W-1:0] o_col_one_slot [0:L-1][0:W-1]        // Which "1" in this variable column, range 0..W-1.
 );
@@ -37,13 +37,8 @@ module qc_column_preprocess
 
     for (edge_idx_local = 0; edge_idx_local < W; edge_idx_local++) begin
       row_value_local = (H_BASE[0][circ_idx_local][edge_idx_local] + col_idx_local) % R;
-      if (row_value_local < ROW_SEG_SIZE) begin
-        lane_idx_local = 0;
-        row_local_value = ROW_W'(row_value_local);
-      end else begin
-        lane_idx_local = 1;
-        row_local_value = ROW_W'(row_value_local - ROW_SEG_SIZE);
-      end
+      lane_idx_local = row_value_local & 1;
+      row_local_value = ROW_W'(row_value_local >> 1);
       lane_slot_idx_local = int'(o_col_lane_count[lane_idx_local]);
       o_col_one_valid[lane_idx_local][lane_slot_idx_local] = 1'b1;
       o_col_one_row_local[lane_idx_local][lane_slot_idx_local] = row_local_value;

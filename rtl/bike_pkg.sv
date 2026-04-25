@@ -12,8 +12,8 @@ package bike_pkg;
   parameter int W = 71;
   parameter int I_MAX = 6;
   parameter int C_VAL = 7;
-  parameter int ALPHA_SHIFT_0 = 4;
-  parameter int ALPHA_SHIFT_1 = 6;
+  parameter int ALPHA_SHIFT_0 = 4;  //对应论文中使用最多两位1表示
+  parameter int ALPHA_SHIFT_1 = 6;  //ALPHA_SHIFT_0 与 ALPHA_SHIFT_1 表示"1"的位置，即 alpha=0.000101b
 `else
   parameter int R = 8;
   parameter int W = 3;
@@ -26,11 +26,11 @@ package bike_pkg;
   parameter int N = N0 * R;
   parameter int L = 2;
   parameter int D = 4;
-  parameter int ALPHA_FRAC_W = 6;
+  parameter int ALPHA_FRAC_W = 6;  //alpha 用6位小数表示
   parameter int MAG_MAX = (1 << D) - 1;
+  parameter int MSG_W = D + 1;
   parameter int ROW_SEG_SIZE = (R + L - 1) / L;
-  parameter int APP_W = 8;
-  parameter int VNU_TC_W = APP_W + ((W > 1) ? $clog2(W + 1) : 1);
+  parameter int VNU_TC_W = MSG_W + ((W > 1) ? $clog2(W + 1) : 1);
   parameter int LANE_IDX_W = (L > 1) ? $clog2(L) : 1;
   parameter int VAR_W = (N > 1) ? $clog2(N) : 1;
   parameter int ROW_W = (R > 1) ? $clog2(R) : 1;
@@ -59,11 +59,9 @@ package bike_pkg;
   localparam int DEC_PHASE_W = 5;
   localparam logic [DEC_PHASE_W-1:0] DEC_PH_WAIT                = 5'd0;
   localparam logic [DEC_PHASE_W-1:0] DEC_PH_SEED_I              = 5'd1;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_INIT_CLEAR          = 5'd2;
   localparam logic [DEC_PHASE_W-1:0] DEC_PH_INIT_M_READ         = 5'd3;
   localparam logic [DEC_PHASE_W-1:0] DEC_PH_INIT_CNU_A          = 5'd4;
   localparam logic [DEC_PHASE_W-1:0] DEC_PH_INIT_M_WRITE        = 5'd5;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_CLEAR_NEXT_M        = 5'd6;
   localparam logic [DEC_PHASE_W-1:0] DEC_PH_PRIME_READ          = 5'd7;
   localparam logic [DEC_PHASE_W-1:0] DEC_PH_PRIME_WRITE         = 5'd8;
   localparam logic [DEC_PHASE_W-1:0] DEC_PH_OVERLAP_ACCUM_READ  = 5'd9;
@@ -94,7 +92,6 @@ package bike_pkg;
   localparam logic [DEC_PHASE_W-1:0] DEC_PH_VNU_CNU_A       = DEC_PH_OVERLAP_EMIT_CNU_A;
   localparam logic [DEC_PHASE_W-1:0] DEC_PH_VNU_WRITE_NEXT  = DEC_PH_OVERLAP_EMIT_WRITE;
 
-  localparam int MSG_W = D + 1;
   localparam int MSG_MAG_LSB = 0;
   localparam int MSG_SIGN_BIT = D;
 

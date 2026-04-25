@@ -72,10 +72,11 @@ zero, or fails after `I_MAX` iterations.
   `I0/I1`, `M0/M1/M2/M3`, `S0/S1`, `T0/T1`, `U0/U1`, and `C0/C1`.  The top
   does not use `generate`/`genvar` for RAM instantiation.
 - `decoder_ctrl` follows the paper's Fig.8-style single-port schedule: each
-  iteration clears the next RAM-M pair, primes column 0 into RAM-T, then runs
-  a column-overlap pipeline where the c2v side computes column `j+1` while the
-  v2c side accumulates and updates column `j`, and finally drains the last v2c
-  column before `ITER_CHECK`. The exported
+  iteration primes column 0 into RAM-T, then runs a column-overlap pipeline
+  where the c2v side computes column `j+1` while the v2c side accumulates and
+  updates column `j`, and finally drains the last v2c column before
+  `ITER_CHECK`. Reused RAM-M rows are treated as `COMP_C2V_INIT` through a
+  per-row epoch tracker instead of a synchronous bank reset pulse. The exported
   `phase` signal is now debug-only; datapath sequencing uses explicit control
   pulses and column-buffer handoff events.
 - RAM-I is seeded with first-column row-group lists. During decode, the active
@@ -87,6 +88,9 @@ zero, or fails after `I_MAX` iterations.
   outputs instead of using RAM debug arrays in the functional path. Project-wide
   RTL naming for indexes, rows, entries, lists, and counts is defined in
   [`docs/naming_conventions.md`](/Users/z2901550610/Documents/Min_Sum/docs/naming_conventions.md).
+  The current row-group scheme is parity-based: `row_group 0` stores even
+  rows, `row_group 1` stores odd rows, and `row_local` is the compact
+  parity-local index `floor(row_global / 2)`.
   `H_BASE` is not used for normal CNU/VNU row-address scheduling.
 - `decoder_edge_meta` and `qc_column_preprocess` are kept under
   [`rtl/reference/`](/Users/z2901550610/Documents/Min_Sum/rtl/reference) as

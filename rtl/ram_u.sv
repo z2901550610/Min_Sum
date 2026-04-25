@@ -4,7 +4,6 @@ module ram_u
 (
   input  logic i_clk,
   input  logic i_rst_n,
-  input  logic i_init,
   input  logic i_en,
   input  logic i_we,
   input  logic [VAR_W-1:0] i_var_idx,                      // Which variable column j to access.
@@ -25,13 +24,6 @@ module ram_u
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin
-      o_rdata <= '0;
-      for (int var_idx = 0; var_idx < N; var_idx++) begin
-        for (int edge_idx = 0; edge_idx < W; edge_idx++) begin
-          mem[var_idx][edge_idx] <= '0;
-        end
-      end
-    end else if (i_init) begin
       o_rdata <= '0;
       for (int var_idx = 0; var_idx < N; var_idx++) begin
         for (int edge_idx = 0; edge_idx < W; edge_idx++) begin

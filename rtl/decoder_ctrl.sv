@@ -23,8 +23,6 @@ module decoder_ctrl
   output logic o_m_write_pair,                                 // RAM-M pair selected for compressed-c2v writes.
   output logic o_seed_active,                                  // Loads static first-column RAM-I metadata.
   output logic [H_BLOCK_W-1:0] o_seed_h_block_idx,              // Which H block's first-column RAM-I list is seeded.
-  output logic o_init_clear,                                   // Clears/init RAMs for a new decode.
-  output logic o_clear_next_m,                                 // Clears the next RAM-M pair before overlap starts.
   output logic o_init_m_read,                                  // Reads RAM-M/RAM-U for initial CNU_A.
   output logic o_init_cnu_a,                                   // Enables CNU_A for initial accumulation.
   output logic o_init_m_write,                                 // Writes initial CNU_A result.
@@ -83,9 +81,7 @@ module decoder_ctrl
   localparam logic [2:0] CONS_STEP_WRITE = 3'd5;
 
   logic [2:0] ctrl_state;
-  logic init_clear_pending;
   logic [1:0] init_step;
-  logic clear_next_m_pending;
   logic iter_check_pending;
   logic producer_active;
   logic producer_step;
@@ -113,44 +109,42 @@ module decoder_ctrl
   assign o_m_write_pair = ~o_m_read_pair;
   assign o_seed_active = (ctrl_state == CTRL_SEED);
 
-  assign o_init_clear = (ctrl_state == CTRL_INIT) && init_clear_pending;
-  assign o_clear_next_m = (ctrl_state == CTRL_ITER) && clear_next_m_pending;
-  assign o_init_m_read = (ctrl_state == CTRL_INIT) && !init_clear_pending && (init_step == INIT_STEP_READ);
-  assign o_init_cnu_a = (ctrl_state == CTRL_INIT) && !init_clear_pending && (init_step == INIT_STEP_CNU_A);
-  assign o_init_m_write = (ctrl_state == CTRL_INIT) && !init_clear_pending && (init_step == INIT_STEP_WRITE);
+  assign o_init_m_read = (ctrl_state == CTRL_INIT) && (init_step == INIT_STEP_READ);
+  assign o_init_cnu_a = (ctrl_state == CTRL_INIT) && (init_step == INIT_STEP_CNU_A);
+  assign o_init_m_write = (ctrl_state == CTRL_INIT) && (init_step == INIT_STEP_WRITE);
 
-  assign o_c2v_read = (ctrl_state == CTRL_ITER) && producer_active && (producer_step == PROD_STEP_READ) && !clear_next_m_pending && !iter_check_pending;
-  assign o_c2v_write_t = (ctrl_state == CTRL_ITER) && producer_active && (producer_step == PROD_STEP_WRITE) && !clear_next_m_pending && !iter_check_pending;
+  assign o_c2v_read = (ctrl_state == CTRL_ITER) && producer_active && (producer_step == PROD_STEP_READ) && !iter_check_pending;
+  assign o_c2v_write_t = (ctrl_state == CTRL_ITER) && producer_active && (producer_step == PROD_STEP_WRITE) && !iter_check_pending;
 
   assign o_vnu_read_t =
     (ctrl_state == CTRL_ITER) && consumer_active &&
     (consumer_mode == CONS_MODE_ACCUM) && (consumer_step == CONS_STEP_READ) &&
-    !clear_next_m_pending && !iter_check_pending;
+    !iter_check_pending;
 
   assign o_vnu_accum_t =
     (ctrl_state == CTRL_ITER) && consumer_active &&
     (consumer_mode == CONS_MODE_ACCUM) && (consumer_step == CONS_STEP_USE) &&
-    !clear_next_m_pending && !iter_check_pending;
+    !iter_check_pending;
 
   assign o_vnu_prep_write =
     (ctrl_state == CTRL_ITER) && consumer_active &&
     (consumer_mode == CONS_MODE_V2C) && (consumer_step == CONS_STEP_PREP) &&
-    !clear_next_m_pending && !iter_check_pending;
+    !iter_check_pending;
 
   assign o_vnu_read_next_m =
     (ctrl_state == CTRL_ITER) && consumer_active &&
     (consumer_mode == CONS_MODE_V2C) && (consumer_step == CONS_STEP_READ_NEXT_M) &&
-    !clear_next_m_pending && !iter_check_pending;
+    !iter_check_pending;
 
   assign o_vnu_cnu_a =
     (ctrl_state == CTRL_ITER) && consumer_active &&
     (consumer_mode == CONS_MODE_V2C) && (consumer_step == CONS_STEP_CNU_A) &&
-    !clear_next_m_pending && !iter_check_pending;
+    !iter_check_pending;
 
   assign o_vnu_write_next =
     (ctrl_state == CTRL_ITER) && consumer_active &&
     (consumer_mode == CONS_MODE_V2C) && (consumer_step == CONS_STEP_WRITE) &&
-    !clear_next_m_pending && !iter_check_pending;
+    !iter_check_pending;
 
   assign o_iter_check = (ctrl_state == CTRL_ITER) && iter_check_pending;
 
@@ -198,23 +192,16 @@ module decoder_ctrl
       end
 
       CTRL_INIT: begin
-        o_state = init_clear_pending ? DEC_INIT_DECODER : DEC_INIT_ROW_ACCUM;
-        if (init_clear_pending) begin
-          o_phase = DEC_PH_INIT_CLEAR;
-        end else begin
-          case (init_step)
-            INIT_STEP_READ: o_phase = DEC_PH_INIT_M_READ;
-            INIT_STEP_CNU_A: o_phase = DEC_PH_INIT_CNU_A;
-            default: o_phase = DEC_PH_INIT_M_WRITE;
-          endcase
-        end
+        o_state = DEC_INIT_ROW_ACCUM;
+        case (init_step)
+          INIT_STEP_READ: o_phase = DEC_PH_INIT_M_READ;
+          INIT_STEP_CNU_A: o_phase = DEC_PH_INIT_CNU_A;
+          default: o_phase = DEC_PH_INIT_M_WRITE;
+        endcase
       end
 
       CTRL_ITER: begin
-        if (clear_next_m_pending) begin
-          o_state = DEC_ITER_C2V_PRIME;
-          o_phase = DEC_PH_CLEAR_NEXT_M;
-        end else if (iter_check_pending) begin
+        if (iter_check_pending) begin
           o_state = DEC_ITER_CHECK;
           o_phase = DEC_PH_ITER_CHECK;
         end else if (consumer_active) begin
@@ -267,9 +254,7 @@ module decoder_ctrl
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin
       ctrl_state <= CTRL_WAIT;
-      init_clear_pending <= 1'b0;
       init_step <= INIT_STEP_READ;
-      clear_next_m_pending <= 1'b0;
       iter_check_pending <= 1'b0;
       producer_active <= 1'b0;
       producer_step <= PROD_STEP_READ;
@@ -293,8 +278,6 @@ module decoder_ctrl
           o_success <= 1'b0;
           if (i_start) begin
             ctrl_state <= CTRL_SEED;
-            init_clear_pending <= 1'b0;
-            clear_next_m_pending <= 1'b0;
             iter_check_pending <= 1'b0;
             producer_active <= 1'b0;
             producer_step <= PROD_STEP_READ;
@@ -315,9 +298,7 @@ module decoder_ctrl
         CTRL_SEED: begin
           if (o_seed_h_block_idx == H_BLOCK_W'(N0 - 1)) begin
             ctrl_state <= CTRL_INIT;
-            init_clear_pending <= 1'b1;
             init_step <= INIT_STEP_READ;
-            clear_next_m_pending <= 1'b0;
             iter_check_pending <= 1'b0;
             producer_active <= 1'b0;
             consumer_active <= 1'b0;
@@ -331,64 +312,43 @@ module decoder_ctrl
         end
 
         CTRL_INIT: begin
-          if (init_clear_pending) begin
-            init_clear_pending <= 1'b0;
-            init_step <= INIT_STEP_READ;
-            o_c2v_var_idx <= '0;
-            o_v2c_var_idx <= '0;
-            o_c2v_row_group_pos <= '0;
-            o_v2c_row_group_pos <= '0;
-          end else begin
-            case (init_step)
-              INIT_STEP_READ: begin
-                init_step <= INIT_STEP_CNU_A;
-              end
+          case (init_step)
+            INIT_STEP_READ: begin
+              init_step <= INIT_STEP_CNU_A;
+            end
 
-              INIT_STEP_CNU_A: begin
-                init_step <= INIT_STEP_WRITE;
-              end
+            INIT_STEP_CNU_A: begin
+              init_step <= INIT_STEP_WRITE;
+            end
 
-              default: begin
-                if (i_c2v_row_group_pos_last) begin
-                  o_c2v_row_group_pos <= '0;
-                  if (o_c2v_var_idx == LAST_VAR) begin
-                    ctrl_state <= CTRL_ITER;
-                    clear_next_m_pending <= 1'b1;
-                    producer_active <= 1'b0;
-                    producer_step <= PROD_STEP_READ;
-                    consumer_active <= 1'b0;
-                    consumer_mode <= CONS_MODE_ACCUM;
-                    consumer_step <= CONS_STEP_READ;
-                    o_c2v_var_idx <= '0;
-                    o_v2c_var_idx <= '0;
-                    o_v2c_row_group_pos <= '0;
-                  end else begin
-                    o_c2v_var_idx <= next_var(o_c2v_var_idx);
-                    init_step <= INIT_STEP_READ;
-                  end
+            default: begin
+              if (i_c2v_row_group_pos_last) begin
+                o_c2v_row_group_pos <= '0;
+                if (o_c2v_var_idx == LAST_VAR) begin
+                  ctrl_state <= CTRL_ITER;
+                  producer_active <= 1'b1;
+                  producer_step <= PROD_STEP_READ;
+                  consumer_active <= 1'b0;
+                  consumer_mode <= CONS_MODE_ACCUM;
+                  consumer_step <= CONS_STEP_READ;
+                  o_c2v_var_idx <= '0;
+                  o_v2c_var_idx <= '0;
+                  o_v2c_row_group_pos <= '0;
                 end else begin
-                  o_c2v_row_group_pos <= o_c2v_row_group_pos + EDGE_W'(1);
+                  o_c2v_var_idx <= next_var(o_c2v_var_idx);
                   init_step <= INIT_STEP_READ;
                 end
+              end else begin
+                o_c2v_row_group_pos <= o_c2v_row_group_pos + EDGE_W'(1);
+                init_step <= INIT_STEP_READ;
               end
-            endcase
-          end
+            end
+          endcase
         end
 
         CTRL_ITER: begin
           o_done <= 1'b0;
-          if (clear_next_m_pending) begin
-            clear_next_m_pending <= 1'b0;
-            producer_active <= 1'b1;
-            producer_step <= PROD_STEP_READ;
-            consumer_active <= 1'b0;
-            consumer_mode <= CONS_MODE_ACCUM;
-            consumer_step <= CONS_STEP_READ;
-            o_c2v_var_idx <= '0;
-            o_c2v_row_group_pos <= '0;
-            o_v2c_var_idx <= '0;
-            o_v2c_row_group_pos <= '0;
-          end else if (iter_check_pending) begin
+          if (iter_check_pending) begin
             iter_check_pending <= 1'b0;
             o_iter_count <= next_iter_count;
             if (i_finish_decode) begin
@@ -399,8 +359,7 @@ module decoder_ctrl
               o_success <= i_decode_success;
             end else begin
               o_m_read_pair <= o_m_write_pair;
-              clear_next_m_pending <= 1'b1;
-              producer_active <= 1'b0;
+              producer_active <= 1'b1;
               producer_step <= PROD_STEP_READ;
               consumer_active <= 1'b0;
               consumer_mode <= CONS_MODE_ACCUM;
@@ -524,8 +483,6 @@ module decoder_ctrl
           o_done <= 1'b1;
           if (i_start) begin
             ctrl_state <= CTRL_SEED;
-            init_clear_pending <= 1'b0;
-            clear_next_m_pending <= 1'b0;
             iter_check_pending <= 1'b0;
             producer_active <= 1'b0;
             producer_step <= PROD_STEP_READ;
