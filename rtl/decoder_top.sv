@@ -77,9 +77,9 @@ module decoder_top
   logic [I_ENTRY_W-1:0] c2v_buffer_row_group_entries [0:L-1][0:W-1];
   logic [ROW_GROUP_COUNT_W-1:0] ram_i_shift_write_count [0:L-1];
   logic [ROW_GROUP_COUNT_W-1:0] ram_i_shift_write_count_next [0:L-1];
-  logic [I_ENTRY_W-1:0] h_shift_entry_in [0:L-1];
+  logic [ROW_W-ROW_GROUP_IDX_W-1:0] h_shift_row_idx_group_in [0:L-1];
   logic [ROW_GROUP_IDX_W-1:0] shifted_row_group_idx [0:L-1];
-  logic [I_ENTRY_W-1:0] shifted_entry [0:L-1];
+  logic [ROW_W-ROW_GROUP_IDX_W-1:0] shifted_row_idx_group [0:L-1];
   logic shifted_valid [0:L-1];
   logic shift_ram_i;
   logic shift_ram_i_last;
@@ -241,26 +241,20 @@ module decoder_top
     integer row_group_idx;
 
     for (row_group_idx = 0; row_group_idx < L; row_group_idx++) begin
-      h_shift_entry_in[row_group_idx] = {
-        c2v_latched_edge_slot[row_group_idx],
-        c2v_latched_row_local[row_group_idx]
-      };
+      h_shift_row_idx_group_in[row_group_idx] =
+        c2v_latched_row_local[row_group_idx][0 +: (ROW_W-ROW_GROUP_IDX_W)];
     end
   end
 
   h_shift #(
     .R(R),
     .L(L),
-    .COLUMN_WEIGHT(W),
     .ROW_IDX_W(ROW_W),
-    .GROUP_IDX_W(ROW_GROUP_IDX_W),
-    .I_ENTRY_ROW_IDX_GROUP_LSB(I_ENTRY_ROW_LOCAL_LSB),
-    .I_ENTRY_ONE_IDX_LSB(I_ENTRY_EDGE_SLOT_LSB),
-    .I_ENTRY_W(I_ENTRY_W)
+    .GROUP_IDX_W(ROW_GROUP_IDX_W)
   ) u_h_shift (
-    .i_ram_i_entry(h_shift_entry_in),
+    .i_row_idx_group(h_shift_row_idx_group_in),
     .o_ram_i_target_idx(shifted_row_group_idx),
-    .o_ram_i_entry(shifted_entry)
+    .o_row_idx_group(shifted_row_idx_group)
   );
 
   // Aggregate the two row_group RAM-I debug counts into the shape expected by
@@ -383,7 +377,7 @@ module decoder_top
         ram_i_shift_entry_idx[shifted_row_group_idx[row_group_idx]] =
           EDGE_W'(ram_i_shift_write_count_next[shifted_row_group_idx[row_group_idx]]);
         ram_i_shift_entry_wdata[shifted_row_group_idx[row_group_idx]] =
-          shifted_entry[row_group_idx];
+          {c2v_latched_edge_slot[row_group_idx], ROW_W'(shifted_row_idx_group[row_group_idx])};
         ram_i_shift_write_count_next[shifted_row_group_idx[row_group_idx]] =
           ram_i_shift_write_count_next[shifted_row_group_idx[row_group_idx]] + 1'b1;
       end
