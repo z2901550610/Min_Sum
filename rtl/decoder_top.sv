@@ -72,13 +72,22 @@ module decoder_top
   logic [I_ENTRY_W-1:0] v2c_column_row_group_entries [0:L-1][0:W-1];
   logic [ROW_GROUP_COUNT_W-1:0] v2c_next_column_row_group_count [0:L-1];
   logic [I_ENTRY_W-1:0] v2c_next_column_row_group_entries [0:L-1][0:W-1];
-  logic [ROW_GROUP_COUNT_W-1:0] shifted_group0_count;
-  logic [ROW_GROUP_COUNT_W-1:0] shifted_group1_count;
-  logic [I_ENTRY_W-1:0] shifted_group0_entries [0:W-1];
-  logic [I_ENTRY_W-1:0] shifted_group1_entries [0:W-1];
+  logic c2v_column_buffer_valid;
+  logic [ROW_GROUP_COUNT_W-1:0] c2v_buffer_row_group_count [0:L-1];
+  logic [I_ENTRY_W-1:0] c2v_buffer_row_group_entries [0:L-1][0:W-1];
+  logic [ROW_GROUP_COUNT_W-1:0] ram_i_shift_write_count [0:L-1];
+  logic [ROW_GROUP_COUNT_W-1:0] ram_i_shift_write_count_next [0:L-1];
+  logic [I_ENTRY_W-1:0] h_shift_entry_in [0:L-1];
+  logic [ROW_GROUP_IDX_W-1:0] shifted_row_group_idx [0:L-1];
+  logic [I_ENTRY_W-1:0] shifted_entry [0:L-1];
+  logic shifted_valid [0:L-1];
+  logic shift_ram_i;
+  logic shift_ram_i_last;
+  logic ram_i_shift_we [0:L-1];
+  logic [EDGE_W-1:0] ram_i_shift_entry_idx [0:L-1];
+  logic [I_ENTRY_W-1:0] ram_i_shift_entry_wdata [0:L-1];
   logic c2v_row_group_pos_last;
   logic v2c_row_group_pos_last;
-  logic shift_ram_i;
 
   // Per-edge decoded metadata used to address RAM-M/S/T/U.
   logic c2v_row_group_valid [0:L-1];
@@ -228,15 +237,30 @@ module decoder_top
   assign c2v_h_block_idx = H_BLOCK_W'(int'(c2v_var_idx) / R);
   assign o_e = error_estimate_bits;
 
-  h_shift u_h_shift (
-    .i_group0_entries(ram_i0_list_entries),
-    .i_group0_count(ram_i_count[0]),
-    .i_group1_entries(ram_i1_list_entries),
-    .i_group1_count(ram_i_count[1]),
-    .o_group0_entries(shifted_group0_entries),
-    .o_group0_count(shifted_group0_count),
-    .o_group1_entries(shifted_group1_entries),
-    .o_group1_count(shifted_group1_count)
+  always_comb begin
+    integer row_group_idx;
+
+    for (row_group_idx = 0; row_group_idx < L; row_group_idx++) begin
+      h_shift_entry_in[row_group_idx] = {
+        c2v_latched_edge_slot[row_group_idx],
+        c2v_latched_row_local[row_group_idx]
+      };
+    end
+  end
+
+  h_shift #(
+    .R(R),
+    .L(L),
+    .COLUMN_WEIGHT(W),
+    .ROW_IDX_W(ROW_W),
+    .GROUP_IDX_W(ROW_GROUP_IDX_W),
+    .I_ENTRY_ROW_IDX_GROUP_LSB(I_ENTRY_ROW_LOCAL_LSB),
+    .I_ENTRY_ONE_IDX_LSB(I_ENTRY_EDGE_SLOT_LSB),
+    .I_ENTRY_W(I_ENTRY_W)
+  ) u_h_shift (
+    .i_ram_i_entry(h_shift_entry_in),
+    .o_ram_i_target_idx(shifted_row_group_idx),
+    .o_ram_i_entry(shifted_entry)
   );
 
   // Aggregate the two row_group RAM-I debug counts into the shape expected by
@@ -251,14 +275,24 @@ module decoder_top
   end
 
   // 将两个 RAM-I 实例的 group-local list/count 合成 c2v 侧当前列视图。
+  // 一旦当前列开始，后续 metadata 从 buffer 读，避免单 entry shift 写回
+  // 下一列时破坏还在使用的当前列视图。
   always_comb begin
     integer entry_idx_local;
 
-    c2v_column_row_group_count[0] = ram_i_count[0];
-    c2v_column_row_group_count[1] = ram_i_count[1];
+    c2v_column_row_group_count[0] =
+      c2v_column_buffer_valid ? c2v_buffer_row_group_count[0] : ram_i_count[0];
+    c2v_column_row_group_count[1] =
+      c2v_column_buffer_valid ? c2v_buffer_row_group_count[1] : ram_i_count[1];
     for (entry_idx_local = 0; entry_idx_local < W; entry_idx_local++) begin
-      c2v_column_row_group_entries[0][entry_idx_local] = ram_i0_list_entries[entry_idx_local];
-      c2v_column_row_group_entries[1][entry_idx_local] = ram_i1_list_entries[entry_idx_local];
+      c2v_column_row_group_entries[0][entry_idx_local] =
+        c2v_column_buffer_valid ?
+        c2v_buffer_row_group_entries[0][entry_idx_local] :
+        ram_i0_list_entries[entry_idx_local];
+      c2v_column_row_group_entries[1][entry_idx_local] =
+        c2v_column_buffer_valid ?
+        c2v_buffer_row_group_entries[1][entry_idx_local] :
+        ram_i1_list_entries[entry_idx_local];
     end
   end
 
@@ -315,25 +349,45 @@ module decoder_top
     end
   end
 
-  // 选择 RAM-I list_load 数据；同一路径用于 seed 第一列和写入 shift 后的下一列。
+  // 选择 RAM-I seed list_load 数据。正常解码中的 H shift 使用 RAM-I
+  // 单 entry 写口逐项写回下一列 metadata。
   always_comb begin
     integer entry_idx_local;
+    integer row_group_idx;
 
-    shift_ram_i = (init_m_write || c2v_write_t) && c2v_row_group_pos_last;
-    ram_i_list_load_en = seed_active || shift_ram_i;
-    ram_i_list_load_hblk_idx = seed_active ? seed_h_block_idx : c2v_h_block_idx;
+    shift_ram_i = init_m_write || c2v_write_t;
+    shift_ram_i_last = shift_ram_i && c2v_row_group_pos_last;
+    ram_i_list_load_en = seed_active;
+    ram_i_list_load_hblk_idx = seed_h_block_idx;
     for (entry_idx_local = 0; entry_idx_local < W; entry_idx_local++) begin
-      ram_i0_list_load_entries[entry_idx_local] = seed_active ?
-        QC_FIRST_COL_ROW_GROUP_ENTRY[seed_h_block_idx][0][entry_idx_local] :
-        shifted_group0_entries[entry_idx_local];
-      ram_i1_list_load_entries[entry_idx_local] = seed_active ?
-        QC_FIRST_COL_ROW_GROUP_ENTRY[seed_h_block_idx][1][entry_idx_local] :
-        shifted_group1_entries[entry_idx_local];
+      ram_i0_list_load_entries[entry_idx_local] =
+        QC_FIRST_COL_ROW_GROUP_ENTRY[seed_h_block_idx][0][entry_idx_local];
+      ram_i1_list_load_entries[entry_idx_local] =
+        QC_FIRST_COL_ROW_GROUP_ENTRY[seed_h_block_idx][1][entry_idx_local];
     end
-    ram_i0_list_load_count = seed_active ?
-      QC_FIRST_COL_ROW_GROUP_COUNT[seed_h_block_idx][0] : shifted_group0_count;
-    ram_i1_list_load_count = seed_active ?
-      QC_FIRST_COL_ROW_GROUP_COUNT[seed_h_block_idx][1] : shifted_group1_count;
+    ram_i0_list_load_count = QC_FIRST_COL_ROW_GROUP_COUNT[seed_h_block_idx][0];
+    ram_i1_list_load_count = QC_FIRST_COL_ROW_GROUP_COUNT[seed_h_block_idx][1];
+
+    shifted_valid[0] = shift_ram_i && c2v_latched_row_group_valid[0];
+    shifted_valid[1] = shift_ram_i && c2v_latched_row_group_valid[1];
+    for (row_group_idx = 0; row_group_idx < L; row_group_idx++) begin
+      ram_i_shift_write_count_next[row_group_idx] = ram_i_shift_write_count[row_group_idx];
+      ram_i_shift_we[row_group_idx] = 1'b0;
+      ram_i_shift_entry_idx[row_group_idx] = EDGE_W'(ram_i_shift_write_count[row_group_idx]);
+      ram_i_shift_entry_wdata[row_group_idx] = '0;
+    end
+
+    for (row_group_idx = 0; row_group_idx < L; row_group_idx++) begin
+      if (shifted_valid[row_group_idx]) begin
+        ram_i_shift_we[shifted_row_group_idx[row_group_idx]] = 1'b1;
+        ram_i_shift_entry_idx[shifted_row_group_idx[row_group_idx]] =
+          EDGE_W'(ram_i_shift_write_count_next[shifted_row_group_idx[row_group_idx]]);
+        ram_i_shift_entry_wdata[shifted_row_group_idx[row_group_idx]] =
+          shifted_entry[row_group_idx];
+        ram_i_shift_write_count_next[shifted_row_group_idx[row_group_idx]] =
+          ram_i_shift_write_count_next[shifted_row_group_idx[row_group_idx]] + 1'b1;
+      end
+    end
   end
 
   // Centralized single-port memory steering for RAM-M/S/T/U and the hard
@@ -522,6 +576,8 @@ module decoder_top
 
     if (!i_rst_n) begin
       for (row_group_idx = 0; row_group_idx < L; row_group_idx++) begin
+        c2v_buffer_row_group_count[row_group_idx] <= '0;
+        ram_i_shift_write_count[row_group_idx] <= '0;
         v2c_column_row_group_count[row_group_idx] <= '0;
         v2c_next_column_row_group_count[row_group_idx] <= '0;
         c2v_latched_row_group_valid[row_group_idx] <= 1'b0;
@@ -535,10 +591,12 @@ module decoder_top
         v2c_m_latched_row_local[row_group_idx] <= '0;
         u_next_msg_reg[row_group_idx] <= '0;
         for (idx = 0; idx < W; idx++) begin
+          c2v_buffer_row_group_entries[row_group_idx][idx] <= '0;
           v2c_column_row_group_entries[row_group_idx][idx] <= '0;
           v2c_next_column_row_group_entries[row_group_idx][idx] <= '0;
         end
       end
+      c2v_column_buffer_valid <= 1'b0;
       c2v_latched_var <= '0;
       c2v_latched_m_read_pair <= 1'b0;
       v2c_m_latched_var <= '0;
@@ -559,6 +617,26 @@ module decoder_top
         end
         c2v_latched_var <= c2v_var_idx;
         c2v_latched_m_read_pair <= m_read_pair;
+      end
+
+      if ((init_m_read || c2v_read) && (c2v_row_group_pos == '0) && !c2v_column_buffer_valid) begin
+        c2v_column_buffer_valid <= 1'b1;
+        ram_i_shift_write_count[0] <= '0;
+        ram_i_shift_write_count[1] <= '0;
+        c2v_buffer_row_group_count[0] <= ram_i_count[0];
+        c2v_buffer_row_group_count[1] <= ram_i_count[1];
+        for (idx = 0; idx < W; idx++) begin
+          c2v_buffer_row_group_entries[0][idx] <= ram_i0_list_entries[idx];
+          c2v_buffer_row_group_entries[1][idx] <= ram_i1_list_entries[idx];
+        end
+      end
+
+      if (shift_ram_i) begin
+        ram_i_shift_write_count[0] <= ram_i_shift_write_count_next[0];
+        ram_i_shift_write_count[1] <= ram_i_shift_write_count_next[1];
+        if (shift_ram_i_last) begin
+          c2v_column_buffer_valid <= 1'b0;
+        end
       end
 
       if (capture_v2c_column_now) begin
@@ -850,13 +928,13 @@ module decoder_top
   ram_i u_ram_i0 (
     .i_clk(i_clk),
     .i_rst_n(i_rst_n),
-    .i_en(1'b0),
-    .i_we(1'b0),
+    .i_en(ram_i_shift_we[0]),
+    .i_we(ram_i_shift_we[0]),
     .i_hblk_idx(c2v_h_block_idx),
-    .i_entry_idx('0),
-    .i_entry_wdata('0),
-    .i_count_we(1'b0),
-    .i_count_wdata('0),
+    .i_entry_idx(ram_i_shift_entry_idx[0]),
+    .i_entry_wdata(ram_i_shift_entry_wdata[0]),
+    .i_count_we(shift_ram_i_last),
+    .i_count_wdata(ram_i_shift_write_count_next[0]),
     .i_list_load_en(ram_i_list_load_en),
     .i_list_load_hblk_idx(ram_i_list_load_hblk_idx),
     .i_list_load_entries(ram_i0_list_load_entries),
@@ -871,13 +949,13 @@ module decoder_top
   ram_i u_ram_i1 (
     .i_clk(i_clk),
     .i_rst_n(i_rst_n),
-    .i_en(1'b0),
-    .i_we(1'b0),
+    .i_en(ram_i_shift_we[1]),
+    .i_we(ram_i_shift_we[1]),
     .i_hblk_idx(c2v_h_block_idx),
-    .i_entry_idx('0),
-    .i_entry_wdata('0),
-    .i_count_we(1'b0),
-    .i_count_wdata('0),
+    .i_entry_idx(ram_i_shift_entry_idx[1]),
+    .i_entry_wdata(ram_i_shift_entry_wdata[1]),
+    .i_count_we(shift_ram_i_last),
+    .i_count_wdata(ram_i_shift_write_count_next[1]),
     .i_list_load_en(ram_i_list_load_en),
     .i_list_load_hblk_idx(ram_i_list_load_hblk_idx),
     .i_list_load_entries(ram_i1_list_load_entries),

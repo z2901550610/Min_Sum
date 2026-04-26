@@ -81,12 +81,14 @@ zero, or fails after `I_MAX` iterations.
   pulses and column-buffer handoff events.
 - RAM-I is seeded with first-column row-group lists. During decode, the active
   column's row/local-row/edge-index metadata comes from the RAM-I row-group
-  lists; after the c2v side finishes a column, `h_shift` advances those packed
-  lists by `+1 mod R` and writes them back for the next c2v column. v2c
-  metadata is buffered separately so the c2v side can keep RAM-I one column
-  ahead. `decoder_top` now consumes RAM-I through formal functional column-view
-  outputs instead of using RAM debug arrays in the functional path. Project-wide
-  RTL naming for indexes, rows, entries, lists, and counts is defined in
+  lists. `h_shift` has one entry input for each RAM-I block and one shifted
+  entry output for each lane, then the datapath writes each shifted entry
+  through RAM-I's single-entry write port for the next c2v column. v2c metadata
+  is buffered separately so the c2v side can keep RAM-I one column ahead.
+  `decoder_top` now consumes RAM-I through formal functional column-view
+  outputs instead of using RAM debug arrays in the functional path.
+  Project-wide RTL naming for indexes, rows, entries, lists, and counts is
+  defined in
   [`docs/naming_conventions.md`](/Users/z2901550610/Documents/Min_Sum/docs/naming_conventions.md).
   The current row-group scheme is parity-based: `row_group 0` stores even
   rows, `row_group 1` stores odd rows, and `row_local` is the compact
@@ -102,9 +104,9 @@ zero, or fails after `I_MAX` iterations.
   [`rtl/generated/qc_first_columns.svh`](/Users/z2901550610/Documents/Min_Sum/rtl/generated/qc_first_columns.svh).
   `decoder_top` consumes only the generated tables; it no longer derives row-group
   grouping from `H_BASE` internally.
-- The current RTL keeps the practical whole-column RAM-I writeback/cache
-  scheme; it does not implement strict edge-by-edge RAM-I timing from the
-  paper.
+- The c2v side buffers the active RAM-I column at column start so single-entry
+  shifted writes for the next column cannot disturb the current column's
+  metadata view.
 - Two-stage scaling, flexible message storage selection, the paper's wide-word
   `RAM S` packing/shift-register scheme, and group-size re-balancing are not
   implemented yet. The RTL keeps the existing single-stage VNU scaling.

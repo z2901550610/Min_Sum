@@ -1,95 +1,52 @@
-// Advances every "1" in a packed QC column by +1 mod R and reassigns row_groups.
-// row_group 0 stores even rows, row_group 1 stores odd rows, and row_local is
-// the compact parity-local index floor(row_global / 2).
+// 目前实现的是根据"row_idx_global 属于第 l 组，当且仅当row_idx_global mod L = l"进行分组
+// one_idx--"1"的索引
+// row_idx--行号索引
+// _global--全局
+// _group--组内
 module h_shift
-  import bike_pkg::*;
+  #(
+    parameter int R = 8,  // 单个矩阵长宽
+    parameter int L = 2,  // 并行度
+    parameter int W = 3,  // 矩阵列权重
+    parameter int ONE_IDX_W = (W > 1) ? $clog2(W) : 1,  // "1"的索引位宽
+    parameter int ROW_IDX_W = (R > 1) ? $clog2(R) : 1,  // 行索引位宽
+    parameter int GROUP_IDX_W = (L > 1) ? $clog2(L) : 1,  // 分组索引位宽
+    parameter int I_ENTRY_ROW_IDX_GROUP_LSB = 0,
+    parameter int I_ENTRY_ONE_IDX_LSB = I_ENTRY_ROW_IDX_GROUP_LSB + ROW_IDX_W,
+    parameter int I_ENTRY_W = I_ENTRY_ONE_IDX_LSB + ONE_IDX_W
+  )
 (
-  input  logic [I_ENTRY_W-1:0] i_group0_entries [0:W-1],   // Packed entries for even-row metadata before the shift.
-  input  logic [ROW_GROUP_COUNT_W-1:0] i_group0_count,     // How many even-row entries are valid.
-  input  logic [I_ENTRY_W-1:0] i_group1_entries [0:W-1],   // Packed entries for odd-row metadata before the shift.
-  input  logic [ROW_GROUP_COUNT_W-1:0] i_group1_count,     // How many odd-row entries are valid.
-  output logic [I_ENTRY_W-1:0] o_group0_entries [0:W-1],   // Packed entries after the shift that land on even rows.
-  output logic [ROW_GROUP_COUNT_W-1:0] o_group0_count,     // How many shifted entries land on even rows.
-  output logic [I_ENTRY_W-1:0] o_group1_entries [0:W-1],   // Packed entries after the shift that land on odd rows.
-  output logic [ROW_GROUP_COUNT_W-1:0] o_group1_count      // How many shifted entries land on odd rows.
+  input  logic [I_ENTRY_W-1:0] i_ram_i_entry [0:L-1], // entry 中保存的是{one_idx_global, row_idx_group}
+  output logic [GROUP_IDX_W-1:0] o_ram_i_target_idx [0:L-1],
+  output logic [I_ENTRY_W-1:0] o_ram_i_entry [0:L-1]
 );
 
-  timeunit 1ns;
-  timeprecision 1ps;
+  localparam logic [ROW_IDX_W-1:0] MAX_ROW_IDX = ROW_IDX_W'(R - 1);
 
   always_comb begin
-    integer edge_idx_local;
-    integer row_value_local;
-    integer next_row_value_local;
-    logic [ROW_GROUP_IDX_W-1:0] next_row_group_idx_local;
-    logic [EDGE_W-1:0] next_edge_idx_local;
-    logic [ROW_W-1:0] row_local_value;
-    logic [ROW_W-1:0] next_row_local_value;
+    for (int group_idx = 0; group_idx < L; group_idx++) begin
+      logic [ROW_IDX_W-GROUP_IDX_W-1:0] row_idx_group;  // 组内行号idx，2并行时，行号idx的最后一位用来确定存在哪个ram i中
+      logic [ONE_IDX_W-1:0]             one_idx_global; // 全局“1”的idx
+      logic [GROUP_IDX_W-1:0]           group_idx_bits; // 组的idx，也就是组内行号idx相对于全局行号idx剔除的部分
+      logic [ROW_IDX_W-1:0]             row_idx_global; // 全局行号idx，由组内行号idx和组的idx拼接而成
+      logic [ROW_IDX_W-1:0]             next_row_idx_global;
+      logic [ROW_IDX_W-1:0]             next_row_idx_group;
 
-    row_value_local = 0;
-    next_row_value_local = 0;
-    next_row_group_idx_local = '0;
-    next_edge_idx_local = '0;
-    row_local_value = '0;
-    next_row_local_value = '0;
+      row_idx_group  = i_ram_i_entry[group_idx][I_ENTRY_ROW_IDX_GROUP_LSB +: (ROW_IDX_W-GROUP_IDX_W)];
+      one_idx_global = i_ram_i_entry[group_idx][I_ENTRY_ONE_IDX_LSB +: ONE_IDX_W];
+      group_idx_bits = GROUP_IDX_W'(group_idx);
 
-    o_group0_count = '0;
-    o_group1_count = '0;
-    for (edge_idx_local = 0; edge_idx_local < W; edge_idx_local++) begin
-      o_group0_entries[edge_idx_local] = '0;
-      o_group1_entries[edge_idx_local] = '0;
-    end
+      row_idx_global = {row_idx_group, group_idx_bits};
 
-    for (edge_idx_local = 0; edge_idx_local < W; edge_idx_local++) begin
-      if (edge_idx_local < i_group0_count) begin
-        row_local_value = i_group0_entries[edge_idx_local][I_ENTRY_ROW_LOCAL_LSB +: ROW_W];
-        row_value_local = int'(row_local_value) << 1;
-        next_row_value_local = (row_value_local + 1) % R;
-        next_row_group_idx_local = ROW_GROUP_IDX_W'(next_row_value_local & 1);
-        next_row_local_value = ROW_W'(next_row_value_local >> 1);
+      next_row_idx_global = (row_idx_global == MAX_ROW_IDX) ? '0 : (row_idx_global + 1'b1);
+      
+      next_row_idx_group  = {
+        {GROUP_IDX_W{1'b0}},
+        next_row_idx_global[ROW_IDX_W-1:GROUP_IDX_W]
+      };
 
-        if (next_row_group_idx_local == ROW_GROUP_IDX_W'(0)) begin
-          next_edge_idx_local = EDGE_W'(o_group0_count);
-          o_group0_entries[next_edge_idx_local] = {
-            i_group0_entries[edge_idx_local][I_ENTRY_EDGE_SLOT_LSB +: EDGE_W],
-            next_row_local_value
-          };
-          o_group0_count = o_group0_count + 1'b1;
-        end else begin
-          next_edge_idx_local = EDGE_W'(o_group1_count);
-          o_group1_entries[next_edge_idx_local] = {
-            i_group0_entries[edge_idx_local][I_ENTRY_EDGE_SLOT_LSB +: EDGE_W],
-            next_row_local_value
-          };
-          o_group1_count = o_group1_count + 1'b1;
-        end
-      end
-    end
-
-    for (edge_idx_local = 0; edge_idx_local < W; edge_idx_local++) begin
-      if (edge_idx_local < i_group1_count) begin
-        row_local_value = i_group1_entries[edge_idx_local][I_ENTRY_ROW_LOCAL_LSB +: ROW_W];
-        row_value_local = (int'(row_local_value) << 1) | 1;
-        next_row_value_local = (row_value_local + 1) % R;
-        next_row_group_idx_local = ROW_GROUP_IDX_W'(next_row_value_local & 1);
-        next_row_local_value = ROW_W'(next_row_value_local >> 1);
-
-        if (next_row_group_idx_local == ROW_GROUP_IDX_W'(0)) begin
-          next_edge_idx_local = EDGE_W'(o_group0_count);
-          o_group0_entries[next_edge_idx_local] = {
-            i_group1_entries[edge_idx_local][I_ENTRY_EDGE_SLOT_LSB +: EDGE_W],
-            next_row_local_value
-          };
-          o_group0_count = o_group0_count + 1'b1;
-        end else begin
-          next_edge_idx_local = EDGE_W'(o_group1_count);
-          o_group1_entries[next_edge_idx_local] = {
-            i_group1_entries[edge_idx_local][I_ENTRY_EDGE_SLOT_LSB +: EDGE_W],
-            next_row_local_value
-          };
-          o_group1_count = o_group1_count + 1'b1;
-        end
-      end
+      o_ram_i_target_idx[group_idx] = next_row_idx_global[GROUP_IDX_W-1:0];
+      o_ram_i_entry[group_idx] = {one_idx_global, next_row_idx_group};
     end
   end
 endmodule

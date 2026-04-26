@@ -19,7 +19,7 @@ module vnu
   input  logic                       i_col_end,
   input  logic signed [MSG_W-1:0]    i_initial_llr,
 
-  // 来自两个 group 的当前 c2v 输入，使用2的补码表示
+  // 来自两个 CNU B 的当前 c2v 输入，使用2的补码表示
   input  logic                       i_c2v0_valid,
   input  logic signed [MSG_W-1:0]    i_c2v0,
   input  logic                       i_c2v1_valid,
