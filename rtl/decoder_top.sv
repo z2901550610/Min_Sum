@@ -73,8 +73,8 @@ module decoder_top
   logic c2v_column_buffer_valid;
   logic [GROUP_COUNT_W-1:0] c2v_buffer_group_count [0:L-1];
   logic [I_ENTRY_W-1:0] c2v_buffer_group_entries [0:L-1][0:W-1];
-  logic [GROUP_COUNT_W-1:0] ram_i_shift_write_count [0:L-1];
-  logic [GROUP_COUNT_W-1:0] ram_i_shift_write_count_next [0:L-1];
+  logic [GROUP_COUNT_W-1:0] ram_i_shift_write_ptr [0:L-1];
+  logic [GROUP_COUNT_W-1:0] ram_i_shift_write_ptr_next [0:L-1];
   logic [I_ENTRY_W-1:0] h_shift_entry_in [0:L-1];
   logic [GROUP_IDX_W-1:0] shifted_group_idx [0:L-1];
   logic [I_ENTRY_W-1:0] shifted_entry [0:L-1];
@@ -82,7 +82,7 @@ module decoder_top
   logic shift_ram_i;
   logic shift_ram_i_last;
   logic ram_i_shift_we [0:L-1];
-  logic [ONE_IDX_W-1:0] ram_i_shift_entry_idx [0:L-1];
+  logic [ONE_IDX_W-1:0] ram_i_shift_entry_addr [0:L-1];
   logic [I_ENTRY_W-1:0] ram_i_shift_entry_wdata [0:L-1];
   logic c2v_entry_pos_last;
   logic v2c_entry_pos_last;
@@ -208,9 +208,9 @@ module decoder_top
   logic signed [VNU_TC_W-1:0] vnu_v2c_tc [0:L-1];
   logic [MSG_W-1:0] vnu_v2c_msg [0:L-1];
 
-  function automatic int m_index(input logic pair, input logic [GROUP_IDX_W-1:0] row_group);
+  function automatic int m_index(input logic pair, input logic [GROUP_IDX_W-1:0] group_idx);
     begin
-      m_index = (pair ? 2 : 0) + int'(row_group);
+      m_index = (pair ? 2 : 0) + int'(group_idx);
     end
   endfunction
 
@@ -350,21 +350,21 @@ module decoder_top
     shifted_valid[0] = shift_ram_i && c2v_latched_group_valid[0];
     shifted_valid[1] = shift_ram_i && c2v_latched_group_valid[1];
     for (group_idx = 0; group_idx < L; group_idx++) begin
-      ram_i_shift_write_count_next[group_idx] = ram_i_shift_write_count[group_idx];
+      ram_i_shift_write_ptr_next[group_idx] = ram_i_shift_write_ptr[group_idx];
       ram_i_shift_we[group_idx] = 1'b0;
-      ram_i_shift_entry_idx[group_idx] = ONE_IDX_W'(ram_i_shift_write_count[group_idx]);
+      ram_i_shift_entry_addr[group_idx] = ONE_IDX_W'(ram_i_shift_write_ptr[group_idx]);
       ram_i_shift_entry_wdata[group_idx] = '0;
     end
 
     for (group_idx = 0; group_idx < L; group_idx++) begin
       if (shifted_valid[group_idx]) begin
         ram_i_shift_we[shifted_group_idx[group_idx]] = 1'b1;
-        ram_i_shift_entry_idx[shifted_group_idx[group_idx]] =
-          ONE_IDX_W'(ram_i_shift_write_count_next[shifted_group_idx[group_idx]]);
+        ram_i_shift_entry_addr[shifted_group_idx[group_idx]] =
+          ONE_IDX_W'(ram_i_shift_write_ptr_next[shifted_group_idx[group_idx]]);
         ram_i_shift_entry_wdata[shifted_group_idx[group_idx]] =
           shifted_entry[group_idx];
-        ram_i_shift_write_count_next[shifted_group_idx[group_idx]] =
-          ram_i_shift_write_count_next[shifted_group_idx[group_idx]] + 1'b1;
+        ram_i_shift_write_ptr_next[shifted_group_idx[group_idx]] =
+          ram_i_shift_write_ptr_next[shifted_group_idx[group_idx]] + 1'b1;
       end
     end
   end
@@ -556,7 +556,7 @@ module decoder_top
     if (!i_rst_n) begin
       for (group_idx = 0; group_idx < L; group_idx++) begin
         c2v_buffer_group_count[group_idx] <= '0;
-        ram_i_shift_write_count[group_idx] <= '0;
+        ram_i_shift_write_ptr[group_idx] <= '0;
         v2c_column_group_count[group_idx] <= '0;
         v2c_next_column_group_count[group_idx] <= '0;
         c2v_latched_group_valid[group_idx] <= 1'b0;
@@ -600,8 +600,8 @@ module decoder_top
 
       if ((init_m_read || c2v_read) && (c2v_entry_pos == '0) && !c2v_column_buffer_valid) begin
         c2v_column_buffer_valid <= 1'b1;
-        ram_i_shift_write_count[0] <= '0;
-        ram_i_shift_write_count[1] <= '0;
+        ram_i_shift_write_ptr[0] <= '0;
+        ram_i_shift_write_ptr[1] <= '0;
         c2v_buffer_group_count[0] <= ram_i_count[0];
         c2v_buffer_group_count[1] <= ram_i_count[1];
         for (idx = 0; idx < W; idx++) begin
@@ -611,8 +611,8 @@ module decoder_top
       end
 
       if (shift_ram_i) begin
-        ram_i_shift_write_count[0] <= ram_i_shift_write_count_next[0];
-        ram_i_shift_write_count[1] <= ram_i_shift_write_count_next[1];
+        ram_i_shift_write_ptr[0] <= ram_i_shift_write_ptr_next[0];
+        ram_i_shift_write_ptr[1] <= ram_i_shift_write_ptr_next[1];
         if (shift_ram_i_last) begin
           c2v_column_buffer_valid <= 1'b0;
         end
@@ -909,11 +909,11 @@ module decoder_top
     .i_rst_n(i_rst_n),
     .i_en(ram_i_shift_we[0]),
     .i_we(ram_i_shift_we[0]),
-    .i_hblk_idx(c2v_h_block_idx),
-    .i_entry_idx(ram_i_shift_entry_idx[0]),
+    .i_h_block_idx(c2v_h_block_idx),
+    .i_entry_idx(ram_i_shift_entry_addr[0]),
     .i_entry_wdata(ram_i_shift_entry_wdata[0]),
     .i_count_we(shift_ram_i_last),
-    .i_count_wdata(ram_i_shift_write_count_next[0]),
+    .i_count_wdata(ram_i_shift_write_ptr_next[0]),
     .o_entry_rdata(ram_i_entry_rdata_unused[0]),
     .o_count(ram_i_count[0]),
     .o_list_entries(ram_i0_list_entries),
@@ -928,11 +928,11 @@ module decoder_top
     .i_rst_n(i_rst_n),
     .i_en(ram_i_shift_we[1]),
     .i_we(ram_i_shift_we[1]),
-    .i_hblk_idx(c2v_h_block_idx),
-    .i_entry_idx(ram_i_shift_entry_idx[1]),
+    .i_h_block_idx(c2v_h_block_idx),
+    .i_entry_idx(ram_i_shift_entry_addr[1]),
     .i_entry_wdata(ram_i_shift_entry_wdata[1]),
     .i_count_we(shift_ram_i_last),
-    .i_count_wdata(ram_i_shift_write_count_next[1]),
+    .i_count_wdata(ram_i_shift_write_ptr_next[1]),
     .o_entry_rdata(ram_i_entry_rdata_unused[1]),
     .o_count(ram_i_count[1]),
     .o_list_entries(ram_i1_list_entries),

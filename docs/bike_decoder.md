@@ -5,8 +5,8 @@
 本 RTL 实现了一个 BIKE 风格的syndrome解码器。校验矩阵为双循环矩阵：
 
 - `H = [H0 | H1]`
-- `H0` 和 `H1` 由各自的首列向量表示，存储在 `bike_pkg.H_BASE[h_sel][hblk_idx][one_idx]` 中
-- `hblk_idx = 0` 对应 `H0`，`hblk_idx = 1` 对应 `H1`
+- `H0` 和 `H1` 由各自的首列向量表示，存储在 `bike_pkg.H_BASE[h_sel][h_block_idx][one_idx_global]` 中
+- `h_block_idx = 0` 对应 `H0`，`h_block_idx = 1` 对应 `H1`
 
 解码器接受初始syndrome，根据静态首列向量填充各 circulant bank，并估计错误向量：
 
@@ -37,7 +37,7 @@
 row_sign_xor ^ edge_u_sign ^ syndrome[row]
 ```
 
-每次迭代结束时，从 RAM C1 的内容重新计算残差syndrome，RAM C1 是导出错误估计 `o_e` 的唯一数据源。残差为零时解码成功，达到 `I_MAX` 次迭代后仍未清零则解码失败。
+每次迭代结束时，从 RAM C 的内容重新计算残差syndrome，RAM C 是导出错误估计 `o_e` 的唯一数据源。残差为零时解码成功，达到 `I_MAX` 次迭代后仍未清零则解码失败。
 
 ## 初始化
 
@@ -87,7 +87,7 @@ ram_i #(.INIT_HEX_STEM("rtl/generated/ram_i1")) u_ram_i1 (...);
 - `decoder_top` 是解码器核心数据通路和结构互连。它实例化各编号 RAM 块、`decoder_ctrl`、`h_shift`、CNU/VNU 单元和消息编解码适配器；顶层逻辑仅限于 RAM 端口选择、RAM-I 行组 entry 处理、数据锁存和残差syndrome重算。
 - `vnu` 以 2's-complement 格式消费 c2v 并生成未饱和的 2's-complement v2c。符号-幅值转换在 VNU 输入/输出边界的外部 `msg_codec` 适配器中完成；RAM-T 和 VNU 缩放数据通路保持在 2's-complement 域内。
 - `ram_i`、`ram_m`、`ram_s`、`ram_t`、`ram_u`、`ram_c` 均为论文风格的同步读单端口 RAM 原语。每个 RTL 文件对应一个编号 RAM 块。
-- `decoder_top` 按论文命名显式实例化各 RAM 块：`I0/I1`、`M0/M1/M2/M3`、`S0/S1`、`T0/T1`、`U0/U1`、`C0/C1`。
+- `decoder_top` 按论文命名显式实例化各 RAM 块：`I0/I1`、`M0/M1/M2/M3`、`S0/S1`、`T0/T1`、`U0/U1`、`C`。
 - `decoder_ctrl` 遵循论文的 Fig.8 式单端口调度：每次迭代先将列 0 的数据填入 RAM-T，然后进入列重叠流水线——c2v 侧重建列 `j+1` 的同时 v2c 侧累积并更新列 `j`，最后排空 v2c 的最后一列，进入 `ITER_CHECK`。复用的 RAM-M 行通过逐行 epoch 追踪器实现 `COMP_C2V_INIT` 语义。`phase` 信号仅用于调试；数据通路时序由显式的控制脉冲和列缓冲切换事件驱动。
 - RAM-I 在仿真启动时通过 `$readmemh` 从 hex 文件加载首列元数据。解码期间，活跃列的行/局部行/边索引元数据来自 RAM-I 的行组列表。`h_shift` 为每个 RAM-I 块设置一个 entry 输入，为每个 lane 设置一个移位后的 entry 输出，数据通路通过 RAM-I 的单 entry 写端口将每个移位后的 entry 写入下一个 c2v 列。v2c 元数据独立缓冲，使 c2v 侧的 RAM-I 可以领先一列。`decoder_top` 通过 RAM-I 的功能列视图输出访问 RAM-I。项目级 RTL 命名约定定义在 [`docs/naming_conventions.md`](/Users/z2901550610/Documents/Min_Sum/docs/naming_conventions.md) 中。行组方案基于奇偶：`row_group 0` 存储偶数行，`row_group 1` 存储奇数行，`row_local` 为紧凑的奇偶局部索引 `floor(row_global / 2)`。CNU/VNU 行地址调度由 RAM-I 元数据驱动。
 - `decoder_edge_meta` 和 `qc_column_preprocess` 保留在 [`rtl/reference/`](/Users/z2901550610/Documents/Min_Sum/rtl/reference) 下作为参考辅助文件。核心解码器使用 RAM-I + `h_shift` 提供活跃边元数据。

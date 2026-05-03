@@ -236,7 +236,7 @@ module decoder_ctrl
   end
 
   // State update rules:
-  // 1. INIT builds the first compressed-c2v pair one row_group position at a time.
+  // 1. INIT builds the first compressed-c2v pair one group position at a time.
   //    RAM-I is pre-initialised by $readmemh before simulation starts.
   // 2. ITER prime phase fills v2c column 0.
   // 3. Once v2c is active, c2v stays one column ahead when possible.

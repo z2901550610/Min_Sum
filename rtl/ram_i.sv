@@ -11,7 +11,7 @@ module ram_i
   input  logic i_rst_n,
   input  logic i_en,
   input  logic i_we,
-  input  logic [H_BLOCK_W-1:0] i_hblk_idx,
+  input  logic [H_BLOCK_W-1:0] i_h_block_idx,
   input  logic [ONE_IDX_W-1:0] i_entry_idx,
   input  logic [I_ENTRY_W-1:0] i_entry_wdata,
   input  logic i_count_we,
@@ -26,16 +26,16 @@ module ram_i
   timeunit 1ns;
   timeprecision 1ps;
 
-  // 每个 hblk 保存一个 group-local list；count 说明 list 前几项有效。
+  // 每个 h_block 保存一个 group-local list；count 说明 list 前几项有效。
   logic [I_ENTRY_W-1:0] list_entries_mem [0:N0-1][0:W-1];
   logic [GROUP_COUNT_W-1:0] list_count_mem [0:N0-1];
   assign o_debug_list_entries = list_entries_mem;
   assign o_debug_counts = list_count_mem;
 
   always_comb begin
-    o_count = list_count_mem[i_hblk_idx];
+    o_count = list_count_mem[i_h_block_idx];
     for (int entry_idx_local = 0; entry_idx_local < W; entry_idx_local++) begin
-      o_list_entries[entry_idx_local] = list_entries_mem[i_hblk_idx][entry_idx_local];
+      o_list_entries[entry_idx_local] = list_entries_mem[i_h_block_idx][entry_idx_local];
     end
   end
 
@@ -45,12 +45,12 @@ module ram_i
     end else begin
       if (i_en) begin
         if (i_we) begin
-          list_entries_mem[i_hblk_idx][i_entry_idx] <= i_entry_wdata;
+          list_entries_mem[i_h_block_idx][i_entry_idx] <= i_entry_wdata;
         end
-        o_entry_rdata <= list_entries_mem[i_hblk_idx][i_entry_idx];
+        o_entry_rdata <= list_entries_mem[i_h_block_idx][i_entry_idx];
       end
       if (i_count_we) begin
-        list_count_mem[i_hblk_idx] <= i_count_wdata;
+        list_count_mem[i_h_block_idx] <= i_count_wdata;
       end
     end
   end
