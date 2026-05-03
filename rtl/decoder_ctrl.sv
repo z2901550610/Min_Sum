@@ -21,8 +21,6 @@ module decoder_ctrl
   output logic [ONE_IDX_W-1:0] o_active_entry_pos,             // Debug-selected entry list position.
   output logic o_m_read_pair,                                  // RAM-M pair selected for compressed-c2v reads.
   output logic o_m_write_pair,                                 // RAM-M pair selected for compressed-c2v writes.
-  output logic o_seed_active,                                  // Loads static first-column RAM-I metadata.
-  output logic [H_BLOCK_W-1:0] o_seed_h_block_idx,              // Which H block's first-column RAM-I list is seeded.
   output logic o_init_m_read,                                  // Reads RAM-M/RAM-U for initial CNU_A.
   output logic o_init_cnu_a,                                   // Enables CNU_A for initial accumulation.
   output logic o_init_m_write,                                 // Writes initial CNU_A result.
@@ -52,15 +50,14 @@ module decoder_ctrl
   localparam int ITER_W = $clog2(I_MAX + 1);
   localparam logic [VAR_W-1:0] LAST_VAR = VAR_W'(N - 1);
 
-  // Macro control states. Fine-grain activity is carried by the c2v and v2c
-  // column contexts below rather than by a long flat micro-phase FSM.
+  // Macro control states.
   localparam logic [2:0] CTRL_WAIT = 3'd0;
-  localparam logic [2:0] CTRL_SEED = 3'd1;
   localparam logic [2:0] CTRL_INIT = 3'd2;
   localparam logic [2:0] CTRL_ITER = 3'd3;
   localparam logic [2:0] CTRL_DONE = 3'd4;
 
-  // INIT walks one column entry position through read -> CNU_A -> write.
+  // INIT walks each column entry position through read -> CNU_A -> write.
+  // RAM-I is initialised by $readmemh at simulation start, so no SEED step.
   localparam logic [1:0] INIT_STEP_READ = 2'd0;
   localparam logic [1:0] INIT_STEP_CNU_A = 2'd1;
   localparam logic [1:0] INIT_STEP_WRITE = 2'd2;
@@ -107,8 +104,6 @@ module decoder_ctrl
   // current context in a compact encoding.
   assign next_iter_count = o_iter_count + 1'b1;
   assign o_m_write_pair = ~o_m_read_pair;
-  assign o_seed_active = (ctrl_state == CTRL_SEED);
-
   assign o_init_m_read = (ctrl_state == CTRL_INIT) && (init_step == INIT_STEP_READ);
   assign o_init_cnu_a = (ctrl_state == CTRL_INIT) && (init_step == INIT_STEP_CNU_A);
   assign o_init_m_write = (ctrl_state == CTRL_INIT) && (init_step == INIT_STEP_WRITE);
@@ -186,13 +181,8 @@ module decoder_ctrl
         o_phase = DEC_PH_WAIT;
       end
 
-      CTRL_SEED: begin
-        o_state = DEC_INIT_DECODER;
-        o_phase = DEC_PH_SEED_I;
-      end
-
       CTRL_INIT: begin
-        o_state = DEC_INIT_ROW_ACCUM;
+        o_state = DEC_INIT_DECODER;
         case (init_step)
           INIT_STEP_READ: o_phase = DEC_PH_INIT_M_READ;
           INIT_STEP_CNU_A: o_phase = DEC_PH_INIT_CNU_A;
@@ -247,6 +237,7 @@ module decoder_ctrl
 
   // State update rules:
   // 1. INIT builds the first compressed-c2v pair one row_group position at a time.
+  //    RAM-I is pre-initialised by $readmemh before simulation starts.
   // 2. ITER prime phase fills v2c column 0.
   // 3. Once v2c is active, c2v stays one column ahead when possible.
   // 4. When c2v drains, v2c finishes the remaining column and then
@@ -266,7 +257,6 @@ module decoder_ctrl
       o_c2v_entry_pos <= '0;
       o_v2c_entry_pos <= '0;
       o_m_read_pair <= 1'b0;
-      o_seed_h_block_idx <= '0;
       o_c2v_v2c_overlap_seen <= 1'b0;
       o_done <= 1'b0;
       o_success <= 1'b0;
@@ -277,7 +267,8 @@ module decoder_ctrl
           o_done <= 1'b0;
           o_success <= 1'b0;
           if (i_start) begin
-            ctrl_state <= CTRL_SEED;
+            ctrl_state <= CTRL_INIT;
+            init_step <= INIT_STEP_READ;
             iter_check_pending <= 1'b0;
             producer_active <= 1'b0;
             producer_step <= PROD_STEP_READ;
@@ -289,25 +280,8 @@ module decoder_ctrl
             o_c2v_entry_pos <= '0;
             o_v2c_entry_pos <= '0;
             o_m_read_pair <= 1'b0;
-            o_seed_h_block_idx <= '0;
             o_c2v_v2c_overlap_seen <= 1'b0;
             o_iter_count <= '0;
-          end
-        end
-
-        CTRL_SEED: begin
-          if (o_seed_h_block_idx == H_BLOCK_W'(N0 - 1)) begin
-            ctrl_state <= CTRL_INIT;
-            init_step <= INIT_STEP_READ;
-            iter_check_pending <= 1'b0;
-            producer_active <= 1'b0;
-            consumer_active <= 1'b0;
-            o_c2v_var_idx <= '0;
-            o_v2c_var_idx <= '0;
-            o_c2v_entry_pos <= '0;
-            o_v2c_entry_pos <= '0;
-          end else begin
-            o_seed_h_block_idx <= o_seed_h_block_idx + H_BLOCK_W'(1);
           end
         end
 
@@ -321,7 +295,7 @@ module decoder_ctrl
               init_step <= INIT_STEP_WRITE;
             end
 
-            default: begin
+            INIT_STEP_WRITE: begin
               if (i_c2v_entry_pos_last) begin
                 o_c2v_entry_pos <= '0;
                 if (o_c2v_var_idx == LAST_VAR) begin
@@ -343,6 +317,8 @@ module decoder_ctrl
                 init_step <= INIT_STEP_READ;
               end
             end
+
+            default: init_step <= INIT_STEP_READ;
           endcase
         end
 
@@ -482,7 +458,8 @@ module decoder_ctrl
         default: begin
           o_done <= 1'b1;
           if (i_start) begin
-            ctrl_state <= CTRL_SEED;
+            ctrl_state <= CTRL_INIT;
+            init_step <= INIT_STEP_READ;
             iter_check_pending <= 1'b0;
             producer_active <= 1'b0;
             producer_step <= PROD_STEP_READ;
@@ -494,7 +471,6 @@ module decoder_ctrl
             o_c2v_entry_pos <= '0;
             o_v2c_entry_pos <= '0;
             o_m_read_pair <= 1'b0;
-            o_seed_h_block_idx <= '0;
             o_c2v_v2c_overlap_seen <= 1'b0;
             o_done <= 1'b0;
             o_success <= 1'b0;

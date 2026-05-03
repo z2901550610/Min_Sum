@@ -158,12 +158,5 @@ package bike_pkg;
     }
   };
 `endif
-  `include "generated/qc_first_columns.svh"
-  // Deprecated aliases — the generated file now defines the canonical names
-  // QC_FIRST_COL_GROUP_ENTRY / QC_FIRST_COL_GROUP_COUNT directly.
-  localparam logic [I_ENTRY_W-1:0] QC_FIRST_COL_ROW_GROUP_ENTRY [0:N0-1][0:L-1][0:W-1] =
-    QC_FIRST_COL_GROUP_ENTRY;
-  localparam logic [ROW_GROUP_COUNT_W-1:0] QC_FIRST_COL_ROW_GROUP_COUNT [0:N0-1][0:L-1] =
-    QC_FIRST_COL_GROUP_COUNT;
   /* verilator lint_on UNUSEDPARAM */
 endpackage

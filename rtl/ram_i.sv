@@ -1,7 +1,11 @@
 // RAM-I：一个实例只保存一个 group 的 H-block 列 metadata。
 // list 是该 group 内的 packed entries，entry = {one_idx_global, row_idx_group}。
+// 上电时通过 $readmemh 从 hex 文件加载初始数据。
 module ram_i
   import bike_pkg::*;
+#(
+  parameter string INIT_HEX_STEM = "rtl/generated/ram_i"
+)
 (
   input  logic i_clk,
   input  logic i_rst_n,
@@ -12,10 +16,6 @@ module ram_i
   input  logic [I_ENTRY_W-1:0] i_entry_wdata,
   input  logic i_count_we,
   input  logic [GROUP_COUNT_W-1:0] i_count_wdata,
-  input  logic i_list_load_en,
-  input  logic [H_BLOCK_W-1:0] i_list_load_hblk_idx,
-  input  logic [I_ENTRY_W-1:0] i_list_load_entries [0:W-1],
-  input  logic [GROUP_COUNT_W-1:0] i_list_load_count,
   output logic [I_ENTRY_W-1:0] o_entry_rdata,
   output logic [GROUP_COUNT_W-1:0] o_count,
   output logic [I_ENTRY_W-1:0] o_list_entries [0:W-1],
@@ -42,18 +42,6 @@ module ram_i
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin
       o_entry_rdata <= '0;
-      for (int hblk_idx_local = 0; hblk_idx_local < N0; hblk_idx_local++) begin
-        list_count_mem[hblk_idx_local] <= '0;
-        for (int entry_idx_local = 0; entry_idx_local < W; entry_idx_local++) begin
-          list_entries_mem[hblk_idx_local][entry_idx_local] <= '0;
-        end
-      end
-    end else if (i_list_load_en) begin
-      // 整组覆盖：seed 第一列或写入 h_shift 后的下一列 metadata。
-      list_count_mem[i_list_load_hblk_idx] <= i_list_load_count;
-      for (int entry_idx_local = 0; entry_idx_local < W; entry_idx_local++) begin
-        list_entries_mem[i_list_load_hblk_idx][entry_idx_local] <= i_list_load_entries[entry_idx_local];
-      end
     end else begin
       if (i_en) begin
         if (i_we) begin
@@ -65,5 +53,17 @@ module ram_i
         list_count_mem[i_hblk_idx] <= i_count_wdata;
       end
     end
+  end
+
+  // 从 hex 文件加载初始数据，替代原先的 SEED+list_load 机制。
+`ifdef BIKE_L1_PARAMS
+  localparam string INIT_TAG = "_l1";
+`else
+  localparam string INIT_TAG = "_test";
+`endif
+
+  initial begin
+    $readmemh({INIT_HEX_STEM, "_entries", INIT_TAG, ".hex"}, list_entries_mem);
+    $readmemh({INIT_HEX_STEM, "_counts", INIT_TAG, ".hex"}, list_count_mem);
   end
 endmodule

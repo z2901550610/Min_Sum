@@ -1,7 +1,7 @@
 # RTL 命名规范
 
 本文档定义本项目 RTL 中常用对象、索引、地址和数据接口的命名规则。目标是让
-`row_group`、`hblk_idx`、`entry_idx`、`edge_slot`、`row_local` 等词在所有模块里
+`row_group`、`hblk_idx`、`entry_idx`、`one_idx`、`row_local` 等词在所有模块里
 保持同一个含义，避免新读代码的人把“分组编号”“组内位置”“边编号”和“行号”
 混在一起。
 
@@ -20,10 +20,10 @@ block 组成；每个变量列有 `W` 条边；为了并行处理，校验行被
 | `check_row` | `0..R-1` | 全局校验行编号。 |
 | `row_local` | `0..floor((R-1)/2)` | 当前 row group 内的紧凑局部行号。当前 RTL 中等于 `floor(row_global / 2)`。 |
 | `row_global` | `0..R-1` | 绝对校验行号。需要从 `row_group` 和 `row_local` 重建。 |
-| `edge_slot` | `0..W-1` | 一个变量列内的边编号，用于访问 RAM-S/T/U 的 edge 维。 |
+| `one_idx` | `0..W-1` | 一个变量列内某个"1"的位置编号（即该列第几条边），用于访问 RAM-S/T/U 的边维度。 |
 | `list` | `[0:W-1]` | 一组 packed entries，通常表示当前 group-local metadata 列表。 |
 | `entry_idx` | `0..W-1` | `list` 内的位置编号，是相对索引，不是行号。 |
-| `entry` | packed value | 单个 metadata 项。当前 RAM-I entry 格式是 `{edge_slot, row_local}`。 |
+| `entry` | packed value | 单个 metadata 项。当前 RAM-I entry 格式是 `{one_idx, row_local}`。 |
 | `count` | `0..W` | 一个 list 中有效 entry 的数量。只有 `entry_idx < count` 的项有效。 |
 
 ## 层级关系
@@ -37,7 +37,7 @@ per-row-group metadata storage
 list_entries
   [hblk_idx]                 // 0..N0-1，选择 H block
     [entry_idx]              // 0..W-1，选择当前 list 内的位置
-      entry = {edge_slot, row_local}
+      entry = {one_idx, row_local}
                |          |
                |          +-- 当前 row_group 内的局部行号
                +------------- 变量列内的边编号，0..W-1
@@ -53,9 +53,9 @@ list_count
 
 entry_idx   list_entries[0][entry_idx]          是否有效
 ---------   ------------------------------      --------
-0           {edge_slot=0, row_local=1}          entry_idx < count，有效
-1           {edge_slot=2, row_local=3}          entry_idx < count，有效
-2           {edge_slot=0, row_local=0}          entry_idx >= count，无效
+0           {one_idx=0, row_local=1}          entry_idx < count，有效
+1           {one_idx=2, row_local=3}          entry_idx < count，有效
+2           {one_idx=0, row_local=0}          entry_idx >= count，无效
 
 list_count[0] = 2
 ```
@@ -76,9 +76,8 @@ group。端口可以直接叫 `entry_idx`、`list_entries`、`count`，由实例
 
 | 后缀 | 用法 | 示例 |
 | --- | --- | --- |
-| `_idx` | 离散编号或数组索引。优先用于逻辑对象编号。 | `hblk_idx`, `var_idx`, `entry_idx` |
+| `_idx` | 离散编号或数组索引。优先用于逻辑对象编号。 | `one_idx`, `hblk_idx`, `var_idx`, `entry_idx` |
 | `_addr` | 真实 RAM 地址端口。只有信号直接接到存储器地址时使用。 | `check_row_addr` |
-| `_slot` | 固定宽度槽位编号，通常是变量列内第几条边。 | `edge_slot` |
 | `_local` | 在当前分组/局部坐标系内有效。 | `row_local` |
 | `_global` | 全局坐标系内有效。 | `row_global` |
 
@@ -87,7 +86,7 @@ group。端口可以直接叫 `entry_idx`、`list_entries`、`count`，由实例
 ```text
 hblk_idx      // H block 选择，0..N0-1
 entry_idx     // list 内位置，0..W-1
-edge_slot     // 变量列内边槽位，0..W-1
+one_idx     // 变量列内 "1" 的位置编号，0..W-1
 row_local     // 当前 row_group 内局部行号
 row_global    // 绝对行号
 ```
@@ -193,7 +192,7 @@ i_list_load_count
 | 模块/区域 | 推荐命名 | 说明 |
 | --- | --- | --- |
 | RAM-I metadata | `entry_idx`, `entry_wdata`, `list_entries`, `count` | 一个实例属于一个 row group；端口名不重复 group。 |
-| RAM-S/T/U edge 维 | `edge_slot` | 访问变量列内第几条边。 |
+| RAM-S/T/U edge 维 | `one_idx` | 访问变量列内第几条边。 |
 | RAM-M 行地址 | `check_row_addr` 或 `row_local` | 如果 RAM-M 是 per-group 存储，地址应是局部行。 |
 | C2V/V2C 跨 group 数组 | `*_row_group_valid[0:L-1]` | 数组维度确实是 row group。 |
 | H block 选择 | `hblk_idx` | 避免混用 `bank`、`block`、`column`。 |

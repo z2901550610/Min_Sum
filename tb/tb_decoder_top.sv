@@ -166,16 +166,6 @@ module tb_decoder_top;
     apply_reset();
     start_case(CASE1_SYNDROME);
 
-    wait (dut.init_m_read && dut.c2v_var_idx == 0 && dut.active_entry_pos == 0);
-    #1;
-    for (h_block_idx = 0; h_block_idx < N0; h_block_idx++) begin
-      for (group_idx = 0; group_idx < L; group_idx++) begin
-        if (dut.ram_i_debug_count[h_block_idx][group_idx] != QC_FIRST_COL_GROUP_COUNT[h_block_idx][group_idx]) begin
-          $fatal(1, "RAM I count mismatch at H block %0d row_group %0d", h_block_idx, group_idx);
-        end
-      end
-    end
-
     wait (dut.init_m_read && dut.c2v_var_idx == 1 && dut.active_entry_pos == 0);
     #1;
     if (dut.ram_i_debug_count[0][0] != GROUP_COUNT_W'(2)) $fatal(1, "RAM I shifted row_group0 count mismatch for column 1");

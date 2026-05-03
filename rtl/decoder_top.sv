@@ -46,8 +46,6 @@ module decoder_top
 
   logic m_read_pair;
   logic m_write_pair;
-  logic seed_active;
-  logic [H_BLOCK_W-1:0] seed_h_block_idx;
 
   logic init_m_read;
   logic init_cnu_a;
@@ -129,12 +127,6 @@ module decoder_top
   logic [GROUP_COUNT_W-1:0] ram_i1_debug_count [0:N0-1];
   logic [I_ENTRY_W-1:0] ram_i0_list_entries [0:W-1];
   logic [I_ENTRY_W-1:0] ram_i1_list_entries [0:W-1];
-  logic [I_ENTRY_W-1:0] ram_i0_list_load_entries [0:W-1];
-  logic [I_ENTRY_W-1:0] ram_i1_list_load_entries [0:W-1];
-  logic [GROUP_COUNT_W-1:0] ram_i0_list_load_count;
-  logic [GROUP_COUNT_W-1:0] ram_i1_list_load_count;
-  logic [H_BLOCK_W-1:0] ram_i_list_load_hblk_idx;
-  logic ram_i_list_load_en;
 
   // Paper-style RAM port steering. Each block is single-port, so the top
   // centralizes all enables, addresses, and write data here.
@@ -349,24 +341,13 @@ module decoder_top
     end
   end
 
-  // 选择 RAM-I seed list_load 数据。正常解码中的 H shift 使用 RAM-I
-  // 单 entry 写口逐项写回下一列 metadata。
+  // H shift：使用 RAM-I 单 entry 写口逐项写回下一列 metadata。
   always_comb begin
     integer entry_idx_local;
     integer group_idx;
 
     shift_ram_i = init_m_write || c2v_write_t;
     shift_ram_i_last = shift_ram_i && c2v_entry_pos_last;
-    ram_i_list_load_en = seed_active;
-    ram_i_list_load_hblk_idx = seed_h_block_idx;
-    for (entry_idx_local = 0; entry_idx_local < W; entry_idx_local++) begin
-      ram_i0_list_load_entries[entry_idx_local] =
-        QC_FIRST_COL_GROUP_ENTRY[seed_h_block_idx][0][entry_idx_local];
-      ram_i1_list_load_entries[entry_idx_local] =
-        QC_FIRST_COL_GROUP_ENTRY[seed_h_block_idx][1][entry_idx_local];
-    end
-    ram_i0_list_load_count = QC_FIRST_COL_GROUP_COUNT[seed_h_block_idx][0];
-    ram_i1_list_load_count = QC_FIRST_COL_GROUP_COUNT[seed_h_block_idx][1];
 
     shifted_valid[0] = shift_ram_i && c2v_latched_group_valid[0];
     shifted_valid[1] = shift_ram_i && c2v_latched_group_valid[1];
@@ -900,8 +881,6 @@ module decoder_top
     .o_active_entry_pos(active_entry_pos),
     .o_m_read_pair(m_read_pair),
     .o_m_write_pair(m_write_pair),
-    .o_seed_active(seed_active),
-    .o_seed_h_block_idx(seed_h_block_idx),
     .o_init_m_read(init_m_read),
     .o_init_cnu_a(init_cnu_a),
     .o_init_m_write(init_m_write),
@@ -925,7 +904,9 @@ module decoder_top
     .o_iter_count(o_iter_count)
   );
 
-  ram_i u_ram_i0 (
+  ram_i #(
+    .INIT_HEX_STEM("rtl/generated/ram_i0")
+  ) u_ram_i0 (
     .i_clk(i_clk),
     .i_rst_n(i_rst_n),
     .i_en(ram_i_shift_we[0]),
@@ -935,10 +916,6 @@ module decoder_top
     .i_entry_wdata(ram_i_shift_entry_wdata[0]),
     .i_count_we(shift_ram_i_last),
     .i_count_wdata(ram_i_shift_write_count_next[0]),
-    .i_list_load_en(ram_i_list_load_en),
-    .i_list_load_hblk_idx(ram_i_list_load_hblk_idx),
-    .i_list_load_entries(ram_i0_list_load_entries),
-    .i_list_load_count(ram_i0_list_load_count),
     .o_entry_rdata(ram_i_entry_rdata_unused[0]),
     .o_count(ram_i_count[0]),
     .o_list_entries(ram_i0_list_entries),
@@ -946,7 +923,9 @@ module decoder_top
     .o_debug_counts(ram_i0_debug_count)
   );
 
-  ram_i u_ram_i1 (
+  ram_i #(
+    .INIT_HEX_STEM("rtl/generated/ram_i1")
+  ) u_ram_i1 (
     .i_clk(i_clk),
     .i_rst_n(i_rst_n),
     .i_en(ram_i_shift_we[1]),
@@ -956,10 +935,6 @@ module decoder_top
     .i_entry_wdata(ram_i_shift_entry_wdata[1]),
     .i_count_we(shift_ram_i_last),
     .i_count_wdata(ram_i_shift_write_count_next[1]),
-    .i_list_load_en(ram_i_list_load_en),
-    .i_list_load_hblk_idx(ram_i_list_load_hblk_idx),
-    .i_list_load_entries(ram_i1_list_load_entries),
-    .i_list_load_count(ram_i1_list_load_count),
     .o_entry_rdata(ram_i_entry_rdata_unused[1]),
     .o_count(ram_i_count[1]),
     .o_list_entries(ram_i1_list_entries),

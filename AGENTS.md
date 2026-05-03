@@ -35,3 +35,4 @@
 - Prefer Makefile targets over hand-written Verilator commands.
 - Keep terminal output compact; inspect saved logs only when a failure needs detail.
 - Do not delete generated files casually; many tests depend on generated SV headers.
+- 文档和代码注释中只描述当前状态，不写与旧版本的对比（避免"不再"、"目前已改为"、"no longer"、"now"、"instead of"、"rather than"等表述）。设计文档应描述成品架构，而非修改记录。

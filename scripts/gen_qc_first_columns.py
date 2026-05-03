@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Generate static first-column QC lane tables from bike_pkg.H_BASE."""
+"""Generate RAM-I initialization hex files from bike_pkg.H_BASE."""
 
 from __future__ import annotations
 
 import argparse
+import math
 import re
 from pathlib import Path
 
@@ -12,6 +13,13 @@ def extract_r_values(text: str) -> list[int]:
     values = [int(value) for value in re.findall(r"parameter\s+int\s+R\s*=\s*(\d+)\s*;", text)]
     if len(values) != 2:
         raise ValueError("expected exactly two R parameter values in bike_pkg")
+    return values
+
+
+def extract_w_values(text: str) -> list[int]:
+    values = [int(value) for value in re.findall(r"parameter\s+int\s+W\s*=\s*(\d+)\s*;", text)]
+    if len(values) < 2:
+        raise ValueError("expected at least two W parameter values in bike_pkg")
     return values
 
 
@@ -102,11 +110,10 @@ def extract_h_base_values(text: str) -> list[list[list[int]]]:
         search_from = pos + len(marker)
     if len(positions) != 2:
         raise ValueError("expected exactly two H_BASE declarations in bike_pkg")
-
     return [parse_h_base_literal(extract_h_base_literal(text, pos)) for pos in positions]
 
 
-def first_column_tables(banks: list[list[int]], r_value: int) -> tuple[list[list[int]], list[list[list[tuple[int, int] | None]]]]:
+def first_column_tables(banks: list[list[int]]) -> tuple[list[list[int]], list[list[list[tuple[int, int] | None]]]]:
     lane_count_table: list[list[int]] = []
     lane_entry_table: list[list[list[tuple[int, int] | None]]] = []
 
@@ -128,75 +135,75 @@ def first_column_tables(banks: list[list[int]], r_value: int) -> tuple[list[list
     return lane_count_table, lane_entry_table
 
 
-def render_lane_counts(lane_counts: list[list[int]]) -> str:
-    lines = ["  localparam logic [GROUP_COUNT_W-1:0] QC_FIRST_COL_GROUP_COUNT [0:N0-1][0:L-1] = '{"] 
-    for bank_idx, counts in enumerate(lane_counts):
-        suffix = "," if bank_idx != len(lane_counts) - 1 else ""
-        lines.append(
-            "    '{"
-            + ", ".join(f"GROUP_COUNT_W'({count})" for count in counts)
-            + "}"
-            + suffix
-        )
-    lines.append("  };")
-    return "\n".join(lines)
+def cl2(v: int) -> int:
+    """SystemVerilog $clog2 equivalent."""
+    if v <= 1:
+        return 1
+    return (v - 1).bit_length()
 
 
-def render_lane_entries(lane_entries: list[list[list[tuple[int, int] | None]]]) -> str:
-    lines = ["  localparam logic [I_ENTRY_W-1:0] QC_FIRST_COL_GROUP_ENTRY [0:N0-1][0:L-1][0:W-1] = '{"] 
-    for bank_idx, bank_entries in enumerate(lane_entries):
-        bank_suffix = "," if bank_idx != len(lane_entries) - 1 else ""
-        lines.append("    '{")
-        for lane_idx, lane_slots in enumerate(bank_entries):
-            lane_suffix = "," if lane_idx != len(bank_entries) - 1 else ""
-            slot_exprs: list[str] = []
-            for item in lane_slots:
+def packed_entry(edge_slot: int, row_local: int, row_idx_w: int) -> int:
+    """Pack {one_idx, row_local} into an integer matching RTL I_ENTRY format."""
+    return (edge_slot << row_idx_w) | row_local
+
+
+def write_hex_file(path: Path, values: list[int], width: int) -> None:
+    """Write a hex file with one value per line."""
+    lines = [f"{v:x}" for v in values]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def generate_hex_files(banks: list[list[int]], r_value: int, w_value: int, tag: str, output_dir: Path) -> None:
+    row_idx_w = cl2(r_value)
+
+    lane_counts, lane_entries = first_column_tables(banks)
+
+    # One set of files per lane (row group)
+    lane_names = ["ram_i0", "ram_i1"]
+
+    for lane_idx in range(2):
+        entries: list[int] = []
+        counts: list[int] = []
+        for hblk in range(len(banks)):
+            counts.append(lane_counts[hblk][lane_idx])
+            for entry_idx in range(w_value):
+                item = lane_entries[hblk][lane_idx][entry_idx]
                 if item is None:
-                    slot_exprs.append("'0")
+                    entries.append(0)
                 else:
                     edge_slot, row_local = item
-                    slot_exprs.append(f"{{ONE_IDX_W'({edge_slot}), ROW_IDX_W'({row_local})}}")
-            lines.append("      '{" + ", ".join(slot_exprs) + "}" + lane_suffix)
-        lines.append("    }" + bank_suffix)
-    lines.append("  };")
-    return "\n".join(lines)
+                    entries.append(packed_entry(edge_slot, row_local, row_idx_w))
 
-
-def render_branch(r_value: int, banks: list[list[int]]) -> str:
-    lane_counts, lane_entries = first_column_tables(banks, r_value)
-    return "\n".join([render_lane_counts(lane_counts), render_lane_entries(lane_entries)])
-
-
-def generate_include(input_path: Path, output_path: Path) -> None:
-    source_text = input_path.read_text(encoding="utf-8")
-    r_values = extract_r_values(source_text)
-    h_base_values = extract_h_base_values(source_text)
-    output_text = "\n".join(
-        [
-            "// Auto-generated by scripts/gen_qc_first_columns.py.",
-            "// Source: rtl/bike_pkg.sv H_BASE first-column supports.",
-            "`ifdef BIKE_L1_PARAMS",
-            render_branch(r_values[0], h_base_values[0]),
-            "`else",
-            render_branch(r_values[1], h_base_values[1]),
-            "`endif",
-            "",
-        ]
-    )
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(output_text, encoding="utf-8")
+        write_hex_file(output_dir / f"{lane_names[lane_idx]}_entries_{tag}.hex", entries, 0)
+        write_hex_file(output_dir / f"{lane_names[lane_idx]}_counts_{tag}.hex", counts, 0)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", default="rtl/bike_pkg.sv", help="Source bike_pkg.sv path")
     parser.add_argument(
-        "--output",
-        default="rtl/generated/qc_first_columns.svh",
-        help="Generated include output path",
+        "--output-dir",
+        default="rtl/generated",
+        help="Output directory for hex files",
     )
     args = parser.parse_args()
-    generate_include(Path(args.input), Path(args.output))
+
+    input_path = Path(args.input)
+    output_dir = Path(args.output_dir)
+
+    source_text = input_path.read_text(encoding="utf-8")
+    r_values = extract_r_values(source_text)
+    w_values = extract_w_values(source_text)
+    h_base_values = extract_h_base_values(source_text)
+
+    # Branch 0: BIKE_L1_PARAMS (first H_BASE, first R, first W)
+    generate_hex_files(h_base_values[0], r_values[0], w_values[0], "l1", output_dir)
+
+    # Branch 1: default test params (second H_BASE, second R, second W)
+    generate_hex_files(h_base_values[1], r_values[1], w_values[1], "test", output_dir)
+
+    print(f"Generated hex files in {output_dir}")
 
 
 if __name__ == "__main__":
