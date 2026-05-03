@@ -157,8 +157,8 @@ INIT 为所有变量列构建初始压缩 c2v 对（第一次迭代的输入）�
 播种完成后，每个 entry 依次经过 READ → CNU_A → WRITE 三步。entry 步进规则：
 
 - 非最后 entry（`i_c2v_entry_pos_last = 0`）：递增 `o_c2v_entry_pos`，回到 `INIT_STEP_READ`。
-- 最后 entry 但非最后列：`o_c2v_entry_pos` 归零，`o_c2v_var_idx` 递增，回到 `INIT_STEP_READ`。
-- 最后 entry 且最后列（`o_c2v_var_idx == LAST_VAR`）：所有列初始化完成，进入 **CTRL_ITER**，激活 producer，列索引归零。
+- 最后 entry 但非最后列：`o_c2v_entry_pos` 归零，`o_c2v_col_idx` 递增，回到 `INIT_STEP_READ`。
+- 最后 entry 且最后列（`o_c2v_col_idx == LAST_VAR`）：所有列初始化完成，进入 **CTRL_ITER**，激活 producer，列索引归零。
 
 #### 3. CTRL_ITER — 迭代解码（核心）
 
@@ -170,7 +170,7 @@ INIT 为所有变量列构建初始压缩 c2v 对（第一次迭代的输入）�
 - 循环 `PROD_STEP_READ → PROD_STEP_WRITE`，遍历 c2v 列 0 的所有 entry。
   - `PROD_STEP_READ`：`o_c2v_read = 1`，从 RAM-M / RAM-S 读取压缩 c2v 数据。
   - `PROD_STEP_WRITE`：`o_c2v_write_t = 1`，将 CNU_B/编解码结果写入 RAM-T。
-- 每个 entry 完成后：非最后 entry 则递增 `o_c2v_entry_pos` 回到 `PROD_STEP_READ`。最后 entry 则激活 consumer（`consumer_active = 1`），consumer 模式设为 `CONS_MODE_ACCUM`，`o_v2c_var_idx` 设为与 `o_c2v_var_idx` 相同。若 `o_c2v_var_idx == LAST_VAR`，停用 producer（drain 开始）；否则 producer 继续激活，`o_c2v_var_idx` 递增（overlap 开始），`o_c2v_v2c_overlap_seen` 置位。
+- 每个 entry 完成后：非最后 entry 则递增 `o_c2v_entry_pos` 回到 `PROD_STEP_READ`。最后 entry 则激活 consumer（`consumer_active = 1`），consumer 模式设为 `CONS_MODE_ACCUM`，`o_v2c_col_idx` 设为与 `o_c2v_col_idx` 相同。若 `o_c2v_col_idx == LAST_VAR`，停用 producer（drain 开始）；否则 producer 继续激活，`o_c2v_col_idx` 递增（overlap 开始），`o_c2v_v2c_overlap_seen` 置位。
 
 ##### 3b. PRODUCER + CONSUMER（Overlap 阶段）— 流水线并行
 
@@ -198,9 +198,9 @@ Producer 和 consumer 同时活跃。Consumer 在两个模式间切换：
 
 `CONS_STEP_WRITE` 结束时的分流逻辑：
 
-- v2c 最后 entry 且 `o_v2c_var_idx == LAST_VAR`：停用 consumer，设置 `iter_check_pending = 1`，进入迭代检查。
+- v2c 最后 entry 且 `o_v2c_col_idx == LAST_VAR`：停用 consumer，设置 `iter_check_pending = 1`，进入迭代检查。
 - v2c 最后 entry 且 producer 活跃：停用 consumer，回到仅 producer 模式。
-- v2c 最后 entry 且 producer 不活跃：递增 `o_v2c_var_idx`，若后续还有列则激活 producer 并设 `o_c2v_var_idx` 领先两列。
+- v2c 最后 entry 且 producer 不活跃：递增 `o_v2c_col_idx`，若后续还有列则激活 producer 并设 `o_c2v_col_idx` 领先两列。
 - 否则：递增 `o_v2c_entry_pos`，回到 `CONS_STEP_READ_NEXT_M`。
 
 ##### 3c. CONSUMER ONLY（Drain 阶段）— 排空最后一列

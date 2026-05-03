@@ -6,14 +6,14 @@ module tb_cnu_b;
   logic [COMP_C2V_W-1:0] comp_c2v_in;
   logic v2c_sign_in;
   logic syndrome_bit;
-  logic [VAR_W-1:0] src_var_idx;
+  logic [COL_W-1:0] src_col_idx;
   logic [MSG_W-1:0] c2v_msg_out;
 
   cnu_b dut (
     .i_comp_c2v(comp_c2v_in),
     .i_v2c_sign(v2c_sign_in),
     .i_syndrome_bit(syndrome_bit),
-    .i_var_idx(src_var_idx),
+    .i_col_idx(src_col_idx),
     .o_c2v_msg(c2v_msg_out)
   );
 
@@ -22,14 +22,14 @@ module tb_cnu_b;
 
     v2c_sign_in = 1;
     syndrome_bit = 0;
-    src_var_idx = 4;
+    src_col_idx = 4;
     #1;
     if (int'(c2v_msg_out[MSG_MAG_LSB +: D]) != 5) $fatal(1, "expected min2 path mag=5, got %0d", int'(c2v_msg_out[MSG_MAG_LSB +: D]));
     if (int'(c2v_msg_out[MSG_SIGN_BIT]) != 0) $fatal(1, "expected sign xor result 0, got %0d", int'(c2v_msg_out[MSG_SIGN_BIT]));
 
     v2c_sign_in = 0;
     syndrome_bit = 0;
-    src_var_idx = 6;
+    src_col_idx = 6;
     #1;
     if (int'(c2v_msg_out[MSG_MAG_LSB +: D]) != 2) $fatal(1, "expected min1 path mag=2, got %0d", int'(c2v_msg_out[MSG_MAG_LSB +: D]));
     if (int'(c2v_msg_out[MSG_SIGN_BIT]) != 1) $fatal(1, "expected sign xor result 1, got %0d", int'(c2v_msg_out[MSG_SIGN_BIT]));

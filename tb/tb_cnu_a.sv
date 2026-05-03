@@ -7,7 +7,7 @@ module tb_cnu_a;
   logic rst_n;
   logic in_valid;
   logic [MSG_W-1:0] v2c_msg_in;
-  logic [VAR_W-1:0] src_var_idx;
+  logic [COL_W-1:0] src_col_idx;
   logic [COMP_C2V_W-1:0] comp_c2v_in;
   logic [COMP_C2V_W-1:0] comp_c2v_out;
   logic v2c_sign_out;
@@ -17,8 +17,8 @@ module tb_cnu_a;
     .i_clk(clk),
     .i_rst_n(rst_n),
     .i_en(in_valid),
-    .i_v2c(v2c_msg_in),
-    .i_var_idx(src_var_idx),
+    .i_v2c_msg(v2c_msg_in),
+    .i_col_idx(src_col_idx),
     .i_comp_c2v(comp_c2v_in),
     .o_comp_c2v(comp_c2v_out),
     .o_sign(v2c_sign_out),
@@ -31,12 +31,12 @@ module tb_cnu_a;
   task automatic drive_step(
     input logic [COMP_C2V_W-1:0] comp_c2v_state_in,
     input logic [MSG_W-1:0] msg_in,
-    input logic [VAR_W-1:0] var_idx
+    input logic [COL_W-1:0] col_idx
   );
     begin
       comp_c2v_in = comp_c2v_state_in;
       v2c_msg_in = msg_in;
-      src_var_idx = var_idx;
+      src_col_idx = col_idx;
       in_valid = 1'b1;
       @(posedge clk);
       #1;
@@ -54,7 +54,7 @@ module tb_cnu_a;
     begin
       if (int'(comp_c2v_out[COMP_C2V_MIN1_LSB +: D]) != exp_min1) $fatal(1, "min1 mismatch: got %0d exp %0d", int'(comp_c2v_out[COMP_C2V_MIN1_LSB +: D]), exp_min1);
       if (int'(comp_c2v_out[COMP_C2V_MIN2_LSB +: D]) != exp_min2) $fatal(1, "min2 mismatch: got %0d exp %0d", int'(comp_c2v_out[COMP_C2V_MIN2_LSB +: D]), exp_min2);
-      if (int'(comp_c2v_out[COMP_C2V_MIN_ID_LSB +: VAR_W]) != exp_min_id) $fatal(1, "min_id mismatch: got %0d exp %0d", int'(comp_c2v_out[COMP_C2V_MIN_ID_LSB +: VAR_W]), exp_min_id);
+      if (int'(comp_c2v_out[COMP_C2V_MIN_ID_LSB +: COL_W]) != exp_min_id) $fatal(1, "min_id mismatch: got %0d exp %0d", int'(comp_c2v_out[COMP_C2V_MIN_ID_LSB +: COL_W]), exp_min_id);
       if (int'(comp_c2v_out[COMP_C2V_SIGN_XOR_BIT]) != exp_sign_xor) $fatal(1, "sign_xor mismatch: got %0d exp %0d", int'(comp_c2v_out[COMP_C2V_SIGN_XOR_BIT]), exp_sign_xor);
       if (int'(v2c_sign_out) != exp_sign_bit) $fatal(1, "sign_bit mismatch: got %0d exp %0d", int'(v2c_sign_out), exp_sign_bit);
     end
@@ -64,20 +64,20 @@ module tb_cnu_a;
     rst_n = 1'b0;
     in_valid = 1'b0;
     v2c_msg_in = '0;
-    src_var_idx = '0;
+    src_col_idx = '0;
     comp_c2v_in = COMP_C2V_INIT;
 
     repeat (2) @(posedge clk);
     rst_n = 1'b1;
     @(posedge clk);
 
-    drive_step(COMP_C2V_INIT, {1'b0, D'(5)}, VAR_W'(4));
+    drive_step(COMP_C2V_INIT, {1'b0, D'(5)}, COL_W'(4));
     expect_state(5, MAG_MAX, 4, 0, 0);
 
-    drive_step(comp_c2v_out, {1'b1, D'(2)}, VAR_W'(3));
+    drive_step(comp_c2v_out, {1'b1, D'(2)}, COL_W'(3));
     expect_state(2, 5, 3, 1, 1);
 
-    drive_step(comp_c2v_out, {1'b0, D'(2)}, VAR_W'(7));
+    drive_step(comp_c2v_out, {1'b0, D'(2)}, COL_W'(7));
     expect_state(2, 2, 7, 1, 0);
 
     in_valid = 1'b0;

@@ -6,7 +6,7 @@ module ram_c
   input  logic i_rst_n,
   input  logic i_en,
   input  logic i_we,
-  input  logic [VAR_W-1:0] i_var_idx,                      // Which variable column j / hard-decision bit to access.
+  input  logic [COL_W-1:0] i_col_idx,                      // Which variable column j / hard-decision bit to access.
   input  logic i_wdata,
   output logic o_rdata,
   output logic [N-1:0] o_bits
@@ -29,9 +29,9 @@ module ram_c
       end
     end else if (i_en) begin
       if (i_we) begin
-        mem[i_var_idx] <= i_wdata;
+        mem[i_col_idx] <= i_wdata;
       end
-      o_rdata <= mem[i_var_idx];
+      o_rdata <= mem[i_col_idx];
     end
   end
 endmodule

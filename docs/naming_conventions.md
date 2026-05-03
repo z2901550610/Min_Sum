@@ -16,7 +16,7 @@ group。很多模块只处理其中一个 group，因此端口名必须清楚区
 | --- | --- | --- |
 | `group_idx` | `0..L-1` | 校验行的并行分组编号。只有跨 group 的数组或真正选择 group 的信号才使用这个词。 |
 | `h_block_idx` | `0..N0-1` | H 的 circulant block 编号，即 H0/H1/... 的 block 选择。 |
-| `var_idx` | `0..N-1` | 全局变量节点编号。 |
+| `col_idx` | `0..N-1` | 全局变量节点编号。 |
 | `check_row` | `0..R-1` | 全局校验行编号。 |
 | `row_idx_group` | `0..floor((R-1)/L)` | 当前 group 内的紧凑局部行号。当前 RTL 中等于 `floor(row_idx_global / L)`。 |
 | `row_idx_global` | `0..R-1` | 绝对校验行号。需要从 `group_idx` 和 `row_idx_group` 重建。 |
@@ -98,7 +98,7 @@ group。端口可以直接叫 `entry_pos`、`list_entries`、`count`，由实例
 
 | 后缀 | 用法 | 示例 |
 | --- | --- | --- |
-| `_idx` | 离散编号或数组索引。优先用于逻辑对象编号。 | `var_idx`, `h_block_idx`, `group_idx` |
+| `_idx` | 离散编号或数组索引。优先用于逻辑对象编号。 | `col_idx`, `h_block_idx`, `group_idx` |
 | `_pos` | 遍历 list 的游标位置，会递增步进。 | `c2v_entry_pos`, `v2c_entry_pos` |
 | `_addr` | 真实 RAM 地址端口。只有信号直接接到存储器地址时使用。 | `check_row_addr` |
 | `_global` | 全局坐标系内有效，与 group-local 信号形成对比。 | `one_idx_global`, `row_idx_global` |

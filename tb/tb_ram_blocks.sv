@@ -15,7 +15,7 @@ module tb_ram_blocks;
 
   logic s_en;
   logic s_we;
-  logic [VAR_W-1:0] s_var;
+  logic [COL_W-1:0] s_col_idx;
   logic [ONE_IDX_W-1:0] s_one_idx_global;
   logic s_wdata;
   logic s_rdata;
@@ -55,7 +55,7 @@ module tb_ram_blocks;
     .i_rst_n(rst_n),
     .i_en(s_en),
     .i_we(s_we),
-    .i_var_idx(s_var),
+    .i_col_idx(s_col_idx),
     .i_one_idx_global(s_one_idx_global),
     .i_wdata(s_wdata),
     .o_rdata(s_rdata),
@@ -67,7 +67,7 @@ module tb_ram_blocks;
     .i_rst_n(rst_n),
     .i_en(t_en),
     .i_we(t_we),
-    .i_var_idx(s_var),
+    .i_col_idx(s_col_idx),
     .i_one_idx_global(s_one_idx_global),
     .i_wdata(t_wdata),
     .o_rdata(t_rdata),
@@ -79,7 +79,7 @@ module tb_ram_blocks;
     .i_rst_n(rst_n),
     .i_en(u_en),
     .i_we(u_we),
-    .i_var_idx(s_var),
+    .i_col_idx(s_col_idx),
     .i_one_idx_global(s_one_idx_global),
     .i_wdata(u_wdata),
     .o_rdata(u_rdata),
@@ -91,7 +91,7 @@ module tb_ram_blocks;
     .i_rst_n(rst_n),
     .i_en(c_en),
     .i_we(c_we),
-    .i_var_idx(s_var),
+    .i_col_idx(s_col_idx),
     .i_wdata(c_din),
     .o_rdata(c_dout),
     .o_bits(c_bits)
@@ -108,7 +108,7 @@ module tb_ram_blocks;
     m_wdata = '0;
     s_en = 1'b0;
     s_we = 1'b0;
-    s_var = '0;
+    s_col_idx = '0;
     s_one_idx_global = '0;
     s_wdata = 1'b0;
     t_en = 1'b0;
@@ -141,7 +141,7 @@ module tb_ram_blocks;
     #1;
     if (m_rdata != m_wdata) $fatal(1, "ram_m read-after-write mismatch");
 
-    s_var = VAR_W'(3 % N);
+    s_col_idx = COL_W'(3 % N);
     s_one_idx_global = ONE_IDX_W'(1 % W);
     s_wdata = 1'b1;
     s_en = 1'b1;

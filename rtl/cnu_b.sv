@@ -5,7 +5,7 @@ module cnu_b
   input  logic [COMP_C2V_W-1:0] i_comp_c2v,   // Compressed-c2v state for this check node.
   input  logic i_v2c_sign,                    // Stored sign of this "1"'s prior v2c/u message.
   input  logic i_syndrome_bit,                // Syndrome target bit for this check equation.
-  input  logic [VAR_W-1:0] i_var_idx,         // Which variable column j requests a c2v message.
+  input  logic [COL_W-1:0] i_col_idx,         // Which variable column j requests a c2v message.
   output logic [MSG_W-1:0] o_c2v_msg          // Reconstructed c2v sign-magnitude message.
 );
 
@@ -14,18 +14,18 @@ module cnu_b
 
   logic [D-1:0] c2v_min1_mag;
   logic [D-1:0] c2v_min2_mag;
-  logic [VAR_W-1:0] c2v_min_var_idx;
+  logic [COL_W-1:0] c2v_min_col_idx;
   logic c2v_sign_xor;
   logic [D-1:0] c2v_msg_mag;
   logic c2v_msg_sign;
 
   assign c2v_min1_mag = i_comp_c2v[COMP_C2V_MIN1_LSB +: D];
   assign c2v_min2_mag = i_comp_c2v[COMP_C2V_MIN2_LSB +: D];
-  assign c2v_min_var_idx = i_comp_c2v[COMP_C2V_MIN_ID_LSB +: VAR_W];
+  assign c2v_min_col_idx = i_comp_c2v[COMP_C2V_MIN_ID_LSB +: COL_W];
   assign c2v_sign_xor = i_comp_c2v[COMP_C2V_SIGN_XOR_BIT];
 
   always_comb begin
-    if (i_var_idx == c2v_min_var_idx) begin
+    if (i_col_idx == c2v_min_col_idx) begin
       c2v_msg_mag = c2v_min2_mag;
     end else begin
       c2v_msg_mag = c2v_min1_mag;

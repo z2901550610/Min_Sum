@@ -6,7 +6,7 @@ module ram_s
   input  logic i_rst_n,
   input  logic i_en,
   input  logic i_we,
-  input  logic [VAR_W-1:0] i_var_idx,
+  input  logic [COL_W-1:0] i_col_idx,
   input  logic [ONE_IDX_W-1:0] i_one_idx_global,
   input  logic i_wdata,
   output logic o_rdata,
@@ -23,16 +23,16 @@ module ram_s
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin
       o_rdata <= 1'b0;
-      for (int var_idx = 0; var_idx < N; var_idx++) begin
+      for (int col_idx = 0; col_idx < N; col_idx++) begin
         for (int one_idx = 0; one_idx < W; one_idx++) begin
-          mem[var_idx][one_idx] <= 1'b0;
+          mem[col_idx][one_idx] <= 1'b0;
         end
       end
     end else if (i_en) begin
       if (i_we) begin
-        mem[i_var_idx][i_one_idx_global] <= i_wdata;
+        mem[i_col_idx][i_one_idx_global] <= i_wdata;
       end
-      o_rdata <= mem[i_var_idx][i_one_idx_global];
+      o_rdata <= mem[i_col_idx][i_one_idx_global];
     end
   end
 endmodule
