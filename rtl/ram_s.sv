@@ -1,4 +1,4 @@
-// One paper-style RAM S block storing v2c sign bits for one processing row_group.
+// RAM S — stores v2c sign bits for one processing group.
 module ram_s
   import bike_pkg::*;
 (
@@ -6,8 +6,8 @@ module ram_s
   input  logic i_rst_n,
   input  logic i_en,
   input  logic i_we,
-  input  logic [VAR_W-1:0] i_var_idx,                      // Which variable column j to access.
-  input  logic [EDGE_W-1:0] i_edge_slot,                   // Which "1" in this variable column, range 0..W-1.
+  input  logic [VAR_W-1:0] i_var_idx,
+  input  logic [ONE_IDX_W-1:0] i_one_idx_global,
   input  logic i_wdata,
   output logic o_rdata,
   output logic o_debug_mem [0:N-1][0:W-1]
@@ -24,15 +24,15 @@ module ram_s
     if (!i_rst_n) begin
       o_rdata <= 1'b0;
       for (int var_idx = 0; var_idx < N; var_idx++) begin
-        for (int edge_idx = 0; edge_idx < W; edge_idx++) begin
-          mem[var_idx][edge_idx] <= 1'b0;
+        for (int one_idx = 0; one_idx < W; one_idx++) begin
+          mem[var_idx][one_idx] <= 1'b0;
         end
       end
     end else if (i_en) begin
       if (i_we) begin
-        mem[i_var_idx][i_edge_slot] <= i_wdata;
+        mem[i_var_idx][i_one_idx_global] <= i_wdata;
       end
-      o_rdata <= mem[i_var_idx][i_edge_slot];
+      o_rdata <= mem[i_var_idx][i_one_idx_global];
     end
   end
 endmodule

@@ -4,27 +4,27 @@ module tb_h_shift;
   import bike_pkg::*;
 
   logic [I_ENTRY_W-1:0] ram_i_entry_in [0:L-1];
-  logic [ROW_GROUP_IDX_W-1:0] ram_i_target_idx_out [0:L-1];
+  logic [GROUP_IDX_W-1:0] ram_i_target_idx_out [0:L-1];
   logic [I_ENTRY_W-1:0] ram_i_entry_out [0:L-1];
 
   localparam int ODD_R = 9;
-  localparam int ODD_ROW_W = (ODD_R > 1) ? $clog2(ODD_R) : 1;
+  localparam int ODD_ROW_IDX_W = (ODD_R > 1) ? $clog2(ODD_R) : 1;
   localparam int ODD_ROW_SEG_SIZE = (ODD_R + L - 1) / L;
-  localparam int ODD_I_ENTRY_EDGE_SLOT_LSB = ODD_ROW_W;
-  localparam int ODD_I_ENTRY_W = ODD_I_ENTRY_EDGE_SLOT_LSB + EDGE_W;
+  localparam int ODD_I_ENTRY_ONE_IDX_LSB = ODD_ROW_IDX_W;
+  localparam int ODD_I_ENTRY_W = ODD_I_ENTRY_ONE_IDX_LSB + ONE_IDX_W;
 
   logic [ODD_I_ENTRY_W-1:0] odd_ram_i_entry_in [0:L-1];
-  logic [ROW_GROUP_IDX_W-1:0] odd_ram_i_target_idx_out [0:L-1];
+  logic [GROUP_IDX_W-1:0] odd_ram_i_target_idx_out [0:L-1];
   logic [ODD_I_ENTRY_W-1:0] odd_ram_i_entry_out [0:L-1];
 
   h_shift #(
     .R(R),
     .L(L),
-    .W(W),
-    .ROW_IDX_W(ROW_W),
-    .GROUP_IDX_W(ROW_GROUP_IDX_W),
-    .I_ENTRY_ROW_IDX_GROUP_LSB(I_ENTRY_ROW_LOCAL_LSB),
-    .I_ENTRY_ONE_IDX_LSB(I_ENTRY_EDGE_SLOT_LSB),
+    .ONE_IDX_W(ONE_IDX_W),
+    .ROW_IDX_W(ROW_IDX_W),
+    .GROUP_IDX_W(GROUP_IDX_W),
+    .I_ENTRY_ROW_IDX_GROUP_LSB(I_ENTRY_ROW_IDX_GROUP_LSB),
+    .I_ENTRY_ONE_IDX_LSB(I_ENTRY_ONE_IDX_LSB),
     .I_ENTRY_W(I_ENTRY_W)
   ) dut (
     .i_ram_i_entry(ram_i_entry_in),
@@ -35,11 +35,11 @@ module tb_h_shift;
   h_shift #(
     .R(ODD_R),
     .L(L),
-    .W(W),
-    .ROW_IDX_W(ODD_ROW_W),
-    .GROUP_IDX_W(ROW_GROUP_IDX_W),
-    .I_ENTRY_ROW_IDX_GROUP_LSB(I_ENTRY_ROW_LOCAL_LSB),
-    .I_ENTRY_ONE_IDX_LSB(ODD_I_ENTRY_EDGE_SLOT_LSB),
+    .ONE_IDX_W(ONE_IDX_W),
+    .ROW_IDX_W(ODD_ROW_IDX_W),
+    .GROUP_IDX_W(GROUP_IDX_W),
+    .I_ENTRY_ROW_IDX_GROUP_LSB(I_ENTRY_ROW_IDX_GROUP_LSB),
+    .I_ENTRY_ONE_IDX_LSB(ODD_I_ENTRY_ONE_IDX_LSB),
     .I_ENTRY_W(ODD_I_ENTRY_W)
   ) odd_r_dut (
     .i_ram_i_entry(odd_ram_i_entry_in),
@@ -55,7 +55,7 @@ module tb_h_shift;
       if (edge_slot_i < 0 || edge_slot_i >= W || row_local_i < 0 || row_local_i >= ROW_SEG_SIZE) begin
         make_entry = 'x;
       end else begin
-        make_entry = {EDGE_W'(edge_slot_i), ROW_W'(row_local_i)};
+        make_entry = {ONE_IDX_W'(edge_slot_i), ROW_IDX_W'(row_local_i)};
       end
     end
   endfunction
@@ -69,7 +69,7 @@ module tb_h_shift;
           row_local_i < 0 || row_local_i >= ODD_ROW_SEG_SIZE) begin
         make_odd_entry = 'x;
       end else begin
-        make_odd_entry = {EDGE_W'(edge_slot_i), ODD_ROW_W'(row_local_i)};
+        make_odd_entry = {ONE_IDX_W'(edge_slot_i), ODD_ROW_IDX_W'(row_local_i)};
       end
     end
   endfunction
@@ -89,14 +89,14 @@ module tb_h_shift;
     end
   endfunction
 
-  function automatic logic [ROW_GROUP_IDX_W-1:0] expected_target_idx(
+  function automatic logic [GROUP_IDX_W-1:0] expected_target_idx(
     input int row_group_i,
     input int row_local_i
   );
     int next_row_global;
     begin
       next_row_global = shifted_row_global(row_global_from_second_scheme(row_group_i, row_local_i));
-      expected_target_idx = ROW_GROUP_IDX_W'(next_row_global % L);
+      expected_target_idx = GROUP_IDX_W'(next_row_global % L);
     end
   endfunction
 
@@ -115,9 +115,9 @@ module tb_h_shift;
   task automatic check_shift(
     input logic [I_ENTRY_W-1:0] entry0_i,
     input logic [I_ENTRY_W-1:0] entry1_i,
-    input logic [ROW_GROUP_IDX_W-1:0] expected_target0_i,
+    input logic [GROUP_IDX_W-1:0] expected_target0_i,
     input logic [I_ENTRY_W-1:0] expected_entry0_i,
-    input logic [ROW_GROUP_IDX_W-1:0] expected_target1_i,
+    input logic [GROUP_IDX_W-1:0] expected_target1_i,
     input logic [I_ENTRY_W-1:0] expected_entry1_i
   );
     begin
@@ -173,11 +173,11 @@ module tb_h_shift;
       odd_ram_i_entry_in[0] = make_odd_entry(edge_slot0_i, row_local0_i);
       odd_ram_i_entry_in[1] = make_odd_entry(edge_slot1_i, row_local1_i);
       #1;
-      if (odd_ram_i_target_idx_out[0] != ROW_GROUP_IDX_W'(0)) begin
+      if (odd_ram_i_target_idx_out[0] != GROUP_IDX_W'(0)) begin
         $fatal(1, "odd-r h_shift target0 mismatch: got %0d exp 0",
                odd_ram_i_target_idx_out[0]);
       end
-      if (odd_ram_i_target_idx_out[1] != ROW_GROUP_IDX_W'(0)) begin
+      if (odd_ram_i_target_idx_out[1] != GROUP_IDX_W'(0)) begin
         $fatal(1, "odd-r h_shift target1 mismatch: got %0d exp 0",
                odd_ram_i_target_idx_out[1]);
       end
@@ -201,17 +201,17 @@ module tb_h_shift;
     check_shift(
       make_entry(0, 3),  // global row 6 -> 7
       make_entry(1, 3),  // global row 7 -> 0
-      ROW_GROUP_IDX_W'(1),
+      GROUP_IDX_W'(1),
       make_entry(0, 3),
-      ROW_GROUP_IDX_W'(0),
+      GROUP_IDX_W'(0),
       make_entry(1, 0)
     );
     check_shift(
       make_entry(2, 1),  // global row 2 -> 3
       make_entry(0, 2),  // global row 5 -> 6
-      ROW_GROUP_IDX_W'(1),
+      GROUP_IDX_W'(1),
       make_entry(2, 1),
-      ROW_GROUP_IDX_W'(0),
+      GROUP_IDX_W'(0),
       make_entry(0, 3)
     );
 

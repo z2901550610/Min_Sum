@@ -59,34 +59,34 @@ def sv_array(values: list[int]) -> str:
 
 
 def build_first_column_tables(h_base: list[list[int]], r: int) -> tuple[list[list[int]], list[list[list[tuple[int, int] | None]]]]:
-    row_group_counts: list[list[int]] = []
-    row_group_entries: list[list[list[tuple[int, int] | None]]] = []
+    group_counts: list[list[int]] = []
+    group_entries: list[list[list[tuple[int, int] | None]]] = []
 
     for h_block_support in h_base:
-        h_block_counts = [0, 0]
-        h_block_entries: list[list[tuple[int, int] | None]] = [
+        h_block_group_counts = [0, 0]
+        h_block_group_entries: list[list[tuple[int, int] | None]] = [
             [None for _ in range(len(h_block_support))],
             [None for _ in range(len(h_block_support))],
         ]
-        for edge_idx, row_value in enumerate(h_block_support):
-            row_group_idx = row_value & 1
-            row_local = row_value >> 1
-            row_group_pos = h_block_counts[row_group_idx]
-            h_block_entries[row_group_idx][row_group_pos] = (edge_idx, row_local)
-            h_block_counts[row_group_idx] += 1
-        row_group_counts.append(h_block_counts)
-        row_group_entries.append(h_block_entries)
+        for one_idx, row_idx_global in enumerate(h_block_support):
+            group_idx = row_idx_global & 1
+            row_idx_group = row_idx_global >> 1
+            group_entry_idx = h_block_group_counts[group_idx]
+            h_block_group_entries[group_idx][group_entry_idx] = (one_idx, row_idx_group)
+            h_block_group_counts[group_idx] += 1
+        group_counts.append(h_block_group_counts)
+        group_entries.append(h_block_group_entries)
 
-    return row_group_counts, row_group_entries
+    return group_counts, group_entries
 
 
-def render_row_group_count_param(row_group_counts: list[list[int]]) -> str:
-    lines = ["  localparam logic [LANE_COUNT_W-1:0] QC_FIRST_COL_LANE_COUNT [0:N0-1][0:L-1] = '{"] 
-    for h_block_idx, h_block_counts in enumerate(row_group_counts):
-        suffix = "," if h_block_idx != len(row_group_counts) - 1 else ""
+def render_group_count_param(group_counts: list[list[int]]) -> str:
+    lines = ["  localparam logic [GROUP_COUNT_W-1:0] QC_FIRST_COL_GROUP_COUNT [0:N0-1][0:L-1] = '{"]
+    for h_block_idx, h_block_group_counts in enumerate(group_counts):
+        suffix = "," if h_block_idx != len(group_counts) - 1 else ""
         lines.append(
             "    '{"
-            + ", ".join(f"LANE_COUNT_W'({count})" for count in h_block_counts)
+            + ", ".join(f"GROUP_COUNT_W'({count})" for count in h_block_group_counts)
             + "}"
             + suffix
         )
@@ -94,21 +94,21 @@ def render_row_group_count_param(row_group_counts: list[list[int]]) -> str:
     return "\n".join(lines)
 
 
-def render_row_group_entry_param(row_group_entries: list[list[list[tuple[int, int] | None]]]) -> str:
-    lines = ["  localparam logic [I_ENTRY_W-1:0] QC_FIRST_COL_LANE_ENTRY [0:N0-1][0:L-1][0:W-1] = '{"] 
-    for h_block_idx, h_block_entries in enumerate(row_group_entries):
-        h_block_suffix = "," if h_block_idx != len(row_group_entries) - 1 else ""
+def render_group_entry_param(group_entries: list[list[list[tuple[int, int] | None]]]) -> str:
+    lines = ["  localparam logic [I_ENTRY_W-1:0] QC_FIRST_COL_GROUP_ENTRY [0:N0-1][0:L-1][0:W-1] = '{"]
+    for h_block_idx, h_block_group_entries in enumerate(group_entries):
+        h_block_suffix = "," if h_block_idx != len(group_entries) - 1 else ""
         lines.append("    '{")
-        for row_group_idx, row_group_edges in enumerate(h_block_entries):
-            row_group_suffix = "," if row_group_idx != len(h_block_entries) - 1 else ""
-            edge_text = []
-            for item in row_group_edges:
+        for group_idx, group_entry_list in enumerate(h_block_group_entries):
+            group_suffix = "," if group_idx != len(h_block_group_entries) - 1 else ""
+            entry_text = []
+            for item in group_entry_list:
                 if item is None:
-                    edge_text.append("'0")
+                    entry_text.append("'0")
                 else:
-                    edge_idx, row_local = item
-                    edge_text.append(f"{{EDGE_W'({edge_idx}), ROW_W'({row_local})}}")
-            lines.append("      '{" + ", ".join(edge_text) + "}" + row_group_suffix)
+                    one_idx, row_idx_group = item
+                    entry_text.append(f"{{ONE_IDX_W'({one_idx}), ROW_IDX_W'({row_idx_group})}}")
+            lines.append("      '{" + ", ".join(entry_text) + "}" + group_suffix)
         lines.append("    }" + h_block_suffix)
     lines.append("  };")
     return "\n".join(lines)
@@ -125,7 +125,7 @@ def emit_pkg(
     alpha_shift_1: int,
     h_base: list[list[int]],
 ) -> None:
-    row_group_counts, row_group_entries = build_first_column_tables(h_base, r)
+    group_counts, group_entries = build_first_column_tables(h_base, r)
     path.write_text(
         f"""package bike_pkg;
   timeunit 1ns;
@@ -149,18 +149,23 @@ def emit_pkg(
   parameter int MSG_W = D + 1;
   parameter int ROW_SEG_SIZE = (R + L - 1) / L;
   parameter int VNU_TC_W = MSG_W + ((W > 1) ? $clog2(W + 1) : 1);
-  parameter int LANE_IDX_W = (L > 1) ? $clog2(L) : 1;
   parameter int VAR_W = (N > 1) ? $clog2(N) : 1;
-  parameter int ROW_W = (R > 1) ? $clog2(R) : 1;
-  parameter int EDGE_W = (W > 1) ? $clog2(W) : 1;
   parameter int H_BLOCK_W = (N0 > 1) ? $clog2(N0) : 1;
-  parameter int BANK_W = H_BLOCK_W;
-  parameter int LANE_COUNT_W = (W > 1) ? $clog2(W + 1) : 1;
   parameter int H_NUM = 1;
   parameter int H_SEL_W = (H_NUM > 1) ? $clog2(H_NUM) : 1;
 
-  localparam int ROW_GROUP_IDX_W = LANE_IDX_W;
-  localparam int ROW_GROUP_COUNT_W = LANE_COUNT_W;
+  parameter int ONE_IDX_W = (W > 1) ? $clog2(W) : 1;
+  parameter int ROW_IDX_W = (R > 1) ? $clog2(R) : 1;
+  parameter int GROUP_IDX_W = (L > 1) ? $clog2(L) : 1;
+  parameter int GROUP_COUNT_W = (W > 1) ? $clog2(W + 1) : 1;
+
+  localparam int EDGE_W = ONE_IDX_W;
+  localparam int ROW_W = ROW_IDX_W;
+  localparam int LANE_IDX_W = GROUP_IDX_W;
+  localparam int LANE_COUNT_W = GROUP_COUNT_W;
+  localparam int ROW_GROUP_IDX_W = GROUP_IDX_W;
+  localparam int ROW_GROUP_COUNT_W = GROUP_COUNT_W;
+  localparam int BANK_W = H_BLOCK_W;
 
   localparam int DEC_STATE_W = 4;
   localparam logic [DEC_STATE_W-1:0] DEC_WAIT_START       = 4'd0;
@@ -223,9 +228,11 @@ def emit_pkg(
     D'(MAG_MAX)
   }};
 
-  localparam int I_ENTRY_ROW_LOCAL_LSB = 0;
-  localparam int I_ENTRY_EDGE_SLOT_LSB = I_ENTRY_ROW_LOCAL_LSB + ROW_W;
-  localparam int I_ENTRY_W = I_ENTRY_EDGE_SLOT_LSB + EDGE_W;
+  localparam int I_ENTRY_ROW_IDX_GROUP_LSB = 0;
+  localparam int I_ENTRY_ONE_IDX_LSB = I_ENTRY_ROW_IDX_GROUP_LSB + ROW_IDX_W;
+  localparam int I_ENTRY_W = I_ENTRY_ONE_IDX_LSB + ONE_IDX_W;
+  localparam int I_ENTRY_ROW_LOCAL_LSB = I_ENTRY_ROW_IDX_GROUP_LSB;
+  localparam int I_ENTRY_EDGE_SLOT_LSB = I_ENTRY_ONE_IDX_LSB;
 
   localparam int unsigned H_BASE [0:H_NUM-1][0:N0-1][0:W-1] = '{{
     '{{
@@ -233,12 +240,16 @@ def emit_pkg(
       {sv_array(h_base[1])}
     }}
   }};
-{render_row_group_count_param(row_group_counts)}
-{render_row_group_entry_param(row_group_entries)}
+{render_group_count_param(group_counts)}
+{render_group_entry_param(group_entries)}
+  localparam logic [LANE_COUNT_W-1:0] QC_FIRST_COL_LANE_COUNT [0:N0-1][0:L-1] =
+    QC_FIRST_COL_GROUP_COUNT;
+  localparam logic [I_ENTRY_W-1:0] QC_FIRST_COL_LANE_ENTRY [0:N0-1][0:L-1][0:W-1] =
+    QC_FIRST_COL_GROUP_ENTRY;
   localparam logic [ROW_GROUP_COUNT_W-1:0] QC_FIRST_COL_ROW_GROUP_COUNT [0:N0-1][0:L-1] =
-    QC_FIRST_COL_LANE_COUNT;
+    QC_FIRST_COL_GROUP_COUNT;
   localparam logic [I_ENTRY_W-1:0] QC_FIRST_COL_ROW_GROUP_ENTRY [0:N0-1][0:L-1][0:W-1] =
-    QC_FIRST_COL_LANE_ENTRY;
+    QC_FIRST_COL_GROUP_ENTRY;
   /* verilator lint_on UNUSEDPARAM */
 endpackage
 """,
@@ -296,7 +307,7 @@ module tb_bike_decoder_random;
     logic [H_BLOCK_W-1:0] h_block_idx;
     int col_idx;
     int edge_idx;
-    logic [ROW_W-1:0] row_idx;
+    logic [ROW_IDX_W-1:0] row_idx;
     begin
       residual = INPUT_SYNDROME;
       for (var_idx = 0; var_idx < N; var_idx++) begin
@@ -304,7 +315,7 @@ module tb_bike_decoder_random;
           h_block_idx = H_BLOCK_W'(var_idx / R);
           col_idx = var_idx % R;
           for (edge_idx = 0; edge_idx < W; edge_idx++) begin
-            row_idx = ROW_W'((H_BASE[0][h_block_idx][edge_idx] + col_idx) % R);
+            row_idx = ROW_IDX_W'((H_BASE[0][h_block_idx][edge_idx] + col_idx) % R);
             residual[row_idx] = residual[row_idx] ^ 1'b1;
           end
         end

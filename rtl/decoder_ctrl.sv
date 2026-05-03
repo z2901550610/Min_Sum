@@ -8,17 +8,17 @@ module decoder_ctrl
   input  logic i_start,                                        // Starts a new decode pass.
   input  logic i_finish_decode,                                // Requests transition to DONE after the check phase.
   input  logic i_decode_success,                               // Indicates whether the residual syndrome is zero.
-  input  logic i_c2v_row_group_pos_last,                         // c2v side: current row_group list position is last in this column.
-  input  logic i_v2c_row_group_pos_last,                         // v2c side: current row_group list position is last in this column.
+  input  logic i_c2v_entry_pos_last,                         // c2v side: current entry list position is the last in this column.
+  input  logic i_v2c_entry_pos_last,                         // v2c side: current entry list position is the last in this column.
   output logic [DEC_STATE_W-1:0] o_state,                      // Coarse decoder state for debug/observation.
   output logic [DEC_PHASE_W-1:0] o_phase,                      // Current debug micro-stage.
   output logic [VAR_W-1:0] o_work_var,                         // Debug-selected active column.
-  output logic [EDGE_W-1:0] o_work_row_group_pos,               // Debug-selected row_group list position.
+  output logic [ONE_IDX_W-1:0] o_work_entry_pos,               // Debug-selected entry list position.
   output logic [VAR_W-1:0] o_c2v_var_idx,                      // Column currently being reconstructed into c2v.
   output logic [VAR_W-1:0] o_v2c_var_idx,                      // Column currently being updated into v2c.
-  output logic [EDGE_W-1:0] o_c2v_row_group_pos,                // Active row_group list position inside the c2v column.
-  output logic [EDGE_W-1:0] o_v2c_row_group_pos,                // Active row_group list position inside the v2c column.
-  output logic [EDGE_W-1:0] o_active_row_group_pos,             // Debug-selected row_group list position.
+  output logic [ONE_IDX_W-1:0] o_c2v_entry_pos,                // Active entry list position inside the c2v column.
+  output logic [ONE_IDX_W-1:0] o_v2c_entry_pos,                // Active entry list position inside the v2c column.
+  output logic [ONE_IDX_W-1:0] o_active_entry_pos,             // Debug-selected entry list position.
   output logic o_m_read_pair,                                  // RAM-M pair selected for compressed-c2v reads.
   output logic o_m_write_pair,                                 // RAM-M pair selected for compressed-c2v writes.
   output logic o_seed_active,                                  // Loads static first-column RAM-I metadata.
@@ -60,7 +60,7 @@ module decoder_ctrl
   localparam logic [2:0] CTRL_ITER = 3'd3;
   localparam logic [2:0] CTRL_DONE = 3'd4;
 
-  // INIT walks one column row_group position through read -> CNU_A -> write.
+  // INIT walks one column entry position through read -> CNU_A -> write.
   localparam logic [1:0] INIT_STEP_READ = 2'd0;
   localparam logic [1:0] INIT_STEP_CNU_A = 2'd1;
   localparam logic [1:0] INIT_STEP_WRITE = 2'd2;
@@ -156,8 +156,8 @@ module decoder_ctrl
     (ctrl_state == CTRL_ITER) && consumer_active && !producer_active &&
     (o_v2c_var_idx == LAST_VAR);
 
-  assign producer_write_last = o_c2v_write_t && i_c2v_row_group_pos_last;
-  assign consumer_v2c_write_last = o_vnu_write_next && i_v2c_row_group_pos_last;
+  assign producer_write_last = o_c2v_write_t && i_c2v_entry_pos_last;
+  assign consumer_v2c_write_last = o_vnu_write_next && i_v2c_entry_pos_last;
 
   assign o_capture_v2c_column_now = producer_write_last && !consumer_active;
   assign o_capture_v2c_column_next = producer_write_last && consumer_active;
@@ -170,8 +170,8 @@ module decoder_ctrl
     o_vnu_read_next_m || o_vnu_cnu_a || o_vnu_write_next;
 
   assign o_work_var = o_v2c_pipe_valid ? o_v2c_var_idx : o_c2v_var_idx;
-  assign o_work_row_group_pos = o_v2c_pipe_valid ? o_v2c_row_group_pos : o_c2v_row_group_pos;
-  assign o_active_row_group_pos = o_work_row_group_pos;
+  assign o_work_entry_pos = o_v2c_pipe_valid ? o_v2c_entry_pos : o_c2v_entry_pos;
+  assign o_active_entry_pos = o_work_entry_pos;
 
   // Export a legacy-style phase view for debug/waveform readability. The
   // actual scheduling decisions are made by the contexts in the sequential
@@ -263,8 +263,8 @@ module decoder_ctrl
       consumer_step <= CONS_STEP_READ;
       o_c2v_var_idx <= '0;
       o_v2c_var_idx <= '0;
-      o_c2v_row_group_pos <= '0;
-      o_v2c_row_group_pos <= '0;
+      o_c2v_entry_pos <= '0;
+      o_v2c_entry_pos <= '0;
       o_m_read_pair <= 1'b0;
       o_seed_h_block_idx <= '0;
       o_c2v_v2c_overlap_seen <= 1'b0;
@@ -286,8 +286,8 @@ module decoder_ctrl
             consumer_step <= CONS_STEP_READ;
             o_c2v_var_idx <= '0;
             o_v2c_var_idx <= '0;
-            o_c2v_row_group_pos <= '0;
-            o_v2c_row_group_pos <= '0;
+            o_c2v_entry_pos <= '0;
+            o_v2c_entry_pos <= '0;
             o_m_read_pair <= 1'b0;
             o_seed_h_block_idx <= '0;
             o_c2v_v2c_overlap_seen <= 1'b0;
@@ -304,8 +304,8 @@ module decoder_ctrl
             consumer_active <= 1'b0;
             o_c2v_var_idx <= '0;
             o_v2c_var_idx <= '0;
-            o_c2v_row_group_pos <= '0;
-            o_v2c_row_group_pos <= '0;
+            o_c2v_entry_pos <= '0;
+            o_v2c_entry_pos <= '0;
           end else begin
             o_seed_h_block_idx <= o_seed_h_block_idx + H_BLOCK_W'(1);
           end
@@ -322,8 +322,8 @@ module decoder_ctrl
             end
 
             default: begin
-              if (i_c2v_row_group_pos_last) begin
-                o_c2v_row_group_pos <= '0;
+              if (i_c2v_entry_pos_last) begin
+                o_c2v_entry_pos <= '0;
                 if (o_c2v_var_idx == LAST_VAR) begin
                   ctrl_state <= CTRL_ITER;
                   producer_active <= 1'b1;
@@ -333,13 +333,13 @@ module decoder_ctrl
                   consumer_step <= CONS_STEP_READ;
                   o_c2v_var_idx <= '0;
                   o_v2c_var_idx <= '0;
-                  o_v2c_row_group_pos <= '0;
+                  o_v2c_entry_pos <= '0;
                 end else begin
                   o_c2v_var_idx <= next_var(o_c2v_var_idx);
                   init_step <= INIT_STEP_READ;
                 end
               end else begin
-                o_c2v_row_group_pos <= o_c2v_row_group_pos + EDGE_W'(1);
+                o_c2v_entry_pos <= o_c2v_entry_pos + ONE_IDX_W'(1);
                 init_step <= INIT_STEP_READ;
               end
             end
@@ -366,20 +366,20 @@ module decoder_ctrl
               consumer_step <= CONS_STEP_READ;
               o_c2v_var_idx <= '0;
               o_v2c_var_idx <= '0;
-              o_c2v_row_group_pos <= '0;
-              o_v2c_row_group_pos <= '0;
+              o_c2v_entry_pos <= '0;
+              o_v2c_entry_pos <= '0;
             end
           end else if (!consumer_active) begin
             if (producer_active) begin
               if (producer_step == PROD_STEP_READ) begin
                 producer_step <= PROD_STEP_WRITE;
-              end else if (i_c2v_row_group_pos_last) begin
+              end else if (i_c2v_entry_pos_last) begin
                 consumer_active <= 1'b1;
                 consumer_mode <= CONS_MODE_ACCUM;
                 consumer_step <= CONS_STEP_READ;
                 o_v2c_var_idx <= o_c2v_var_idx;
-                o_v2c_row_group_pos <= '0;
-                o_c2v_row_group_pos <= '0;
+                o_v2c_entry_pos <= '0;
+                o_c2v_entry_pos <= '0;
                 if (o_c2v_var_idx == LAST_VAR) begin
                   producer_active <= 1'b0;
                   producer_step <= PROD_STEP_READ;
@@ -391,7 +391,7 @@ module decoder_ctrl
                 end
               end else begin
                 producer_step <= PROD_STEP_READ;
-                o_c2v_row_group_pos <= o_c2v_row_group_pos + EDGE_W'(1);
+                o_c2v_entry_pos <= o_c2v_entry_pos + ONE_IDX_W'(1);
               end
             end
           end else if (consumer_mode == CONS_MODE_ACCUM) begin
@@ -403,20 +403,20 @@ module decoder_ctrl
             end else begin
               if (producer_active) begin
                 producer_step <= PROD_STEP_READ;
-                if (i_c2v_row_group_pos_last) begin
+                if (i_c2v_entry_pos_last) begin
                   producer_active <= 1'b0;
-                  o_c2v_row_group_pos <= '0;
+                  o_c2v_entry_pos <= '0;
                 end else begin
-                  o_c2v_row_group_pos <= o_c2v_row_group_pos + EDGE_W'(1);
+                  o_c2v_entry_pos <= o_c2v_entry_pos + ONE_IDX_W'(1);
                 end
               end
 
-              if (i_v2c_row_group_pos_last) begin
-                o_v2c_row_group_pos <= '0;
+              if (i_v2c_entry_pos_last) begin
+                o_v2c_entry_pos <= '0;
                 consumer_mode <= CONS_MODE_V2C;
                 consumer_step <= CONS_STEP_PREP;
               end else begin
-                o_v2c_row_group_pos <= o_v2c_row_group_pos + EDGE_W'(1);
+                o_v2c_entry_pos <= o_v2c_entry_pos + ONE_IDX_W'(1);
                 consumer_step <= CONS_STEP_READ;
               end
             end
@@ -437,18 +437,18 @@ module decoder_ctrl
                 consumer_step <= CONS_STEP_WRITE;
                 if (producer_active) begin
                   producer_step <= PROD_STEP_READ;
-                  if (i_c2v_row_group_pos_last) begin
+                  if (i_c2v_entry_pos_last) begin
                     producer_active <= 1'b0;
-                    o_c2v_row_group_pos <= '0;
+                    o_c2v_entry_pos <= '0;
                   end else begin
-                    o_c2v_row_group_pos <= o_c2v_row_group_pos + EDGE_W'(1);
+                    o_c2v_entry_pos <= o_c2v_entry_pos + ONE_IDX_W'(1);
                   end
                 end
               end
 
               default: begin
-                if (i_v2c_row_group_pos_last) begin
-                  o_v2c_row_group_pos <= '0;
+                if (i_v2c_entry_pos_last) begin
+                  o_v2c_entry_pos <= '0;
                   consumer_mode <= CONS_MODE_ACCUM;
                   consumer_step <= CONS_STEP_READ;
                   if (o_v2c_var_idx == LAST_VAR) begin
@@ -466,12 +466,12 @@ module decoder_ctrl
                       producer_active <= 1'b1;
                       producer_step <= PROD_STEP_READ;
                       o_c2v_var_idx <= next_var(next_var(o_v2c_var_idx));
-                      o_c2v_row_group_pos <= '0;
+                      o_c2v_entry_pos <= '0;
                       o_c2v_v2c_overlap_seen <= 1'b1;
                     end
                   end
                 end else begin
-                  o_v2c_row_group_pos <= o_v2c_row_group_pos + EDGE_W'(1);
+                  o_v2c_entry_pos <= o_v2c_entry_pos + ONE_IDX_W'(1);
                   consumer_step <= CONS_STEP_READ_NEXT_M;
                 end
               end
@@ -491,8 +491,8 @@ module decoder_ctrl
             consumer_step <= CONS_STEP_READ;
             o_c2v_var_idx <= '0;
             o_v2c_var_idx <= '0;
-            o_c2v_row_group_pos <= '0;
-            o_v2c_row_group_pos <= '0;
+            o_c2v_entry_pos <= '0;
+            o_v2c_entry_pos <= '0;
             o_m_read_pair <= 1'b0;
             o_seed_h_block_idx <= '0;
             o_c2v_v2c_overlap_seen <= 1'b0;

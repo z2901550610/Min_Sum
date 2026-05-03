@@ -1,16 +1,15 @@
-// 目前实现的是根据"row_idx_global 属于第 l 组，当且仅当row_idx_global mod L = l"进行分组
-// one_idx--"1"的索引
-// row_idx--行号索引
-// _global--全局
-// _group--组内
+// 根据 "row_idx_global mod L = l" 进行分组。
+// one_idx_global -- "1" 在列中的索引
+// row_idx_group   -- 组内行号
+// row_idx_global  -- 全局行号
+// group_idx       -- 分组索引
 module h_shift
   #(
-    parameter int R = 8,  // 单个矩阵长宽
-    parameter int L = 2,  // 并行度
-    parameter int W = 3,  // 矩阵列权重
-    parameter int ONE_IDX_W = (W > 1) ? $clog2(W) : 1,  // "1"的索引位宽
-    parameter int ROW_IDX_W = (R > 1) ? $clog2(R) : 1,  // 行索引位宽
-    parameter int GROUP_IDX_W = (L > 1) ? $clog2(L) : 1,  // 分组索引位宽
+    parameter int R = 8,
+    parameter int L = 2,
+    parameter int ONE_IDX_W = 2,
+    parameter int ROW_IDX_W = (R > 1) ? $clog2(R) : 1,
+    parameter int GROUP_IDX_W = (L > 1) ? $clog2(L) : 1,
     parameter int I_ENTRY_ROW_IDX_GROUP_LSB = 0,
     parameter int I_ENTRY_ONE_IDX_LSB = I_ENTRY_ROW_IDX_GROUP_LSB + ROW_IDX_W,
     parameter int I_ENTRY_W = I_ENTRY_ONE_IDX_LSB + ONE_IDX_W

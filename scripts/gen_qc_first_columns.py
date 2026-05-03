@@ -129,12 +129,12 @@ def first_column_tables(banks: list[list[int]], r_value: int) -> tuple[list[list
 
 
 def render_lane_counts(lane_counts: list[list[int]]) -> str:
-    lines = ["  localparam logic [LANE_COUNT_W-1:0] QC_FIRST_COL_LANE_COUNT [0:N0-1][0:L-1] = '{"] 
+    lines = ["  localparam logic [GROUP_COUNT_W-1:0] QC_FIRST_COL_GROUP_COUNT [0:N0-1][0:L-1] = '{"] 
     for bank_idx, counts in enumerate(lane_counts):
         suffix = "," if bank_idx != len(lane_counts) - 1 else ""
         lines.append(
             "    '{"
-            + ", ".join(f"LANE_COUNT_W'({count})" for count in counts)
+            + ", ".join(f"GROUP_COUNT_W'({count})" for count in counts)
             + "}"
             + suffix
         )
@@ -143,7 +143,7 @@ def render_lane_counts(lane_counts: list[list[int]]) -> str:
 
 
 def render_lane_entries(lane_entries: list[list[list[tuple[int, int] | None]]]) -> str:
-    lines = ["  localparam logic [I_ENTRY_W-1:0] QC_FIRST_COL_LANE_ENTRY [0:N0-1][0:L-1][0:W-1] = '{"] 
+    lines = ["  localparam logic [I_ENTRY_W-1:0] QC_FIRST_COL_GROUP_ENTRY [0:N0-1][0:L-1][0:W-1] = '{"] 
     for bank_idx, bank_entries in enumerate(lane_entries):
         bank_suffix = "," if bank_idx != len(lane_entries) - 1 else ""
         lines.append("    '{")
@@ -155,7 +155,7 @@ def render_lane_entries(lane_entries: list[list[list[tuple[int, int] | None]]]) 
                     slot_exprs.append("'0")
                 else:
                     edge_slot, row_local = item
-                    slot_exprs.append(f"{{EDGE_W'({edge_slot}), ROW_W'({row_local})}}")
+                    slot_exprs.append(f"{{ONE_IDX_W'({edge_slot}), ROW_IDX_W'({row_local})}}")
             lines.append("      '{" + ", ".join(slot_exprs) + "}" + lane_suffix)
         lines.append("    }" + bank_suffix)
     lines.append("  };")

@@ -1,4 +1,4 @@
-// One paper-style RAM M block storing compressed c2v state for one row segment.
+// One paper-style RAM M block storing compressed c2v state for one check-row group.
 module ram_m
   import bike_pkg::*;
 (
@@ -6,7 +6,7 @@ module ram_m
   input  logic i_rst_n,
   input  logic i_en,
   input  logic i_we,
-  input  logic [ROW_W-1:0] i_check_row_addr,               // Which check-row state to access inside this RAM-M lane.
+  input  logic [ROW_IDX_W-1:0] i_check_row_addr,           // Which check-row state to access inside this RAM-M group.
   input  logic [COMP_C2V_W-1:0] i_wdata,
   output logic [COMP_C2V_W-1:0] o_rdata,
   output logic [COMP_C2V_W-1:0] o_debug_mem [0:R-1]

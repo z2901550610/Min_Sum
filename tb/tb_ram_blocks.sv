@@ -8,7 +8,7 @@ module tb_ram_blocks;
 
   logic m_en;
   logic m_we;
-  logic [ROW_W-1:0] m_check_row_addr;
+  logic [ROW_IDX_W-1:0] m_check_row_addr;
   logic [COMP_C2V_W-1:0] m_wdata;
   logic [COMP_C2V_W-1:0] m_rdata;
   logic [COMP_C2V_W-1:0] m_debug [0:R-1];
@@ -16,7 +16,7 @@ module tb_ram_blocks;
   logic s_en;
   logic s_we;
   logic [VAR_W-1:0] s_var;
-  logic [EDGE_W-1:0] s_edge;
+  logic [ONE_IDX_W-1:0] s_one_idx_global;
   logic s_wdata;
   logic s_rdata;
   logic s_debug [0:N-1][0:W-1];
@@ -56,7 +56,7 @@ module tb_ram_blocks;
     .i_en(s_en),
     .i_we(s_we),
     .i_var_idx(s_var),
-    .i_edge_slot(s_edge),
+    .i_one_idx_global(s_one_idx_global),
     .i_wdata(s_wdata),
     .o_rdata(s_rdata),
     .o_debug_mem(s_debug)
@@ -68,7 +68,7 @@ module tb_ram_blocks;
     .i_en(t_en),
     .i_we(t_we),
     .i_var_idx(s_var),
-    .i_edge_slot(s_edge),
+    .i_one_idx_global(s_one_idx_global),
     .i_wdata(t_wdata),
     .o_rdata(t_rdata),
     .o_debug_mem(t_debug)
@@ -80,7 +80,7 @@ module tb_ram_blocks;
     .i_en(u_en),
     .i_we(u_we),
     .i_var_idx(s_var),
-    .i_edge_slot(s_edge),
+    .i_one_idx_global(s_one_idx_global),
     .i_wdata(u_wdata),
     .o_rdata(u_rdata),
     .o_debug_mem(u_debug)
@@ -109,7 +109,7 @@ module tb_ram_blocks;
     s_en = 1'b0;
     s_we = 1'b0;
     s_var = '0;
-    s_edge = '0;
+    s_one_idx_global = '0;
     s_wdata = 1'b0;
     t_en = 1'b0;
     t_we = 1'b0;
@@ -130,7 +130,7 @@ module tb_ram_blocks;
     if (u_debug[0][0] != {1'b0, D'(C_VAL)}) $fatal(1, "ram_u reset mismatch");
     if (c_bits != '0) $fatal(1, "ram_c reset mismatch");
 
-    m_check_row_addr = ROW_W'(2 % R);
+    m_check_row_addr = ROW_IDX_W'(2 % R);
     m_wdata = COMP_C2V_INIT ^ COMP_C2V_W'(7);
     m_en = 1'b1;
     m_we = 1'b1;
@@ -142,7 +142,7 @@ module tb_ram_blocks;
     if (m_rdata != m_wdata) $fatal(1, "ram_m read-after-write mismatch");
 
     s_var = VAR_W'(3 % N);
-    s_edge = EDGE_W'(1 % W);
+    s_one_idx_global = ONE_IDX_W'(1 % W);
     s_wdata = 1'b1;
     s_en = 1'b1;
     s_we = 1'b1;

@@ -17,7 +17,7 @@ module tb_decoder_top;
   logic [$clog2(I_MAX + 1)-1:0] iter_count;
   logic checks_active;
   integer h_block_idx;
-  integer row_group_idx;
+  integer group_idx;
   integer idx;
   integer flat_idx;
 
@@ -93,13 +93,13 @@ module tb_decoder_top;
   endfunction
 
   /* verilator lint_off UNUSEDSIGNAL */
-  function automatic int edge_row_idx(input int var_idx_i, input int edge_idx_i);
+  function automatic int edge_row_idx(input int var_idx_i, input int one_idx_i);
     int h_block_local;
     int col_local;
     begin
       h_block_local = var_idx_i / R;
       col_local = var_idx_i % R;
-      edge_row_idx = (H_BASE[0][h_block_local][edge_idx_i] + col_local) % R;
+      edge_row_idx = (H_BASE[0][h_block_local][one_idx_i] + col_local) % R;
     end
   endfunction
 
@@ -119,26 +119,26 @@ module tb_decoder_top;
 
   function automatic logic signed [MSG_W-1:0] ram_t_debug_read(
     input int var_idx_i,
-    input int edge_idx_i
+    input int one_idx_i
   );
     begin
-      if (row_group_from_row(edge_row_idx(var_idx_i, edge_idx_i)) == 0) begin
-        ram_t_debug_read = dut.ram_t0_debug_mem[var_idx_i][edge_idx_i];
+      if (row_group_from_row(edge_row_idx(var_idx_i, one_idx_i)) == 0) begin
+        ram_t_debug_read = dut.ram_t0_debug_mem[var_idx_i][one_idx_i];
       end else begin
-        ram_t_debug_read = dut.ram_t1_debug_mem[var_idx_i][edge_idx_i];
+        ram_t_debug_read = dut.ram_t1_debug_mem[var_idx_i][one_idx_i];
       end
     end
   endfunction
 
   function automatic logic [MSG_W-1:0] ram_u_debug_read(
     input int var_idx_i,
-    input int edge_idx_i
+    input int one_idx_i
   );
     begin
-      if (row_group_from_row(edge_row_idx(var_idx_i, edge_idx_i)) == 0) begin
-        ram_u_debug_read = dut.ram_u0_debug_mem[var_idx_i][edge_idx_i];
+      if (row_group_from_row(edge_row_idx(var_idx_i, one_idx_i)) == 0) begin
+        ram_u_debug_read = dut.ram_u0_debug_mem[var_idx_i][one_idx_i];
       end else begin
-        ram_u_debug_read = dut.ram_u1_debug_mem[var_idx_i][edge_idx_i];
+        ram_u_debug_read = dut.ram_u1_debug_mem[var_idx_i][one_idx_i];
       end
     end
   endfunction
@@ -158,7 +158,7 @@ module tb_decoder_top;
       begin
         repeat (20000) @(posedge clk);
         $fatal(1, "tb_decoder_top timeout: state=%0d phase=%0d work_var=%0d work_row_group_pos=%0d iter=%0d overlap=%0b c2v=%0b v2c=%0b done=%0b",
-               dut.state, dut.phase, dut.work_var, dut.work_row_group_pos, iter_count,
+               dut.state, dut.phase, dut.work_var, dut.work_entry_pos, iter_count,
                dut.c2v_v2c_overlap_seen, dut.c2v_phase_active, dut.v2c_phase_active, done);
       end
     join_none
@@ -166,25 +166,25 @@ module tb_decoder_top;
     apply_reset();
     start_case(CASE1_SYNDROME);
 
-    wait (dut.init_m_read && dut.c2v_var_idx == 0 && dut.active_row_group_pos == 0);
+    wait (dut.init_m_read && dut.c2v_var_idx == 0 && dut.active_entry_pos == 0);
     #1;
     for (h_block_idx = 0; h_block_idx < N0; h_block_idx++) begin
-      for (row_group_idx = 0; row_group_idx < L; row_group_idx++) begin
-        if (dut.ram_i_debug_count[h_block_idx][row_group_idx] != QC_FIRST_COL_ROW_GROUP_COUNT[h_block_idx][row_group_idx]) begin
-          $fatal(1, "RAM I count mismatch at H block %0d row_group %0d", h_block_idx, row_group_idx);
+      for (group_idx = 0; group_idx < L; group_idx++) begin
+        if (dut.ram_i_debug_count[h_block_idx][group_idx] != QC_FIRST_COL_GROUP_COUNT[h_block_idx][group_idx]) begin
+          $fatal(1, "RAM I count mismatch at H block %0d row_group %0d", h_block_idx, group_idx);
         end
       end
     end
 
-    wait (dut.init_m_read && dut.c2v_var_idx == 1 && dut.active_row_group_pos == 0);
+    wait (dut.init_m_read && dut.c2v_var_idx == 1 && dut.active_entry_pos == 0);
     #1;
-    if (dut.ram_i_debug_count[0][0] != ROW_GROUP_COUNT_W'(2)) $fatal(1, "RAM I shifted row_group0 count mismatch for column 1");
-    if (dut.ram_i_debug_count[0][1] != ROW_GROUP_COUNT_W'(1)) $fatal(1, "RAM I shifted row_group1 count mismatch for column 1");
-    if (!(dut.c2v_row_group_valid[0] && dut.c2v_row_group_valid[1])) $fatal(1, "shifted column 1 should expose two active row_groups");
-    if (dut.c2v_row_group_edge_slot[0] != EDGE_W'(1) || dut.c2v_row_group_row_local[0] != ROW_W'(1)) $fatal(1, "shifted row_group0 entry mismatch for column 1");
-    if (dut.c2v_row_group_edge_slot[1] != EDGE_W'(0) || dut.c2v_row_group_row_local[1] != ROW_W'(0)) $fatal(1, "shifted row_group1 entry mismatch for column 1");
+    if (dut.ram_i_debug_count[0][0] != GROUP_COUNT_W'(2)) $fatal(1, "RAM I shifted row_group0 count mismatch for column 1");
+    if (dut.ram_i_debug_count[0][1] != GROUP_COUNT_W'(1)) $fatal(1, "RAM I shifted row_group1 count mismatch for column 1");
+    if (!(dut.c2v_group_valid[0] && dut.c2v_group_valid[1])) $fatal(1, "shifted column 1 should expose two active row_groups");
+    if (dut.c2v_one_idx_global[0] != ONE_IDX_W'(1) || dut.c2v_row_idx_group[0] != ROW_IDX_W'(1)) $fatal(1, "shifted row_group0 entry mismatch for column 1");
+    if (dut.c2v_one_idx_global[1] != ONE_IDX_W'(0) || dut.c2v_row_idx_group[1] != ROW_IDX_W'(0)) $fatal(1, "shifted row_group1 entry mismatch for column 1");
 
-    wait (dut.c2v_phase_active && !dut.v2c_phase_active && dut.c2v_var_idx == 0 && dut.active_row_group_pos == 0);
+    wait (dut.c2v_phase_active && !dut.v2c_phase_active && dut.c2v_var_idx == 0 && dut.active_entry_pos == 0);
     #1;
     if (dut.m_read_pair === dut.m_write_pair) $fatal(1, "RAM M ping-pong pairs should differ");
     for (idx = 0; idx < R; idx++) begin
@@ -199,7 +199,7 @@ module tb_decoder_top;
     if (!(dut.c2v_phase_active && dut.v2c_phase_active)) $fatal(1, "pipeline did not expose simultaneous CNU_B and VNU/CNU_A work");
     if (dut.c2v_var_idx != dut.v2c_var_idx + VAR_W'(1)) $fatal(1, "overlap should keep the c2v column exactly one step ahead");
 
-    wait (dut.vnu_accum_t && dut.v2c_var_idx == 1 && dut.active_row_group_pos == 0);
+    wait (dut.vnu_accum_t && dut.v2c_var_idx == 1 && dut.active_entry_pos == 0);
     #1;
     if (!(dut.vnu_accum_valid[0] && dut.vnu_accum_valid[1])) $fatal(1, "VNU did not consume both RAM-I row_groups for shifted column 1");
 
@@ -214,24 +214,24 @@ module tb_decoder_top;
     end
     flat_idx = 0;
     for (idx = 0; idx < N; idx++) begin
-      int edge_idx;
-      for (edge_idx = 0; edge_idx < W; edge_idx++) begin
-        if (int'($signed(ram_t_debug_read(idx, edge_idx))) != c2v_signmag_to_tc(CASE1_FIRST_C2V_SIGN[flat_idx], CASE1_FIRST_C2V_MAG[flat_idx])) $fatal(1, "CASE1 c2v tc[%0d] mismatch", flat_idx);
+      int one_idx;
+      for (one_idx = 0; one_idx < W; one_idx++) begin
+        if (int'($signed(ram_t_debug_read(idx, one_idx))) != c2v_signmag_to_tc(CASE1_FIRST_C2V_SIGN[flat_idx], CASE1_FIRST_C2V_MAG[flat_idx])) $fatal(1, "CASE1 c2v tc[%0d] mismatch", flat_idx);
         flat_idx += 1;
       end
     end
 
     flat_idx = 0;
     for (idx = 0; idx < N; idx++) begin
-      int edge_idx;
-      for (edge_idx = 0; edge_idx < W; edge_idx++) begin
-        if (int'(ram_u_debug_read(idx, edge_idx)[MSG_SIGN_BIT]) != CASE1_FIRST_U_SIGN[flat_idx]) begin
+      int one_idx;
+      for (one_idx = 0; one_idx < W; one_idx++) begin
+        if (int'(ram_u_debug_read(idx, one_idx)[MSG_SIGN_BIT]) != CASE1_FIRST_U_SIGN[flat_idx]) begin
           $fatal(1, "CASE1 u sign[%0d] mismatch: got %0d exp %0d", flat_idx,
-                 int'(ram_u_debug_read(idx, edge_idx)[MSG_SIGN_BIT]), CASE1_FIRST_U_SIGN[flat_idx]);
+                 int'(ram_u_debug_read(idx, one_idx)[MSG_SIGN_BIT]), CASE1_FIRST_U_SIGN[flat_idx]);
         end
-        if (int'(ram_u_debug_read(idx, edge_idx)[MSG_MAG_LSB +: D]) != CASE1_FIRST_U_MAG[flat_idx]) begin
+        if (int'(ram_u_debug_read(idx, one_idx)[MSG_MAG_LSB +: D]) != CASE1_FIRST_U_MAG[flat_idx]) begin
           $fatal(1, "CASE1 u mag[%0d] mismatch: got %0d exp %0d", flat_idx,
-                 int'(ram_u_debug_read(idx, edge_idx)[MSG_MAG_LSB +: D]), CASE1_FIRST_U_MAG[flat_idx]);
+                 int'(ram_u_debug_read(idx, one_idx)[MSG_MAG_LSB +: D]), CASE1_FIRST_U_MAG[flat_idx]);
         end
         flat_idx += 1;
       end

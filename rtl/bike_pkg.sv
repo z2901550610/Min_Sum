@@ -31,20 +31,31 @@ package bike_pkg;
   parameter int MSG_W = D + 1;
   parameter int ROW_SEG_SIZE = (R + L - 1) / L;
   parameter int VNU_TC_W = MSG_W + ((W > 1) ? $clog2(W + 1) : 1);
-  parameter int LANE_IDX_W = (L > 1) ? $clog2(L) : 1;
   parameter int VAR_W = (N > 1) ? $clog2(N) : 1;
-  parameter int ROW_W = (R > 1) ? $clog2(R) : 1;
-  parameter int EDGE_W = (W > 1) ? $clog2(W) : 1;
   parameter int H_BLOCK_W = (N0 > 1) ? $clog2(N0) : 1;
-  parameter int BANK_W = H_BLOCK_W;  // Compatibility alias for generated/test code.
-  parameter int LANE_COUNT_W = (W > 1) ? $clog2(W + 1) : 1;
   parameter int H_NUM = 1;
   parameter int H_SEL_W = (H_NUM > 1) ? $clog2(H_NUM) : 1;
 
-  // Semantic aliases used by the current RTL. "row group" refers to one of
-  // the L row partitions that the paper processes in parallel.
-  localparam int ROW_GROUP_IDX_W = LANE_IDX_W;
-  localparam int ROW_GROUP_COUNT_W = LANE_COUNT_W;
+  // Canonical names aligned with h_shift.sv conventions.
+  // "one_idx" = index of a "1" within a column (0 .. W-1).
+  // "row_idx_global" = global row index (0 .. R-1).
+  // "row_idx_group" = row index within a group/lane.
+  // "group_idx" = which lane/group (0 .. L-1).
+  // "group_count" = number of valid entries in a group's list.
+  parameter int ONE_IDX_W   = (W > 1) ? $clog2(W)     : 1;
+  parameter int ROW_IDX_W   = (R > 1) ? $clog2(R)     : 1;
+  parameter int GROUP_IDX_W = (L > 1) ? $clog2(L)     : 1;
+  parameter int GROUP_COUNT_W = (W > 1) ? $clog2(W + 1) : 1;
+
+  // Deprecated aliases — kept for compatibility with generated code and
+  // external test packages.  New RTL should use the canonical names above.
+  localparam int EDGE_W             = ONE_IDX_W;
+  localparam int ROW_W              = ROW_IDX_W;
+  localparam int LANE_IDX_W         = GROUP_IDX_W;
+  localparam int LANE_COUNT_W       = GROUP_COUNT_W;
+  localparam int ROW_GROUP_IDX_W    = GROUP_IDX_W;
+  localparam int ROW_GROUP_COUNT_W  = GROUP_COUNT_W;
+  localparam int BANK_W             = H_BLOCK_W;
 
   localparam int DEC_STATE_W = 4;
   localparam logic [DEC_STATE_W-1:0] DEC_WAIT_START       = 4'd0;
@@ -107,9 +118,12 @@ package bike_pkg;
     D'(MAG_MAX)
   };
 
-  localparam int I_ENTRY_ROW_LOCAL_LSB = 0;
-  localparam int I_ENTRY_EDGE_SLOT_LSB = I_ENTRY_ROW_LOCAL_LSB + ROW_W;
-  localparam int I_ENTRY_W = I_ENTRY_EDGE_SLOT_LSB + EDGE_W;
+  localparam int I_ENTRY_ROW_IDX_GROUP_LSB = 0;
+  localparam int I_ENTRY_ONE_IDX_LSB = I_ENTRY_ROW_IDX_GROUP_LSB + ROW_IDX_W;
+  localparam int I_ENTRY_W = I_ENTRY_ONE_IDX_LSB + ONE_IDX_W;
+  // Deprecated aliases.
+  localparam int I_ENTRY_ROW_LOCAL_LSB = I_ENTRY_ROW_IDX_GROUP_LSB;
+  localparam int I_ENTRY_EDGE_SLOT_LSB  = I_ENTRY_ONE_IDX_LSB;
 
 `ifdef BIKE_L1_PARAMS
   localparam int unsigned H_BASE [0:H_NUM-1][0:N0-1][0:W-1] = '{
@@ -145,9 +159,11 @@ package bike_pkg;
   };
 `endif
   `include "generated/qc_first_columns.svh"
+  // Deprecated aliases — the generated file now defines the canonical names
+  // QC_FIRST_COL_GROUP_ENTRY / QC_FIRST_COL_GROUP_COUNT directly.
   localparam logic [I_ENTRY_W-1:0] QC_FIRST_COL_ROW_GROUP_ENTRY [0:N0-1][0:L-1][0:W-1] =
-    QC_FIRST_COL_LANE_ENTRY;
+    QC_FIRST_COL_GROUP_ENTRY;
   localparam logic [ROW_GROUP_COUNT_W-1:0] QC_FIRST_COL_ROW_GROUP_COUNT [0:N0-1][0:L-1] =
-    QC_FIRST_COL_LANE_COUNT;
+    QC_FIRST_COL_GROUP_COUNT;
   /* verilator lint_on UNUSEDPARAM */
 endpackage

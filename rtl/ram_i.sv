@@ -1,5 +1,5 @@
-// RAM-I：一个实例只保存一个 row_group 的 H-block 列 metadata。
-// list 是该 row_group 内的 packed entries，entry = {edge_slot, row_local}。
+// RAM-I：一个实例只保存一个 group 的 H-block 列 metadata。
+// list 是该 group 内的 packed entries，entry = {one_idx_global, row_idx_group}。
 module ram_i
   import bike_pkg::*;
 (
@@ -7,20 +7,20 @@ module ram_i
   input  logic i_rst_n,
   input  logic i_en,
   input  logic i_we,
-  input  logic [H_BLOCK_W-1:0] i_hblk_idx,                    // H block 编号，范围 0..N0-1。
-  input  logic [EDGE_W-1:0] i_entry_idx,                      // 当前 list 内的 entry 位置，范围 0..W-1。
-  input  logic [I_ENTRY_W-1:0] i_entry_wdata,                 // 单个 packed entry，格式 {edge_slot, row_local}。
-  input  logic i_count_we,                                    // 单独写 selected list 的有效 entry 数。
-  input  logic [ROW_GROUP_COUNT_W-1:0] i_count_wdata,         // 单独写入的 count。
-  input  logic i_list_load_en,                                // 覆盖一个 H block 的完整 list 和 count。
-  input  logic [H_BLOCK_W-1:0] i_list_load_hblk_idx,          // list_load 目标 H block。
-  input  logic [I_ENTRY_W-1:0] i_list_load_entries [0:W-1],   // list_load 写入的完整 entries。
-  input  logic [ROW_GROUP_COUNT_W-1:0] i_list_load_count,     // list_load 写入的有效 entry 数。
-  output logic [I_ENTRY_W-1:0] o_entry_rdata,                 // 单 entry 读数据。
-  output logic [ROW_GROUP_COUNT_W-1:0] o_count,               // selected list 的有效 entry 数。
-  output logic [I_ENTRY_W-1:0] o_list_entries [0:W-1],        // selected H block 的完整 list 视图。
+  input  logic [H_BLOCK_W-1:0] i_hblk_idx,
+  input  logic [ONE_IDX_W-1:0] i_entry_idx,
+  input  logic [I_ENTRY_W-1:0] i_entry_wdata,
+  input  logic i_count_we,
+  input  logic [GROUP_COUNT_W-1:0] i_count_wdata,
+  input  logic i_list_load_en,
+  input  logic [H_BLOCK_W-1:0] i_list_load_hblk_idx,
+  input  logic [I_ENTRY_W-1:0] i_list_load_entries [0:W-1],
+  input  logic [GROUP_COUNT_W-1:0] i_list_load_count,
+  output logic [I_ENTRY_W-1:0] o_entry_rdata,
+  output logic [GROUP_COUNT_W-1:0] o_count,
+  output logic [I_ENTRY_W-1:0] o_list_entries [0:W-1],
   output logic [I_ENTRY_W-1:0] o_debug_list_entries [0:N0-1][0:W-1],
-  output logic [ROW_GROUP_COUNT_W-1:0] o_debug_counts [0:N0-1]
+  output logic [GROUP_COUNT_W-1:0] o_debug_counts [0:N0-1]
 );
 
   timeunit 1ns;
@@ -28,7 +28,7 @@ module ram_i
 
   // 每个 hblk 保存一个 group-local list；count 说明 list 前几项有效。
   logic [I_ENTRY_W-1:0] list_entries_mem [0:N0-1][0:W-1];
-  logic [ROW_GROUP_COUNT_W-1:0] list_count_mem [0:N0-1];
+  logic [GROUP_COUNT_W-1:0] list_count_mem [0:N0-1];
   assign o_debug_list_entries = list_entries_mem;
   assign o_debug_counts = list_count_mem;
 
