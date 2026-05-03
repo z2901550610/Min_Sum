@@ -152,25 +152,15 @@ def emit_pkg(
   parameter int VAR_W = (N > 1) ? $clog2(N) : 1;
   parameter int H_BLOCK_W = (N0 > 1) ? $clog2(N0) : 1;
   parameter int H_NUM = 1;
-  parameter int H_SEL_W = (H_NUM > 1) ? $clog2(H_NUM) : 1;
 
   parameter int ONE_IDX_W = (W > 1) ? $clog2(W) : 1;
   parameter int ROW_IDX_W = (R > 1) ? $clog2(R) : 1;
   parameter int GROUP_IDX_W = (L > 1) ? $clog2(L) : 1;
   parameter int GROUP_COUNT_W = (W > 1) ? $clog2(W + 1) : 1;
 
-  localparam int EDGE_W = ONE_IDX_W;
-  localparam int ROW_W = ROW_IDX_W;
-  localparam int LANE_IDX_W = GROUP_IDX_W;
-  localparam int LANE_COUNT_W = GROUP_COUNT_W;
-  localparam int ROW_GROUP_IDX_W = GROUP_IDX_W;
-  localparam int ROW_GROUP_COUNT_W = GROUP_COUNT_W;
-  localparam int BANK_W = H_BLOCK_W;
-
   localparam int DEC_STATE_W = 4;
   localparam logic [DEC_STATE_W-1:0] DEC_WAIT_START       = 4'd0;
   localparam logic [DEC_STATE_W-1:0] DEC_INIT_DECODER     = 4'd1;
-  localparam logic [DEC_STATE_W-1:0] DEC_INIT_ROW_ACCUM   = 4'd2;
   localparam logic [DEC_STATE_W-1:0] DEC_ITER_C2V_PRIME   = 4'd4;
   localparam logic [DEC_STATE_W-1:0] DEC_ITER_OVERLAP     = 4'd5;
   localparam logic [DEC_STATE_W-1:0] DEC_ITER_V2C_DRAIN   = 4'd6;
@@ -179,12 +169,9 @@ def emit_pkg(
 
   localparam int DEC_PHASE_W = 5;
   localparam logic [DEC_PHASE_W-1:0] DEC_PH_WAIT                = 5'd0;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_SEED_I              = 5'd1;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_INIT_CLEAR          = 5'd2;
   localparam logic [DEC_PHASE_W-1:0] DEC_PH_INIT_M_READ         = 5'd3;
   localparam logic [DEC_PHASE_W-1:0] DEC_PH_INIT_CNU_A          = 5'd4;
   localparam logic [DEC_PHASE_W-1:0] DEC_PH_INIT_M_WRITE        = 5'd5;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_CLEAR_NEXT_M        = 5'd6;
   localparam logic [DEC_PHASE_W-1:0] DEC_PH_PRIME_READ          = 5'd7;
   localparam logic [DEC_PHASE_W-1:0] DEC_PH_PRIME_WRITE         = 5'd8;
   localparam logic [DEC_PHASE_W-1:0] DEC_PH_OVERLAP_ACCUM_READ  = 5'd9;
@@ -204,15 +191,6 @@ def emit_pkg(
   localparam logic [DEC_PHASE_W-1:0] DEC_PH_ITER_CHECK          = 5'd23;
   localparam logic [DEC_PHASE_W-1:0] DEC_PH_DONE                = 5'd24;
 
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_C2V_READ        = DEC_PH_PRIME_READ;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_C2V_WRITE_T     = DEC_PH_PRIME_WRITE;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_VNU_READ_T      = DEC_PH_OVERLAP_ACCUM_READ;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_VNU_ACCUM_T     = DEC_PH_OVERLAP_ACCUM_USE;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_VNU_PREP_WRITE  = DEC_PH_OVERLAP_PREP;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_VNU_READ_NEXT_M = DEC_PH_OVERLAP_EMIT_READ;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_VNU_CNU_A       = DEC_PH_OVERLAP_EMIT_CNU_A;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_VNU_WRITE_NEXT  = DEC_PH_OVERLAP_EMIT_WRITE;
-
   localparam int MSG_MAG_LSB = 0;
   localparam int MSG_SIGN_BIT = D;
 
@@ -231,8 +209,6 @@ def emit_pkg(
   localparam int I_ENTRY_ROW_IDX_GROUP_LSB = 0;
   localparam int I_ENTRY_ONE_IDX_LSB = I_ENTRY_ROW_IDX_GROUP_LSB + ROW_IDX_W;
   localparam int I_ENTRY_W = I_ENTRY_ONE_IDX_LSB + ONE_IDX_W;
-  localparam int I_ENTRY_ROW_LOCAL_LSB = I_ENTRY_ROW_IDX_GROUP_LSB;
-  localparam int I_ENTRY_EDGE_SLOT_LSB = I_ENTRY_ONE_IDX_LSB;
 
   localparam int unsigned H_BASE [0:H_NUM-1][0:N0-1][0:W-1] = '{{
     '{{
@@ -242,11 +218,11 @@ def emit_pkg(
   }};
 {render_group_count_param(group_counts)}
 {render_group_entry_param(group_entries)}
-  localparam logic [LANE_COUNT_W-1:0] QC_FIRST_COL_LANE_COUNT [0:N0-1][0:L-1] =
+  localparam logic [GROUP_COUNT_W-1:0] QC_FIRST_COL_LANE_COUNT [0:N0-1][0:L-1] =
     QC_FIRST_COL_GROUP_COUNT;
   localparam logic [I_ENTRY_W-1:0] QC_FIRST_COL_LANE_ENTRY [0:N0-1][0:L-1][0:W-1] =
     QC_FIRST_COL_GROUP_ENTRY;
-  localparam logic [ROW_GROUP_COUNT_W-1:0] QC_FIRST_COL_ROW_GROUP_COUNT [0:N0-1][0:L-1] =
+  localparam logic [GROUP_COUNT_W-1:0] QC_FIRST_COL_ROW_GROUP_COUNT [0:N0-1][0:L-1] =
     QC_FIRST_COL_GROUP_COUNT;
   localparam logic [I_ENTRY_W-1:0] QC_FIRST_COL_ROW_GROUP_ENTRY [0:N0-1][0:L-1][0:W-1] =
     QC_FIRST_COL_GROUP_ENTRY;

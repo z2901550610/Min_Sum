@@ -107,21 +107,9 @@ pos                 // 没有说明相对哪个对象的位置
 | `entry_*` | 单个 packed entry 的数据或接口。 |
 | `list_*` | 一整组 `[0:W-1]` entries。 |
 | `count_*` | 一个 list 的有效 entry 数。 |
-| `*_load_*` | 一次性装载/覆盖一组相关状态。 |
 | `*_valid` | 当前数据或 lane 有效。 |
 | `*_last` | 当前游标已经到达本轮/本列最后一个有效位置。 |
 | `debug_*` | 仅用于 testbench/观测，不参与功能路径。 |
-
-当一个操作同时写入完整 `list` 和对应 `count` 时，使用同一个前缀：
-
-```text
-list_load_en
-list_load_hblk_idx
-list_load_entries
-list_load_count
-```
-
-这样可以看出这是一组事务：选中一个 H block，并覆盖它的完整 list 与有效长度。
 
 ## Row Group 规则
 
@@ -183,8 +171,6 @@ c2v_row_group_row_global[row_group_idx]
 ```text
 i_entry_wdata
 o_entry_rdata
-i_list_load_entries
-i_list_load_count
 ```
 
 ## 常见模块示例
@@ -205,5 +191,4 @@ i_list_load_count
 - 这个索引是 H block、变量节点、边槽位、list 位置，还是行号？名字里要体现出来。
 - 行号是局部的还是全局的？使用 `row_local` 或 `row_global`。
 - `[0:W-1]` 的数组是完整 list，单个元素是 entry，list 的有效长度是 count。
-- 批量覆盖一组 entries 和 count 时，用 `list_load_*` 这类统一前缀。
 - `debug_*` 信号不应参与功能路径。

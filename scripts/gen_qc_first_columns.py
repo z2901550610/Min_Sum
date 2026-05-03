@@ -123,11 +123,11 @@ def first_column_tables(banks: list[list[int]]) -> tuple[list[list[int]], list[l
             [None for _ in range(len(bank_support))],
             [None for _ in range(len(bank_support))],
         ]
-        for edge_slot, row_value in enumerate(bank_support):
+        for one_idx, row_value in enumerate(bank_support):
             lane_idx = row_value & 1
             row_local = row_value >> 1
             slot_idx = lane_counts[lane_idx]
-            lane_entries[lane_idx][slot_idx] = (edge_slot, row_local)
+            lane_entries[lane_idx][slot_idx] = (one_idx, row_local)
             lane_counts[lane_idx] += 1
         lane_count_table.append(lane_counts)
         lane_entry_table.append(lane_entries)
@@ -142,9 +142,9 @@ def cl2(v: int) -> int:
     return (v - 1).bit_length()
 
 
-def packed_entry(edge_slot: int, row_local: int, row_idx_w: int) -> int:
+def packed_entry(one_idx: int, row_local: int, row_idx_w: int) -> int:
     """Pack {one_idx, row_local} into an integer matching RTL I_ENTRY format."""
-    return (edge_slot << row_idx_w) | row_local
+    return (one_idx << row_idx_w) | row_local
 
 
 def write_hex_file(path: Path, values: list[int], width: int) -> None:
@@ -172,8 +172,8 @@ def generate_hex_files(banks: list[list[int]], r_value: int, w_value: int, tag: 
                 if item is None:
                     entries.append(0)
                 else:
-                    edge_slot, row_local = item
-                    entries.append(packed_entry(edge_slot, row_local, row_idx_w))
+                    one_idx, row_local = item
+                    entries.append(packed_entry(one_idx, row_local, row_idx_w))
 
         write_hex_file(output_dir / f"{lane_names[lane_idx]}_entries_{tag}.hex", entries, 0)
         write_hex_file(output_dir / f"{lane_names[lane_idx]}_counts_{tag}.hex", counts, 0)

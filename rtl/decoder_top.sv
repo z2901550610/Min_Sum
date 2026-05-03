@@ -193,8 +193,6 @@ module decoder_top
 
   logic [MSG_W-1:0] c2v_msg [0:L-1];
   logic signed [MSG_W-1:0] c2v_tc [0:L-1];
-  /* verilator lint_off UNUSEDSIGNAL */
-  /* verilator lint_on UNUSEDSIGNAL */
 
   logic vnu_col_start;
   logic vnu_col_end;

@@ -5,8 +5,8 @@
 本 RTL 实现了一个 BIKE 风格的syndrome解码器。校验矩阵为双循环矩阵：
 
 - `H = [H0 | H1]`
-- `H0` 和 `H1` 由各自的首列向量表示，存储在 `bike_pkg.H_BASE[h_sel][bank][edge]` 中
-- `bank = 0` 对应 `H0`，`bank = 1` 对应 `H1`
+- `H0` 和 `H1` 由各自的首列向量表示，存储在 `bike_pkg.H_BASE[h_sel][hblk_idx][one_idx]` 中
+- `hblk_idx = 0` 对应 `H0`，`hblk_idx = 1` 对应 `H1`
 
 解码器接受初始syndrome，根据静态首列向量填充各 circulant bank，并估计错误向量：
 
