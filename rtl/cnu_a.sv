@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 // CNU_A updates one compressed-c2v state from an incoming v2c message.
 module cnu_a
   import bike_pkg::*;
@@ -12,9 +13,6 @@ module cnu_a
   output logic o_sign,                        // sign(i_v2c_msg), stored in RAM S for CNU_B.
   output logic o_valid                   
 );
-
-  timeunit 1ns;
-  timeprecision 1ps;
 
   logic               v2c_sign;
   logic [D-1:0]       v2c_mag;

@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 // One paper-style RAM M block storing compressed c2v state for one check-row group.
 module ram_m
   import bike_pkg::*;
@@ -11,9 +12,6 @@ module ram_m
   output logic [COMP_C2V_W-1:0] o_rdata,
   output logic [COMP_C2V_W-1:0] o_debug_mem [0:R-1]
 );
-
-  timeunit 1ns;
-  timeprecision 1ps;
 
   logic [COMP_C2V_W-1:0] mem [0:R-1];
 

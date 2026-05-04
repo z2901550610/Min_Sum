@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 // RAM S — stores v2c sign bits for one processing group.
 module ram_s
   import bike_pkg::*;
@@ -12,9 +13,6 @@ module ram_s
   output logic o_rdata,
   output logic o_debug_mem [0:N-1][0:W-1]
 );
-
-  timeunit 1ns;
-  timeprecision 1ps;
 
   logic mem [0:N-1][0:W-1];
 

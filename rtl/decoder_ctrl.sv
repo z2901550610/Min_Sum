@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 // Decoder control for Fig.8-style column-overlap scheduling using a small
 // set of macro states plus c2v/v2c column contexts.
 module decoder_ctrl
@@ -43,9 +44,6 @@ module decoder_ctrl
   output logic o_success,                                      // Decode success flag.
   output logic [$clog2(I_MAX + 1)-1:0] o_iter_count            // Completed iteration count.
 );
-
-  timeunit 1ns;
-  timeprecision 1ps;
 
   localparam int ITER_W = $clog2(I_MAX + 1);
   localparam logic [COL_W-1:0] LAST_COL = COL_W'(N - 1);

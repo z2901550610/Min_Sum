@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 // One paper-style RAM C block storing hard decisions/error-estimate bits.
 module ram_c
   import bike_pkg::*;
@@ -11,9 +12,6 @@ module ram_c
   output logic o_rdata,
   output logic [N-1:0] o_bits
 );
-
-  timeunit 1ns;
-  timeprecision 1ps;
 
   localparam logic RESET_VALUE = 1'b0;
 

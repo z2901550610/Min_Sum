@@ -127,9 +127,8 @@ def emit_pkg(
 ) -> None:
     group_counts, group_entries = build_first_column_tables(h_base, r)
     path.write_text(
-        f"""package bike_pkg;
-  timeunit 1ns;
-  timeprecision 1ps;
+        f"""`timescale 1ns/1ps
+package bike_pkg;
 
   /* verilator lint_off UNUSEDPARAM */
 

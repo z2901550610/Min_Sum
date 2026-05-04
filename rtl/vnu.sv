@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 // VNU：累加 c2v 消息，并生成更新后的 v2c
 // VNU 内部数据均用2的补码表示，与符号-幅度之间的转换在VNU外部进行
 module vnu

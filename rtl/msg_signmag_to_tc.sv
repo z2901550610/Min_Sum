@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 // Converts a sign-magnitude message into signed two's-complement.
 module msg_signmag_to_tc
   #(

@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 // CNU_B reconstructs an outgoing c2v message from compressed-c2v state.
 module cnu_b
   import bike_pkg::*;
@@ -8,9 +9,6 @@ module cnu_b
   input  logic [COL_W-1:0] i_col_idx,         // Which variable column j requests a c2v message.
   output logic [MSG_W-1:0] o_c2v_msg          // Reconstructed c2v sign-magnitude message.
 );
-
-  timeunit 1ns;
-  timeprecision 1ps;
 
   logic [D-1:0] c2v_min1_mag;
   logic [D-1:0] c2v_min2_mag;

@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 // Converts a signed two's-complement message into saturated sign-magnitude.
 module msg_tc_to_signmag_sat
   #(

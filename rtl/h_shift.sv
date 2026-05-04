@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 // 根据 "row_idx_global mod L = l" 进行分组。
 // one_idx_global -- "1" 在列中的索引
 // row_idx_group   -- 组内行号

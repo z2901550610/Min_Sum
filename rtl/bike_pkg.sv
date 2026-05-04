@@ -1,7 +1,6 @@
+`timescale 1ns/1ps
 // Shared decoder parameters, field layouts, and H-block constants.
 package bike_pkg;
-  timeunit 1ns;
-  timeprecision 1ps;
 
   /* verilator lint_off UNUSEDPARAM */
 

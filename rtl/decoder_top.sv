@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 // Top-level BIKE min-sum decoder datapath and module interconnect.
 module decoder_top
   import bike_pkg::*;
@@ -11,9 +12,6 @@ module decoder_top
   output logic [N-1:0] o_e,                     // Final error estimate vector.
   output logic [$clog2(I_MAX + 1)-1:0] o_iter_count  // Number of iterations that completed.
 );
-
-  timeunit 1ns;
-  timeprecision 1ps;
 
   localparam int ITER_W = $clog2(I_MAX + 1);
   localparam int HIST_IDX_W = (I_MAX > 1) ? $clog2(I_MAX) : 1;

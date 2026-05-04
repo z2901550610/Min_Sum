@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 // RAM-I：一个实例只保存一个 group 的 H-block 列 metadata。
 // list 是该 group 内的 packed entries，entry = {one_idx_global, row_idx_group}。
 // 上电时通过 $readmemh 从 hex 文件加载初始数据。
@@ -22,9 +23,6 @@ module ram_i
   output logic [I_ENTRY_W-1:0] o_debug_list_entries [0:N0-1][0:W-1],
   output logic [GROUP_COUNT_W-1:0] o_debug_counts [0:N0-1]
 );
-
-  timeunit 1ns;
-  timeprecision 1ps;
 
   // 每个 h_block 保存一个 group-local list；count 说明 list 前几项有效。
   logic [I_ENTRY_W-1:0] list_entries_mem [0:N0-1][0:W-1];
