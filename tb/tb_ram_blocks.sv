@@ -6,34 +6,29 @@ module tb_ram_blocks;
   logic clk;
   logic rst_n;
 
-  logic m_en;
   logic m_we;
   logic [ROW_IDX_W-1:0] m_check_row_addr;
   logic [COMP_C2V_W-1:0] m_wdata;
   logic [COMP_C2V_W-1:0] m_rdata;
   logic [COMP_C2V_W-1:0] m_debug [0:R-1];
 
-  logic s_en;
   logic s_we;
   logic [COL_W-1:0] s_col_idx;
-  logic [ONE_IDX_W-1:0] s_one_idx_global;
+  logic [ONE_IDX_W-1:0] s_one_idx;
   logic s_wdata;
   logic s_rdata;
   logic s_debug [0:N-1][0:W-1];
 
-  logic t_en;
   logic t_we;
   logic [MSG_W-1:0] t_wdata;
   logic [MSG_W-1:0] t_rdata;
   logic [MSG_W-1:0] t_debug [0:N-1][0:W-1];
 
-  logic u_en;
   logic u_we;
   logic [MSG_W-1:0] u_wdata;
   logic [MSG_W-1:0] u_rdata;
   logic [MSG_W-1:0] u_debug [0:N-1][0:W-1];
 
-  logic c_en;
   logic c_we;
   logic c_din;
   logic c_dout;
@@ -42,7 +37,6 @@ module tb_ram_blocks;
   ram_m u_ram_m (
     .i_clk(clk),
     .i_rst_n(rst_n),
-    .i_en(m_en),
     .i_we(m_we),
     .i_check_row_addr(m_check_row_addr),
     .i_wdata(m_wdata),
@@ -53,10 +47,9 @@ module tb_ram_blocks;
   ram_s u_ram_s (
     .i_clk(clk),
     .i_rst_n(rst_n),
-    .i_en(s_en),
     .i_we(s_we),
     .i_col_idx(s_col_idx),
-    .i_one_idx_global(s_one_idx_global),
+    .i_one_idx(s_one_idx),
     .i_wdata(s_wdata),
     .o_rdata(s_rdata),
     .o_debug_mem(s_debug)
@@ -65,10 +58,9 @@ module tb_ram_blocks;
   ram_t u_ram_t (
     .i_clk(clk),
     .i_rst_n(rst_n),
-    .i_en(t_en),
     .i_we(t_we),
     .i_col_idx(s_col_idx),
-    .i_one_idx_global(s_one_idx_global),
+    .i_one_idx(s_one_idx),
     .i_wdata(t_wdata),
     .o_rdata(t_rdata),
     .o_debug_mem(t_debug)
@@ -77,10 +69,9 @@ module tb_ram_blocks;
   ram_u u_ram_u (
     .i_clk(clk),
     .i_rst_n(rst_n),
-    .i_en(u_en),
     .i_we(u_we),
     .i_col_idx(s_col_idx),
-    .i_one_idx_global(s_one_idx_global),
+    .i_one_idx(s_one_idx),
     .i_wdata(u_wdata),
     .o_rdata(u_rdata),
     .o_debug_mem(u_debug)
@@ -89,7 +80,6 @@ module tb_ram_blocks;
   ram_c u_ram_c (
     .i_clk(clk),
     .i_rst_n(rst_n),
-    .i_en(c_en),
     .i_we(c_we),
     .i_col_idx(s_col_idx),
     .i_wdata(c_din),
@@ -102,22 +92,17 @@ module tb_ram_blocks;
 
   initial begin
     rst_n = 1'b0;
-    m_en = 1'b0;
     m_we = 1'b0;
     m_check_row_addr = '0;
     m_wdata = '0;
-    s_en = 1'b0;
     s_we = 1'b0;
     s_col_idx = '0;
-    s_one_idx_global = '0;
+    s_one_idx = '0;
     s_wdata = 1'b0;
-    t_en = 1'b0;
     t_we = 1'b0;
     t_wdata = '0;
-    u_en = 1'b0;
     u_we = 1'b0;
     u_wdata = '0;
-    c_en = 1'b0;
     c_we = 1'b0;
     c_din = 1'b0;
 
@@ -132,7 +117,6 @@ module tb_ram_blocks;
 
     m_check_row_addr = ROW_IDX_W'(2 % R);
     m_wdata = COMP_C2V_INIT ^ COMP_C2V_W'(7);
-    m_en = 1'b1;
     m_we = 1'b1;
     @(posedge clk);
     #1;
@@ -142,18 +126,14 @@ module tb_ram_blocks;
     if (m_rdata != m_wdata) $fatal(1, "ram_m read-after-write mismatch");
 
     s_col_idx = COL_W'(3 % N);
-    s_one_idx_global = ONE_IDX_W'(1 % W);
+    s_one_idx = ONE_IDX_W'(1 % W);
     s_wdata = 1'b1;
-    s_en = 1'b1;
     s_we = 1'b1;
     t_wdata = MSG_W'(-2);
-    t_en = 1'b1;
     t_we = 1'b1;
     u_wdata = {1'b0, D'(C_VAL)};
-    u_en = 1'b1;
     u_we = 1'b1;
     c_din = 1'b1;
-    c_en = 1'b1;
     c_we = 1'b1;
     @(posedge clk);
     #1;

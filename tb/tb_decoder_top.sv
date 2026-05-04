@@ -170,8 +170,8 @@ module tb_decoder_top;
     if (dut.ram_i_debug_count[0][0] != GROUP_COUNT_W'(2)) $fatal(1, "RAM I shifted group_idx0 count mismatch for column 1");
     if (dut.ram_i_debug_count[0][1] != GROUP_COUNT_W'(1)) $fatal(1, "RAM I shifted group_idx1 count mismatch for column 1");
     if (!(dut.c2v_group_valid[0] && dut.c2v_group_valid[1])) $fatal(1, "shifted column 1 should expose two active group_idxs");
-    if (dut.c2v_one_idx_global[0] != ONE_IDX_W'(1) || dut.c2v_row_idx_group[0] != ROW_IDX_W'(1)) $fatal(1, "shifted group_idx0 entry mismatch for column 1");
-    if (dut.c2v_one_idx_global[1] != ONE_IDX_W'(0) || dut.c2v_row_idx_group[1] != ROW_IDX_W'(0)) $fatal(1, "shifted group_idx1 entry mismatch for column 1");
+    if (dut.c2v_one_idx[0] != ONE_IDX_W'(1) || dut.c2v_row_idx_group[0] != ROW_IDX_W'(1)) $fatal(1, "shifted group_idx0 entry mismatch for column 1");
+    if (dut.c2v_one_idx[1] != ONE_IDX_W'(0) || dut.c2v_row_idx_group[1] != ROW_IDX_W'(0)) $fatal(1, "shifted group_idx1 entry mismatch for column 1");
 
     wait (dut.c2v_phase_active && !dut.v2c_phase_active && dut.c2v_col_idx == 0 && dut.active_entry_pos == 0);
     #1;

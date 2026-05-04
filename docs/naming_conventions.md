@@ -1,7 +1,7 @@
 # RTL 命名规范
 
 本文档定义本项目 RTL 中常用对象、索引、地址和数据接口的命名规则。目标是让
-`group_idx`、`row_idx_group`、`h_block_idx`、`entry_pos`、`one_idx_global`、`row_idx_global` 等词在所有模块里
+`group_idx`、`row_idx_group`、`h_block_idx`、`entry_pos`、`one_idx`、`row_idx_global` 等词在所有模块里
 保持同一个含义，避免新读代码的人把"分组编号""组内位置""边编号"和"行号"
 混在一起。
 
@@ -20,10 +20,10 @@ group。很多模块只处理其中一个 group，因此端口名必须清楚区
 | `check_row` | `0..R-1` | 全局校验行编号。 |
 | `row_idx_group` | `0..floor((R-1)/L)` | 当前 group 内的紧凑局部行号。当前 RTL 中等于 `floor(row_idx_global / L)`。 |
 | `row_idx_global` | `0..R-1` | 绝对校验行号。需要从 `group_idx` 和 `row_idx_group` 重建。 |
-| `one_idx_global` | `0..W-1` | 一个变量列内某个"1"的位置编号（即该列第几条边），用于访问 RAM-S/T/U 的边维度。加 `_global` 后缀是为了与 group-local 信号形成对比；在不涉及 group 概念的局部上下文中可简写为 `one_idx`。 |
+| `one_idx` | `0..W-1` | 一个变量列内某个"1"的位置编号（即该列第几条边），用于访问 RAM-S/T/U 的边维度。 |
 | `list` | `[0:W-1]` | 一组 packed entries，通常表示当前 group-local metadata 列表。 |
 | `entry_pos` | `0..W-1` | `list` 内的游标位置，是相对索引，不是行号。用于遍历列表中各 entry 的步进游标。 |
-| `entry` | packed value | 单个 metadata 项。当前 RAM-I entry 格式是 `{one_idx_global, row_idx_group}`。 |
+| `entry` | packed value | 单个 metadata 项。当前 RAM-I entry 格式是 `{one_idx, row_idx_group}`。 |
 | `count` | `0..W` | 一个 list 中有效 entry 的数量。只有 `entry_pos < count` 的项有效。 |
 
 ### `count` 与写指针的区分
@@ -35,16 +35,11 @@ group。很多模块只处理其中一个 group，因此端口名必须清楚区
 - `ram_i_shift_write_ptr` — 移位写回的递增指针（正确）
 - `ram_i_shift_write_count` — 易与 list cardinality 混淆（不推荐）
 
-### `_global` 后缀使用规则
+### `_global` / `_idx_group` 后缀使用规则
 
-当信号在全坐标系内有效，且存在同名的 group-local 版本时需要显式区分时，
-加 `_global` 后缀。典型场景：
-
-- `one_idx_global` — 列内边编号（天然全局），用于跨 group 数组索引
-- `row_idx_global` — 绝对行号，与 `row_idx_group`（组内行号）形成对比
-
-仅在同一个上下文中同时存在全局版和局部版时才需要 `_global`/`_idx_group` 后缀；
-若模块内只涉及一种坐标空间，可省略后缀。
+只有 `row_idx` 需要在全局行号和组内行号之间显式区分，使用 `row_idx_global`
+和 `row_idx_group` 后缀。`one_idx`、`col_idx` 等其他索引天然是全局坐标系，
+不需要 `_global` 后缀。
 
 ## 层级关系
 
@@ -57,7 +52,7 @@ per-group metadata storage
 list_entries
   [h_block_idx]              // 0..N0-1，选择 H block
     [entry_pos]              // 0..W-1，选择当前 list 内的位置
-      entry = {one_idx_global, row_idx_group}
+      entry = {one_idx, row_idx_group}
                |               |
                |               +-- 当前 group 内的局部行号
                +------------------ 变量列内的边编号，0..W-1
@@ -73,9 +68,9 @@ list_count
 
 entry_pos   list_entries[0][entry_pos]           是否有效
 ---------   ------------------------------      --------
-0           {one_idx_global=0, row_idx_group=1}  entry_pos < count，有效
-1           {one_idx_global=2, row_idx_group=3}  entry_pos < count，有效
-2           {one_idx_global=0, row_idx_group=0}  entry_pos >= count，无效
+0           {one_idx=0, row_idx_group=1}  entry_pos < count，有效
+1           {one_idx=2, row_idx_group=3}  entry_pos < count，有效
+2           {one_idx=0, row_idx_group=0}  entry_pos >= count，无效
 
 list_count[0] = 2
 ```
@@ -101,7 +96,7 @@ group。端口可以直接叫 `entry_pos`、`list_entries`、`count`，由实例
 | `_idx` | 离散编号或数组索引。优先用于逻辑对象编号。 | `col_idx`, `h_block_idx`, `group_idx` |
 | `_pos` | 遍历 list 的游标位置，会递增步进。 | `c2v_entry_pos`, `v2c_entry_pos` |
 | `_addr` | 真实 RAM 地址端口。只有信号直接接到存储器地址时使用。 | `check_row_addr` |
-| `_global` | 全局坐标系内有效，与 group-local 信号形成对比。 | `one_idx_global`, `row_idx_global` |
+| `_global` | 全局行号，与 group-local 行号 `row_idx_group` 形成对比。仅在行号中使用。 | `row_idx_global` |
 | `_idx_group` | 在当前 group 内的局部索引。 | `row_idx_group` |
 
 推荐写法：
@@ -110,7 +105,7 @@ group。端口可以直接叫 `entry_pos`、`list_entries`、`count`，由实例
 group_idx         // 分组编号，0..L-1
 h_block_idx       // H block 选择，0..N0-1
 entry_pos         // list 内游标位置，0..W-1
-one_idx_global    // 变量列内 "1" 的位置编号，0..W-1
+one_idx    // 变量列内 "1" 的位置编号，0..W-1
 row_idx_group     // 当前 group 内局部行号
 row_idx_global    // 绝对行号
 ```
@@ -238,7 +233,7 @@ o_entry_rdata
 | 模块/区域 | 推荐命名 | 说明 |
 | --- | --- | --- |
 | RAM-I metadata | `entry_pos`, `entry_wdata`, `list_entries`, `count` | 一个实例属于一个 group；端口名不重复 group。 |
-| RAM-S/T/U edge 维 | `one_idx_global` | 访问变量列内第几条边。 |
+| RAM-S/T/U edge 维 | `one_idx` | 访问变量列内第几条边。 |
 | RAM-M 行地址 | `check_row_addr` 或 `row_idx_group` | 如果 RAM-M 是 per-group 存储，地址应是组内局部行。 |
 | C2V/V2C 跨 group 数组 | `*_group_valid[0:L-1]` | 数组维度确实是 group。 |
 | H block 选择 | `h_block_idx` | 统一使用 `h_block`，不使用 `hblk`。 |
@@ -252,9 +247,9 @@ o_entry_rdata
 
 - 这个信号是否真的是 group 编号？如果是，使用 `group_idx`。不要使用 `row_group` 表示分组编号。
 - 这个索引是 H block、变量节点、边槽位、list 游标位置，还是行号？名字里要体现出来。
-- 行号是局部的还是全局的？使用 `row_idx_group` 或 `row_idx_global`。
+- 行号是局部的还是全局的？只有行号需要区分，使用 `row_idx_group` 或 `row_idx_global`。`one_idx` 和 `col_idx` 天然是全局坐标，无需后缀。
 - `[0:W-1]` 的数组是完整 list，单个元素是 entry，list 的有效长度是 count。
 - 递增的写指针用 `_ptr`，不要与 list 的 count 混淆。
-- 跨 group 上下文中，边编号用 `one_idx_global` 带 `_global` 后缀。
+- 跨 group 上下文中，边编号用 `one_idx`，无需 `_global` 后缀。只有行号需要 `_global`/`_idx_group` 区分。
 - `debug_*` 信号不应参与功能路径。
 - H block 选择统一用 `h_block_idx`，不要用 `hblk_idx` 或 `h_blk_idx`。

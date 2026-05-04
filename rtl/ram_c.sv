@@ -5,7 +5,6 @@ module ram_c
 (
   input  logic i_clk,
   input  logic i_rst_n,
-  input  logic i_en,
   input  logic i_we,
   input  logic [COL_W-1:0] i_col_idx,                      // Which variable column j / hard-decision bit to access.
   input  logic i_wdata,
@@ -25,7 +24,7 @@ module ram_c
       for (int bit_idx = 0; bit_idx < N; bit_idx++) begin
         mem[bit_idx] <= RESET_VALUE;
       end
-    end else if (i_en) begin
+    end else begin
       if (i_we) begin
         mem[i_col_idx] <= i_wdata;
       end

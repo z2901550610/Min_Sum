@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 // RAM-I：一个实例只保存一个 group 的 H-block 列 metadata。
-// list 是该 group 内的 packed entries，entry = {one_idx_global, row_idx_group}。
+// list 是该 group 内的 packed entries，entry = {one_idx, row_idx_group}。
 // 上电时通过 $readmemh 从 hex 文件加载初始数据。
 module ram_i
   import bike_pkg::*;
@@ -10,7 +10,6 @@ module ram_i
 (
   input  logic i_clk,
   input  logic i_rst_n,
-  input  logic i_en,
   input  logic i_we,
   input  logic [H_BLOCK_W-1:0] i_h_block_idx,
   input  logic [ONE_IDX_W-1:0] i_entry_idx,
@@ -41,12 +40,10 @@ module ram_i
     if (!i_rst_n) begin
       o_entry_rdata <= '0;
     end else begin
-      if (i_en) begin
-        if (i_we) begin
-          list_entries_mem[i_h_block_idx][i_entry_idx] <= i_entry_wdata;
-        end
-        o_entry_rdata <= list_entries_mem[i_h_block_idx][i_entry_idx];
+      if (i_we) begin
+        list_entries_mem[i_h_block_idx][i_entry_idx] <= i_entry_wdata;
       end
+      o_entry_rdata <= list_entries_mem[i_h_block_idx][i_entry_idx];
       if (i_count_we) begin
         list_count_mem[i_h_block_idx] <= i_count_wdata;
       end
