@@ -22,7 +22,7 @@ module decoder_ctrl
   output logic [ONE_IDX_W-1:0] o_active_entry_pos,             // Debug-selected entry list position.
   output logic o_m_read_pair,                                  // RAM-M pair selected for compressed-c2v reads.
   output logic o_m_write_pair,                                 // RAM-M pair selected for compressed-c2v writes.
-  output logic o_init_m_read,                                  // Reads RAM-M/RAM-U for initial CNU_A.
+  output logic o_init_m_read,                                  // Reads RAM-M for initial CNU_A.
   output logic o_init_cnu_a,                                   // Enables CNU_A for initial accumulation.
   output logic o_init_m_write,                                 // Writes initial CNU_A result.
   output logic o_c2v_read,                                     // Reads RAM-M/RAM-S for CNU_B.
@@ -32,7 +32,7 @@ module decoder_ctrl
   output logic o_vnu_prep_write,                               // Captures VNU decision.
   output logic o_vnu_read_next_m,                              // Reads next RAM-M pair before CNU_A.
   output logic o_vnu_cnu_a,                                    // Enables CNU_A with VNU-generated v2c.
-  output logic o_vnu_write_next,                               // Writes RAM-U/RAM-M/RAM-S for next iteration.
+  output logic o_vnu_write_next,                               // Writes RAM-M/RAM-S for next iteration.
   output logic o_iter_check,                                   // Iteration completion/check cycle.
   output logic o_capture_v2c_column_now,                      // Current c2v column becomes the active v2c column.
   output logic o_capture_v2c_column_next,                     // Current c2v column becomes the buffered next v2c column.

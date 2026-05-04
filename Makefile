@@ -12,7 +12,7 @@ GOLDEN_BIN := golden/mdpc_min_sum_golden
 BIKE_GOLDEN_BIN := golden/bike_l1_min_sum_golden
 VECTOR_SVH := tb/generated/bike_demo_vectors.svh
 RAM_I_HEX := rtl/generated/ram_i0_entries_test.hex rtl/generated/ram_i0_counts_test.hex rtl/generated/ram_i1_entries_test.hex rtl/generated/ram_i1_counts_test.hex rtl/generated/ram_i0_entries_l1.hex rtl/generated/ram_i0_counts_l1.hex rtl/generated/ram_i1_entries_l1.hex rtl/generated/ram_i1_counts_l1.hex
-RTL_CORE := rtl/ram_i.sv rtl/h_shift.sv rtl/msg_signmag_to_tc.sv rtl/msg_tc_to_signmag_sat.sv rtl/decoder_ctrl.sv rtl/ram_c.sv rtl/ram_m.sv rtl/ram_s.sv rtl/ram_t.sv rtl/ram_u.sv rtl/cnu_a.sv rtl/cnu_b.sv rtl/vnu.sv rtl/decoder_top.sv
+RTL_CORE := rtl/ram_i.sv rtl/h_shift.sv rtl/msg_signmag_to_tc.sv rtl/msg_tc_to_signmag_sat.sv rtl/decoder_ctrl.sv rtl/ram_c.sv rtl/ram_m.sv rtl/ram_s.sv rtl/ram_t.sv rtl/cnu_a.sv rtl/cnu_b.sv rtl/vnu.sv rtl/decoder_top.sv
 RTL := rtl/bike_pkg.sv $(RTL_CORE)
 BIKE_SEED ?= 1
 BIKE_BASE_SEED ?= 1
@@ -63,7 +63,7 @@ test-unit: $(VECTOR_SVH) $(word 1,$(RAM_I_HEX))
 	@$(SIM) ./obj_dir/Vtb_msg_codec +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_i rtl/bike_pkg.sv rtl/ram_i.sv tb/tb_ram_i.sv
 	@$(SIM) ./obj_dir/Vtb_ram_i +verilator+quiet
-	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_blocks rtl/bike_pkg.sv rtl/ram_c.sv rtl/ram_m.sv rtl/ram_s.sv rtl/ram_t.sv rtl/ram_u.sv tb/tb_ram_blocks.sv
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_blocks rtl/bike_pkg.sv rtl/ram_c.sv rtl/ram_m.sv rtl/ram_s.sv rtl/ram_t.sv tb/tb_ram_blocks.sv
 	@$(SIM) ./obj_dir/Vtb_ram_blocks +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_h_shift rtl/bike_pkg.sv rtl/h_shift.sv tb/tb_h_shift.sv
 	@$(SIM) ./obj_dir/Vtb_h_shift +verilator+quiet

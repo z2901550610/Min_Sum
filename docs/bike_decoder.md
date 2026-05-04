@@ -28,7 +28,7 @@
 解码器从全零错误估计开始。
 
 - `ram_c` 存储运行中的错误估计（硬判决位）
-- `RAM U` 的每条边初始化为 `{sign=0, mag=C_VAL}`
+- `CNU_A` 初始化输入使用 `{sign=0, mag=C_VAL}`
 - `VNU` 先验值始终为 `+C_VAL`
 - `CNU_A` 仅累积每个压缩 c2v 状态中传入的 `u` 符号
 - `CNU_B` 计算每条输出边的符号：
@@ -79,17 +79,18 @@ ram_i #(.INIT_HEX_STEM("rtl/generated/ram_i1")) u_ram_i1 (...);
 
 `INIT_TAG` 通过 `` `ifdef BIKE_L1_PARAMS `` 选择 `"_l1"` 或 `"_test"`，确保编译时匹配正确的参数集。
 
-`$readmemh` 在仿真时间零点执行，直接将 hex 文件内容加载到 `list_entries_mem` 和 `list_count_mem`。复位期间记忆体阵列**不清零**（仅复位输出寄存器 `o_entry_rdata`），因此复位释放后 RAM-I 已包含完整的首列元数据，解码器进入 INIT 状态即可直接使用。
+`$readmemh` 在仿真时间零点执行，直接将 hex 文件内容加载到 `list_entries_mem` 和 `list_count_mem`。复位期间记忆体阵列保持加载内容，因此复位释放后 RAM-I 已包含完整的首列元数据，解码器进入 INIT 状态即可直接使用。
 
 ## 模块划分
 
 - `decoder_ctrl` 负责解码控制、c2v/v2c 列上下文、RAM-M 乒乓 bank、列缓冲切换事件以及 done/success 状态管理。实现采用少量宏状态配合计数器/valid 风格的活动标志，将调度逻辑分布在列上下文中。
 - `decoder_top` 是解码器核心数据通路和结构互连。它实例化各编号 RAM 块、`decoder_ctrl`、`h_shift`、CNU/VNU 单元和消息编解码适配器；顶层逻辑仅限于 RAM 端口选择、RAM-I 行组 entry 处理、数据锁存和残差syndrome重算。
 - `vnu` 以 2's-complement 格式消费 c2v 并生成未饱和的 2's-complement v2c。符号-幅值转换在 VNU 输入/输出边界的外部 `msg_codec` 适配器中完成；RAM-T 和 VNU 缩放数据通路保持在 2's-complement 域内。
-- `ram_i`、`ram_m`、`ram_s`、`ram_t`、`ram_u`、`ram_c` 均为论文风格的同步读单端口 RAM 原语。每个 RTL 文件对应一个编号 RAM 块。
-- `decoder_top` 按论文命名显式实例化各 RAM 块：`I0/I1`、`M0/M1/M2/M3`、`S0/S1`、`T0/T1`、`U0/U1`、`C`。
+- `ram_i`、`ram_m`、`ram_s`、`ram_t`、`ram_c` 均为论文风格的 RAM 原语。每个 RTL 文件对应一个编号 RAM 块。
+- `decoder_top` 按论文命名显式实例化各 RAM 块：`I0/I1`、`M0/M1/M2/M3`、`S0/S1`、`T0/T1`、`C`。
+- RAM-T 每个 lane 使用 `W` 个 `entry_pos` slot 缓冲当前 c2v 列，VNU 累加阶段按 `v2c_entry_pos` 读取 slot，并将该列 c2v 拷贝到 `c2v_column_cache_tc` 供 v2c 发射阶段使用。
 - `decoder_ctrl` 遵循论文的 Fig.8 式单端口调度：每次迭代先将列 0 的数据填入 RAM-T，然后进入列重叠流水线——c2v 侧重建列 `j+1` 的同时 v2c 侧累积并更新列 `j`，最后排空 v2c 的最后一列，进入 `ITER_CHECK`。复用的 RAM-M 行通过逐行 epoch 追踪器实现 `COMP_C2V_INIT` 语义。`phase` 信号仅用于调试；数据通路时序由显式的控制脉冲和列缓冲切换事件驱动。
-- RAM-I 在仿真启动时通过 `$readmemh` 从 hex 文件加载首列元数据。解码期间，活跃列的行/局部行/边索引元数据来自 RAM-I 的行组列表。`h_shift` 为每个 RAM-I 块设置一个 entry 输入，为每个 lane 设置一个移位后的 entry 输出，数据通路通过 RAM-I 的单 entry 写端口将每个移位后的 entry 写入下一个 c2v 列。v2c 元数据独立缓冲，使 c2v 侧的 RAM-I 可以领先一列。`decoder_top` 通过 RAM-I 的功能列视图输出访问 RAM-I。项目级 RTL 命名约定定义在 [`docs/naming_conventions.md`](/Users/z2901550610/Documents/Min_Sum/docs/naming_conventions.md) 中。行组方案基于奇偶：`row_group 0` 存储偶数行，`row_group 1` 存储奇数行，`row_local` 为紧凑的奇偶局部索引 `floor(row_global / 2)`。CNU/VNU 行地址调度由 RAM-I 元数据驱动。
+- RAM-I 在仿真启动时通过 `$readmemh` 从 hex 文件加载首列元数据。解码期间，活跃列的行/局部行/边索引元数据来自 RAM-I 的单 entry 读口。`h_shift` 为每个 RAM-I 块设置一个 entry 输入，为每个 lane 设置一个移位后的 entry 输出，数据通路通过 RAM-I 的单 entry 写端口将每个移位后的 entry 写入下一个 c2v 列。v2c 元数据独立缓冲，使 c2v 侧的 RAM-I 可以领先一列。`decoder_top` 通过 RAM-I 的单 entry 功能视图输出访问 RAM-I。项目级 RTL 命名约定定义在 [`docs/naming_conventions.md`](/Users/z2901550610/Documents/Min_Sum/docs/naming_conventions.md) 中。行组方案基于奇偶：`row_group 0` 存储偶数行，`row_group 1` 存储奇数行，`row_local` 为紧凑的奇偶局部索引 `floor(row_global / 2)`。CNU/VNU 行地址调度由 RAM-I 元数据驱动。
 - `decoder_edge_meta` 和 `qc_column_preprocess` 保留在 [`rtl/reference/`](/Users/z2901550610/Documents/Min_Sum/rtl/reference) 下作为参考辅助文件。核心解码器使用 RAM-I + `h_shift` 提供活跃边元数据。
 - 静态首列元数据由 [`scripts/gen_qc_first_columns.py`](/Users/z2901550610/Documents/Min_Sum/scripts/gen_qc_first_columns.py) 离线生成，输出 hex 文件到 `rtl/generated/`。RAM-I 通过 `$readmemh` 在仿真启动时直接加载。
 - c2v 侧在列开始时缓冲活跃的 RAM-I 列，使得下一列的单 entry 移位写入不会干扰当前列的元数据视图。
@@ -150,9 +151,9 @@ INIT 为所有变量列构建初始压缩 c2v 对（第一次迭代的输入）�
 
 | 微步骤 | 信号 | 功能 |
 |---|---|---|
-| `INIT_STEP_READ` | `o_init_m_read` | 从 RAM-M / RAM-U 读取当前 entry 的 c2v 数据 |
+| `INIT_STEP_READ` | `o_init_m_read` | 从 RAM-M 读取当前 entry 的压缩 c2v 状态 |
 | `INIT_STEP_CNU_A` | `o_init_cnu_a` | 使能 CNU_A 进行初始累加运算 |
-| `INIT_STEP_WRITE` | `o_init_m_write` | 将 CNU_A 结果写回 RAM-M / RAM-U |
+| `INIT_STEP_WRITE` | `o_init_m_write` | 将 CNU_A 结果写回 RAM-M / RAM-S |
 
 播种完成后，每个 entry 依次经过 READ → CNU_A → WRITE 三步。entry 步进规则：
 
@@ -192,7 +193,7 @@ Producer 和 consumer 同时活跃。Consumer 在两个模式间切换：
 | `CONS_STEP_PREP` | `o_vnu_prep_write` | 捕获 VNU 硬判决，准备 v2c 写入 |
 | `CONS_STEP_READ_NEXT_M` | `o_vnu_read_next_m` | 读取下一个 RAM-M 对，为 CNU_A 做准备 |
 | `CONS_STEP_CNU_A` | `o_vnu_cnu_a` | 用 VNU 生成的 v2c 值使能 CNU_A |
-| `CONS_STEP_WRITE` | `o_vnu_write_next` | 将结果写入 RAM-U / RAM-M / RAM-S，为下一次迭代准备 |
+| `CONS_STEP_WRITE` | `o_vnu_write_next` | 将结果写入 RAM-M / RAM-S，为下一次迭代准备 |
 
 在 `CONS_STEP_READ_NEXT_M` 时，若 producer 活跃，producer 写入一个 c2v 结果。在 `CONS_STEP_CNU_A` 时，若 producer 活跃，producer 读取下一个 c2v entry，最后 entry 则停用 producer。
 

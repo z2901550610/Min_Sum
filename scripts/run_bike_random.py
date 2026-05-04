@@ -20,7 +20,6 @@ RTL_CORE = [
     "rtl/ram_m.sv",
     "rtl/ram_s.sv",
     "rtl/ram_t.sv",
-    "rtl/ram_u.sv",
     "rtl/cnu_a.sv",
     "rtl/cnu_b.sv",
     "rtl/vnu.sv",
@@ -148,7 +147,7 @@ package bike_pkg;
   parameter int MSG_W = D + 1;
   parameter int ROW_SEG_SIZE = (R + L - 1) / L;
   parameter int VNU_TC_W = MSG_W + ((W > 1) ? $clog2(W + 1) : 1);
-  parameter int VAR_W = (N > 1) ? $clog2(N) : 1;
+  parameter int COL_W = (N > 1) ? $clog2(N) : 1;
   parameter int H_BLOCK_W = (N0 > 1) ? $clog2(N0) : 1;
   parameter int H_NUM = 1;
 
@@ -196,11 +195,11 @@ package bike_pkg;
   localparam int COMP_C2V_MIN1_LSB = 0;
   localparam int COMP_C2V_MIN2_LSB = COMP_C2V_MIN1_LSB + D;
   localparam int COMP_C2V_MIN_ID_LSB = COMP_C2V_MIN2_LSB + D;
-  localparam int COMP_C2V_SIGN_XOR_BIT = COMP_C2V_MIN_ID_LSB + VAR_W;
+  localparam int COMP_C2V_SIGN_XOR_BIT = COMP_C2V_MIN_ID_LSB + COL_W;
   localparam int COMP_C2V_W = COMP_C2V_SIGN_XOR_BIT + 1;
   localparam logic [COMP_C2V_W-1:0] COMP_C2V_INIT = {{
     1'b0,
-    VAR_W'(0),
+    COL_W'(0),
     D'(MAG_MAX),
     D'(MAG_MAX)
   }};

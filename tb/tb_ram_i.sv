@@ -14,7 +14,6 @@ module tb_ram_i;
   logic [I_ENTRY_W-1:0] entry_rdata;
   /* verilator lint_off UNUSEDSIGNAL */
   logic [GROUP_COUNT_W-1:0] count;
-  logic [I_ENTRY_W-1:0] list_entries [0:W-1];
   /* verilator lint_on UNUSEDSIGNAL */
   logic [I_ENTRY_W-1:0] debug_list_entries [0:N0-1][0:W-1];
   logic [GROUP_COUNT_W-1:0] debug_counts [0:N0-1];
@@ -32,7 +31,6 @@ module tb_ram_i;
     .i_count_wdata(count_wdata),
     .o_entry_rdata(entry_rdata),
     .o_count(count),
-    .o_list_entries(list_entries),
     .o_debug_list_entries(debug_list_entries),
     .o_debug_counts(debug_counts)
   );
@@ -61,9 +59,10 @@ module tb_ram_i;
 
     // Read back via functional port.
     h_block_idx = '0;
+    entry_idx = '0;
     #1;
     if (count != debug_counts[0]) $fatal(1, "ram_i functional count view mismatch");
-    if (list_entries[0] != debug_list_entries[0][0]) $fatal(1, "ram_i functional list view mismatch");
+    if (entry_rdata != debug_list_entries[0][0]) $fatal(1, "ram_i functional entry view mismatch");
 
     // Single-entry write / read.
     h_block_idx = '0;

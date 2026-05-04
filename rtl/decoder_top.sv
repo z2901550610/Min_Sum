@@ -39,7 +39,7 @@ module decoder_top
   logic [R-1:0] syndrome_hist [0:I_MAX-1];
   logic [GROUP_COUNT_W-1:0] ram_i_debug_count [0:N0-1][0:L-1];
   /* verilator lint_on UNUSEDSIGNAL */
-  logic [I_ENTRY_W-1:0] ram_i_entry_rdata_unused [0:L-1];
+  logic [I_ENTRY_W-1:0] ram_i_entry_rdata [0:L-1];
   logic [GROUP_COUNT_W-1:0] ram_i_count [0:L-1];
 
   logic m_read_pair;
@@ -63,12 +63,10 @@ module decoder_top
   // column ahead.
   logic [H_BLOCK_W-1:0] c2v_h_block_idx;
   logic [GROUP_COUNT_W-1:0] c2v_column_group_count [0:L-1];
-  logic [I_ENTRY_W-1:0] c2v_column_group_entries [0:L-1][0:W-1];
   logic [GROUP_COUNT_W-1:0] v2c_column_group_count [0:L-1];
   logic [I_ENTRY_W-1:0] v2c_column_group_entries [0:L-1][0:W-1];
   logic [GROUP_COUNT_W-1:0] v2c_next_column_group_count [0:L-1];
   logic [I_ENTRY_W-1:0] v2c_next_column_group_entries [0:L-1][0:W-1];
-  logic c2v_column_buffer_valid;
   logic [GROUP_COUNT_W-1:0] c2v_buffer_group_count [0:L-1];
   logic [I_ENTRY_W-1:0] c2v_buffer_group_entries [0:L-1][0:W-1];
   logic [GROUP_COUNT_W-1:0] ram_i_shift_write_ptr [0:L-1];
@@ -85,7 +83,7 @@ module decoder_top
   logic c2v_entry_pos_last;
   logic v2c_entry_pos_last;
 
-  // Per-edge decoded metadata used to address RAM-M/S/T/U.
+  // Per-edge decoded metadata used to address RAM-M/S/T.
   logic c2v_group_valid [0:L-1];
   logic [ONE_IDX_W-1:0] c2v_one_idx [0:L-1];
   logic [ROW_IDX_W-1:0] c2v_row_idx_group [0:L-1];
@@ -109,7 +107,6 @@ module decoder_top
   logic [COL_W-1:0] v2c_m_latched_col;
   logic v2c_m_latched_m_write_pair;
   logic signed [MSG_W-1:0] c2v_column_cache_tc [0:W-1];
-  logic [MSG_W-1:0] u_next_msg_reg [0:L-1];
 
   logic [R-1:0] residual_syndrome_next;
   logic decode_success;
@@ -123,13 +120,11 @@ module decoder_top
   /* verilator lint_on UNUSEDSIGNAL */
   logic [GROUP_COUNT_W-1:0] ram_i0_debug_count [0:N0-1];
   logic [GROUP_COUNT_W-1:0] ram_i1_debug_count [0:N0-1];
-  logic [I_ENTRY_W-1:0] ram_i0_list_entries [0:W-1];
-  logic [I_ENTRY_W-1:0] ram_i1_list_entries [0:W-1];
 
   // Paper-style RAM port steering. Each block is single-port, so the top
   // centralizes all enables, addresses, and write data here.
   logic m_we [0:3];
-  logic [ROW_IDX_W-1:0] m_check_row_addr [0:3];
+  logic [ROW_IDX_W-1:0] m_row_idx_group [0:3];
   logic [COMP_C2V_W-1:0] m_wdata [0:3];
   logic [COMP_C2V_W-1:0] m_rdata [0:3];
   logic m_pair_epoch [0:1];
@@ -153,23 +148,12 @@ module decoder_top
   /* verilator lint_on UNUSEDSIGNAL */
 
   logic t_we [0:L-1];
-  logic [COL_W-1:0] t_col_idx [0:L-1];
-  logic [ONE_IDX_W-1:0] t_one_idx [0:L-1];
+  logic [ONE_IDX_W-1:0] t_entry_pos [0:L-1];
   logic [MSG_W-1:0] t_wdata [0:L-1];
   logic [MSG_W-1:0] t_rdata [0:L-1];
   /* verilator lint_off UNUSEDSIGNAL */
-  logic [MSG_W-1:0] ram_t0_debug_mem [0:N-1][0:W-1];
-  logic [MSG_W-1:0] ram_t1_debug_mem [0:N-1][0:W-1];
-  /* verilator lint_on UNUSEDSIGNAL */
-
-  logic u_we [0:L-1];
-  logic [COL_W-1:0] u_col_idx [0:L-1];
-  logic [ONE_IDX_W-1:0] u_one_idx [0:L-1];
-  logic [MSG_W-1:0] u_wdata [0:L-1];
-  logic [MSG_W-1:0] u_rdata [0:L-1];
-  /* verilator lint_off UNUSEDSIGNAL */
-  logic [MSG_W-1:0] ram_u0_debug_mem [0:N-1][0:W-1];
-  logic [MSG_W-1:0] ram_u1_debug_mem [0:N-1][0:W-1];
+  logic [MSG_W-1:0] ram_t0_debug_mem [0:W-1];
+  logic [MSG_W-1:0] ram_t1_debug_mem [0:W-1];
   /* verilator lint_on UNUSEDSIGNAL */
 
   logic decision_ram_we;
@@ -196,8 +180,8 @@ module decoder_top
   /* verilator lint_off UNUSEDSIGNAL */
   logic vnu_c2v_to_ram_t_valid_unused [0:L-1];
   logic [MSG_W-1:0] vnu_c2v_to_ram_t_unused [0:L-1];
-  /* verilator lint_on UNUSEDSIGNAL */
   logic vnu_v2c_tc_valid [0:L-1];
+  /* verilator lint_on UNUSEDSIGNAL */
   logic signed [VNU_TC_W-1:0] vnu_v2c_tc [0:L-1];
   logic [MSG_W-1:0] vnu_v2c_msg [0:L-1];
 
@@ -257,26 +241,11 @@ module decoder_top
     end
   end
 
-  // 将两个 RAM-I 实例的 group-local list/count 合成 c2v 侧当前列视图。
-  // 一旦当前列开始，后续 metadata 从 buffer 读，避免单 entry shift 写回
-  // 下一列时破坏还在使用的当前列视图。
+  // RAM-I exposes one group-local entry per lane. The c2v side consumes this
+  // single-entry view and collects the column metadata for the lagging v2c side.
   always_comb begin
-    integer entry_idx_local;
-
-    c2v_column_group_count[0] =
-      c2v_column_buffer_valid ? c2v_buffer_group_count[0] : ram_i_count[0];
-    c2v_column_group_count[1] =
-      c2v_column_buffer_valid ? c2v_buffer_group_count[1] : ram_i_count[1];
-    for (entry_idx_local = 0; entry_idx_local < W; entry_idx_local++) begin
-      c2v_column_group_entries[0][entry_idx_local] =
-        c2v_column_buffer_valid ?
-        c2v_buffer_group_entries[0][entry_idx_local] :
-        ram_i0_list_entries[entry_idx_local];
-      c2v_column_group_entries[1][entry_idx_local] =
-        c2v_column_buffer_valid ?
-        c2v_buffer_group_entries[1][entry_idx_local] :
-        ram_i1_list_entries[entry_idx_local];
-    end
+    c2v_column_group_count[0] = ram_i_count[0];
+    c2v_column_group_count[1] = ram_i_count[1];
   end
 
   // Decide whether each c2v/v2c column cursor is at the last active group
@@ -298,8 +267,8 @@ module decoder_top
     v2c_entry_pos_last = ((int'(v2c_entry_pos) + 1) >= v2c_max_count);
   end
 
-  // Decode the packed RAM-I entries at the active group list position into
-  // the addresses consumed by the M/S/T/U memories.
+  // Decode the active packed RAM-I entry into the addresses consumed by the
+  // M/S/T memories.
   always_comb begin
     integer group_idx;
 
@@ -307,9 +276,9 @@ module decoder_top
       c2v_group_valid[group_idx] =
         (int'(c2v_entry_pos) < int'(c2v_column_group_count[group_idx]));
       c2v_one_idx[group_idx] =
-        c2v_column_group_entries[group_idx][c2v_entry_pos][I_ENTRY_ONE_IDX_LSB +: ONE_IDX_W];
+        ram_i_entry_rdata[group_idx][I_ENTRY_ONE_IDX_LSB +: ONE_IDX_W];
       c2v_row_idx_group[group_idx] =
-        c2v_column_group_entries[group_idx][c2v_entry_pos][I_ENTRY_ROW_IDX_GROUP_LSB +: ROW_IDX_W];
+        ram_i_entry_rdata[group_idx][I_ENTRY_ROW_IDX_GROUP_LSB +: ROW_IDX_W];
       c2v_row_idx_global[group_idx] = ROW_IDX_W'(
         (int'(c2v_row_idx_group[group_idx]) << 1) | group_idx
       );
@@ -334,7 +303,6 @@ module decoder_top
 
   // H shift：使用 RAM-I 单 entry 写口逐项写回下一列 metadata。
   always_comb begin
-    integer entry_idx_local;
     integer group_idx;
 
     shift_ram_i = init_m_write || c2v_write_t;
@@ -345,7 +313,7 @@ module decoder_top
     for (group_idx = 0; group_idx < L; group_idx++) begin
       ram_i_shift_write_ptr_next[group_idx] = ram_i_shift_write_ptr[group_idx];
       ram_i_shift_we[group_idx] = 1'b0;
-      ram_i_shift_entry_addr[group_idx] = ONE_IDX_W'(ram_i_shift_write_ptr[group_idx]);
+      ram_i_shift_entry_addr[group_idx] = c2v_entry_pos;
       ram_i_shift_entry_wdata[group_idx] = '0;
     end
 
@@ -362,7 +330,7 @@ module decoder_top
     end
   end
 
-  // Centralized single-port memory steering for RAM-M/S/T/U and the hard
+  // Centralized single-port memory steering for RAM-M/S/T and the hard
   // decision RAM.
   always_comb begin
     integer port_idx;
@@ -370,7 +338,7 @@ module decoder_top
 
     for (port_idx = 0; port_idx < 4; port_idx++) begin
       m_we[port_idx] = 1'b0;
-      m_check_row_addr[port_idx] = '0;
+      m_row_idx_group[port_idx] = '0;
       m_wdata[port_idx] = COMP_C2V_INIT;
     end
 
@@ -381,14 +349,8 @@ module decoder_top
       s_wdata[group_idx] = 1'b0;
 
       t_we[group_idx] = 1'b0;
-      t_col_idx[group_idx] = c2v_col_idx;
-      t_one_idx[group_idx] = c2v_one_idx[group_idx];
+      t_entry_pos[group_idx] = c2v_entry_pos;
       t_wdata[group_idx] = '0;
-
-      u_we[group_idx] = 1'b0;
-      u_col_idx[group_idx] = v2c_col_idx;
-      u_one_idx[group_idx] = v2c_one_idx[group_idx];
-      u_wdata[group_idx] = '0;
     end
 
     decision_ram_we = 1'b0;
@@ -398,7 +360,7 @@ module decoder_top
     if (init_m_read || c2v_read) begin
       for (group_idx = 0; group_idx < L; group_idx++) begin
         if (c2v_group_valid[group_idx]) begin
-          m_check_row_addr[m_index(m_read_pair, GROUP_IDX_W'(group_idx))] =
+          m_row_idx_group[m_index(m_read_pair, GROUP_IDX_W'(group_idx))] =
             c2v_row_idx_group[group_idx];
         end
       end
@@ -407,17 +369,8 @@ module decoder_top
     if (vnu_read_next_m) begin
       for (group_idx = 0; group_idx < L; group_idx++) begin
         if (v2c_group_valid[group_idx]) begin
-          m_check_row_addr[m_index(m_write_pair, GROUP_IDX_W'(group_idx))] =
+          m_row_idx_group[m_index(m_write_pair, GROUP_IDX_W'(group_idx))] =
             v2c_row_idx_group[group_idx];
-        end
-      end
-    end
-
-    if (init_m_read) begin
-      for (group_idx = 0; group_idx < L; group_idx++) begin
-        if (c2v_group_valid[group_idx]) begin
-          u_col_idx[group_idx] = c2v_col_idx;
-          u_one_idx[group_idx] = c2v_one_idx[group_idx];
         end
       end
     end
@@ -435,8 +388,7 @@ module decoder_top
       for (group_idx = 0; group_idx < L; group_idx++) begin
         if (c2v_latched_group_valid[group_idx]) begin
           t_we[group_idx] = 1'b1;
-          t_col_idx[group_idx] = c2v_latched_col;
-          t_one_idx[group_idx] = c2v_latched_one_idx[group_idx];
+          t_entry_pos[group_idx] = c2v_entry_pos;
           t_wdata[group_idx] = c2v_tc[group_idx];
         end
       end
@@ -445,8 +397,7 @@ module decoder_top
     if (vnu_read_t) begin
       for (group_idx = 0; group_idx < L; group_idx++) begin
         if (v2c_group_valid[group_idx]) begin
-          t_col_idx[group_idx] = v2c_col_idx;
-          t_one_idx[group_idx] = v2c_one_idx[group_idx];
+          t_entry_pos[group_idx] = v2c_entry_pos;
         end
       end
     end
@@ -455,7 +406,7 @@ module decoder_top
       for (group_idx = 0; group_idx < L; group_idx++) begin
         if (cnu_a_valid[group_idx]) begin
           m_we[m_index(c2v_latched_m_read_pair, GROUP_IDX_W'(group_idx))] = 1'b1;
-          m_check_row_addr[m_index(c2v_latched_m_read_pair, GROUP_IDX_W'(group_idx))] =
+          m_row_idx_group[m_index(c2v_latched_m_read_pair, GROUP_IDX_W'(group_idx))] =
             c2v_latched_row_idx_group[group_idx];
           m_wdata[m_index(c2v_latched_m_read_pair, GROUP_IDX_W'(group_idx))] =
             cnu_a_comp_out[group_idx];
@@ -477,13 +428,8 @@ module decoder_top
     if (vnu_write_next) begin
       for (group_idx = 0; group_idx < L; group_idx++) begin
         if (cnu_a_valid[group_idx]) begin
-          u_we[group_idx] = 1'b1;
-          u_col_idx[group_idx] = v2c_m_latched_col;
-          u_one_idx[group_idx] = v2c_m_latched_one_idx[group_idx];
-          u_wdata[group_idx] = u_next_msg_reg[group_idx];
-
           m_we[m_index(v2c_m_latched_m_write_pair, GROUP_IDX_W'(group_idx))] = 1'b1;
-          m_check_row_addr[m_index(v2c_m_latched_m_write_pair, GROUP_IDX_W'(group_idx))] =
+          m_row_idx_group[m_index(v2c_m_latched_m_write_pair, GROUP_IDX_W'(group_idx))] =
             v2c_m_latched_row_idx_group[group_idx];
           m_wdata[m_index(v2c_m_latched_m_write_pair, GROUP_IDX_W'(group_idx))] =
             cnu_a_comp_out[group_idx];
@@ -544,14 +490,12 @@ module decoder_top
         v2c_m_latched_group_valid[group_idx] <= 1'b0;
         v2c_m_latched_one_idx[group_idx] <= '0;
         v2c_m_latched_row_idx_group[group_idx] <= '0;
-        u_next_msg_reg[group_idx] <= '0;
         for (idx = 0; idx < W; idx++) begin
           c2v_buffer_group_entries[group_idx][idx] <= '0;
           v2c_column_group_entries[group_idx][idx] <= '0;
           v2c_next_column_group_entries[group_idx][idx] <= '0;
         end
       end
-      c2v_column_buffer_valid <= 1'b0;
       c2v_latched_col <= '0;
       c2v_latched_m_read_pair <= 1'b0;
       v2c_m_latched_col <= '0;
@@ -569,45 +513,45 @@ module decoder_top
           c2v_latched_one_idx[group_idx] <= c2v_one_idx[group_idx];
           c2v_latched_row_idx_group[group_idx] <= c2v_row_idx_group[group_idx];
           c2v_latched_row_idx_global[group_idx] <= c2v_row_idx_global[group_idx];
+          c2v_buffer_group_entries[group_idx][c2v_entry_pos] <= ram_i_entry_rdata[group_idx];
         end
         c2v_latched_col <= c2v_col_idx;
         c2v_latched_m_read_pair <= m_read_pair;
-      end
-
-      if ((init_m_read || c2v_read) && (c2v_entry_pos == '0) && !c2v_column_buffer_valid) begin
-        c2v_column_buffer_valid <= 1'b1;
-        ram_i_shift_write_ptr[0] <= '0;
-        ram_i_shift_write_ptr[1] <= '0;
-        c2v_buffer_group_count[0] <= ram_i_count[0];
-        c2v_buffer_group_count[1] <= ram_i_count[1];
-        for (idx = 0; idx < W; idx++) begin
-          c2v_buffer_group_entries[0][idx] <= ram_i0_list_entries[idx];
-          c2v_buffer_group_entries[1][idx] <= ram_i1_list_entries[idx];
+        if (c2v_entry_pos == '0) begin
+          ram_i_shift_write_ptr[0] <= '0;
+          ram_i_shift_write_ptr[1] <= '0;
+          c2v_buffer_group_count[0] <= ram_i_count[0];
+          c2v_buffer_group_count[1] <= ram_i_count[1];
         end
       end
 
       if (shift_ram_i) begin
         ram_i_shift_write_ptr[0] <= ram_i_shift_write_ptr_next[0];
         ram_i_shift_write_ptr[1] <= ram_i_shift_write_ptr_next[1];
-        if (shift_ram_i_last) begin
-          c2v_column_buffer_valid <= 1'b0;
-        end
       end
 
       if (capture_v2c_column_now) begin
         for (group_idx = 0; group_idx < L; group_idx++) begin
-          v2c_column_group_count[group_idx] <= c2v_column_group_count[group_idx];
+          v2c_column_group_count[group_idx] <= c2v_buffer_group_count[group_idx];
           for (idx = 0; idx < W; idx++) begin
-            v2c_column_group_entries[group_idx][idx] <= c2v_column_group_entries[group_idx][idx];
+            if (idx == int'(c2v_entry_pos)) begin
+              v2c_column_group_entries[group_idx][idx] <= ram_i_entry_rdata[group_idx];
+            end else begin
+              v2c_column_group_entries[group_idx][idx] <= c2v_buffer_group_entries[group_idx][idx];
+            end
           end
         end
       end
 
       if (capture_v2c_column_next) begin
         for (group_idx = 0; group_idx < L; group_idx++) begin
-          v2c_next_column_group_count[group_idx] <= c2v_column_group_count[group_idx];
+          v2c_next_column_group_count[group_idx] <= c2v_buffer_group_count[group_idx];
           for (idx = 0; idx < W; idx++) begin
-            v2c_next_column_group_entries[group_idx][idx] <= c2v_column_group_entries[group_idx][idx];
+            if (idx == int'(c2v_entry_pos)) begin
+              v2c_next_column_group_entries[group_idx][idx] <= ram_i_entry_rdata[group_idx];
+            end else begin
+              v2c_next_column_group_entries[group_idx][idx] <= c2v_buffer_group_entries[group_idx][idx];
+            end
           end
         end
       end
@@ -646,14 +590,6 @@ module decoder_top
         end
       end
 
-      if (vnu_cnu_a) begin
-        for (group_idx = 0; group_idx < L; group_idx++) begin
-          if (vnu_v2c_tc_valid[group_idx]) begin
-            u_next_msg_reg[group_idx] <= vnu_v2c_msg[group_idx];
-          end
-        end
-      end
-
       if (iter_check) begin
         syndrome_hist[hist_wr_idx] <= residual_syndrome_next;
       end
@@ -677,8 +613,8 @@ module decoder_top
       end
       for (int port_idx = 0; port_idx < 4; port_idx++) begin
         if (m_we[port_idx]) begin
-          m_row_valid[port_idx][m_check_row_addr[port_idx]] <= 1'b1;
-          m_row_epoch[port_idx][m_check_row_addr[port_idx]] <= m_pair_epoch[m_port_pair(port_idx)];
+          m_row_valid[port_idx][m_row_idx_group[port_idx]] <= 1'b1;
+          m_row_epoch[port_idx][m_row_idx_group[port_idx]] <= m_pair_epoch[m_port_pair(port_idx)];
         end
       end
     end
@@ -687,8 +623,8 @@ module decoder_top
   assign cnu_a_col_idx = init_cnu_a ? c2v_latched_col : v2c_m_latched_col;
   assign cnu_a_en[0] = (init_cnu_a && c2v_latched_group_valid[0]) || (vnu_cnu_a && v2c_m_latched_group_valid[0]);
   assign cnu_a_en[1] = (init_cnu_a && c2v_latched_group_valid[1]) || (vnu_cnu_a && v2c_m_latched_group_valid[1]);
-  assign cnu_a_v2c_msg[0] = init_cnu_a ? u_rdata[0] : vnu_v2c_msg[0];
-  assign cnu_a_v2c_msg[1] = init_cnu_a ? u_rdata[1] : vnu_v2c_msg[1];
+  assign cnu_a_v2c_msg[0] = init_cnu_a ? {1'b0, D'(C_VAL)} : vnu_v2c_msg[0];
+  assign cnu_a_v2c_msg[1] = init_cnu_a ? {1'b0, D'(C_VAL)} : vnu_v2c_msg[1];
 
   always_comb begin
     integer group_idx;
@@ -889,9 +825,8 @@ module decoder_top
     .i_entry_wdata(ram_i_shift_entry_wdata[0]),
     .i_count_we(shift_ram_i_last),
     .i_count_wdata(ram_i_shift_write_ptr_next[0]),
-    .o_entry_rdata(ram_i_entry_rdata_unused[0]),
+    .o_entry_rdata(ram_i_entry_rdata[0]),
     .o_count(ram_i_count[0]),
-    .o_list_entries(ram_i0_list_entries),
     .o_debug_list_entries(ram_i0_debug_entries_unused),
     .o_debug_counts(ram_i0_debug_count)
   );
@@ -907,9 +842,8 @@ module decoder_top
     .i_entry_wdata(ram_i_shift_entry_wdata[1]),
     .i_count_we(shift_ram_i_last),
     .i_count_wdata(ram_i_shift_write_ptr_next[1]),
-    .o_entry_rdata(ram_i_entry_rdata_unused[1]),
+    .o_entry_rdata(ram_i_entry_rdata[1]),
     .o_count(ram_i_count[1]),
-    .o_list_entries(ram_i1_list_entries),
     .o_debug_list_entries(ram_i1_debug_entries_unused),
     .o_debug_counts(ram_i1_debug_count)
   );
@@ -928,7 +862,7 @@ module decoder_top
     .i_clk(i_clk),
     .i_rst_n(i_rst_n),
     .i_we(m_we[0]),
-    .i_check_row_addr(m_check_row_addr[0]),
+    .i_check_row_addr(m_row_idx_group[0]),
     .i_wdata(m_wdata[0]),
     .o_rdata(m_rdata[0]),
     .o_debug_mem(ram_m0_debug_mem)
@@ -938,7 +872,7 @@ module decoder_top
     .i_clk(i_clk),
     .i_rst_n(i_rst_n),
     .i_we(m_we[1]),
-    .i_check_row_addr(m_check_row_addr[1]),
+    .i_check_row_addr(m_row_idx_group[1]),
     .i_wdata(m_wdata[1]),
     .o_rdata(m_rdata[1]),
     .o_debug_mem(ram_m1_debug_mem)
@@ -948,7 +882,7 @@ module decoder_top
     .i_clk(i_clk),
     .i_rst_n(i_rst_n),
     .i_we(m_we[2]),
-    .i_check_row_addr(m_check_row_addr[2]),
+    .i_check_row_addr(m_row_idx_group[2]),
     .i_wdata(m_wdata[2]),
     .o_rdata(m_rdata[2]),
     .o_debug_mem(ram_m2_debug_mem)
@@ -958,7 +892,7 @@ module decoder_top
     .i_clk(i_clk),
     .i_rst_n(i_rst_n),
     .i_we(m_we[3]),
-    .i_check_row_addr(m_check_row_addr[3]),
+    .i_check_row_addr(m_row_idx_group[3]),
     .i_wdata(m_wdata[3]),
     .o_rdata(m_rdata[3]),
     .o_debug_mem(ram_m3_debug_mem)
@@ -990,8 +924,7 @@ module decoder_top
     .i_clk(i_clk),
     .i_rst_n(i_rst_n),
     .i_we(t_we[0]),
-    .i_col_idx(t_col_idx[0]),
-    .i_one_idx(t_one_idx[0]),
+    .i_entry_pos(t_entry_pos[0]),
     .i_wdata(t_wdata[0]),
     .o_rdata(t_rdata[0]),
     .o_debug_mem(ram_t0_debug_mem)
@@ -1001,32 +934,9 @@ module decoder_top
     .i_clk(i_clk),
     .i_rst_n(i_rst_n),
     .i_we(t_we[1]),
-    .i_col_idx(t_col_idx[1]),
-    .i_one_idx(t_one_idx[1]),
+    .i_entry_pos(t_entry_pos[1]),
     .i_wdata(t_wdata[1]),
     .o_rdata(t_rdata[1]),
     .o_debug_mem(ram_t1_debug_mem)
-  );
-
-  ram_u u_ram_u0 (
-    .i_clk(i_clk),
-    .i_rst_n(i_rst_n),
-    .i_we(u_we[0]),
-    .i_col_idx(u_col_idx[0]),
-    .i_one_idx(u_one_idx[0]),
-    .i_wdata(u_wdata[0]),
-    .o_rdata(u_rdata[0]),
-    .o_debug_mem(ram_u0_debug_mem)
-  );
-
-  ram_u u_ram_u1 (
-    .i_clk(i_clk),
-    .i_rst_n(i_rst_n),
-    .i_we(u_we[1]),
-    .i_col_idx(u_col_idx[1]),
-    .i_one_idx(u_one_idx[1]),
-    .i_wdata(u_wdata[1]),
-    .o_rdata(u_rdata[1]),
-    .o_debug_mem(ram_u1_debug_mem)
   );
 endmodule

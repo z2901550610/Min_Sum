@@ -6,7 +6,7 @@ module ram_m
   input  logic i_clk,
   input  logic i_rst_n,
   input  logic i_we,
-  input  logic [ROW_IDX_W-1:0] i_check_row_addr,           // Which check-row state to access inside this RAM-M group.
+  input  logic [ROW_IDX_W-1:0] i_row_idx_group,           // Which check-row state to access inside this RAM-M group.
   input  logic [COMP_C2V_W-1:0] i_wdata,
   output logic [COMP_C2V_W-1:0] o_rdata,
   output logic [COMP_C2V_W-1:0] o_debug_mem [0:R-1]
@@ -24,9 +24,9 @@ module ram_m
       end
     end else begin
       if (i_we) begin
-        mem[i_check_row_addr] <= i_wdata;
+        mem[i_row_idx_group] <= i_wdata;
       end
-      o_rdata <= mem[i_check_row_addr];
+      o_rdata <= mem[i_row_idx_group];
     end
   end
 endmodule

@@ -16,7 +16,6 @@ module tb_decoder_top;
   logic [N-1:0] e_out;
   logic [$clog2(I_MAX + 1)-1:0] iter_count;
   logic checks_active;
-  integer h_block_idx;
   integer idx;
   integer flat_idx;
 
@@ -116,32 +115,6 @@ module tb_decoder_top;
   endfunction
   /* verilator lint_on UNUSEDSIGNAL */
 
-  function automatic logic signed [MSG_W-1:0] ram_t_debug_read(
-    input int col_idx_i,
-    input int one_idx_i
-  );
-    begin
-      if (group_idx_from_row(edge_row_idx(col_idx_i, one_idx_i)) == 0) begin
-        ram_t_debug_read = dut.ram_t0_debug_mem[col_idx_i][one_idx_i];
-      end else begin
-        ram_t_debug_read = dut.ram_t1_debug_mem[col_idx_i][one_idx_i];
-      end
-    end
-  endfunction
-
-  function automatic logic [MSG_W-1:0] ram_u_debug_read(
-    input int col_idx_i,
-    input int one_idx_i
-  );
-    begin
-      if (group_idx_from_row(edge_row_idx(col_idx_i, one_idx_i)) == 0) begin
-        ram_u_debug_read = dut.ram_u0_debug_mem[col_idx_i][one_idx_i];
-      end else begin
-        ram_u_debug_read = dut.ram_u1_debug_mem[col_idx_i][one_idx_i];
-      end
-    end
-  endfunction
-
   always @(posedge clk) begin
     if (checks_active && (dut.error_estimate_bits !== e_out)) begin
       $fatal(1, "decision RAM and o_e diverged: ram=%h out=%h", dut.error_estimate_bits, e_out);
@@ -191,6 +164,15 @@ module tb_decoder_top;
     wait (dut.vnu_accum_t && dut.v2c_col_idx == 1 && dut.active_entry_pos == 0);
     #1;
     if (!(dut.vnu_accum_valid[0] && dut.vnu_accum_valid[1])) $fatal(1, "VNU did not consume both RAM-I group_idxs for shifted column 1");
+    for (idx = 0; idx < L; idx++) begin
+      if (dut.vnu_accum_valid[idx]) begin
+        flat_idx = int'(dut.v2c_col_idx) * W + int'(dut.v2c_t_latched_one_idx[idx]);
+        if (int'($signed(dut.t_rdata[idx])) !=
+            c2v_signmag_to_tc(CASE1_FIRST_C2V_SIGN[flat_idx], CASE1_FIRST_C2V_MAG[flat_idx])) begin
+          $fatal(1, "CASE1 RAM-T slot c2v tc[%0d] mismatch", flat_idx);
+        end
+      end
+    end
 
     wait (dut.v2c_phase_active && !dut.c2v_phase_active && dut.v2c_col_idx == COL_W'(N - 1));
     #1;
@@ -201,31 +183,6 @@ module tb_decoder_top;
     if (dut.syndrome_hist[0] != dut.residual_syndrome_next) begin
       $fatal(1, "residual syndrome history mismatch after first iteration");
     end
-    flat_idx = 0;
-    for (idx = 0; idx < N; idx++) begin
-      int one_idx;
-      for (one_idx = 0; one_idx < W; one_idx++) begin
-        if (int'($signed(ram_t_debug_read(idx, one_idx))) != c2v_signmag_to_tc(CASE1_FIRST_C2V_SIGN[flat_idx], CASE1_FIRST_C2V_MAG[flat_idx])) $fatal(1, "CASE1 c2v tc[%0d] mismatch", flat_idx);
-        flat_idx += 1;
-      end
-    end
-
-    flat_idx = 0;
-    for (idx = 0; idx < N; idx++) begin
-      int one_idx;
-      for (one_idx = 0; one_idx < W; one_idx++) begin
-        if (int'(ram_u_debug_read(idx, one_idx)[MSG_SIGN_BIT]) != CASE1_FIRST_U_SIGN[flat_idx]) begin
-          $fatal(1, "CASE1 u sign[%0d] mismatch: got %0d exp %0d", flat_idx,
-                 int'(ram_u_debug_read(idx, one_idx)[MSG_SIGN_BIT]), CASE1_FIRST_U_SIGN[flat_idx]);
-        end
-        if (int'(ram_u_debug_read(idx, one_idx)[MSG_MAG_LSB +: D]) != CASE1_FIRST_U_MAG[flat_idx]) begin
-          $fatal(1, "CASE1 u mag[%0d] mismatch: got %0d exp %0d", flat_idx,
-                 int'(ram_u_debug_read(idx, one_idx)[MSG_MAG_LSB +: D]), CASE1_FIRST_U_MAG[flat_idx]);
-        end
-        flat_idx += 1;
-      end
-    end
-
     if (dut.m_read_pair === dut.m_write_pair) $fatal(1, "RAM M pairs collapsed before iteration swap");
     if (dut.error_estimate_bits !== e_out) $fatal(1, "decision RAM mirror mismatch at completion");
 

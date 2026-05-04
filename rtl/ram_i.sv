@@ -18,7 +18,6 @@ module ram_i
   input  logic [GROUP_COUNT_W-1:0] i_count_wdata,
   output logic [I_ENTRY_W-1:0] o_entry_rdata,
   output logic [GROUP_COUNT_W-1:0] o_count,
-  output logic [I_ENTRY_W-1:0] o_list_entries [0:W-1],
   output logic [I_ENTRY_W-1:0] o_debug_list_entries [0:N0-1][0:W-1],
   output logic [GROUP_COUNT_W-1:0] o_debug_counts [0:N0-1]
 );
@@ -29,21 +28,15 @@ module ram_i
   assign o_debug_list_entries = list_entries_mem;
   assign o_debug_counts = list_count_mem;
 
-  always_comb begin
-    o_count = list_count_mem[i_h_block_idx];
-    for (int entry_idx_local = 0; entry_idx_local < W; entry_idx_local++) begin
-      o_list_entries[entry_idx_local] = list_entries_mem[i_h_block_idx][entry_idx_local];
-    end
-  end
+  assign o_count = list_count_mem[i_h_block_idx];
+  assign o_entry_rdata = list_entries_mem[i_h_block_idx][i_entry_idx];
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin
-      o_entry_rdata <= '0;
     end else begin
       if (i_we) begin
         list_entries_mem[i_h_block_idx][i_entry_idx] <= i_entry_wdata;
       end
-      o_entry_rdata <= list_entries_mem[i_h_block_idx][i_entry_idx];
       if (i_count_we) begin
         list_count_mem[i_h_block_idx] <= i_count_wdata;
       end
