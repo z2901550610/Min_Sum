@@ -6,8 +6,10 @@ module ram_s
   input  logic i_clk,
   input  logic i_rst_n,
   input  logic i_we,
-  input  logic [COL_W-1:0] i_col_idx,
-  input  logic [ONE_IDX_W-1:0] i_one_idx,
+  input  logic [COL_W-1:0] i_read_col_idx,
+  input  logic [ONE_IDX_W-1:0] i_read_one_idx,
+  input  logic [COL_W-1:0] i_write_col_idx,
+  input  logic [ONE_IDX_W-1:0] i_write_one_idx,
   input  logic i_wdata,
   output logic o_rdata,
   output logic o_debug_mem [0:N-1][0:W-1]
@@ -27,9 +29,9 @@ module ram_s
       end
     end else begin
       if (i_we) begin
-        mem[i_col_idx][i_one_idx] <= i_wdata;
+        mem[i_write_col_idx][i_write_one_idx] <= i_wdata;
       end
-      o_rdata <= mem[i_col_idx][i_one_idx];
+      o_rdata <= mem[i_read_col_idx][i_read_one_idx];
     end
   end
 endmodule

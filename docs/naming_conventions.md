@@ -233,7 +233,7 @@ o_entry_rdata
 | 模块/区域 | 推荐命名 | 说明 |
 | --- | --- | --- |
 | RAM-I metadata | `entry_pos`, `entry_wdata`, `list_entries`, `count` | 一个实例属于一个 group；端口名不重复 group。 |
-| RAM-S/T/U edge 维 | `one_idx` | 访问变量列内第几条边。 |
+| RAM-S/T/U edge 维 | `one_idx` | 访问变量列内第几条边；RAM-S 使用 read/write 地址后缀区分读写端，RAM-T 使用 push/pop 流式接口。 |
 | RAM-M 行地址 | `check_row_addr` 或 `row_idx_group` | 如果 RAM-M 是 per-group 存储，地址应是组内局部行。 |
 | C2V/V2C 跨 group 数组 | `*_group_valid[0:L-1]` | 数组维度确实是 group。 |
 | H block 选择 | `h_block_idx` | 统一使用 `h_block`，不使用 `hblk`。 |

@@ -161,13 +161,13 @@ module tb_decoder_top;
     if (!(dut.c2v_phase_active && dut.v2c_phase_active)) $fatal(1, "pipeline did not expose simultaneous CNU_B and VNU/CNU_A work");
     if (dut.c2v_col_idx != dut.v2c_col_idx + COL_W'(1)) $fatal(1, "overlap should keep the c2v column exactly one step ahead");
 
-    wait (dut.vnu_accum_t && dut.v2c_col_idx == 1 && dut.active_entry_pos == 0);
+    wait (dut.vnu_accum_t && dut.c2v_latched_col == 1 && dut.c2v_latched_entry_pos == 0);
     #1;
     if (!(dut.vnu_accum_valid[0] && dut.vnu_accum_valid[1])) $fatal(1, "VNU did not consume both RAM-I group_idxs for shifted column 1");
     for (idx = 0; idx < L; idx++) begin
       if (dut.vnu_accum_valid[idx]) begin
-        flat_idx = int'(dut.v2c_col_idx) * W + int'(dut.v2c_t_latched_one_idx[idx]);
-        if (int'($signed(dut.t_rdata[idx])) !=
+        flat_idx = int'(dut.c2v_latched_col) * W + int'(dut.c2v_latched_one_idx[idx]);
+        if (int'(dut.c2v_tc[idx]) !=
             c2v_signmag_to_tc(CASE1_FIRST_C2V_SIGN[flat_idx], CASE1_FIRST_C2V_MAG[flat_idx])) begin
           $fatal(1, "CASE1 RAM-T slot c2v tc[%0d] mismatch", flat_idx);
         end

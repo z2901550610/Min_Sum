@@ -7,7 +7,8 @@ module tb_ram_i;
   logic rst_n;
   logic we;
   logic [H_BLOCK_W-1:0] h_block_idx;
-  logic [ONE_IDX_W-1:0] entry_idx;
+  logic [ONE_IDX_W-1:0] read_entry_idx;
+  logic [ONE_IDX_W-1:0] write_entry_idx;
   logic [I_ENTRY_W-1:0] entry_wdata;
   logic count_we;
   logic [GROUP_COUNT_W-1:0] count_wdata;
@@ -25,7 +26,8 @@ module tb_ram_i;
     .i_rst_n(rst_n),
     .i_we(we),
     .i_h_block_idx(h_block_idx),
-    .i_entry_idx(entry_idx),
+    .i_read_entry_idx(read_entry_idx),
+    .i_write_entry_idx(write_entry_idx),
     .i_entry_wdata(entry_wdata),
     .i_count_we(count_we),
     .i_count_wdata(count_wdata),
@@ -42,7 +44,8 @@ module tb_ram_i;
     rst_n = 1'b0;
     we = 1'b0;
     h_block_idx = '0;
-    entry_idx = '0;
+    read_entry_idx = '0;
+    write_entry_idx = '0;
     entry_wdata = '0;
     count_we = 1'b0;
     count_wdata = '0;
@@ -59,14 +62,15 @@ module tb_ram_i;
 
     // Read back via functional port.
     h_block_idx = '0;
-    entry_idx = '0;
+    read_entry_idx = '0;
     #1;
     if (count != debug_counts[0]) $fatal(1, "ram_i functional count view mismatch");
     if (entry_rdata != debug_list_entries[0][0]) $fatal(1, "ram_i functional entry view mismatch");
 
     // Single-entry write / read.
     h_block_idx = '0;
-    entry_idx = ONE_IDX_W'(1);
+    read_entry_idx = ONE_IDX_W'(1);
+    write_entry_idx = ONE_IDX_W'(1);
     entry_wdata = {ONE_IDX_W'(1), ROW_IDX_W'(2)};
     count_wdata = GROUP_COUNT_W'(1);
     we = 1'b1;

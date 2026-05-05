@@ -12,7 +12,8 @@ module ram_i
   input  logic i_rst_n,
   input  logic i_we,
   input  logic [H_BLOCK_W-1:0] i_h_block_idx,
-  input  logic [ONE_IDX_W-1:0] i_entry_idx,
+  input  logic [ONE_IDX_W-1:0] i_read_entry_idx,
+  input  logic [ONE_IDX_W-1:0] i_write_entry_idx,
   input  logic [I_ENTRY_W-1:0] i_entry_wdata,
   input  logic i_count_we,
   input  logic [GROUP_COUNT_W-1:0] i_count_wdata,
@@ -29,13 +30,13 @@ module ram_i
   assign o_debug_counts = list_count_mem;
 
   assign o_count = list_count_mem[i_h_block_idx];
-  assign o_entry_rdata = list_entries_mem[i_h_block_idx][i_entry_idx];
+  assign o_entry_rdata = list_entries_mem[i_h_block_idx][i_read_entry_idx];
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin
     end else begin
       if (i_we) begin
-        list_entries_mem[i_h_block_idx][i_entry_idx] <= i_entry_wdata;
+        list_entries_mem[i_h_block_idx][i_write_entry_idx] <= i_entry_wdata;
       end
       if (i_count_we) begin
         list_count_mem[i_h_block_idx] <= i_count_wdata;
@@ -43,7 +44,7 @@ module ram_i
     end
   end
 
-  // 从 hex 文件加载初始数据，替代原先的 SEED+list_load 机制。
+  // 从 hex 文件加载初始数据。
 `ifdef BIKE_L1_PARAMS
   localparam string INIT_TAG = "_l1";
 `else

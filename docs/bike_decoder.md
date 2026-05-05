@@ -83,18 +83,19 @@ ram_i #(.INIT_HEX_STEM("rtl/generated/ram_i1")) u_ram_i1 (...);
 
 ## 模块划分
 
-- `decoder_ctrl` 负责解码控制、c2v/v2c 列上下文、RAM-M 乒乓 bank、列缓冲切换事件以及 done/success 状态管理。实现采用少量宏状态配合计数器/valid 风格的活动标志，将调度逻辑分布在列上下文中。
+- `decoder_ctrl` 负责解码控制、c2v/v2c 列上下文、RAM-M 乒乓 bank、列缓冲切换事件以及 done/success 状态管理。ITER 内部调度由固定 `SCHED_*` 状态表驱动，列 k 内部使用 `COL_K_STAGE_*` 表示 v2c 发射流水阶段。
 - `decoder_top` 是解码器核心数据通路和结构互连。它实例化各编号 RAM 块、`decoder_ctrl`、`h_shift`、CNU/VNU 单元和消息编解码适配器；顶层逻辑仅限于 RAM 端口选择、RAM-I 行组 entry 处理、数据锁存和残差syndrome重算。
 - `vnu` 以 2's-complement 格式消费 c2v 并生成未饱和的 2's-complement v2c。符号-幅值转换在 VNU 输入/输出边界的外部 `msg_codec` 适配器中完成；RAM-T 和 VNU 缩放数据通路保持在 2's-complement 域内。
 - `ram_i`、`ram_m`、`ram_s`、`ram_t`、`ram_c` 均为论文风格的 RAM 原语。每个 RTL 文件对应一个编号 RAM 块。
 - `decoder_top` 按论文命名显式实例化各 RAM 块：`I0/I1`、`M0/M1/M2/M3`、`S0/S1`、`T0/T1`、`C`。
-- RAM-T 每个 lane 使用 `W` 个 `entry_pos` slot 缓冲当前 c2v 列，VNU 累加阶段按 `v2c_entry_pos` 读取 slot，并将该列 c2v 拷贝到 `c2v_column_cache_tc` 供 v2c 发射阶段使用。
-- `decoder_ctrl` 遵循论文的 Fig.8 式单端口调度：每次迭代先将列 0 的数据填入 RAM-T，然后进入列重叠流水线——c2v 侧重建列 `j+1` 的同时 v2c 侧累积并更新列 `j`，最后排空 v2c 的最后一列，进入 `ITER_CHECK`。复用的 RAM-M 行通过逐行 epoch 追踪器实现 `COMP_C2V_INIT` 语义。`phase` 信号仅用于调试；数据通路时序由显式的控制脉冲和列缓冲切换事件驱动。
+- RAM-S 每个 lane 保存 v2c sign bit，读地址服务列 k+1 的 CNU_B，写地址服务 CNU_A 写回。读写地址独立进入 RAM-S，使列 k+1 读 sign 和列 k 写回 sign 可以在同一拍调度。
+- RAM-T 每个 lane 以流式队列保存列 k+1 生成的 c2v。列 k+1 push 的同拍将 2's-complement c2v 送入 VNU 累加；v2c 发射阶段从 RAM-T head 读取同列 c2v，并在该 entry 被 VNU 使用后 pop，用于 VNU 的外信息相减。
+- `decoder_ctrl` 遵循论文的 Fig.8 式单端口调度：每次迭代先填充并累加列 0，然后进入列重叠流水线——c2v 侧重建并累加列 `k+1` 的同时 v2c 侧更新列 `k`，最后排空 v2c 的最后一列，进入 `ITER_CHECK`。复用的 RAM-M 行通过逐行 epoch 追踪器实现 `COMP_C2V_INIT` 语义。`phase` 信号仅用于调试；数据通路时序由显式的控制脉冲和列缓冲切换事件驱动。
 - RAM-I 在仿真启动时通过 `$readmemh` 从 hex 文件加载首列元数据。解码期间，活跃列的行/局部行/边索引元数据来自 RAM-I 的单 entry 读口。`h_shift` 为每个 RAM-I 块设置一个 entry 输入，为每个 lane 设置一个移位后的 entry 输出，数据通路通过 RAM-I 的单 entry 写端口将每个移位后的 entry 写入下一个 c2v 列。v2c 元数据独立缓冲，使 c2v 侧的 RAM-I 可以领先一列。`decoder_top` 通过 RAM-I 的单 entry 功能视图输出访问 RAM-I。项目级 RTL 命名约定定义在 [`docs/naming_conventions.md`](/Users/z2901550610/Documents/Min_Sum/docs/naming_conventions.md) 中。行组方案基于奇偶：`row_group 0` 存储偶数行，`row_group 1` 存储奇数行，`row_local` 为紧凑的奇偶局部索引 `floor(row_global / 2)`。CNU/VNU 行地址调度由 RAM-I 元数据驱动。
 - `decoder_edge_meta` 和 `qc_column_preprocess` 保留在 [`rtl/reference/`](/Users/z2901550610/Documents/Min_Sum/rtl/reference) 下作为参考辅助文件。核心解码器使用 RAM-I + `h_shift` 提供活跃边元数据。
 - 静态首列元数据由 [`scripts/gen_qc_first_columns.py`](/Users/z2901550610/Documents/Min_Sum/scripts/gen_qc_first_columns.py) 离线生成，输出 hex 文件到 `rtl/generated/`。RAM-I 通过 `$readmemh` 在仿真启动时直接加载。
 - c2v 侧在列开始时缓冲活跃的 RAM-I 列，使得下一列的单 entry 移位写入不会干扰当前列的元数据视图。
-- 待实现：两级缩放、灵活的消息存储选择、论文中的宽字 `RAM S` 打包/移位寄存器方案、组大小重平衡。当前 RTL 使用单级 VNU 缩放。
+- 待实现：两级缩放、灵活的消息存储选择、论文中的宽字 `RAM S` 打包数据布局、组大小重平衡。RTL 使用单级 VNU 缩放。
 
 ## 状态机详解
 
@@ -118,18 +119,20 @@ stateDiagram-v2
     INIT --> ITER : 所有列初始化完成
 
     state ITER {
-        [*] --> PROD_ONLY
-        PROD_ONLY --> OVERLAP : 列 0 填充完毕
-        OVERLAP --> DRAIN : producer 到达最后一列
-        DRAIN --> ITER_CHECK : 最后一列排空
+        [*] --> FILL_K
+        FILL_K --> K_KP1 : 列 0 填充完毕
+        K_KP1 --> DRAIN_K : promote 到最后一列
+        KP1_READY --> DRAIN_K : promote 到最后一列
+        DRAIN_K --> ITER_CHECK : 最后一列排空
 
         state OVERLAP {
-            [*] --> ACCUM
-            ACCUM --> V2C : 当前列累加完毕
-            V2C --> ACCUM : 下一列
+            [*] --> K_KP1
+            K_KP1 --> KP1_READY : 列 k+1 填充完毕
+            K_KP1 --> FILL_K : 等待列 k+1
+            KP1_READY --> K_KP1 : promote 列 k+1 并启动后继列
         }
 
-        ITER_CHECK --> PROD_ONLY : i_finish_decode=0\n(继续迭代，交换 RAM-M pair)
+        ITER_CHECK --> FILL_K : i_finish_decode=0\n(继续迭代，交换 RAM-M pair)
     }
 
     ITER --> DONE : i_finish_decode=1
@@ -159,61 +162,47 @@ INIT 为所有变量列构建初始压缩 c2v 对（第一次迭代的输入）�
 
 - 非最后 entry（`i_c2v_entry_pos_last = 0`）：递增 `o_c2v_entry_pos`，回到 `INIT_STEP_READ`。
 - 最后 entry 但非最后列：`o_c2v_entry_pos` 归零，`o_c2v_col_idx` 递增，回到 `INIT_STEP_READ`。
-- 最后 entry 且最后列（`o_c2v_col_idx == LAST_VAR`）：所有列初始化完成，进入 **CTRL_ITER**，激活 producer，列索引归零。
+- 最后 entry 且最后列（`o_c2v_col_idx == LAST_VAR`）：所有列初始化完成，进入 **CTRL_ITER** 的 `SCHED_FILL_K`，列索引归零。
 
 #### 3. CTRL_ITER — 迭代解码（核心）
 
-`CTRL_ITER` 实现 **Fig.8 列重叠调度**：一条流水线（producer，c2v 侧）重建列 j+1 的 LLR，另一条流水线（consumer，v2c 侧）对列 j 进行 VNU 累积和 v2c 更新。两条流水线重叠运行，c2v 始终领先 v2c 一列。
+`CTRL_ITER` 实现 **Fig.8 列重叠调度**：列 k+1 侧重建并累加后一列的 LLR，列 k 侧对当前列进行 v2c 更新。两列重叠运行，c2v 始终领先 v2c 一列。
 
-##### 3a. PRODUCER ONLY（Prime 阶段）— 填充 v2c 列 0
+##### 3a. SCHED_FILL_K — 填充一列 c2v
 
-- 只有 producer 活跃，consumer 不活跃。
-- 循环 `PROD_STEP_READ → PROD_STEP_WRITE`，遍历 c2v 列 0 的所有 entry。
-  - `PROD_STEP_READ`：`o_c2v_read = 1`，从 RAM-M / RAM-S 读取压缩 c2v 数据。
-  - `PROD_STEP_WRITE`：`o_c2v_write_t = 1`，将 CNU_B/编解码结果写入 RAM-T。
-- 每个 entry 完成后：非最后 entry 则递增 `o_c2v_entry_pos` 回到 `PROD_STEP_READ`。最后 entry 则激活 consumer（`consumer_active = 1`），consumer 模式设为 `CONS_MODE_ACCUM`，`o_v2c_col_idx` 设为与 `o_c2v_col_idx` 相同。若 `o_c2v_col_idx == LAST_VAR`，停用 producer（drain 开始）；否则 producer 继续激活，`o_c2v_col_idx` 递增（overlap 开始），`o_c2v_v2c_overlap_seen` 置位。
+- 列 k+1 按 entry 顺序发起 c2v 读请求，列 k 处于列间等待。
+- `o_c2v_read` 每拍发起一个 RAM-M / RAM-S 读请求；下一拍 `o_c2v_write_t` 将 CNU_B/编解码结果 push 到 RAM-T，并通过 `o_vnu_accum_t` 送入 VNU 累加。
+- 每个 entry 发射后：非最后 entry 递增 `o_c2v_entry_pos`。最后 entry 触发 `o_capture_v2c_column_now`，列 k 进入 `COL_K_STAGE_FIRST`。若 `o_c2v_col_idx == LAST_VAR`，调度进入 `SCHED_DRAIN_K`；否则调度进入 `SCHED_K_KP1` 并处理下一列，`o_c2v_v2c_overlap_seen` 置位。
 
-##### 3b. PRODUCER + CONSUMER（Overlap 阶段）— 流水线并行
+##### 3b. SCHED_K_KP1 / SCHED_KP1_READY — 流水线并行
 
-Producer 和 consumer 同时活跃。Consumer 在两个模式间切换：
-
-**ACCUM 模式**（`CONS_MODE_ACCUM`，VNU 累积）：
+`SCHED_K_KP1` 中列 k+1 持续重建并累加下一列，列 k 从 RAM-T head 读取当前列 c2v 并发射 v2c 更新。下一列填充完毕时，调度进入 `SCHED_KP1_READY`，等待当前列 k 的列尾 issue 将列 k+1 promote 为活跃 v2c 列。
 
 | 微步骤 | 信号 | 功能 |
 |---|---|---|
-| `CONS_STEP_READ` | `o_vnu_read_t` | 从 RAM-T 读取一个 c2v 值，供 VNU 累加 |
-| `CONS_STEP_USE` | `o_vnu_accum_t` | 在 VNU 中累加该 RAM-T 值 |
+| `COL_K_STAGE_FIRST` | `o_vnu_prep_write`, `o_vnu_cnu_a`, `o_vnu_read_next_m` | 写入 VNU 硬判决，并发射 entry 0 的 v2c/CNU_A 更新 |
+| `COL_K_STAGE_ISSUE` | `o_vnu_cnu_a`, `o_vnu_read_next_m` | 连续读取 RAM-M、生成 v2c，并使能 CNU_A |
 
-在 `CONS_STEP_READ` 时，若 producer 活跃，producer 步进到 `PROD_STEP_WRITE`。在 `CONS_STEP_USE` 时，若 producer 活跃，producer 步进到 `PROD_STEP_READ`。当前 v2c 列所有 entry 累加完毕后（`i_v2c_entry_pos_last = 1`），切换到 `CONS_MODE_V2C`，进入 **V2C 模式**。
+`COL_K_STAGE_FIRST` 和 `COL_K_STAGE_ISSUE` 每拍发射一个 v2c/CNU_A 更新。CNU_A 的输出延后一拍写入 RAM-M / RAM-S，因此稳定段可以在写回上一 entry 的同时发射下一 entry。列尾 issue 负责列切换，后一拍的 `o_vnu_write_next` 负责写回流水中的最后一个 CNU_A 结果。
 
-**V2C 模式**（`CONS_MODE_V2C`，发射 v2c 更新）：
+列尾 issue 的固定调度分流：
 
-| 微步骤 | 信号 | 功能 |
-|---|---|---|
-| `CONS_STEP_PREP` | `o_vnu_prep_write` | 捕获 VNU 硬判决，准备 v2c 写入 |
-| `CONS_STEP_READ_NEXT_M` | `o_vnu_read_next_m` | 读取下一个 RAM-M 对，为 CNU_A 做准备 |
-| `CONS_STEP_CNU_A` | `o_vnu_cnu_a` | 用 VNU 生成的 v2c 值使能 CNU_A |
-| `CONS_STEP_WRITE` | `o_vnu_write_next` | 将结果写入 RAM-M / RAM-S，为下一次迭代准备 |
+- v2c 最后 entry 且 `o_v2c_col_idx == LAST_VAR`：等待写回 valid 后设置 `iter_check_pending = 1`，进入迭代检查。
+- `SCHED_KP1_READY`：触发 `o_promote_v2c_column_next`，列 k 进入下一列的 `COL_K_STAGE_FIRST`。
+- `SCHED_K_KP1` 且列 k+1 同拍完成：`o_capture_v2c_column_next` 与 `o_promote_v2c_column_next` 同拍触发，列 k 直接进入下一列。
+- `SCHED_K_KP1` 且列 k+1 正在填充：调度进入 `SCHED_FILL_K`，等待列 k+1 完成。
+- 其他 entry：递增 `o_v2c_entry_pos`，保持 `COL_K_STAGE_ISSUE` 连续发射。
 
-在 `CONS_STEP_READ_NEXT_M` 时，若 producer 活跃，producer 写入一个 c2v 结果。在 `CONS_STEP_CNU_A` 时，若 producer 活跃，producer 读取下一个 c2v entry，最后 entry 则停用 producer。
+##### 3c. SCHED_DRAIN_K — 排空最后一列
 
-`CONS_STEP_WRITE` 结束时的分流逻辑：
-
-- v2c 最后 entry 且 `o_v2c_col_idx == LAST_VAR`：停用 consumer，设置 `iter_check_pending = 1`，进入迭代检查。
-- v2c 最后 entry 且 producer 活跃：停用 consumer，回到仅 producer 模式。
-- v2c 最后 entry 且 producer 不活跃：递增 `o_v2c_col_idx`，若后续还有列则激活 producer 并设 `o_c2v_col_idx` 领先两列。
-- 否则：递增 `o_v2c_entry_pos`，回到 `CONS_STEP_READ_NEXT_M`。
-
-##### 3c. CONSUMER ONLY（Drain 阶段）— 排空最后一列
-
-Producer 已完成所有列（到达 `LAST_VAR` 后停用），只剩 consumer 处理最后一列的 v2c 更新。经历 ACCUM → V2C 完整流程后，设置 `iter_check_pending = 1`。
+最后一列完成填充后，调度进入 `SCHED_DRAIN_K`。此阶段列 k 处理最后一列的 v2c 更新，列尾写回 valid 后设置 `iter_check_pending = 1`。
 
 ##### 3d. ITER_CHECK — 迭代检查
 
 `iter_check_pending` 置位后的下一个时钟周期执行。迭代计数器 `o_iter_count` 递增。
 
 - `i_finish_decode = 1`（残差为零或达到最大迭代次数）：跳转到 **CTRL_DONE**，输出 `o_done = 1`，锁存 `o_success = i_decode_success`。
-- `i_finish_decode = 0`：交换 RAM-M pair（`o_m_read_pair` 翻转），复位所有子状态和列指针，重新激活 producer，开始下一轮迭代。
+- `i_finish_decode = 0`：交换 RAM-M pair（`o_m_read_pair` 翻转），复位所有子状态和列指针，进入 `SCHED_FILL_K` 开始下一轮迭代。
 
 #### 4. CTRL_DONE — 解码完成
 
@@ -224,19 +213,19 @@ Producer 已完成所有列（到达 `LAST_VAR` 后停用），只剩 consumer �
 ```
 时间 →
        列0              列1              列2        ...    最后一列
-PROD  [R][W][R][W]...  [R][W][R][W]...  [R][W]...        (停用)
-CONS                   [ACCUM][V2C]     [ACCUM][V2C] ... [ACCUM][V2C]
+PROD  [R][W+A]...      [R][W+A]...      [R][W+A]...      (停用)
+CONS                   [V2C]            [V2C]        ... [V2C]
                        └─ overlap ─┘
         ◀── prime ──▶ ◀─────────── 流水线并行 ───────────▶◀─ drain ─▶
 ```
 
-- `[R][W]` = PROD_STEP_READ / PROD_STEP_WRITE
-- `[ACCUM]` = CONS_MODE_ACCUM（CONS_STEP_READ → CONS_STEP_USE 循环）
-- `[V2C]` = CONS_MODE_V2C（PREP → READ_NEXT_M → CNU_A → WRITE 循环）
+- `[R]` = c2v 读请求
+- `[W+A]` = 列 k+1 c2v emit，同拍 push RAM-T、送入 VNU 累加
+- `[V2C]` = `COL_K_STAGE_FIRST/ISSUE`，PREP 同拍发射 entry 0，随后连续 CNU_A 发射，写回 valid 与后续 issue 重叠
 
 ### 资源与性能特征
 
-- **状态寄存器**：3 位宏状态 + 2 位 INIT 子状态 + 1 位 producer_active + 1 位 producer_step + 1 位 consumer_active + 1 位 consumer_mode + 3 位 consumer_step + 1 位 iter_check_pending，控制状态共约 13 位。
+- **状态寄存器**：3 位宏状态 + 2 位 INIT 子状态 + 2 位 ITER 固定调度状态、发射有效位、列尾标记、列 k stage 和 `iter_check_pending`。
 - **关键路径**：控制逻辑为纯组合译码，不产生时序收敛瓶颈。时序关键路径位于 CNU/VNU 数据通路。
 - **流水线效率**：稳定重叠阶段中，每个时钟周期同时进行一个 c2v 操作和一个 v2c 操作，实现接近 2 entry/周期的吞吐。
 

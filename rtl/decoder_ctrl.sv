@@ -1,6 +1,5 @@
 `timescale 1ns/1ps
-// Decoder control for Fig.8-style column-overlap scheduling using a small
-// set of macro states plus c2v/v2c column contexts.
+// Decoder control for column-overlap min-sum scheduling.
 module decoder_ctrl
   import bike_pkg::*;
 (
@@ -9,11 +8,11 @@ module decoder_ctrl
   input  logic i_start,                                        // Starts a new decode pass.
   input  logic i_finish_decode,                                // Requests transition to DONE after the check phase.
   input  logic i_decode_success,                               // Indicates whether the residual syndrome is zero.
-  input  logic i_c2v_entry_pos_last,                         // c2v side: current entry list position is the last in this column.
-  input  logic i_v2c_entry_pos_last,                         // v2c side: current entry list position is the last in this column.
+  input  logic i_c2v_entry_pos_last,                           // c2v side: current entry list position is the last in this column.
+  input  logic i_v2c_entry_pos_last,                           // v2c side: current entry list position is the last in this column.
   output logic [DEC_STATE_W-1:0] o_state,                      // Coarse decoder state for debug/observation.
   output logic [DEC_PHASE_W-1:0] o_phase,                      // Current debug micro-stage.
-  output logic [COL_W-1:0] o_work_col_idx,                         // Debug-selected active column.
+  output logic [COL_W-1:0] o_work_col_idx,                     // Debug-selected active column.
   output logic [ONE_IDX_W-1:0] o_work_entry_pos,               // Debug-selected entry list position.
   output logic [COL_W-1:0] o_c2v_col_idx,                      // Column currently being reconstructed into c2v.
   output logic [COL_W-1:0] o_v2c_col_idx,                      // Column currently being updated into v2c.
@@ -27,16 +26,16 @@ module decoder_ctrl
   output logic o_init_m_write,                                 // Writes initial CNU_A result.
   output logic o_c2v_read,                                     // Reads RAM-M/RAM-S for CNU_B.
   output logic o_c2v_write_t,                                  // Writes CNU_B/codec result to RAM-T.
-  output logic o_vnu_read_t,                                   // Reads RAM-T for VNU accumulation.
-  output logic o_vnu_accum_t,                                  // Accumulates one RAM-T value in VNU.
+  output logic o_vnu_read_t,                                   // Marks col k+1 c2v data presented to VNU accumulation.
+  output logic o_vnu_accum_t,                                  // Accumulates one col k+1 c2v value in VNU.
   output logic o_vnu_prep_write,                               // Captures VNU decision.
   output logic o_vnu_read_next_m,                              // Reads next RAM-M pair before CNU_A.
   output logic o_vnu_cnu_a,                                    // Enables CNU_A with VNU-generated v2c.
   output logic o_vnu_write_next,                               // Writes RAM-M/RAM-S for next iteration.
   output logic o_iter_check,                                   // Iteration completion/check cycle.
-  output logic o_capture_v2c_column_now,                      // Current c2v column becomes the active v2c column.
-  output logic o_capture_v2c_column_next,                     // Current c2v column becomes the buffered next v2c column.
-  output logic o_promote_v2c_column_next,                     // Buffered next v2c column becomes active.
+  output logic o_capture_v2c_column_now,                       // Current c2v column becomes the active v2c column.
+  output logic o_capture_v2c_column_next,                      // Current c2v column becomes the buffered next v2c column.
+  output logic o_promote_v2c_column_next,                      // Buffered next v2c column becomes active.
   output logic o_c2v_pipe_valid,                               // Debug c2v activity flag.
   output logic o_v2c_pipe_valid,                               // Debug v2c activity flag.
   output logic o_c2v_v2c_overlap_seen,                         // Debug flag for exposed overlap.
@@ -48,46 +47,47 @@ module decoder_ctrl
   localparam int ITER_W = $clog2(I_MAX + 1);
   localparam logic [COL_W-1:0] LAST_COL = COL_W'(N - 1);
 
-  // Macro control states.
   localparam logic [2:0] CTRL_WAIT = 3'd0;
   localparam logic [2:0] CTRL_INIT = 3'd2;
   localparam logic [2:0] CTRL_ITER = 3'd3;
   localparam logic [2:0] CTRL_DONE = 3'd4;
 
-  // INIT walks each column entry position through read -> CNU_A -> write.
-  // RAM-I is initialised by $readmemh at simulation start, so no SEED step.
   localparam logic [1:0] INIT_STEP_READ = 2'd0;
   localparam logic [1:0] INIT_STEP_CNU_A = 2'd1;
   localparam logic [1:0] INIT_STEP_WRITE = 2'd2;
 
-  // During ITER, the c2v side reconstructs column j+1 while the v2c side
-  // accumulates and updates column j.
-  localparam logic PROD_STEP_READ = 1'b0;
-  localparam logic PROD_STEP_WRITE = 1'b1;
+  localparam logic [1:0] COL_K_STAGE_FIRST = 2'd0;
+  localparam logic [1:0] COL_K_STAGE_ISSUE = 2'd1;
 
-  localparam logic CONS_MODE_ACCUM = 1'b0;
-  localparam logic CONS_MODE_V2C = 1'b1;
-
-  localparam logic [2:0] CONS_STEP_READ = 3'd0;
-  localparam logic [2:0] CONS_STEP_USE = 3'd1;
-  localparam logic [2:0] CONS_STEP_PREP = 3'd2;
-  localparam logic [2:0] CONS_STEP_READ_NEXT_M = 3'd3;
-  localparam logic [2:0] CONS_STEP_CNU_A = 3'd4;
-  localparam logic [2:0] CONS_STEP_WRITE = 3'd5;
+  localparam logic [1:0] SCHED_FILL_K = 2'd0;
+  localparam logic [1:0] SCHED_K_KP1 = 2'd1;
+  localparam logic [1:0] SCHED_KP1_READY = 2'd2;
+  localparam logic [1:0] SCHED_DRAIN_K = 2'd3;
 
   logic [2:0] ctrl_state;
   logic [1:0] init_step;
   logic iter_check_pending;
-  logic producer_active;
-  logic producer_step;
-  logic consumer_active;
-  logic consumer_mode;
-  logic [2:0] consumer_step;
+
+  logic col_kp1_c2v_valid_d1;
+  logic col_kp1_last_d1;
+  logic col_kp1_col_last_d1;
+
+  logic [1:0] sched_state;
+  logic [1:0] col_k_stage;
+  logic col_k_v2c_valid_d1;
+  logic col_k_last_d1;
+  logic col_k_col_last_d1;
+
+  logic col_kp1_c2v_issue_fire;
+  logic col_k_v2c_issue_fire;
+  logic col_k_last_issue_fire;
+  logic col_kp1_done_fire;
+  logic col_k_last_write_fire;
+  logic schedule_has_col_kp1;
+  logic schedule_has_col_k;
+  logic col_k_is_drain;
+  logic col_kp1_is_prime;
   logic [ITER_W-1:0] next_iter_count;
-  logic producer_is_prime;
-  logic consumer_is_drain;
-  logic producer_write_last;
-  logic consumer_v2c_write_last;
 
   function automatic logic [COL_W-1:0] next_col(
     input logic [COL_W-1:0] col_idx
@@ -97,78 +97,68 @@ module decoder_ctrl
     end
   endfunction
 
-  // The control outputs are intentionally kept as one-cycle pulses that the
-  // datapath can consume directly. `o_phase` is debug-only and mirrors the
-  // current context in a compact encoding.
   assign next_iter_count = o_iter_count + 1'b1;
   assign o_m_write_pair = ~o_m_read_pair;
+
   assign o_init_m_read = (ctrl_state == CTRL_INIT) && (init_step == INIT_STEP_READ);
   assign o_init_cnu_a = (ctrl_state == CTRL_INIT) && (init_step == INIT_STEP_CNU_A);
   assign o_init_m_write = (ctrl_state == CTRL_INIT) && (init_step == INIT_STEP_WRITE);
 
-  assign o_c2v_read = (ctrl_state == CTRL_ITER) && producer_active && (producer_step == PROD_STEP_READ) && !iter_check_pending;
-  assign o_c2v_write_t = (ctrl_state == CTRL_ITER) && producer_active && (producer_step == PROD_STEP_WRITE) && !iter_check_pending;
+  assign schedule_has_col_kp1 =
+    (sched_state == SCHED_FILL_K) || (sched_state == SCHED_K_KP1);
+  assign schedule_has_col_k =
+    (sched_state == SCHED_K_KP1) ||
+    (sched_state == SCHED_KP1_READY) ||
+    (sched_state == SCHED_DRAIN_K);
 
-  assign o_vnu_read_t =
-    (ctrl_state == CTRL_ITER) && consumer_active &&
-    (consumer_mode == CONS_MODE_ACCUM) && (consumer_step == CONS_STEP_READ) &&
-    !iter_check_pending;
+  assign col_kp1_c2v_issue_fire =
+    (ctrl_state == CTRL_ITER) && schedule_has_col_kp1 && !iter_check_pending;
 
-  assign o_vnu_accum_t =
-    (ctrl_state == CTRL_ITER) && consumer_active &&
-    (consumer_mode == CONS_MODE_ACCUM) && (consumer_step == CONS_STEP_USE) &&
-    !iter_check_pending;
+  assign col_k_v2c_issue_fire =
+    (ctrl_state == CTRL_ITER) && schedule_has_col_k && !iter_check_pending &&
+    ((col_k_stage == COL_K_STAGE_FIRST) ||
+     (col_k_stage == COL_K_STAGE_ISSUE));
+  assign col_k_last_issue_fire = col_k_v2c_issue_fire && i_v2c_entry_pos_last;
 
+  assign o_c2v_read = col_kp1_c2v_issue_fire;
+  assign o_c2v_write_t = (ctrl_state == CTRL_ITER) && col_kp1_c2v_valid_d1 && !iter_check_pending;
+
+  assign o_vnu_read_t = o_c2v_write_t;
+  assign o_vnu_accum_t = o_c2v_write_t;
   assign o_vnu_prep_write =
-    (ctrl_state == CTRL_ITER) && consumer_active &&
-    (consumer_mode == CONS_MODE_V2C) && (consumer_step == CONS_STEP_PREP) &&
-    !iter_check_pending;
-
-  assign o_vnu_read_next_m =
-    (ctrl_state == CTRL_ITER) && consumer_active &&
-    (consumer_mode == CONS_MODE_V2C) && (consumer_step == CONS_STEP_READ_NEXT_M) &&
-    !iter_check_pending;
-
-  assign o_vnu_cnu_a =
-    (ctrl_state == CTRL_ITER) && consumer_active &&
-    (consumer_mode == CONS_MODE_V2C) && (consumer_step == CONS_STEP_CNU_A) &&
-    !iter_check_pending;
-
-  assign o_vnu_write_next =
-    (ctrl_state == CTRL_ITER) && consumer_active &&
-    (consumer_mode == CONS_MODE_V2C) && (consumer_step == CONS_STEP_WRITE) &&
-    !iter_check_pending;
-
+    (ctrl_state == CTRL_ITER) && schedule_has_col_k && !iter_check_pending &&
+    (col_k_stage == COL_K_STAGE_FIRST);
+  assign o_vnu_read_next_m = col_k_v2c_issue_fire;
+  assign o_vnu_cnu_a = col_k_v2c_issue_fire;
+  assign o_vnu_write_next = (ctrl_state == CTRL_ITER) && col_k_v2c_valid_d1 && !iter_check_pending;
   assign o_iter_check = (ctrl_state == CTRL_ITER) && iter_check_pending;
 
-  assign producer_is_prime =
-    (ctrl_state == CTRL_ITER) && producer_active && !consumer_active &&
-    (o_c2v_col_idx == '0);
+  assign col_kp1_done_fire = o_c2v_write_t && col_kp1_last_d1;
+  assign col_k_last_write_fire = o_vnu_write_next && col_k_last_d1;
 
-  assign consumer_is_drain =
-    (ctrl_state == CTRL_ITER) && consumer_active && !producer_active &&
-    (o_v2c_col_idx == LAST_COL);
-
-  assign producer_write_last = o_c2v_write_t && i_c2v_entry_pos_last;
-  assign consumer_v2c_write_last = o_vnu_write_next && i_v2c_entry_pos_last;
-
-  assign o_capture_v2c_column_now = producer_write_last && !consumer_active;
-  assign o_capture_v2c_column_next = producer_write_last && consumer_active;
+  assign o_capture_v2c_column_now = col_kp1_done_fire && (sched_state == SCHED_FILL_K);
+  assign o_capture_v2c_column_next = col_kp1_done_fire && (sched_state == SCHED_K_KP1);
   assign o_promote_v2c_column_next =
-    consumer_v2c_write_last && !producer_active && (o_v2c_col_idx != LAST_COL);
+    col_k_last_issue_fire &&
+    ((sched_state == SCHED_KP1_READY) ||
+     ((sched_state == SCHED_K_KP1) && col_kp1_done_fire));
 
   assign o_c2v_pipe_valid = o_c2v_read || o_c2v_write_t;
   assign o_v2c_pipe_valid =
-    o_vnu_read_t || o_vnu_accum_t || o_vnu_prep_write ||
-    o_vnu_read_next_m || o_vnu_cnu_a || o_vnu_write_next;
+    o_vnu_prep_write || o_vnu_read_next_m || o_vnu_cnu_a || o_vnu_write_next;
 
   assign o_work_col_idx = o_v2c_pipe_valid ? o_v2c_col_idx : o_c2v_col_idx;
   assign o_work_entry_pos = o_v2c_pipe_valid ? o_v2c_entry_pos : o_c2v_entry_pos;
   assign o_active_entry_pos = o_work_entry_pos;
 
-  // Export a legacy-style phase view for debug/waveform readability. The
-  // actual scheduling decisions are made by the contexts in the sequential
-  // block below.
+  assign col_k_is_drain =
+    (ctrl_state == CTRL_ITER) && (sched_state == SCHED_DRAIN_K);
+
+  assign col_kp1_is_prime =
+    (ctrl_state == CTRL_ITER) &&
+    ((sched_state == SCHED_FILL_K) || col_kp1_c2v_valid_d1) &&
+    !schedule_has_col_k && (o_c2v_col_idx == '0);
+
   always_comb begin
     o_state = DEC_WAIT_START;
     o_phase = DEC_PH_WAIT;
@@ -192,36 +182,22 @@ module decoder_ctrl
         if (iter_check_pending) begin
           o_state = DEC_ITER_CHECK;
           o_phase = DEC_PH_ITER_CHECK;
-        end else if (consumer_active) begin
-          o_state = consumer_is_drain ? DEC_ITER_V2C_DRAIN : DEC_ITER_OVERLAP;
-          if (consumer_mode == CONS_MODE_ACCUM) begin
-            if (consumer_step == CONS_STEP_READ) begin
-              o_phase = consumer_is_drain ? DEC_PH_DRAIN_ACCUM_READ : DEC_PH_OVERLAP_ACCUM_READ;
-            end else begin
-              o_phase = consumer_is_drain ? DEC_PH_DRAIN_ACCUM_USE : DEC_PH_OVERLAP_ACCUM_USE;
+        end else if (schedule_has_col_k) begin
+          o_state = col_k_is_drain ? DEC_ITER_V2C_DRAIN : DEC_ITER_OVERLAP;
+          case (col_k_stage)
+            COL_K_STAGE_FIRST: begin
+              o_phase = col_k_is_drain ? DEC_PH_DRAIN_PREP : DEC_PH_OVERLAP_PREP;
             end
-          end else begin
-            case (consumer_step)
-              CONS_STEP_PREP: begin
-                o_phase = consumer_is_drain ? DEC_PH_DRAIN_PREP : DEC_PH_OVERLAP_PREP;
-              end
-              CONS_STEP_READ_NEXT_M: begin
-                o_phase = consumer_is_drain ? DEC_PH_DRAIN_EMIT_READ : DEC_PH_OVERLAP_EMIT_READ;
-              end
-              CONS_STEP_CNU_A: begin
-                o_phase = consumer_is_drain ? DEC_PH_DRAIN_EMIT_CNU_A : DEC_PH_OVERLAP_EMIT_CNU_A;
-              end
-              default: begin
-                o_phase = consumer_is_drain ? DEC_PH_DRAIN_EMIT_WRITE : DEC_PH_OVERLAP_EMIT_WRITE;
-              end
-            endcase
-          end
-        end else if (producer_active) begin
-          o_state = producer_is_prime ? DEC_ITER_C2V_PRIME : DEC_ITER_OVERLAP;
-          if (producer_is_prime) begin
-            o_phase = (producer_step == PROD_STEP_READ) ? DEC_PH_PRIME_READ : DEC_PH_PRIME_WRITE;
-          end else begin
-            o_phase = (producer_step == PROD_STEP_READ) ? DEC_PH_PROD_FINISH_READ : DEC_PH_PROD_FINISH_WRITE;
+            COL_K_STAGE_ISSUE: begin
+              o_phase = col_k_is_drain ? DEC_PH_DRAIN_EMIT_CNU_A : DEC_PH_OVERLAP_EMIT_CNU_A;
+            end
+            default: o_phase = col_k_is_drain ? DEC_PH_DRAIN_EMIT_CNU_A : DEC_PH_OVERLAP_EMIT_CNU_A;
+          endcase
+        end else if (schedule_has_col_kp1 || col_kp1_c2v_valid_d1) begin
+          o_state = col_kp1_is_prime ? DEC_ITER_C2V_PRIME : DEC_ITER_OVERLAP;
+          o_phase = o_c2v_read ? DEC_PH_PRIME_READ : DEC_PH_PRIME_WRITE;
+          if (!col_kp1_is_prime) begin
+            o_phase = o_c2v_read ? DEC_PH_PROD_FINISH_READ : DEC_PH_PROD_FINISH_WRITE;
           end
         end
       end
@@ -233,23 +209,36 @@ module decoder_ctrl
     endcase
   end
 
-  // State update rules:
-  // 1. INIT builds the first compressed-c2v pair one group position at a time.
-  //    RAM-I is pre-initialised by $readmemh before simulation starts.
-  // 2. ITER prime phase fills v2c column 0.
-  // 3. Once v2c is active, c2v stays one column ahead when possible.
-  // 4. When c2v drains, v2c finishes the remaining column and then
-  //    ITER_CHECK decides whether to swap RAM-M pairs or stop.
+  task automatic clear_pipelines;
+    begin
+      col_kp1_c2v_valid_d1 <= 1'b0;
+      col_kp1_last_d1 <= 1'b0;
+      col_kp1_col_last_d1 <= 1'b0;
+      col_k_v2c_valid_d1 <= 1'b0;
+      col_k_last_d1 <= 1'b0;
+      col_k_col_last_d1 <= 1'b0;
+    end
+  endtask
+
+  task automatic reset_iteration_context;
+    begin
+      sched_state <= SCHED_FILL_K;
+      col_k_stage <= COL_K_STAGE_FIRST;
+      o_c2v_col_idx <= '0;
+      o_v2c_col_idx <= '0;
+      o_c2v_entry_pos <= '0;
+      o_v2c_entry_pos <= '0;
+    end
+  endtask
+
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin
       ctrl_state <= CTRL_WAIT;
       init_step <= INIT_STEP_READ;
       iter_check_pending <= 1'b0;
-      producer_active <= 1'b0;
-      producer_step <= PROD_STEP_READ;
-      consumer_active <= 1'b0;
-      consumer_mode <= CONS_MODE_ACCUM;
-      consumer_step <= CONS_STEP_READ;
+      sched_state <= SCHED_FILL_K;
+      col_k_stage <= COL_K_STAGE_FIRST;
+      clear_pipelines();
       o_c2v_col_idx <= '0;
       o_v2c_col_idx <= '0;
       o_c2v_entry_pos <= '0;
@@ -268,11 +257,9 @@ module decoder_ctrl
             ctrl_state <= CTRL_INIT;
             init_step <= INIT_STEP_READ;
             iter_check_pending <= 1'b0;
-            producer_active <= 1'b0;
-            producer_step <= PROD_STEP_READ;
-            consumer_active <= 1'b0;
-            consumer_mode <= CONS_MODE_ACCUM;
-            consumer_step <= CONS_STEP_READ;
+            sched_state <= SCHED_FILL_K;
+            col_k_stage <= COL_K_STAGE_FIRST;
+            clear_pipelines();
             o_c2v_col_idx <= '0;
             o_v2c_col_idx <= '0;
             o_c2v_entry_pos <= '0;
@@ -298,14 +285,8 @@ module decoder_ctrl
                 o_c2v_entry_pos <= '0;
                 if (o_c2v_col_idx == LAST_COL) begin
                   ctrl_state <= CTRL_ITER;
-                  producer_active <= 1'b1;
-                  producer_step <= PROD_STEP_READ;
-                  consumer_active <= 1'b0;
-                  consumer_mode <= CONS_MODE_ACCUM;
-                  consumer_step <= CONS_STEP_READ;
-                  o_c2v_col_idx <= '0;
-                  o_v2c_col_idx <= '0;
-                  o_v2c_entry_pos <= '0;
+                  reset_iteration_context();
+                  clear_pipelines();
                 end else begin
                   o_c2v_col_idx <= next_col(o_c2v_col_idx);
                   init_step <= INIT_STEP_READ;
@@ -316,7 +297,9 @@ module decoder_ctrl
               end
             end
 
-            default: init_step <= INIT_STEP_READ;
+            default: begin
+              init_step <= INIT_STEP_READ;
+            end
           endcase
         end
 
@@ -325,131 +308,93 @@ module decoder_ctrl
           if (iter_check_pending) begin
             iter_check_pending <= 1'b0;
             o_iter_count <= next_iter_count;
+            clear_pipelines();
             if (i_finish_decode) begin
               ctrl_state <= CTRL_DONE;
-              producer_active <= 1'b0;
-              consumer_active <= 1'b0;
+              sched_state <= SCHED_FILL_K;
               o_done <= 1'b1;
               o_success <= i_decode_success;
             end else begin
               o_m_read_pair <= o_m_write_pair;
-              producer_active <= 1'b1;
-              producer_step <= PROD_STEP_READ;
-              consumer_active <= 1'b0;
-              consumer_mode <= CONS_MODE_ACCUM;
-              consumer_step <= CONS_STEP_READ;
-              o_c2v_col_idx <= '0;
-              o_v2c_col_idx <= '0;
-              o_c2v_entry_pos <= '0;
-              o_v2c_entry_pos <= '0;
+              reset_iteration_context();
             end
-          end else if (!consumer_active) begin
-            if (producer_active) begin
-              if (producer_step == PROD_STEP_READ) begin
-                producer_step <= PROD_STEP_WRITE;
-              end else if (i_c2v_entry_pos_last) begin
-                consumer_active <= 1'b1;
-                consumer_mode <= CONS_MODE_ACCUM;
-                consumer_step <= CONS_STEP_READ;
-                o_v2c_col_idx <= o_c2v_col_idx;
-                o_v2c_entry_pos <= '0;
+          end else begin
+            col_kp1_c2v_valid_d1 <= col_kp1_c2v_issue_fire;
+            col_kp1_last_d1 <= col_kp1_c2v_issue_fire && i_c2v_entry_pos_last;
+            col_kp1_col_last_d1 <= col_kp1_c2v_issue_fire && (o_c2v_col_idx == LAST_COL);
+            col_k_v2c_valid_d1 <= col_k_v2c_issue_fire;
+            col_k_last_d1 <= col_k_v2c_issue_fire && i_v2c_entry_pos_last;
+            col_k_col_last_d1 <= col_k_v2c_issue_fire && (o_v2c_col_idx == LAST_COL);
+
+            if (col_kp1_c2v_issue_fire) begin
+              if (i_c2v_entry_pos_last) begin
                 o_c2v_entry_pos <= '0;
-                if (o_c2v_col_idx == LAST_COL) begin
-                  producer_active <= 1'b0;
-                  producer_step <= PROD_STEP_READ;
-                end else begin
-                  producer_active <= 1'b1;
-                  producer_step <= PROD_STEP_READ;
-                  o_c2v_col_idx <= next_col(o_c2v_col_idx);
-                  o_c2v_v2c_overlap_seen <= 1'b1;
-                end
               end else begin
-                producer_step <= PROD_STEP_READ;
                 o_c2v_entry_pos <= o_c2v_entry_pos + ONE_IDX_W'(1);
               end
             end
-          end else if (consumer_mode == CONS_MODE_ACCUM) begin
-            if (consumer_step == CONS_STEP_READ) begin
-              consumer_step <= CONS_STEP_USE;
-              if (producer_active) begin
-                producer_step <= PROD_STEP_WRITE;
-              end
-            end else begin
-              if (producer_active) begin
-                producer_step <= PROD_STEP_READ;
-                if (i_c2v_entry_pos_last) begin
-                  producer_active <= 1'b0;
-                  o_c2v_entry_pos <= '0;
-                end else begin
-                  o_c2v_entry_pos <= o_c2v_entry_pos + ONE_IDX_W'(1);
-                end
-              end
 
-              if (i_v2c_entry_pos_last) begin
-                o_v2c_entry_pos <= '0;
-                consumer_mode <= CONS_MODE_V2C;
-                consumer_step <= CONS_STEP_PREP;
+            if (col_kp1_done_fire) begin
+              if (sched_state == SCHED_K_KP1) begin
+                sched_state <= SCHED_KP1_READY;
+                o_c2v_entry_pos <= '0;
               end else begin
-                o_v2c_entry_pos <= o_v2c_entry_pos + ONE_IDX_W'(1);
-                consumer_step <= CONS_STEP_READ;
+                col_k_stage <= COL_K_STAGE_FIRST;
+                o_v2c_col_idx <= o_c2v_col_idx;
+                o_v2c_entry_pos <= '0;
+                o_c2v_entry_pos <= '0;
+                if (col_kp1_col_last_d1) begin
+                  sched_state <= SCHED_DRAIN_K;
+                end else begin
+                  sched_state <= SCHED_K_KP1;
+                  o_c2v_col_idx <= next_col(o_c2v_col_idx);
+                  o_c2v_v2c_overlap_seen <= 1'b1;
+                end
               end
             end
-          end else begin
-            case (consumer_step)
-              CONS_STEP_PREP: begin
-                consumer_step <= CONS_STEP_READ_NEXT_M;
-              end
 
-              CONS_STEP_READ_NEXT_M: begin
-                consumer_step <= CONS_STEP_CNU_A;
-                if (producer_active) begin
-                  producer_step <= PROD_STEP_WRITE;
-                end
-              end
-
-              CONS_STEP_CNU_A: begin
-                consumer_step <= CONS_STEP_WRITE;
-                if (producer_active) begin
-                  producer_step <= PROD_STEP_READ;
-                  if (i_c2v_entry_pos_last) begin
-                    producer_active <= 1'b0;
-                    o_c2v_entry_pos <= '0;
-                  end else begin
-                    o_c2v_entry_pos <= o_c2v_entry_pos + ONE_IDX_W'(1);
-                  end
-                end
-              end
-
-              default: begin
+            if (schedule_has_col_k) begin
+              if (col_k_v2c_issue_fire) begin
                 if (i_v2c_entry_pos_last) begin
                   o_v2c_entry_pos <= '0;
-                  consumer_mode <= CONS_MODE_ACCUM;
-                  consumer_step <= CONS_STEP_READ;
+                  col_k_stage <= COL_K_STAGE_FIRST;
                   if (o_v2c_col_idx == LAST_COL) begin
-                    consumer_active <= 1'b0;
-                    iter_check_pending <= 1'b1;
-                  end else if (producer_active) begin
-                    consumer_active <= 1'b0;
-                  end else begin
-                    consumer_active <= 1'b1;
+                    sched_state <= SCHED_FILL_K;
+                  end else if (sched_state == SCHED_KP1_READY) begin
                     o_v2c_col_idx <= next_col(o_v2c_col_idx);
                     if (next_col(o_v2c_col_idx) == LAST_COL) begin
-                      producer_active <= 1'b0;
-                      producer_step <= PROD_STEP_READ;
+                      sched_state <= SCHED_DRAIN_K;
                     end else begin
-                      producer_active <= 1'b1;
-                      producer_step <= PROD_STEP_READ;
+                      sched_state <= SCHED_K_KP1;
                       o_c2v_col_idx <= next_col(next_col(o_v2c_col_idx));
                       o_c2v_entry_pos <= '0;
                       o_c2v_v2c_overlap_seen <= 1'b1;
                     end
+                  end else if (sched_state == SCHED_K_KP1) begin
+                    if (col_kp1_done_fire) begin
+                      o_v2c_col_idx <= next_col(o_v2c_col_idx);
+                      if (next_col(o_v2c_col_idx) == LAST_COL) begin
+                        sched_state <= SCHED_DRAIN_K;
+                      end else begin
+                        sched_state <= SCHED_K_KP1;
+                        o_c2v_col_idx <= next_col(next_col(o_v2c_col_idx));
+                        o_c2v_entry_pos <= '0;
+                        o_c2v_v2c_overlap_seen <= 1'b1;
+                      end
+                    end else begin
+                      sched_state <= SCHED_FILL_K;
+                    end
                   end
                 end else begin
                   o_v2c_entry_pos <= o_v2c_entry_pos + ONE_IDX_W'(1);
-                  consumer_step <= CONS_STEP_READ_NEXT_M;
+                  col_k_stage <= COL_K_STAGE_ISSUE;
                 end
               end
-            endcase
+            end
+
+            if (col_k_last_write_fire && col_k_col_last_d1) begin
+              iter_check_pending <= 1'b1;
+            end
           end
         end
 
@@ -459,11 +404,9 @@ module decoder_ctrl
             ctrl_state <= CTRL_INIT;
             init_step <= INIT_STEP_READ;
             iter_check_pending <= 1'b0;
-            producer_active <= 1'b0;
-            producer_step <= PROD_STEP_READ;
-            consumer_active <= 1'b0;
-            consumer_mode <= CONS_MODE_ACCUM;
-            consumer_step <= CONS_STEP_READ;
+            sched_state <= SCHED_FILL_K;
+            col_k_stage <= COL_K_STAGE_FIRST;
+            clear_pipelines();
             o_c2v_col_idx <= '0;
             o_v2c_col_idx <= '0;
             o_c2v_entry_pos <= '0;
