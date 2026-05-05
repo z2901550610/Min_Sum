@@ -75,9 +75,9 @@ module decoder_top
   logic [I_ENTRY_W-1:0] c2v_buffer_group_entries [0:L-1][0:W-1];
   logic [GROUP_COUNT_W-1:0] ram_i_shift_write_ptr [0:L-1];
   logic [GROUP_COUNT_W-1:0] ram_i_shift_write_ptr_next [0:L-1];
-  logic [I_ENTRY_W-1:0] h_shift_entry_in [0:L-1];
+  logic [ROW_IDX_W-GROUP_IDX_W-1:0] h_shift_row_idx_group_in [0:L-1];
   logic [GROUP_IDX_W-1:0] shifted_group_idx [0:L-1];
-  logic [I_ENTRY_W-1:0] shifted_entry [0:L-1];
+  logic [ROW_IDX_W-GROUP_IDX_W-1:0] shifted_row_idx_group [0:L-1];
   logic shifted_valid [0:L-1];
   logic shift_ram_i;
   logic shift_ram_i_last;
@@ -214,26 +214,20 @@ module decoder_top
     integer group_idx;
 
     for (group_idx = 0; group_idx < L; group_idx++) begin
-      h_shift_entry_in[group_idx] = {
-        c2v_latched_one_idx[group_idx],
-        c2v_latched_row_idx_group[group_idx]
-      };
+      h_shift_row_idx_group_in[group_idx] =
+        c2v_latched_row_idx_group[group_idx][0 +: (ROW_IDX_W-GROUP_IDX_W)];
     end
   end
 
   h_shift #(
     .R(R),
     .L(L),
-    .ONE_IDX_W(ONE_IDX_W),
     .ROW_IDX_W(ROW_IDX_W),
-    .GROUP_IDX_W(GROUP_IDX_W),
-    .I_ENTRY_ROW_IDX_GROUP_LSB(I_ENTRY_ROW_IDX_GROUP_LSB),
-    .I_ENTRY_ONE_IDX_LSB(I_ENTRY_ONE_IDX_LSB),
-    .I_ENTRY_W(I_ENTRY_W)
+    .GROUP_IDX_W(GROUP_IDX_W)
   ) u_h_shift (
-    .i_ram_i_entry(h_shift_entry_in),
+    .i_row_idx_group(h_shift_row_idx_group_in),
     .o_ram_i_target_idx(shifted_group_idx),
-    .o_ram_i_entry(shifted_entry)
+    .o_row_idx_group(shifted_row_idx_group)
   );
 
   // Aggregate the two group RAM-I debug counts into the shape expected by
@@ -329,7 +323,7 @@ module decoder_top
         ram_i_shift_entry_addr[shifted_group_idx[group_idx]] =
           ONE_IDX_W'(ram_i_shift_write_ptr_next[shifted_group_idx[group_idx]]);
         ram_i_shift_entry_wdata[shifted_group_idx[group_idx]] =
-          shifted_entry[group_idx];
+          {c2v_latched_one_idx[group_idx], ROW_IDX_W'(shifted_row_idx_group[group_idx])};
         ram_i_shift_write_ptr_next[shifted_group_idx[group_idx]] =
           ram_i_shift_write_ptr_next[shifted_group_idx[group_idx]] + 1'b1;
       end
