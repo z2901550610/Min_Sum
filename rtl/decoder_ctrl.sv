@@ -22,9 +22,6 @@ module decoder_ctrl
   output logic [ONE_IDX_W-1:0] o_active_entry_pos,             // Debug-selected entry list position.
   output logic o_m_read_pair,                                  // RAM-M pair selected for compressed-c2v reads.
   output logic o_m_write_pair,                                 // RAM-M pair selected for compressed-c2v writes.
-  output logic o_init_m_read,                                  // Reads RAM-M for initial CNU_A.
-  output logic o_init_cnu_a,                                   // Enables CNU_A for initial accumulation.
-  output logic o_init_m_write,                                 // Writes initial CNU_A result.
   output logic o_c2v_read,                                     // Reads RAM-M/RAM-S for CNU_B.
   output logic o_c2v_write_t,                                  // Writes CNU_B/codec result to RAM-T.
   output logic o_vnu_accum_t,                                  // Accumulates one col k+1 c2v value in VNU.
@@ -45,14 +42,8 @@ module decoder_ctrl
   localparam logic [COL_W-1:0] LAST_COL = COL_W'(N - 1);
 
   localparam logic [2:0] CTRL_WAIT = 3'd0;
-  localparam logic [2:0] CTRL_INIT = 3'd2;
   localparam logic [2:0] CTRL_ITER = 3'd3;
   localparam logic [2:0] CTRL_DONE = 3'd4;
-
-  localparam logic [1:0] INIT_STEP_READ = 2'd0;
-  localparam logic [1:0] INIT_STEP_CNU_A = 2'd1;
-  localparam logic [1:0] INIT_STEP_WRITE = 2'd2;
-  localparam logic [1:0] INIT_STEP_SHIFT_DRAIN = 2'd3;
 
   localparam logic [1:0] COL_K_STAGE_FIRST = 2'd0;
   localparam logic [1:0] COL_K_STAGE_ISSUE = 2'd1;
@@ -63,18 +54,37 @@ module decoder_ctrl
   localparam logic [1:0] SCHED_DRAIN_K = 2'd3;
 
   logic [2:0] ctrl_state;
-  logic [1:0] init_step;
+  logic [2:0] ctrl_state_next;
   logic iter_check_pending;
+  logic iter_check_pending_next;
 
   logic col_kp1_c2v_valid_d1;
   logic col_kp1_last_d1;
   logic col_kp1_col_last_d1;
+  logic col_kp1_c2v_valid_d1_next;
+  logic col_kp1_last_d1_next;
+  logic col_kp1_col_last_d1_next;
 
   logic [1:0] sched_state;
   logic [1:0] col_k_stage;
   logic col_k_v2c_valid_d1;
   logic col_k_last_d1;
   logic col_k_col_last_d1;
+  logic [1:0] sched_state_next;
+  logic [1:0] col_k_stage_next;
+  logic col_k_v2c_valid_d1_next;
+  logic col_k_last_d1_next;
+  logic col_k_col_last_d1_next;
+
+  logic [COL_W-1:0] c2v_col_idx_next;
+  logic [COL_W-1:0] v2c_col_idx_next;
+  logic [ONE_IDX_W-1:0] c2v_entry_pos_next;
+  logic [ONE_IDX_W-1:0] v2c_entry_pos_next;
+  logic m_read_pair_next;
+  logic c2v_v2c_overlap_seen_next;
+  logic done_next;
+  logic success_next;
+  logic [ITER_W-1:0] iter_count_next;
 
   logic col_kp1_c2v_issue_fire;
   logic col_k_v2c_issue_fire;
@@ -97,11 +107,6 @@ module decoder_ctrl
 
   assign next_iter_count = o_iter_count + 1'b1;
   assign o_m_write_pair = ~o_m_read_pair;
-
-  assign o_init_m_read =
-    (ctrl_state == CTRL_INIT) && (init_step == INIT_STEP_READ) && i_ram_i_shift_ready;
-  assign o_init_cnu_a = (ctrl_state == CTRL_INIT) && (init_step == INIT_STEP_CNU_A);
-  assign o_init_m_write = (ctrl_state == CTRL_INIT) && (init_step == INIT_STEP_WRITE);
 
   assign schedule_has_col_kp1 =
     (sched_state == SCHED_FILL_K) || (sched_state == SCHED_K_KP1);
@@ -166,16 +171,6 @@ module decoder_ctrl
         o_phase = DEC_PH_WAIT;
       end
 
-      CTRL_INIT: begin
-        o_state = DEC_INIT_DECODER;
-        case (init_step)
-          INIT_STEP_READ: o_phase = i_ram_i_shift_ready ? DEC_PH_INIT_M_READ : DEC_PH_WAIT;
-          INIT_STEP_CNU_A: o_phase = DEC_PH_INIT_CNU_A;
-          INIT_STEP_WRITE: o_phase = DEC_PH_INIT_M_WRITE;
-          default: o_phase = DEC_PH_WAIT;
-        endcase
-      end
-
       CTRL_ITER: begin
         if (iter_check_pending) begin
           o_state = DEC_ITER_CHECK;
@@ -207,36 +202,199 @@ module decoder_ctrl
     endcase
   end
 
-  task automatic clear_pipelines;
-    begin
+  always_comb begin
+    ctrl_state_next = ctrl_state;
+    iter_check_pending_next = iter_check_pending;
+    sched_state_next = sched_state;
+    col_k_stage_next = col_k_stage;
+    col_kp1_c2v_valid_d1_next = col_kp1_c2v_valid_d1;
+    col_kp1_last_d1_next = col_kp1_last_d1;
+    col_kp1_col_last_d1_next = col_kp1_col_last_d1;
+    col_k_v2c_valid_d1_next = col_k_v2c_valid_d1;
+    col_k_last_d1_next = col_k_last_d1;
+    col_k_col_last_d1_next = col_k_col_last_d1;
+    c2v_col_idx_next = o_c2v_col_idx;
+    v2c_col_idx_next = o_v2c_col_idx;
+    c2v_entry_pos_next = o_c2v_entry_pos;
+    v2c_entry_pos_next = o_v2c_entry_pos;
+    m_read_pair_next = o_m_read_pair;
+    c2v_v2c_overlap_seen_next = o_c2v_v2c_overlap_seen;
+    done_next = o_done;
+    success_next = o_success;
+    iter_count_next = o_iter_count;
+
+    case (ctrl_state)
+      CTRL_WAIT: begin
+        done_next = 1'b0;
+        success_next = 1'b0;
+        if (i_start) begin
+          ctrl_state_next = CTRL_ITER;
+          iter_check_pending_next = 1'b0;
+          sched_state_next = SCHED_FILL_K;
+          col_k_stage_next = COL_K_STAGE_FIRST;
+          col_kp1_c2v_valid_d1_next = 1'b0;
+          col_kp1_last_d1_next = 1'b0;
+          col_kp1_col_last_d1_next = 1'b0;
+          col_k_v2c_valid_d1_next = 1'b0;
+          col_k_last_d1_next = 1'b0;
+          col_k_col_last_d1_next = 1'b0;
+          c2v_col_idx_next = '0;
+          v2c_col_idx_next = '0;
+          c2v_entry_pos_next = '0;
+          v2c_entry_pos_next = '0;
+          m_read_pair_next = 1'b0;
+          c2v_v2c_overlap_seen_next = 1'b0;
+          iter_count_next = '0;
+        end
+      end
+
+      CTRL_ITER: begin
+        done_next = 1'b0;
+        if (iter_check_pending) begin
+          iter_check_pending_next = 1'b0;
+          iter_count_next = next_iter_count;
+          col_kp1_c2v_valid_d1_next = 1'b0;
+          col_kp1_last_d1_next = 1'b0;
+          col_kp1_col_last_d1_next = 1'b0;
+          col_k_v2c_valid_d1_next = 1'b0;
+          col_k_last_d1_next = 1'b0;
+          col_k_col_last_d1_next = 1'b0;
+          if (i_finish_decode) begin
+            ctrl_state_next = CTRL_DONE;
+            sched_state_next = SCHED_FILL_K;
+            done_next = 1'b1;
+            success_next = i_decode_success;
+          end else begin
+            m_read_pair_next = o_m_write_pair;
+            sched_state_next = SCHED_FILL_K;
+            col_k_stage_next = COL_K_STAGE_FIRST;
+            c2v_col_idx_next = '0;
+            v2c_col_idx_next = '0;
+            c2v_entry_pos_next = '0;
+            v2c_entry_pos_next = '0;
+          end
+        end else begin
+          col_kp1_c2v_valid_d1_next = col_kp1_c2v_issue_fire;
+          col_kp1_last_d1_next = col_kp1_c2v_issue_fire && i_c2v_entry_pos_last;
+          col_kp1_col_last_d1_next = col_kp1_c2v_issue_fire && (o_c2v_col_idx == LAST_COL);
+          col_k_v2c_valid_d1_next = col_k_v2c_issue_fire;
+          col_k_last_d1_next = col_k_v2c_issue_fire && i_v2c_entry_pos_last;
+          col_k_col_last_d1_next = col_k_v2c_issue_fire && (o_v2c_col_idx == LAST_COL);
+
+          if (col_kp1_c2v_issue_fire) begin
+            if (i_c2v_entry_pos_last) begin
+              c2v_entry_pos_next = '0;
+            end else begin
+              c2v_entry_pos_next = o_c2v_entry_pos + ONE_IDX_W'(1);
+            end
+          end
+
+          if (col_kp1_done_fire) begin
+            if (sched_state == SCHED_K_KP1) begin
+              sched_state_next = SCHED_KP1_READY;
+              c2v_entry_pos_next = '0;
+            end else begin
+              col_k_stage_next = COL_K_STAGE_FIRST;
+              v2c_col_idx_next = o_c2v_col_idx;
+              v2c_entry_pos_next = '0;
+              c2v_entry_pos_next = '0;
+              if (col_kp1_col_last_d1) begin
+                sched_state_next = SCHED_DRAIN_K;
+              end else begin
+                sched_state_next = SCHED_K_KP1;
+                c2v_col_idx_next = next_col(o_c2v_col_idx);
+                c2v_v2c_overlap_seen_next = 1'b1;
+              end
+            end
+          end
+
+          if (schedule_has_col_k && col_k_v2c_issue_fire) begin
+            if (i_v2c_entry_pos_last) begin
+              v2c_entry_pos_next = '0;
+              col_k_stage_next = COL_K_STAGE_FIRST;
+              if (o_v2c_col_idx == LAST_COL) begin
+                sched_state_next = SCHED_FILL_K;
+              end else if (sched_state == SCHED_KP1_READY) begin
+                v2c_col_idx_next = next_col(o_v2c_col_idx);
+                if (next_col(o_v2c_col_idx) == LAST_COL) begin
+                  sched_state_next = SCHED_DRAIN_K;
+                end else begin
+                  sched_state_next = SCHED_K_KP1;
+                  c2v_col_idx_next = next_col(next_col(o_v2c_col_idx));
+                  c2v_entry_pos_next = '0;
+                  c2v_v2c_overlap_seen_next = 1'b1;
+                end
+              end else if (sched_state == SCHED_K_KP1) begin
+                if (col_kp1_done_fire) begin
+                  v2c_col_idx_next = next_col(o_v2c_col_idx);
+                  if (next_col(o_v2c_col_idx) == LAST_COL) begin
+                    sched_state_next = SCHED_DRAIN_K;
+                  end else begin
+                    sched_state_next = SCHED_K_KP1;
+                    c2v_col_idx_next = next_col(next_col(o_v2c_col_idx));
+                    c2v_entry_pos_next = '0;
+                    c2v_v2c_overlap_seen_next = 1'b1;
+                  end
+                end else begin
+                  sched_state_next = SCHED_FILL_K;
+                end
+              end
+            end else begin
+              v2c_entry_pos_next = o_v2c_entry_pos + ONE_IDX_W'(1);
+              col_k_stage_next = COL_K_STAGE_ISSUE;
+            end
+          end
+
+          if (col_k_last_write_fire && col_k_col_last_d1) begin
+            iter_check_pending_next = 1'b1;
+          end
+        end
+      end
+
+      CTRL_DONE: begin
+        done_next = 1'b1;
+        if (i_start) begin
+          ctrl_state_next = CTRL_ITER;
+          iter_check_pending_next = 1'b0;
+          sched_state_next = SCHED_FILL_K;
+          col_k_stage_next = COL_K_STAGE_FIRST;
+          col_kp1_c2v_valid_d1_next = 1'b0;
+          col_kp1_last_d1_next = 1'b0;
+          col_kp1_col_last_d1_next = 1'b0;
+          col_k_v2c_valid_d1_next = 1'b0;
+          col_k_last_d1_next = 1'b0;
+          col_k_col_last_d1_next = 1'b0;
+          c2v_col_idx_next = '0;
+          v2c_col_idx_next = '0;
+          c2v_entry_pos_next = '0;
+          v2c_entry_pos_next = '0;
+          m_read_pair_next = 1'b0;
+          c2v_v2c_overlap_seen_next = 1'b0;
+          done_next = 1'b0;
+          success_next = 1'b0;
+          iter_count_next = '0;
+        end
+      end
+
+      default: begin
+        ctrl_state_next = CTRL_DONE;
+        done_next = 1'b1;
+      end
+    endcase
+  end
+
+  always_ff @(posedge i_clk or negedge i_rst_n) begin
+    if (!i_rst_n) begin
+      ctrl_state <= CTRL_WAIT;
+      iter_check_pending <= 1'b0;
+      sched_state <= SCHED_FILL_K;
+      col_k_stage <= COL_K_STAGE_FIRST;
       col_kp1_c2v_valid_d1 <= 1'b0;
       col_kp1_last_d1 <= 1'b0;
       col_kp1_col_last_d1 <= 1'b0;
       col_k_v2c_valid_d1 <= 1'b0;
       col_k_last_d1 <= 1'b0;
       col_k_col_last_d1 <= 1'b0;
-    end
-  endtask
-
-  task automatic reset_iteration_context;
-    begin
-      sched_state <= SCHED_FILL_K;
-      col_k_stage <= COL_K_STAGE_FIRST;
-      o_c2v_col_idx <= '0;
-      o_v2c_col_idx <= '0;
-      o_c2v_entry_pos <= '0;
-      o_v2c_entry_pos <= '0;
-    end
-  endtask
-
-  always_ff @(posedge i_clk or negedge i_rst_n) begin
-    if (!i_rst_n) begin
-      ctrl_state <= CTRL_WAIT;
-      init_step <= INIT_STEP_READ;
-      iter_check_pending <= 1'b0;
-      sched_state <= SCHED_FILL_K;
-      col_k_stage <= COL_K_STAGE_FIRST;
-      clear_pipelines();
       o_c2v_col_idx <= '0;
       o_v2c_col_idx <= '0;
       o_c2v_entry_pos <= '0;
@@ -247,196 +405,25 @@ module decoder_ctrl
       o_success <= 1'b0;
       o_iter_count <= '0;
     end else begin
-      case (ctrl_state)
-        CTRL_WAIT: begin
-          o_done <= 1'b0;
-          o_success <= 1'b0;
-          if (i_start) begin
-            ctrl_state <= CTRL_INIT;
-            init_step <= INIT_STEP_READ;
-            iter_check_pending <= 1'b0;
-            sched_state <= SCHED_FILL_K;
-            col_k_stage <= COL_K_STAGE_FIRST;
-            clear_pipelines();
-            o_c2v_col_idx <= '0;
-            o_v2c_col_idx <= '0;
-            o_c2v_entry_pos <= '0;
-            o_v2c_entry_pos <= '0;
-            o_m_read_pair <= 1'b0;
-            o_c2v_v2c_overlap_seen <= 1'b0;
-            o_iter_count <= '0;
-          end
-        end
-
-        CTRL_INIT: begin
-          case (init_step)
-            INIT_STEP_READ: begin
-              if (i_ram_i_shift_ready) begin
-                init_step <= INIT_STEP_CNU_A;
-              end
-            end
-
-            INIT_STEP_CNU_A: begin
-              init_step <= INIT_STEP_WRITE;
-            end
-
-            INIT_STEP_WRITE: begin
-              if (i_c2v_entry_pos_last) begin
-                if (i_ram_i_shift_ready) begin
-                  o_c2v_entry_pos <= '0;
-                  if (o_c2v_col_idx == LAST_COL) begin
-                    ctrl_state <= CTRL_ITER;
-                    reset_iteration_context();
-                    clear_pipelines();
-                  end else begin
-                    o_c2v_col_idx <= next_col(o_c2v_col_idx);
-                    init_step <= INIT_STEP_READ;
-                  end
-                end else begin
-                  init_step <= INIT_STEP_SHIFT_DRAIN;
-                end
-              end else begin
-                o_c2v_entry_pos <= o_c2v_entry_pos + ONE_IDX_W'(1);
-                init_step <= INIT_STEP_READ;
-              end
-            end
-
-            INIT_STEP_SHIFT_DRAIN: begin
-              if (i_ram_i_shift_ready) begin
-                o_c2v_entry_pos <= '0;
-                if (o_c2v_col_idx == LAST_COL) begin
-                  ctrl_state <= CTRL_ITER;
-                  reset_iteration_context();
-                  clear_pipelines();
-                end else begin
-                  o_c2v_col_idx <= next_col(o_c2v_col_idx);
-                  init_step <= INIT_STEP_READ;
-                end
-              end
-            end
-
-            default: begin
-              init_step <= INIT_STEP_READ;
-            end
-          endcase
-        end
-
-        CTRL_ITER: begin
-          o_done <= 1'b0;
-          if (iter_check_pending) begin
-            iter_check_pending <= 1'b0;
-            o_iter_count <= next_iter_count;
-            clear_pipelines();
-            if (i_finish_decode) begin
-              ctrl_state <= CTRL_DONE;
-              sched_state <= SCHED_FILL_K;
-              o_done <= 1'b1;
-              o_success <= i_decode_success;
-            end else begin
-              o_m_read_pair <= o_m_write_pair;
-              reset_iteration_context();
-            end
-          end else begin
-            col_kp1_c2v_valid_d1 <= col_kp1_c2v_issue_fire;
-            col_kp1_last_d1 <= col_kp1_c2v_issue_fire && i_c2v_entry_pos_last;
-            col_kp1_col_last_d1 <= col_kp1_c2v_issue_fire && (o_c2v_col_idx == LAST_COL);
-            col_k_v2c_valid_d1 <= col_k_v2c_issue_fire;
-            col_k_last_d1 <= col_k_v2c_issue_fire && i_v2c_entry_pos_last;
-            col_k_col_last_d1 <= col_k_v2c_issue_fire && (o_v2c_col_idx == LAST_COL);
-
-            if (col_kp1_c2v_issue_fire) begin
-              if (i_c2v_entry_pos_last) begin
-                o_c2v_entry_pos <= '0;
-              end else begin
-                o_c2v_entry_pos <= o_c2v_entry_pos + ONE_IDX_W'(1);
-              end
-            end
-
-            if (col_kp1_done_fire) begin
-              if (sched_state == SCHED_K_KP1) begin
-                sched_state <= SCHED_KP1_READY;
-                o_c2v_entry_pos <= '0;
-              end else begin
-                col_k_stage <= COL_K_STAGE_FIRST;
-                o_v2c_col_idx <= o_c2v_col_idx;
-                o_v2c_entry_pos <= '0;
-                o_c2v_entry_pos <= '0;
-                if (col_kp1_col_last_d1) begin
-                  sched_state <= SCHED_DRAIN_K;
-                end else begin
-                  sched_state <= SCHED_K_KP1;
-                  o_c2v_col_idx <= next_col(o_c2v_col_idx);
-                  o_c2v_v2c_overlap_seen <= 1'b1;
-                end
-              end
-            end
-
-            if (schedule_has_col_k) begin
-              if (col_k_v2c_issue_fire) begin
-                if (i_v2c_entry_pos_last) begin
-                  o_v2c_entry_pos <= '0;
-                  col_k_stage <= COL_K_STAGE_FIRST;
-                  if (o_v2c_col_idx == LAST_COL) begin
-                    sched_state <= SCHED_FILL_K;
-                  end else if (sched_state == SCHED_KP1_READY) begin
-                    o_v2c_col_idx <= next_col(o_v2c_col_idx);
-                    if (next_col(o_v2c_col_idx) == LAST_COL) begin
-                      sched_state <= SCHED_DRAIN_K;
-                    end else begin
-                      sched_state <= SCHED_K_KP1;
-                      o_c2v_col_idx <= next_col(next_col(o_v2c_col_idx));
-                      o_c2v_entry_pos <= '0;
-                      o_c2v_v2c_overlap_seen <= 1'b1;
-                    end
-                  end else if (sched_state == SCHED_K_KP1) begin
-                    if (col_kp1_done_fire) begin
-                      o_v2c_col_idx <= next_col(o_v2c_col_idx);
-                      if (next_col(o_v2c_col_idx) == LAST_COL) begin
-                        sched_state <= SCHED_DRAIN_K;
-                      end else begin
-                        sched_state <= SCHED_K_KP1;
-                        o_c2v_col_idx <= next_col(next_col(o_v2c_col_idx));
-                        o_c2v_entry_pos <= '0;
-                        o_c2v_v2c_overlap_seen <= 1'b1;
-                      end
-                    end else begin
-                      sched_state <= SCHED_FILL_K;
-                    end
-                  end
-                end else begin
-                  o_v2c_entry_pos <= o_v2c_entry_pos + ONE_IDX_W'(1);
-                  col_k_stage <= COL_K_STAGE_ISSUE;
-                end
-              end
-            end
-
-            if (col_k_last_write_fire && col_k_col_last_d1) begin
-              iter_check_pending <= 1'b1;
-            end
-          end
-        end
-
-        default: begin
-          o_done <= 1'b1;
-          if (i_start) begin
-            ctrl_state <= CTRL_INIT;
-            init_step <= INIT_STEP_READ;
-            iter_check_pending <= 1'b0;
-            sched_state <= SCHED_FILL_K;
-            col_k_stage <= COL_K_STAGE_FIRST;
-            clear_pipelines();
-            o_c2v_col_idx <= '0;
-            o_v2c_col_idx <= '0;
-            o_c2v_entry_pos <= '0;
-            o_v2c_entry_pos <= '0;
-            o_m_read_pair <= 1'b0;
-            o_c2v_v2c_overlap_seen <= 1'b0;
-            o_done <= 1'b0;
-            o_success <= 1'b0;
-            o_iter_count <= '0;
-          end
-        end
-      endcase
+      ctrl_state <= ctrl_state_next;
+      iter_check_pending <= iter_check_pending_next;
+      sched_state <= sched_state_next;
+      col_k_stage <= col_k_stage_next;
+      col_kp1_c2v_valid_d1 <= col_kp1_c2v_valid_d1_next;
+      col_kp1_last_d1 <= col_kp1_last_d1_next;
+      col_kp1_col_last_d1 <= col_kp1_col_last_d1_next;
+      col_k_v2c_valid_d1 <= col_k_v2c_valid_d1_next;
+      col_k_last_d1 <= col_k_last_d1_next;
+      col_k_col_last_d1 <= col_k_col_last_d1_next;
+      o_c2v_col_idx <= c2v_col_idx_next;
+      o_v2c_col_idx <= v2c_col_idx_next;
+      o_c2v_entry_pos <= c2v_entry_pos_next;
+      o_v2c_entry_pos <= v2c_entry_pos_next;
+      o_m_read_pair <= m_read_pair_next;
+      o_c2v_v2c_overlap_seen <= c2v_v2c_overlap_seen_next;
+      o_done <= done_next;
+      o_success <= success_next;
+      o_iter_count <= iter_count_next;
     end
   end
 endmodule

@@ -13,6 +13,7 @@
 # Generated simulation binaries and support files
 /golden/*_golden
 /tb/generated/
+/rtl/generated/.ram_i_hex.stamp
 
 # Waveforms, traces, and logs
 *.vcd

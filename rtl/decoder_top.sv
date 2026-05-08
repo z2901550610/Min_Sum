@@ -2,6 +2,15 @@
 // Top-level BIKE min-sum decoder datapath and module interconnect.
 module decoder_top
   import bike_pkg::*;
+#(
+  parameter string RAM_I0_HEX_STEM = "rtl/generated/ram_i0",
+  parameter string RAM_I1_HEX_STEM = "rtl/generated/ram_i1",
+`ifdef BIKE_L1_PARAMS
+  parameter string RAM_I_HEX_TAG = "_l1"
+`else
+  parameter string RAM_I_HEX_TAG = "_test"
+`endif
+)
 (
   input  logic i_clk,
   input  logic i_rst_n,
@@ -15,6 +24,12 @@ module decoder_top
 
   localparam int ITER_W = $clog2(I_MAX + 1);
   localparam int HIST_IDX_W = (I_MAX > 1) ? $clog2(I_MAX) : 1;
+  localparam logic [COMP_C2V_W-1:0] FIRST_ITER_C2V_COMP = {
+    1'b0,
+    COL_W'(0),
+    D'(C_VAL),
+    D'(C_VAL)
+  };
 
   /* verilator lint_off UNUSEDSIGNAL */
   // Debug/control visibility exported to the testbench. The real scheduling
@@ -42,9 +57,6 @@ module decoder_top
   logic m_read_pair;
   logic m_write_pair;
 
-  logic init_m_read;
-  logic init_cnu_a;
-  logic init_m_write;
   logic c2v_read;
   logic c2v_write_t;
   logic vnu_accum_t;
@@ -167,6 +179,7 @@ module decoder_top
   logic [COMP_C2V_W-1:0] cnu_a_comp_out [0:L-1];
   logic cnu_a_sign [0:L-1];
   logic cnu_a_valid [0:L-1];
+  logic [COMP_C2V_W-1:0] cnu_b_comp_in [0:L-1];
 
   logic [MSG_W-1:0] c2v_msg [0:L-1];
   logic signed [MSG_W-1:0] c2v_tc [0:L-1];
@@ -232,6 +245,24 @@ module decoder_top
       s_wdata[group_idx] = sign_bit;
     end
   endtask
+
+  function automatic logic [COMP_C2V_W-1:0] m_comp_or_default(
+    input logic [1:0] port_idx,
+    input logic port_pair,
+    input logic [ROW_IDX_W-1:0] row_addr,
+    input logic use_first_iter_default
+  );
+    begin
+      if (m_row_valid[port_idx][row_addr] &&
+          (m_row_epoch[port_idx][row_addr] == m_pair_epoch[port_pair])) begin
+        m_comp_or_default = m_rdata[port_idx];
+      end else if (use_first_iter_default) begin
+        m_comp_or_default = FIRST_ITER_C2V_COMP;
+      end else begin
+        m_comp_or_default = COMP_C2V_INIT;
+      end
+    end
+  endfunction
 
   assign next_iter_count_ext = {1'b0, o_iter_count} + {{ITER_W{1'b0}}, 1'b1};
   assign hist_wr_idx = o_iter_count[HIST_IDX_W-1:0];
@@ -334,7 +365,7 @@ module decoder_top
     logic entries_empty_current;
     logic entries_empty_next;
 
-    shift_ram_i = init_m_write || c2v_write_t;
+    shift_ram_i = c2v_write_t;
     shift_ram_i_last = shift_ram_i && c2v_latched_entry_pos_last;
     ram_i_shift_commit_pending_next = ram_i_shift_commit_pending;
     ram_i_shift_count_we = 1'b0;
@@ -439,7 +470,7 @@ module decoder_top
       m_wdata[port_idx] = COMP_C2V_INIT;
     end
 
-    if (init_m_read || c2v_read) begin
+    if (c2v_read) begin
       for (group_idx = 0; group_idx < L; group_idx++) begin
         if (c2v_group_valid[group_idx]) begin
           set_m_read_row(m_read_pair, GROUP_IDX_W'(group_idx), c2v_row_idx_group[group_idx]);
@@ -447,7 +478,7 @@ module decoder_top
       end
     end
 
-    if (init_cnu_a || c2v_write_t) begin
+    if (c2v_write_t) begin
       for (group_idx = 0; group_idx < L; group_idx++) begin
         if (c2v_latched_group_valid[group_idx]) begin
           set_m_read_row(
@@ -463,19 +494,6 @@ module decoder_top
       for (group_idx = 0; group_idx < L; group_idx++) begin
         if (v2c_group_valid[group_idx]) begin
           set_m_read_row(m_write_pair, GROUP_IDX_W'(group_idx), v2c_row_idx_group[group_idx]);
-        end
-      end
-    end
-
-    if (init_m_write) begin
-      for (group_idx = 0; group_idx < L; group_idx++) begin
-        if (cnu_a_valid[group_idx]) begin
-          set_m_write_state(
-            c2v_latched_m_read_pair,
-            GROUP_IDX_W'(group_idx),
-            c2v_latched_row_idx_group[group_idx],
-            cnu_a_comp_out[group_idx]
-          );
         end
       end
     end
@@ -505,19 +523,6 @@ module decoder_top
       s_write_col_idx[group_idx] = c2v_latched_col;
       s_write_one_idx[group_idx] = c2v_latched_one_idx[group_idx];
       s_wdata[group_idx] = 1'b0;
-    end
-
-    if (init_m_write) begin
-      for (group_idx = 0; group_idx < L; group_idx++) begin
-        if (cnu_a_valid[group_idx]) begin
-          set_s_write_bit(
-            GROUP_IDX_W'(group_idx),
-            c2v_latched_col,
-            c2v_latched_one_idx[group_idx],
-            cnu_a_sign[group_idx]
-          );
-        end
-      end
     end
 
     if (vnu_write_next) begin
@@ -658,7 +663,7 @@ module decoder_top
         ram_i_shift_pending_wdata[group_idx][2] <= ram_i_shift_pending_wdata_next[group_idx][2];
       end
 
-      if (init_m_read || c2v_read) begin
+      if (c2v_read) begin
         for (group_idx = 0; group_idx < L; group_idx++) begin
           c2v_latched_group_valid[group_idx] <= c2v_group_valid[group_idx];
           c2v_latched_one_idx[group_idx] <= c2v_one_idx[group_idx];
@@ -731,11 +736,11 @@ module decoder_top
     end
   end
 
-  assign cnu_a_col_idx = init_cnu_a ? c2v_latched_col : v2c_col_idx;
-  assign cnu_a_en[0] = (init_cnu_a && c2v_latched_group_valid[0]) || (vnu_cnu_a && v2c_group_valid[0]);
-  assign cnu_a_en[1] = (init_cnu_a && c2v_latched_group_valid[1]) || (vnu_cnu_a && v2c_group_valid[1]);
-  assign cnu_a_v2c_msg[0] = init_cnu_a ? {1'b0, D'(C_VAL)} : vnu_v2c_msg[0];
-  assign cnu_a_v2c_msg[1] = init_cnu_a ? {1'b0, D'(C_VAL)} : vnu_v2c_msg[1];
+  assign cnu_a_col_idx = v2c_col_idx;
+  assign cnu_a_en[0] = vnu_cnu_a && v2c_group_valid[0];
+  assign cnu_a_en[1] = vnu_cnu_a && v2c_group_valid[1];
+  assign cnu_a_v2c_msg[0] = vnu_v2c_msg[0];
+  assign cnu_a_v2c_msg[1] = vnu_v2c_msg[1];
 
   always_comb begin
     integer group_idx;
@@ -744,20 +749,25 @@ module decoder_top
     logic [ROW_IDX_W-1:0] row_addr;
 
     for (group_idx = 0; group_idx < L; group_idx++) begin
-      if (init_cnu_a) begin
-        port_pair = c2v_latched_m_read_pair;
-        row_addr = c2v_latched_row_idx_group[group_idx];
-      end else begin
-        port_pair = m_write_pair;
-        row_addr = v2c_row_idx_group[group_idx];
-      end
+      port_pair = m_write_pair;
+      row_addr = v2c_row_idx_group[group_idx];
       port_idx = 2'(m_index(port_pair, GROUP_IDX_W'(group_idx)));
-      if (m_row_valid[port_idx][row_addr] &&
-          (m_row_epoch[port_idx][row_addr] == m_pair_epoch[port_pair])) begin
-        cnu_a_comp_in[group_idx] = m_rdata[port_idx];
-      end else begin
-        cnu_a_comp_in[group_idx] = COMP_C2V_INIT;
-      end
+      cnu_a_comp_in[group_idx] = m_comp_or_default(port_idx, port_pair, row_addr, 1'b0);
+    end
+  end
+
+  always_comb begin
+    integer group_idx;
+    logic [1:0] port_idx;
+    logic port_pair;
+    logic [ROW_IDX_W-1:0] row_addr;
+
+    for (group_idx = 0; group_idx < L; group_idx++) begin
+      port_pair = c2v_latched_m_read_pair;
+      port_idx = 2'(m_index(port_pair, GROUP_IDX_W'(group_idx)));
+      row_addr = c2v_latched_row_idx_group[group_idx];
+      cnu_b_comp_in[group_idx] =
+        m_comp_or_default(port_idx, port_pair, row_addr, (o_iter_count == '0));
     end
   end
 
@@ -786,7 +796,7 @@ module decoder_top
   );
 
   cnu_b u_cnu_b0 (
-    .i_comp_c2v(m_rdata[m_index(c2v_latched_m_read_pair, GROUP_IDX_W'(0))]),
+    .i_comp_c2v(cnu_b_comp_in[0]),
     .i_v2c_sign(s_rdata[0]),
     .i_syndrome_bit(i_syndrome[c2v_latched_row_idx_global[0]]),
     .i_col_idx(c2v_latched_col),
@@ -794,7 +804,7 @@ module decoder_top
   );
 
   cnu_b u_cnu_b1 (
-    .i_comp_c2v(m_rdata[m_index(c2v_latched_m_read_pair, GROUP_IDX_W'(1))]),
+    .i_comp_c2v(cnu_b_comp_in[1]),
     .i_v2c_sign(s_rdata[1]),
     .i_syndrome_bit(i_syndrome[c2v_latched_row_idx_global[1]]),
     .i_col_idx(c2v_latched_col),
@@ -907,9 +917,6 @@ module decoder_top
     .o_active_entry_pos(active_entry_pos),
     .o_m_read_pair(m_read_pair),
     .o_m_write_pair(m_write_pair),
-    .o_init_m_read(init_m_read),
-    .o_init_cnu_a(init_cnu_a),
-    .o_init_m_write(init_m_write),
     .o_c2v_read(c2v_read),
     .o_c2v_write_t(c2v_write_t),
     .o_vnu_accum_t(vnu_accum_t),
@@ -930,7 +937,8 @@ module decoder_top
   // Open observation pins keep focused module benches able to inspect the
   // submodules while this top-level uses the RAM-I counts.
   ram_i #(
-    .INIT_HEX_STEM("rtl/generated/ram_i0")
+    .INIT_HEX_STEM(RAM_I0_HEX_STEM),
+    .INIT_HEX_TAG(RAM_I_HEX_TAG)
   ) u_ram_i0 (
     .i_clk(i_clk),
     .i_rst_n(i_rst_n),
@@ -948,7 +956,8 @@ module decoder_top
   );
 
   ram_i #(
-    .INIT_HEX_STEM("rtl/generated/ram_i1")
+    .INIT_HEX_STEM(RAM_I1_HEX_STEM),
+    .INIT_HEX_TAG(RAM_I_HEX_TAG)
   ) u_ram_i1 (
     .i_clk(i_clk),
     .i_rst_n(i_rst_n),

@@ -9,6 +9,9 @@ import shlex
 import subprocess
 from pathlib import Path
 
+from ram_i_hex import first_column_tables as build_first_column_tables
+from ram_i_hex import generate_hex_files
+
 
 RTL_CORE = [
     "rtl/ram_i.sv",
@@ -57,28 +60,6 @@ def sv_array(values: list[int]) -> str:
     return "'{" + ", ".join(str(value) for value in values) + "}"
 
 
-def build_first_column_tables(h_base: list[list[int]], r: int) -> tuple[list[list[int]], list[list[list[tuple[int, int] | None]]]]:
-    group_counts: list[list[int]] = []
-    group_entries: list[list[list[tuple[int, int] | None]]] = []
-
-    for h_block_support in h_base:
-        h_block_group_counts = [0, 0]
-        h_block_group_entries: list[list[tuple[int, int] | None]] = [
-            [None for _ in range(len(h_block_support))],
-            [None for _ in range(len(h_block_support))],
-        ]
-        for one_idx, row_idx_global in enumerate(h_block_support):
-            group_idx = row_idx_global & 1
-            row_idx_group = row_idx_global >> 1
-            group_entry_idx = h_block_group_counts[group_idx]
-            h_block_group_entries[group_idx][group_entry_idx] = (one_idx, row_idx_group)
-            h_block_group_counts[group_idx] += 1
-        group_counts.append(h_block_group_counts)
-        group_entries.append(h_block_group_entries)
-
-    return group_counts, group_entries
-
-
 def render_group_count_param(group_counts: list[list[int]]) -> str:
     lines = ["  localparam logic [GROUP_COUNT_W-1:0] QC_FIRST_COL_GROUP_COUNT [0:N0-1][0:L-1] = '{"]
     for h_block_idx, h_block_group_counts in enumerate(group_counts):
@@ -124,7 +105,7 @@ def emit_pkg(
     alpha_shift_1: int,
     h_base: list[list[int]],
 ) -> None:
-    group_counts, group_entries = build_first_column_tables(h_base, r)
+    group_counts, group_entries = build_first_column_tables(h_base)
     path.write_text(
         f"""`timescale 1ns/1ps
 package bike_pkg;
@@ -158,7 +139,6 @@ package bike_pkg;
 
   localparam int DEC_STATE_W = 4;
   localparam logic [DEC_STATE_W-1:0] DEC_WAIT_START       = 4'd0;
-  localparam logic [DEC_STATE_W-1:0] DEC_INIT_DECODER     = 4'd1;
   localparam logic [DEC_STATE_W-1:0] DEC_ITER_C2V_PRIME   = 4'd4;
   localparam logic [DEC_STATE_W-1:0] DEC_ITER_OVERLAP     = 4'd5;
   localparam logic [DEC_STATE_W-1:0] DEC_ITER_V2C_DRAIN   = 4'd6;
@@ -167,9 +147,6 @@ package bike_pkg;
 
   localparam int DEC_PHASE_W = 5;
   localparam logic [DEC_PHASE_W-1:0] DEC_PH_WAIT                = 5'd0;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_INIT_M_READ         = 5'd3;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_INIT_CNU_A          = 5'd4;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_INIT_M_WRITE        = 5'd5;
   localparam logic [DEC_PHASE_W-1:0] DEC_PH_PRIME_READ          = 5'd7;
   localparam logic [DEC_PHASE_W-1:0] DEC_PH_PRIME_WRITE         = 5'd8;
   localparam logic [DEC_PHASE_W-1:0] DEC_PH_OVERLAP_ACCUM_READ  = 5'd9;
@@ -239,6 +216,8 @@ def emit_tb(
     syndrome_hex: str,
     target_hex: str,
     require_success: bool,
+    ram_i0_hex_stem: str,
+    ram_i1_hex_stem: str,
 ) -> None:
     require_success_sv = "1'b1" if require_success else "1'b0"
     path.write_text(
@@ -261,7 +240,11 @@ module tb_bike_decoder_random;
   logic [N-1:0] e_out;
   logic [$clog2(I_MAX + 1)-1:0] iter_count;
 
-  decoder_top dut (
+  decoder_top #(
+    .RAM_I0_HEX_STEM("{ram_i0_hex_stem}"),
+    .RAM_I1_HEX_STEM("{ram_i1_hex_stem}"),
+    .RAM_I_HEX_TAG("")
+  ) dut (
     .i_clk(clk),
     .i_rst_n(rst_n),
     .i_start(start),
@@ -389,7 +372,10 @@ def run_command(command: list[str], cwd: Path) -> None:
 
 def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int) -> bool:
     rng = random.Random(seed)
-    out_dir = repo_root / args.out_dir / f"case_{case_idx:03d}_seed_{seed}"
+    out_dir_arg = Path(args.out_dir)
+    case_dir = out_dir_arg / f"case_{case_idx:03d}_seed_{seed}"
+    out_dir = case_dir if case_dir.is_absolute() else repo_root / case_dir
+    sv_case_dir = out_dir if case_dir.is_absolute() else case_dir
     obj_dir = out_dir / "obj_dir"
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -418,6 +404,7 @@ def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int
         alpha_shift_1=args.alpha_shift_1,
         h_base=h_base,
     )
+    generate_hex_files(h_base, args.r, args.w, "", out_dir)
     emit_tb(
         tb_path,
         seed=seed,
@@ -425,6 +412,8 @@ def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int
         syndrome_hex=bit_vector_hex(syndrome, args.r),
         target_hex=bit_vector_hex(error_bits, n),
         require_success=args.require_success,
+        ram_i0_hex_stem=str((sv_case_dir / "ram_i0").as_posix()),
+        ram_i1_hex_stem=str((sv_case_dir / "ram_i1").as_posix()),
     )
 
     command = [

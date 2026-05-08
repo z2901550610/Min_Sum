@@ -4,9 +4,10 @@
 from __future__ import annotations
 
 import argparse
-import math
 import re
 from pathlib import Path
+
+from ram_i_hex import generate_hex_files
 
 
 def extract_r_values(text: str) -> list[int]:
@@ -111,72 +112,6 @@ def extract_h_base_values(text: str) -> list[list[list[int]]]:
     if len(positions) != 2:
         raise ValueError("expected exactly two H_BASE declarations in bike_pkg")
     return [parse_h_base_literal(extract_h_base_literal(text, pos)) for pos in positions]
-
-
-def first_column_tables(banks: list[list[int]]) -> tuple[list[list[int]], list[list[list[tuple[int, int] | None]]]]:
-    lane_count_table: list[list[int]] = []
-    lane_entry_table: list[list[list[tuple[int, int] | None]]] = []
-
-    for bank_support in banks:
-        lane_counts = [0, 0]
-        lane_entries: list[list[tuple[int, int] | None]] = [
-            [None for _ in range(len(bank_support))],
-            [None for _ in range(len(bank_support))],
-        ]
-        for one_idx, row_value in enumerate(bank_support):
-            lane_idx = row_value & 1
-            row_local = row_value >> 1
-            slot_idx = lane_counts[lane_idx]
-            lane_entries[lane_idx][slot_idx] = (one_idx, row_local)
-            lane_counts[lane_idx] += 1
-        lane_count_table.append(lane_counts)
-        lane_entry_table.append(lane_entries)
-
-    return lane_count_table, lane_entry_table
-
-
-def cl2(v: int) -> int:
-    """SystemVerilog $clog2 equivalent."""
-    if v <= 1:
-        return 1
-    return (v - 1).bit_length()
-
-
-def packed_entry(one_idx: int, row_local: int, row_idx_w: int) -> int:
-    """Pack {one_idx, row_local} into an integer matching RTL I_ENTRY format."""
-    return (one_idx << row_idx_w) | row_local
-
-
-def write_hex_file(path: Path, values: list[int], width: int) -> None:
-    """Write a hex file with one value per line."""
-    lines = [f"{v:x}" for v in values]
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
-def generate_hex_files(banks: list[list[int]], r_value: int, w_value: int, tag: str, output_dir: Path) -> None:
-    row_idx_w = cl2(r_value)
-
-    lane_counts, lane_entries = first_column_tables(banks)
-
-    # One set of files per lane (row group)
-    lane_names = ["ram_i0", "ram_i1"]
-
-    for lane_idx in range(2):
-        entries: list[int] = []
-        counts: list[int] = []
-        for hblk in range(len(banks)):
-            counts.append(lane_counts[hblk][lane_idx])
-            for entry_idx in range(w_value):
-                item = lane_entries[hblk][lane_idx][entry_idx]
-                if item is None:
-                    entries.append(0)
-                else:
-                    one_idx, row_local = item
-                    entries.append(packed_entry(one_idx, row_local, row_idx_w))
-
-        write_hex_file(output_dir / f"{lane_names[lane_idx]}_entries_{tag}.hex", entries, 0)
-        write_hex_file(output_dir / f"{lane_names[lane_idx]}_counts_{tag}.hex", counts, 0)
 
 
 def main() -> None:

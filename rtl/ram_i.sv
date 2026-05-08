@@ -5,7 +5,12 @@
 module ram_i
   import bike_pkg::*;
 #(
-  parameter string INIT_HEX_STEM = "rtl/generated/ram_i"
+  parameter string INIT_HEX_STEM = "rtl/generated/ram_i",
+`ifdef BIKE_L1_PARAMS
+  parameter string INIT_HEX_TAG = "_l1"
+`else
+  parameter string INIT_HEX_TAG = "_test"
+`endif
 )
 (
   input  logic i_clk,
@@ -45,14 +50,8 @@ module ram_i
   end
 
   // 从 hex 文件加载初始数据。
-`ifdef BIKE_L1_PARAMS
-  localparam string INIT_TAG = "_l1";
-`else
-  localparam string INIT_TAG = "_test";
-`endif
-
   initial begin
-    $readmemh({INIT_HEX_STEM, "_entries", INIT_TAG, ".hex"}, list_entries_mem);
-    $readmemh({INIT_HEX_STEM, "_counts", INIT_TAG, ".hex"}, list_count_mem);
+    $readmemh({INIT_HEX_STEM, "_entries", INIT_HEX_TAG, ".hex"}, list_entries_mem);
+    $readmemh({INIT_HEX_STEM, "_counts", INIT_HEX_TAG, ".hex"}, list_count_mem);
   end
 endmodule

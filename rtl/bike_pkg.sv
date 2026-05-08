@@ -47,7 +47,6 @@ package bike_pkg;
 
   localparam int DEC_STATE_W = 4;
   localparam logic [DEC_STATE_W-1:0] DEC_WAIT_START       = 4'd0;
-  localparam logic [DEC_STATE_W-1:0] DEC_INIT_DECODER     = 4'd1;
   localparam logic [DEC_STATE_W-1:0] DEC_ITER_C2V_PRIME   = 4'd4;
   localparam logic [DEC_STATE_W-1:0] DEC_ITER_OVERLAP     = 4'd5;
   localparam logic [DEC_STATE_W-1:0] DEC_ITER_V2C_DRAIN   = 4'd6;
@@ -56,9 +55,6 @@ package bike_pkg;
 
   localparam int DEC_PHASE_W = 5;
   localparam logic [DEC_PHASE_W-1:0] DEC_PH_WAIT                = 5'd0;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_INIT_M_READ         = 5'd3;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_INIT_CNU_A          = 5'd4;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_INIT_M_WRITE        = 5'd5;
   localparam logic [DEC_PHASE_W-1:0] DEC_PH_PRIME_READ          = 5'd7;
   localparam logic [DEC_PHASE_W-1:0] DEC_PH_PRIME_WRITE         = 5'd8;
   localparam logic [DEC_PHASE_W-1:0] DEC_PH_OVERLAP_ACCUM_READ  = 5'd9;

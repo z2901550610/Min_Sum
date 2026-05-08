@@ -90,18 +90,6 @@ module tb_decoder_top;
     end
   endfunction
 
-  function automatic int group_idx_from_row(input int row_idx_i);
-    begin
-      group_idx_from_row = row_idx_i & 1;
-    end
-  endfunction
-
-  function automatic int row_idx_group(input int row_idx_i);
-    begin
-      row_idx_group = row_idx_i >> 1;
-    end
-  endfunction
-
   /* verilator lint_off UNUSEDSIGNAL */
   function automatic int edge_row_idx(input int col_idx_i, input int one_idx_i);
     int h_block_local;
@@ -110,19 +98,6 @@ module tb_decoder_top;
       h_block_local = col_idx_i / R;
       col_local = col_idx_i % R;
       edge_row_idx = (H_BASE[0][h_block_local][one_idx_i] + col_local) % R;
-    end
-  endfunction
-
-  function automatic logic [COMP_C2V_W-1:0] ram_m_debug_read(
-    input logic pair,
-    input int group_idx,
-    input int local_row
-  );
-    begin
-      if (!pair && group_idx == 0) ram_m_debug_read = dut.ram_m0_debug_mem[local_row];
-      else if (!pair) ram_m_debug_read = dut.ram_m1_debug_mem[local_row];
-      else if (group_idx == 0) ram_m_debug_read = dut.ram_m2_debug_mem[local_row];
-      else ram_m_debug_read = dut.ram_m3_debug_mem[local_row];
     end
   endfunction
 
@@ -141,7 +116,7 @@ module tb_decoder_top;
 
     if (checks_active) begin
       if (!dut.ram_i_shift_ready) begin
-        if (dut.init_m_read || dut.c2v_read) begin
+        if (dut.c2v_read) begin
           $fatal(1, "RAM-I reader advanced while shift writer was busy");
         end
       end
@@ -221,23 +196,17 @@ module tb_decoder_top;
     apply_reset();
     start_case(CASE1_SYNDROME);
 
-    wait (dut.init_m_read && dut.c2v_col_idx == 1 && dut.active_entry_pos == 0);
+    wait (dut.c2v_phase_active && !dut.v2c_phase_active && dut.c2v_col_idx == 0 && dut.active_entry_pos == 0);
+    #1;
+    if (dut.m_read_pair === dut.m_write_pair) $fatal(1, "RAM M ping-pong pairs should differ");
+
+    wait (dut.c2v_read && dut.c2v_col_idx == 1 && dut.active_entry_pos == 0);
     #1;
     if (dut.ram_i_debug_count[0][0] != GROUP_COUNT_W'(2)) $fatal(1, "RAM I shifted group_idx0 count mismatch for column 1");
     if (dut.ram_i_debug_count[0][1] != GROUP_COUNT_W'(1)) $fatal(1, "RAM I shifted group_idx1 count mismatch for column 1");
     if (!(dut.c2v_group_valid[0] && dut.c2v_group_valid[1])) $fatal(1, "shifted column 1 should expose two active group_idxs");
     if (dut.c2v_one_idx[0] != ONE_IDX_W'(1) || dut.c2v_row_idx_group[0] != ROW_IDX_W'(1)) $fatal(1, "shifted group_idx0 entry mismatch for column 1");
     if (dut.c2v_one_idx[1] != ONE_IDX_W'(0) || dut.c2v_row_idx_group[1] != ROW_IDX_W'(0)) $fatal(1, "shifted group_idx1 entry mismatch for column 1");
-
-    wait (dut.c2v_phase_active && !dut.v2c_phase_active && dut.c2v_col_idx == 0 && dut.active_entry_pos == 0);
-    #1;
-    if (dut.m_read_pair === dut.m_write_pair) $fatal(1, "RAM M ping-pong pairs should differ");
-    for (idx = 0; idx < R; idx++) begin
-      if (int'(ram_m_debug_read(dut.m_read_pair, group_idx_from_row(idx), row_idx_group(idx))[COMP_C2V_MIN1_LSB +: D]) != CASE1_FIRST_ROW_MIN1[idx]) $fatal(1, "CASE1 row min1[%0d] mismatch", idx);
-      if (int'(ram_m_debug_read(dut.m_read_pair, group_idx_from_row(idx), row_idx_group(idx))[COMP_C2V_MIN2_LSB +: D]) != CASE1_FIRST_ROW_MIN2[idx]) $fatal(1, "CASE1 row min2[%0d] mismatch", idx);
-      if (int'(ram_m_debug_read(dut.m_read_pair, group_idx_from_row(idx), row_idx_group(idx))[COMP_C2V_MIN_ID_LSB +: COL_W]) != CASE1_FIRST_ROW_MIN_ID[idx]) $fatal(1, "CASE1 row min_id[%0d] mismatch", idx);
-      if (int'(ram_m_debug_read(dut.m_read_pair, group_idx_from_row(idx), row_idx_group(idx))[COMP_C2V_SIGN_XOR_BIT]) != CASE1_FIRST_ROW_SIGN_XOR[idx]) $fatal(1, "CASE1 row sign_xor[%0d] mismatch", idx);
-    end
 
     wait (dut.c2v_phase_active && dut.v2c_phase_active && dut.c2v_v2c_overlap_seen === 1'b1);
     #1;
@@ -252,7 +221,10 @@ module tb_decoder_top;
         flat_idx = int'(dut.c2v_latched_col) * W + int'(dut.c2v_latched_one_idx[idx]);
         if (int'(dut.c2v_tc[idx]) !=
             c2v_signmag_to_tc(CASE1_FIRST_C2V_SIGN[flat_idx], CASE1_FIRST_C2V_MAG[flat_idx])) begin
-          $fatal(1, "CASE1 RAM-T slot c2v tc[%0d] mismatch", flat_idx);
+          $fatal(1, "CASE1 RAM-T slot c2v tc[%0d] mismatch: got %0d exp %0d",
+                 flat_idx,
+                 int'(dut.c2v_tc[idx]),
+                 c2v_signmag_to_tc(CASE1_FIRST_C2V_SIGN[flat_idx], CASE1_FIRST_C2V_MAG[flat_idx]));
         end
       end
     end

@@ -12,6 +12,7 @@ GOLDEN_BIN := golden/mdpc_min_sum_golden
 BIKE_GOLDEN_BIN := golden/bike_l1_min_sum_golden
 VECTOR_SVH := tb/generated/bike_demo_vectors.svh
 RAM_I_HEX := rtl/generated/ram_i0_entries_test.hex rtl/generated/ram_i0_counts_test.hex rtl/generated/ram_i1_entries_test.hex rtl/generated/ram_i1_counts_test.hex rtl/generated/ram_i0_entries_l1.hex rtl/generated/ram_i0_counts_l1.hex rtl/generated/ram_i1_entries_l1.hex rtl/generated/ram_i1_counts_l1.hex
+RAM_I_HEX_STAMP := rtl/generated/.ram_i_hex.stamp
 RTL_CORE := rtl/ram_i.sv rtl/h_shift.sv rtl/msg_signmag_to_tc.sv rtl/msg_tc_to_signmag_sat.sv rtl/decoder_ctrl.sv rtl/ram_c.sv rtl/ram_m.sv rtl/ram_s.sv rtl/ram_t.sv rtl/cnu_a.sv rtl/cnu_b.sv rtl/vnu.sv rtl/decoder_top.sv
 RTL := rtl/bike_pkg.sv $(RTL_CORE)
 BIKE_SEED ?= 1
@@ -38,8 +39,12 @@ $(BIKE_GOLDEN_BIN): golden/bike_l1_min_sum_golden.c FORCE
 $(VECTOR_SVH): $(GOLDEN_BIN)
 	@./$(GOLDEN_BIN) --emit-svh $@
 
-$(word 1,$(RAM_I_HEX)): rtl/bike_pkg.sv scripts/gen_qc_first_columns.py
+$(RAM_I_HEX_STAMP): rtl/bike_pkg.sv scripts/gen_qc_first_columns.py scripts/ram_i_hex.py
 	@python3 scripts/gen_qc_first_columns.py --input rtl/bike_pkg.sv --output-dir rtl/generated/
+	@touch $@
+
+$(RAM_I_HEX): $(RAM_I_HEX_STAMP)
+	@if [ ! -f "$@" ]; then python3 scripts/gen_qc_first_columns.py --input rtl/bike_pkg.sv --output-dir rtl/generated/; touch $(RAM_I_HEX_STAMP); fi
 
 golden-self-test: $(GOLDEN_BIN)
 	@./$(GOLDEN_BIN) --self-test
@@ -58,7 +63,7 @@ bike-golden-calibrate: $(BIKE_GOLDEN_BIN)
 
 test: test-unit test-integration
 
-test-unit: $(VECTOR_SVH) $(word 1,$(RAM_I_HEX))
+test-unit: $(VECTOR_SVH) $(RAM_I_HEX)
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_msg_codec rtl/bike_pkg.sv rtl/msg_signmag_to_tc.sv rtl/msg_tc_to_signmag_sat.sv tb/tb_msg_codec.sv
 	@$(SIM) ./obj_dir/Vtb_msg_codec +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_i rtl/bike_pkg.sv rtl/ram_i.sv tb/tb_ram_i.sv
@@ -74,7 +79,7 @@ test-unit: $(VECTOR_SVH) $(word 1,$(RAM_I_HEX))
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_vnu rtl/bike_pkg.sv rtl/vnu.sv tb/tb_vnu.sv
 	@$(SIM) ./obj_dir/Vtb_vnu +verilator+quiet
 
-test-integration: $(VECTOR_SVH) $(word 1,$(RAM_I_HEX))
+test-integration: $(VECTOR_SVH) $(RAM_I_HEX)
 	@if grep -nE '\b(generate|genvar|endgenerate)\b' rtl/decoder_top.sv; then echo "decoder_top.sv must not use generate/genvar for RAM instantiation"; exit 1; fi
 	@if grep -nE '\bram_[mstu]_debug_mem\b' rtl/decoder_top.sv; then echo "decoder_top.sv must not use aggregate RAM debug mirror arrays"; exit 1; fi
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_decoder_top $(RTL) tb/tb_decoder_top.sv
