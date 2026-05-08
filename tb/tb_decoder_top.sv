@@ -18,6 +18,11 @@ module tb_decoder_top;
   logic checks_active;
   integer idx;
   integer flat_idx;
+  logic prev_ram_i_shift_count_we;
+  logic [H_BLOCK_W-1:0] prev_ram_i_shift_h_block_idx;
+  logic [GROUP_COUNT_W-1:0] prev_ram_i_shift_count_wdata [0:L-1];
+  logic saw_ram_i_count_commit;
+  logic saw_drain_state;
 
   decoder_top dut (
     .i_clk(clk),
@@ -37,6 +42,13 @@ module tb_decoder_top;
     begin
       rst_n = 1'b0;
       checks_active = 1'b0;
+      prev_ram_i_shift_count_we = 1'b0;
+      prev_ram_i_shift_h_block_idx = '0;
+      for (int group_idx = 0; group_idx < L; group_idx++) begin
+        prev_ram_i_shift_count_wdata[group_idx] = '0;
+      end
+      saw_ram_i_count_commit = 1'b0;
+      saw_drain_state = 1'b0;
       start = 1'b0;
       syndrome_in = '0;
       repeat (2) @(posedge clk);
@@ -113,11 +125,82 @@ module tb_decoder_top;
       else ram_m_debug_read = dut.ram_m3_debug_mem[local_row];
     end
   endfunction
+
+  function automatic int ram_t_item_count(input int group_idx);
+    begin
+      if (group_idx == 0) ram_t_item_count = int'(dut.u_ram_t0.valid_count);
+      else ram_t_item_count = int'(dut.u_ram_t1.valid_count);
+    end
+  endfunction
   /* verilator lint_on UNUSEDSIGNAL */
 
   always @(posedge clk) begin
     if (checks_active && (dut.error_estimate_bits !== e_out)) begin
       $fatal(1, "decision RAM and o_e diverged: ram=%h out=%h", dut.error_estimate_bits, e_out);
+    end
+
+    if (checks_active) begin
+      if (!dut.ram_i_shift_ready) begin
+        if (dut.init_m_read || dut.c2v_read) begin
+          $fatal(1, "RAM-I reader advanced while shift writer was busy");
+        end
+      end
+
+      if (dut.state == DEC_ITER_V2C_DRAIN && dut.v2c_col_idx == COL_W'(N - 1)) begin
+        saw_drain_state <= 1'b1;
+      end
+
+      for (int group_idx = 0; group_idx < L; group_idx++) begin
+        if (ram_t_item_count(group_idx) > W) begin
+          $fatal(1, "RAM-T valid slot count overflow in group %0d", group_idx);
+        end
+        if (dut.ram_i_shift_pending_count[group_idx] > 3) begin
+          $fatal(1, "RAM-I shift pending queue overflow in group %0d", group_idx);
+        end
+      end
+
+      for (int h_block_idx = 0; h_block_idx < N0; h_block_idx++) begin
+        int group_count_sum;
+
+        group_count_sum = 0;
+        for (int group_idx = 0; group_idx < L; group_idx++) begin
+          group_count_sum += int'(dut.ram_i_debug_count[h_block_idx][group_idx]);
+        end
+        if (group_count_sum > W) begin
+          $fatal(1, "RAM-I group counts exceed W in h block %0d: sum=%0d", h_block_idx, group_count_sum);
+        end
+      end
+
+      if (dut.ram_i_shift_count_we) begin
+        saw_ram_i_count_commit <= 1'b1;
+        if (dut.ram_i_shift_commit_pending_next) begin
+          $fatal(1, "RAM-I count commit left commit_pending asserted");
+        end
+        for (int group_idx = 0; group_idx < L; group_idx++) begin
+          if (dut.ram_i_shift_pending_count[group_idx] != 0 ||
+              dut.ram_i_shift_pending_count_next[group_idx] != 0) begin
+            $fatal(1, "RAM-I count committed with pending entries in group %0d", group_idx);
+          end
+        end
+      end
+
+      if (prev_ram_i_shift_count_we) begin
+        for (int group_idx = 0; group_idx < L; group_idx++) begin
+          if (dut.ram_i_debug_count[prev_ram_i_shift_h_block_idx][group_idx] !=
+              prev_ram_i_shift_count_wdata[group_idx]) begin
+            $fatal(1, "RAM-I committed count mismatch group %0d: got %0d exp %0d",
+                   group_idx,
+                   dut.ram_i_debug_count[prev_ram_i_shift_h_block_idx][group_idx],
+                   prev_ram_i_shift_count_wdata[group_idx]);
+          end
+        end
+      end
+    end
+
+    prev_ram_i_shift_count_we <= checks_active && dut.ram_i_shift_count_we;
+    prev_ram_i_shift_h_block_idx <= dut.c2v_h_block_idx;
+    for (int group_idx = 0; group_idx < L; group_idx++) begin
+      prev_ram_i_shift_count_wdata[group_idx] <= dut.ram_i_shift_count_wdata[group_idx];
     end
   end
 
@@ -174,10 +257,6 @@ module tb_decoder_top;
       end
     end
 
-    wait (dut.v2c_phase_active && !dut.c2v_phase_active && dut.v2c_col_idx == COL_W'(N - 1));
-    #1;
-    if (dut.state != DEC_ITER_V2C_DRAIN) $fatal(1, "last v2c column should drain without c2v activity");
-
     wait (iter_count == 1);
     #1;
     if (dut.syndrome_hist[0] != dut.residual_syndrome_next) begin
@@ -192,6 +271,8 @@ module tb_decoder_top;
     if (int'(iter_count) != CASE1_ITERATIONS) $fatal(1, "CASE1 iterations mismatch: got %0d exp %0d", iter_count, CASE1_ITERATIONS);
     if (e_out !== CASE1_OUTPUT) $fatal(1, "CASE1 e_out mismatch: got %h exp %h", e_out, CASE1_OUTPUT);
     check_hist(case1_hist);
+    if (!saw_drain_state) $fatal(1, "last v2c column drain state was not exercised");
+    if (!saw_ram_i_count_commit) $fatal(1, "RAM-I count commit was not exercised");
 
     $display("tb_decoder_top PASS");
     $finish;

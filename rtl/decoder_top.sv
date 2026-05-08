@@ -63,12 +63,24 @@ module decoder_top
   logic [I_ENTRY_W-1:0] col_meta_group_entries [0:1][0:L-1][0:W-1];
   logic [GROUP_COUNT_W-1:0] ram_i_shift_write_ptr [0:L-1];
   logic [GROUP_COUNT_W-1:0] ram_i_shift_write_ptr_next [0:L-1];
+  logic [GROUP_COUNT_W-1:0] ram_i_shift_commit_count [0:L-1];
+  logic [GROUP_COUNT_W-1:0] ram_i_shift_count_wdata [0:L-1];
   logic [ROW_IDX_W-GROUP_IDX_W-1:0] h_shift_row_idx_group_in [0:L-1];
   logic [GROUP_IDX_W-1:0] shifted_group_idx [0:L-1];
   logic [ROW_IDX_W-GROUP_IDX_W-1:0] shifted_row_idx_group [0:L-1];
   logic shifted_valid [0:L-1];
   logic shift_ram_i;
   logic shift_ram_i_last;
+  logic ram_i_shift_ready;
+  logic ram_i_shift_commit_pending;
+  logic ram_i_shift_commit_pending_next;
+  logic ram_i_shift_count_we;
+  logic [1:0] ram_i_shift_pending_count [0:L-1];
+  logic [1:0] ram_i_shift_pending_count_next [0:L-1];
+  logic [ONE_IDX_W-1:0] ram_i_shift_pending_addr [0:L-1][0:2];
+  logic [ONE_IDX_W-1:0] ram_i_shift_pending_addr_next [0:L-1][0:2];
+  logic [I_ENTRY_W-1:0] ram_i_shift_pending_wdata [0:L-1][0:2];
+  logic [I_ENTRY_W-1:0] ram_i_shift_pending_wdata_next [0:L-1][0:2];
   logic ram_i_shift_we [0:L-1];
   logic [ONE_IDX_W-1:0] ram_i_shift_entry_addr [0:L-1];
   logic [I_ENTRY_W-1:0] ram_i_shift_entry_wdata [0:L-1];
@@ -135,7 +147,11 @@ module decoder_top
 
   logic t_push [0:L-1];
   logic t_pop [0:L-1];
+  logic t_valid [0:L-1];
+  logic [ONE_IDX_W-1:0] t_write_entry_idx;
+  logic [ONE_IDX_W-1:0] t_read_entry_idx;
   logic [MSG_W-1:0] t_wdata [0:L-1];
+  logic t_rvalid [0:L-1];
   /* verilator lint_off UNUSEDSIGNAL */
   logic [MSG_W-1:0] t_rdata [0:L-1];
   /* verilator lint_on UNUSEDSIGNAL */
@@ -311,29 +327,104 @@ module decoder_top
   // H shift：使用 RAM-I 单 entry 写口逐项写回下一列 metadata。
   always_comb begin
     integer group_idx;
+    logic [GROUP_IDX_W-1:0] target_idx;
+    logic [I_ENTRY_W-1:0] shifted_entry;
+    logic bank_has_write [0:L-1];
+    logic [1:0] enqueue_slot;
+    logic entries_empty_current;
+    logic entries_empty_next;
 
     shift_ram_i = init_m_write || c2v_write_t;
     shift_ram_i_last = shift_ram_i && c2v_latched_entry_pos_last;
+    ram_i_shift_commit_pending_next = ram_i_shift_commit_pending;
+    ram_i_shift_count_we = 1'b0;
+    ram_i_shift_ready = 1'b0;
+    target_idx = '0;
+    shifted_entry = '0;
+    enqueue_slot = '0;
+    entries_empty_current = 1'b1;
+    entries_empty_next = 1'b1;
 
     for (group_idx = 0; group_idx < L; group_idx++) begin
+      entries_empty_current = entries_empty_current && (ram_i_shift_pending_count[group_idx] == 2'd0);
       shifted_valid[group_idx] = shift_ram_i && c2v_latched_group_valid[group_idx];
-      ram_i_shift_write_ptr_next[group_idx] = ram_i_shift_write_ptr[group_idx];
+      ram_i_shift_write_ptr_next[group_idx] =
+        (shift_ram_i && (c2v_latched_entry_pos == '0)) ? '0 : ram_i_shift_write_ptr[group_idx];
+      ram_i_shift_count_wdata[group_idx] = ram_i_shift_commit_count[group_idx];
+      ram_i_shift_pending_count_next[group_idx] = ram_i_shift_pending_count[group_idx];
+      ram_i_shift_pending_addr_next[group_idx][0] = ram_i_shift_pending_addr[group_idx][0];
+      ram_i_shift_pending_addr_next[group_idx][1] = ram_i_shift_pending_addr[group_idx][1];
+      ram_i_shift_pending_addr_next[group_idx][2] = ram_i_shift_pending_addr[group_idx][2];
+      ram_i_shift_pending_wdata_next[group_idx][0] = ram_i_shift_pending_wdata[group_idx][0];
+      ram_i_shift_pending_wdata_next[group_idx][1] = ram_i_shift_pending_wdata[group_idx][1];
+      ram_i_shift_pending_wdata_next[group_idx][2] = ram_i_shift_pending_wdata[group_idx][2];
       ram_i_shift_we[group_idx] = 1'b0;
       ram_i_shift_entry_addr[group_idx] = c2v_latched_entry_pos;
       ram_i_shift_entry_wdata[group_idx] = '0;
+      bank_has_write[group_idx] = 1'b0;
+    end
+
+    for (group_idx = 0; group_idx < L; group_idx++) begin
+      if (ram_i_shift_pending_count[group_idx] != 2'd0) begin
+        ram_i_shift_we[group_idx] = 1'b1;
+        ram_i_shift_entry_addr[group_idx] = ram_i_shift_pending_addr[group_idx][0];
+        ram_i_shift_entry_wdata[group_idx] = ram_i_shift_pending_wdata[group_idx][0];
+        ram_i_shift_pending_count_next[group_idx] = ram_i_shift_pending_count[group_idx] - 2'd1;
+        ram_i_shift_pending_addr_next[group_idx][0] = ram_i_shift_pending_addr[group_idx][1];
+        ram_i_shift_pending_addr_next[group_idx][1] = ram_i_shift_pending_addr[group_idx][2];
+        ram_i_shift_pending_wdata_next[group_idx][0] = ram_i_shift_pending_wdata[group_idx][1];
+        ram_i_shift_pending_wdata_next[group_idx][1] = ram_i_shift_pending_wdata[group_idx][2];
+        ram_i_shift_pending_addr_next[group_idx][2] = '0;
+        ram_i_shift_pending_wdata_next[group_idx][2] = '0;
+        bank_has_write[group_idx] = 1'b1;
+      end
     end
 
     for (group_idx = 0; group_idx < L; group_idx++) begin
       if (shifted_valid[group_idx]) begin
-        ram_i_shift_we[shifted_group_idx[group_idx]] = 1'b1;
-        ram_i_shift_entry_addr[shifted_group_idx[group_idx]] =
-          ONE_IDX_W'(ram_i_shift_write_ptr_next[shifted_group_idx[group_idx]]);
-        ram_i_shift_entry_wdata[shifted_group_idx[group_idx]] =
-          {c2v_latched_one_idx[group_idx], ROW_IDX_W'(shifted_row_idx_group[group_idx])};
-        ram_i_shift_write_ptr_next[shifted_group_idx[group_idx]] =
-          ram_i_shift_write_ptr_next[shifted_group_idx[group_idx]] + 1'b1;
+        target_idx = shifted_group_idx[group_idx];
+        shifted_entry = {c2v_latched_one_idx[group_idx], ROW_IDX_W'(shifted_row_idx_group[group_idx])};
+
+        if (bank_has_write[target_idx]) begin
+          enqueue_slot = ram_i_shift_pending_count_next[target_idx];
+          ram_i_shift_pending_addr_next[target_idx][enqueue_slot] =
+            ONE_IDX_W'(ram_i_shift_write_ptr_next[target_idx]);
+          ram_i_shift_pending_wdata_next[target_idx][enqueue_slot] = shifted_entry;
+          ram_i_shift_pending_count_next[target_idx] =
+            ram_i_shift_pending_count_next[target_idx] + 2'd1;
+        end else begin
+          ram_i_shift_we[target_idx] = 1'b1;
+          ram_i_shift_entry_addr[target_idx] =
+            ONE_IDX_W'(ram_i_shift_write_ptr_next[target_idx]);
+          ram_i_shift_entry_wdata[target_idx] = shifted_entry;
+          bank_has_write[target_idx] = 1'b1;
+        end
+
+        ram_i_shift_write_ptr_next[target_idx] =
+          ram_i_shift_write_ptr_next[target_idx] + 1'b1;
       end
     end
+
+    if (shift_ram_i_last) begin
+      ram_i_shift_commit_pending_next = 1'b1;
+      for (group_idx = 0; group_idx < L; group_idx++) begin
+        ram_i_shift_count_wdata[group_idx] = ram_i_shift_write_ptr_next[group_idx];
+      end
+    end
+
+    entries_empty_next = 1'b1;
+    for (group_idx = 0; group_idx < L; group_idx++) begin
+      entries_empty_next = entries_empty_next && (ram_i_shift_pending_count_next[group_idx] == 2'd0);
+    end
+
+    if (ram_i_shift_commit_pending_next && entries_empty_next) begin
+      ram_i_shift_count_we = 1'b1;
+      ram_i_shift_commit_pending_next = 1'b0;
+    end
+
+    ram_i_shift_ready =
+      entries_empty_current && entries_empty_next &&
+      !ram_i_shift_commit_pending && !ram_i_shift_commit_pending_next;
   end
 
   // RAM-M steering for compressed c2v state.
@@ -447,16 +538,20 @@ module decoder_top
   always_comb begin
     integer group_idx;
 
+    t_write_entry_idx = c2v_latched_entry_pos;
+    t_read_entry_idx = v2c_entry_pos;
     for (group_idx = 0; group_idx < L; group_idx++) begin
       t_push[group_idx] = 1'b0;
       t_pop[group_idx] = 1'b0;
+      t_valid[group_idx] = 1'b0;
       t_wdata[group_idx] = '0;
     end
 
     if (c2v_write_t) begin
       for (group_idx = 0; group_idx < L; group_idx++) begin
+        t_push[group_idx] = 1'b1;
         if (c2v_latched_group_valid[group_idx]) begin
-          t_push[group_idx] = 1'b1;
+          t_valid[group_idx] = 1'b1;
           t_wdata[group_idx] = c2v_tc[group_idx];
         end
       end
@@ -464,9 +559,7 @@ module decoder_top
 
     if (vnu_cnu_a) begin
       for (group_idx = 0; group_idx < L; group_idx++) begin
-        if (v2c_group_valid[group_idx]) begin
-          t_pop[group_idx] = 1'b1;
-        end
+        t_pop[group_idx] = 1'b1;
       end
     end
   end
@@ -519,8 +612,17 @@ module decoder_top
     if (!i_rst_n) begin
       col_k_meta_slot <= 1'b0;
       col_kp1_meta_slot <= 1'b1;
+      ram_i_shift_commit_pending <= 1'b0;
       for (group_idx = 0; group_idx < L; group_idx++) begin
         ram_i_shift_write_ptr[group_idx] <= '0;
+        ram_i_shift_commit_count[group_idx] <= '0;
+        ram_i_shift_pending_count[group_idx] <= '0;
+        ram_i_shift_pending_addr[group_idx][0] <= '0;
+        ram_i_shift_pending_addr[group_idx][1] <= '0;
+        ram_i_shift_pending_addr[group_idx][2] <= '0;
+        ram_i_shift_pending_wdata[group_idx][0] <= '0;
+        ram_i_shift_pending_wdata[group_idx][1] <= '0;
+        ram_i_shift_pending_wdata[group_idx][2] <= '0;
         c2v_latched_group_valid[group_idx] <= 1'b0;
         c2v_latched_one_idx[group_idx] <= '0;
         c2v_latched_row_idx_group[group_idx] <= '0;
@@ -545,6 +647,17 @@ module decoder_top
         syndrome_hist[idx] <= '0;
       end
     end else begin
+      ram_i_shift_commit_pending <= ram_i_shift_commit_pending_next;
+      for (group_idx = 0; group_idx < L; group_idx++) begin
+        ram_i_shift_pending_count[group_idx] <= ram_i_shift_pending_count_next[group_idx];
+        ram_i_shift_pending_addr[group_idx][0] <= ram_i_shift_pending_addr_next[group_idx][0];
+        ram_i_shift_pending_addr[group_idx][1] <= ram_i_shift_pending_addr_next[group_idx][1];
+        ram_i_shift_pending_addr[group_idx][2] <= ram_i_shift_pending_addr_next[group_idx][2];
+        ram_i_shift_pending_wdata[group_idx][0] <= ram_i_shift_pending_wdata_next[group_idx][0];
+        ram_i_shift_pending_wdata[group_idx][1] <= ram_i_shift_pending_wdata_next[group_idx][1];
+        ram_i_shift_pending_wdata[group_idx][2] <= ram_i_shift_pending_wdata_next[group_idx][2];
+      end
+
       if (init_m_read || c2v_read) begin
         for (group_idx = 0; group_idx < L; group_idx++) begin
           c2v_latched_group_valid[group_idx] <= c2v_group_valid[group_idx];
@@ -559,8 +672,6 @@ module decoder_top
         c2v_latched_entry_pos_last <= c2v_entry_pos_last;
         c2v_latched_m_read_pair <= m_read_pair;
         if (c2v_entry_pos == '0) begin
-          ram_i_shift_write_ptr[0] <= '0;
-          ram_i_shift_write_ptr[1] <= '0;
           col_meta_group_count[col_kp1_meta_slot][0] <= ram_i_count[0];
           col_meta_group_count[col_kp1_meta_slot][1] <= ram_i_count[1];
         end
@@ -569,6 +680,9 @@ module decoder_top
       if (shift_ram_i) begin
         for (group_idx = 0; group_idx < L; group_idx++) begin
           ram_i_shift_write_ptr[group_idx] <= ram_i_shift_write_ptr_next[group_idx];
+          if (shift_ram_i_last) begin
+            ram_i_shift_commit_count[group_idx] <= ram_i_shift_write_ptr_next[group_idx];
+          end
         end
       end
 
@@ -711,8 +825,8 @@ module decoder_top
   assign vnu_col_end = vnu_accum_t && c2v_latched_entry_pos_last;
   assign vnu_accum_valid[0] = vnu_accum_t && c2v_latched_group_valid[0];
   assign vnu_accum_valid[1] = vnu_accum_t && c2v_latched_group_valid[1];
-  assign vnu_prev_c2v_valid[0] = vnu_cnu_a && v2c_group_valid[0];
-  assign vnu_prev_c2v_valid[1] = vnu_cnu_a && v2c_group_valid[1];
+  assign vnu_prev_c2v_valid[0] = vnu_cnu_a && t_rvalid[0];
+  assign vnu_prev_c2v_valid[1] = vnu_cnu_a && t_rvalid[1];
   assign vnu_prev_c2v[0] = $signed(t_rdata[0]);
   assign vnu_prev_c2v[1] = $signed(t_rdata[1]);
 
@@ -781,6 +895,7 @@ module decoder_top
     .i_decode_success(decode_success),
     .i_c2v_entry_pos_last(c2v_entry_pos_last),
     .i_v2c_entry_pos_last(v2c_entry_pos_last),
+    .i_ram_i_shift_ready(ram_i_shift_ready),
     .o_state(state),
     .o_phase(phase),
     .o_work_col_idx(work_col_idx),
@@ -824,8 +939,8 @@ module decoder_top
     .i_read_entry_idx(c2v_entry_pos),
     .i_write_entry_idx(ram_i_shift_entry_addr[0]),
     .i_entry_wdata(ram_i_shift_entry_wdata[0]),
-    .i_count_we(shift_ram_i_last),
-    .i_count_wdata(ram_i_shift_write_ptr_next[0]),
+    .i_count_we(ram_i_shift_count_we),
+    .i_count_wdata(ram_i_shift_count_wdata[0]),
     .o_entry_rdata(ram_i_entry_rdata[0]),
     .o_count(ram_i_count[0]),
     .o_debug_list_entries(),
@@ -842,8 +957,8 @@ module decoder_top
     .i_read_entry_idx(c2v_entry_pos),
     .i_write_entry_idx(ram_i_shift_entry_addr[1]),
     .i_entry_wdata(ram_i_shift_entry_wdata[1]),
-    .i_count_we(shift_ram_i_last),
-    .i_count_wdata(ram_i_shift_write_ptr_next[1]),
+    .i_count_we(ram_i_shift_count_we),
+    .i_count_wdata(ram_i_shift_count_wdata[1]),
     .o_entry_rdata(ram_i_entry_rdata[1]),
     .o_count(ram_i_count[1]),
     .o_debug_list_entries(),
@@ -933,20 +1048,32 @@ module decoder_top
   ram_t u_ram_t0 (
     .i_clk(i_clk),
     .i_rst_n(i_rst_n),
+    .i_clear(iter_check),
     .i_push(t_push[0]),
     .i_pop(t_pop[0]),
+    .i_write_entry_idx(t_write_entry_idx),
+    .i_read_entry_idx(t_read_entry_idx),
+    .i_valid(t_valid[0]),
     .i_wdata(t_wdata[0]),
     .o_rdata(t_rdata[0]),
+    .o_valid(t_rvalid[0]),
+    .o_item_count(),
     .o_debug_mem()
   );
 
   ram_t u_ram_t1 (
     .i_clk(i_clk),
     .i_rst_n(i_rst_n),
+    .i_clear(iter_check),
     .i_push(t_push[1]),
     .i_pop(t_pop[1]),
+    .i_write_entry_idx(t_write_entry_idx),
+    .i_read_entry_idx(t_read_entry_idx),
+    .i_valid(t_valid[1]),
     .i_wdata(t_wdata[1]),
     .o_rdata(t_rdata[1]),
+    .o_valid(t_rvalid[1]),
+    .o_item_count(),
     .o_debug_mem()
   );
   /* verilator lint_on PINCONNECTEMPTY */

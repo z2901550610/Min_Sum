@@ -10,6 +10,7 @@ module decoder_ctrl
   input  logic i_decode_success,                               // Indicates whether the residual syndrome is zero.
   input  logic i_c2v_entry_pos_last,                           // c2v side: current entry list position is the last in this column.
   input  logic i_v2c_entry_pos_last,                           // v2c side: current entry list position is the last in this column.
+  input  logic i_ram_i_shift_ready,                             // RAM-I shifted metadata writer can accept the next c2v read.
   output logic [DEC_STATE_W-1:0] o_state,                      // Coarse decoder state for debug/observation.
   output logic [DEC_PHASE_W-1:0] o_phase,                      // Current debug micro-stage.
   output logic [COL_W-1:0] o_work_col_idx,                     // Debug-selected active column.
@@ -51,6 +52,7 @@ module decoder_ctrl
   localparam logic [1:0] INIT_STEP_READ = 2'd0;
   localparam logic [1:0] INIT_STEP_CNU_A = 2'd1;
   localparam logic [1:0] INIT_STEP_WRITE = 2'd2;
+  localparam logic [1:0] INIT_STEP_SHIFT_DRAIN = 2'd3;
 
   localparam logic [1:0] COL_K_STAGE_FIRST = 2'd0;
   localparam logic [1:0] COL_K_STAGE_ISSUE = 2'd1;
@@ -96,7 +98,8 @@ module decoder_ctrl
   assign next_iter_count = o_iter_count + 1'b1;
   assign o_m_write_pair = ~o_m_read_pair;
 
-  assign o_init_m_read = (ctrl_state == CTRL_INIT) && (init_step == INIT_STEP_READ);
+  assign o_init_m_read =
+    (ctrl_state == CTRL_INIT) && (init_step == INIT_STEP_READ) && i_ram_i_shift_ready;
   assign o_init_cnu_a = (ctrl_state == CTRL_INIT) && (init_step == INIT_STEP_CNU_A);
   assign o_init_m_write = (ctrl_state == CTRL_INIT) && (init_step == INIT_STEP_WRITE);
 
@@ -108,7 +111,8 @@ module decoder_ctrl
     (sched_state == SCHED_DRAIN_K);
 
   assign col_kp1_c2v_issue_fire =
-    (ctrl_state == CTRL_ITER) && schedule_has_col_kp1 && !iter_check_pending;
+    (ctrl_state == CTRL_ITER) && schedule_has_col_kp1 &&
+    !iter_check_pending && i_ram_i_shift_ready;
 
   assign col_k_v2c_issue_fire =
     (ctrl_state == CTRL_ITER) && schedule_has_col_k && !iter_check_pending &&
@@ -165,9 +169,10 @@ module decoder_ctrl
       CTRL_INIT: begin
         o_state = DEC_INIT_DECODER;
         case (init_step)
-          INIT_STEP_READ: o_phase = DEC_PH_INIT_M_READ;
+          INIT_STEP_READ: o_phase = i_ram_i_shift_ready ? DEC_PH_INIT_M_READ : DEC_PH_WAIT;
           INIT_STEP_CNU_A: o_phase = DEC_PH_INIT_CNU_A;
-          default: o_phase = DEC_PH_INIT_M_WRITE;
+          INIT_STEP_WRITE: o_phase = DEC_PH_INIT_M_WRITE;
+          default: o_phase = DEC_PH_WAIT;
         endcase
       end
 
@@ -266,7 +271,9 @@ module decoder_ctrl
         CTRL_INIT: begin
           case (init_step)
             INIT_STEP_READ: begin
-              init_step <= INIT_STEP_CNU_A;
+              if (i_ram_i_shift_ready) begin
+                init_step <= INIT_STEP_CNU_A;
+              end
             end
 
             INIT_STEP_CNU_A: begin
@@ -275,6 +282,27 @@ module decoder_ctrl
 
             INIT_STEP_WRITE: begin
               if (i_c2v_entry_pos_last) begin
+                if (i_ram_i_shift_ready) begin
+                  o_c2v_entry_pos <= '0;
+                  if (o_c2v_col_idx == LAST_COL) begin
+                    ctrl_state <= CTRL_ITER;
+                    reset_iteration_context();
+                    clear_pipelines();
+                  end else begin
+                    o_c2v_col_idx <= next_col(o_c2v_col_idx);
+                    init_step <= INIT_STEP_READ;
+                  end
+                end else begin
+                  init_step <= INIT_STEP_SHIFT_DRAIN;
+                end
+              end else begin
+                o_c2v_entry_pos <= o_c2v_entry_pos + ONE_IDX_W'(1);
+                init_step <= INIT_STEP_READ;
+              end
+            end
+
+            INIT_STEP_SHIFT_DRAIN: begin
+              if (i_ram_i_shift_ready) begin
                 o_c2v_entry_pos <= '0;
                 if (o_c2v_col_idx == LAST_COL) begin
                   ctrl_state <= CTRL_ITER;
@@ -284,9 +312,6 @@ module decoder_ctrl
                   o_c2v_col_idx <= next_col(o_c2v_col_idx);
                   init_step <= INIT_STEP_READ;
                 end
-              end else begin
-                o_c2v_entry_pos <= o_c2v_entry_pos + ONE_IDX_W'(1);
-                init_step <= INIT_STEP_READ;
               end
             end
 

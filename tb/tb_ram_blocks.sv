@@ -24,8 +24,15 @@ module tb_ram_blocks;
 
   logic t_push;
   logic t_pop;
+  logic [ONE_IDX_W-1:0] t_write_entry_idx;
+  logic [ONE_IDX_W-1:0] t_read_entry_idx;
+  logic t_valid;
   logic [MSG_W-1:0] t_wdata;
   logic [MSG_W-1:0] t_rdata;
+  logic t_rvalid;
+  /* verilator lint_off UNUSEDSIGNAL */
+  logic [GROUP_COUNT_W-1:0] t_item_count;
+  /* verilator lint_on UNUSEDSIGNAL */
   logic [MSG_W-1:0] t_debug [0:W-1];
 
   logic c_we;
@@ -60,10 +67,16 @@ module tb_ram_blocks;
   ram_t u_ram_t (
     .i_clk(clk),
     .i_rst_n(rst_n),
+    .i_clear(1'b0),
     .i_push(t_push),
     .i_pop(t_pop),
+    .i_write_entry_idx(t_write_entry_idx),
+    .i_read_entry_idx(t_read_entry_idx),
+    .i_valid(t_valid),
     .i_wdata(t_wdata),
     .o_rdata(t_rdata),
+    .o_valid(t_rvalid),
+    .o_item_count(t_item_count),
     .o_debug_mem(t_debug)
   );
 
@@ -94,6 +107,9 @@ module tb_ram_blocks;
     s_wdata = 1'b0;
     t_push = 1'b0;
     t_pop = 1'b0;
+    t_write_entry_idx = '0;
+    t_read_entry_idx = '0;
+    t_valid = 1'b0;
     t_wdata = '0;
     c_we = 1'b0;
     c_din = 1'b0;
@@ -123,19 +139,24 @@ module tb_ram_blocks;
     s_write_one_idx = ONE_IDX_W'(1 % W);
     s_wdata = 1'b1;
     s_we = 1'b1;
+    t_write_entry_idx = ONE_IDX_W'(1 % W);
+    t_read_entry_idx = ONE_IDX_W'(1 % W);
     t_wdata = MSG_W'(-2);
     t_push = 1'b1;
+    t_valid = 1'b1;
     c_din = 1'b1;
     c_we = 1'b1;
     @(posedge clk);
     #1;
     s_we = 1'b0;
     t_push = 1'b0;
+    t_valid = 1'b0;
     c_we = 1'b0;
     @(posedge clk);
     #1;
     if (s_rdata != 1'b1) $fatal(1, "ram_s read-after-write mismatch");
     if ($signed(t_rdata) != -MSG_W'(2)) $fatal(1, "ram_t read-after-write mismatch");
+    if (t_rvalid != 1'b1) $fatal(1, "ram_t valid read-after-write mismatch");
     t_pop = 1'b1;
     @(posedge clk);
     #1;

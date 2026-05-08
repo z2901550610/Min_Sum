@@ -5,56 +5,55 @@ module ram_t
 (
   input  logic i_clk,
   input  logic i_rst_n,
+  input  logic i_clear,
   input  logic i_push,
   input  logic i_pop,
+  input  logic [ONE_IDX_W-1:0] i_write_entry_idx,
+  input  logic [ONE_IDX_W-1:0] i_read_entry_idx,
+  input  logic i_valid,
   input  logic [MSG_W-1:0] i_wdata,
   output logic [MSG_W-1:0] o_rdata,
+  output logic o_valid,
+  output logic [GROUP_COUNT_W-1:0] o_item_count,
   output logic [MSG_W-1:0] o_debug_mem [0:W-1]
 );
 
   logic [MSG_W-1:0] mem [0:W-1];
-  logic [ONE_IDX_W-1:0] read_ptr;
-  logic [ONE_IDX_W-1:0] write_ptr;
-  logic [GROUP_COUNT_W-1:0] item_count;
+  logic valid_mem [0:W-1];
+  logic [GROUP_COUNT_W-1:0] valid_count;
 
-  function automatic logic [ONE_IDX_W-1:0] ptr_next(
-    input logic [ONE_IDX_W-1:0] ptr
-  );
-    begin
-      if (int'(ptr) == (W - 1)) begin
-        ptr_next = '0;
-      end else begin
-        ptr_next = ptr + ONE_IDX_W'(1);
-      end
+  assign o_rdata = mem[i_read_entry_idx];
+  assign o_valid = valid_mem[i_read_entry_idx];
+  assign o_item_count = valid_count;
+
+  always_comb begin
+    for (int entry_pos = 0; entry_pos < W; entry_pos++) begin
+      o_debug_mem[entry_pos] = mem[entry_pos];
     end
-  endfunction
-
-  assign o_debug_mem = mem;
-  assign o_rdata = mem[read_ptr];
+  end
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
-    if (!i_rst_n) begin
-      read_ptr <= '0;
-      write_ptr <= '0;
-      item_count <= '0;
+    if (!i_rst_n || i_clear) begin
       for (int entry_pos = 0; entry_pos < W; entry_pos++) begin
         mem[entry_pos] <= '0;
+        valid_mem[entry_pos] <= 1'b0;
       end
     end else begin
-      if (i_push) begin
-        mem[write_ptr] <= i_wdata;
-        write_ptr <= ptr_next(write_ptr);
-      end
       if (i_pop) begin
-        read_ptr <= ptr_next(read_ptr);
+        valid_mem[i_read_entry_idx] <= 1'b0;
       end
-      case ({i_push, i_pop})
-        2'b10: item_count <= item_count + GROUP_COUNT_W'(1);
-        2'b01: item_count <= item_count - GROUP_COUNT_W'(1);
-        default: item_count <= item_count;
-      endcase
-      if (!i_push && !i_pop && (item_count == '0)) begin
-        read_ptr <= write_ptr;
+      if (i_push) begin
+        mem[i_write_entry_idx] <= i_wdata;
+        valid_mem[i_write_entry_idx] <= i_valid;
+      end
+    end
+  end
+
+  always_comb begin
+    valid_count = '0;
+    for (int entry_pos = 0; entry_pos < W; entry_pos++) begin
+      if (valid_mem[entry_pos]) begin
+        valid_count = valid_count + GROUP_COUNT_W'(1);
       end
     end
   end
