@@ -90,11 +90,12 @@ ram_i #(.INIT_HEX_STEM("rtl/generated/ram_i1")) u_ram_i1 (...);
 - `decoder_top` 按论文命名显式实例化各 RAM 块：`I0/I1`、`M0/M1/M2/M3`、`S0/S1`、`T0/T1`、`C`。
 - RAM-S 每个 lane 保存 v2c sign bit，读地址服务列 k+1 的 CNU_B，写地址服务 CNU_A 写回。读写地址独立进入 RAM-S，使列 k+1 读 sign 和列 k 写回 sign 可以在同一拍调度。
 - RAM-T 每个 lane 以流式队列保存列 k+1 生成的 c2v。列 k+1 push 的同拍将 2's-complement c2v 送入 VNU 累加；v2c 发射阶段从 RAM-T head 读取同列 c2v，并在该 entry 被 VNU 使用后 pop，用于 VNU 的外信息相减。
-- `decoder_ctrl` 遵循论文的 Fig.8 式单端口调度：每次迭代先填充并累加列 0，然后进入列重叠流水线——c2v 侧重建并累加列 `k+1` 的同时 v2c 侧更新列 `k`，最后排空 v2c 的最后一列，进入 `ITER_CHECK`。复用的 RAM-M 行通过逐行 epoch 追踪器实现 `COMP_C2V_INIT` 语义。`phase` 信号仅用于调试；数据通路时序由显式的控制脉冲和列缓冲切换事件驱动。
+- 列 metadata 使用两个固定 slot：列 k 从 active slot 读取，列 k+1 从 RAM-I 单 entry 视图写入 fill slot。`o_col_k_meta_advance` 触发 active/fill slot 轮换，使列 k+1 成为新的列 k。
+- `decoder_ctrl` 遵循论文的 Fig.8 式单端口调度：每次迭代先填充并累加列 0，然后进入列重叠流水线——c2v 侧重建并累加列 `k+1` 的同时 v2c 侧更新列 `k`，最后排空 v2c 的最后一列，进入 `ITER_CHECK`。复用的 RAM-M 行通过逐行 epoch 追踪器实现 `COMP_C2V_INIT` 语义。`phase` 信号仅用于调试；数据通路时序由固定调度脉冲和 metadata slot 轮换驱动。
 - RAM-I 在仿真启动时通过 `$readmemh` 从 hex 文件加载首列元数据。解码期间，活跃列的行/局部行/边索引元数据来自 RAM-I 的单 entry 读口。`h_shift` 为每个 RAM-I 块设置一个 entry 输入，为每个 lane 设置一个移位后的 entry 输出，数据通路通过 RAM-I 的单 entry 写端口将每个移位后的 entry 写入下一个 c2v 列。v2c 元数据独立缓冲，使 c2v 侧的 RAM-I 可以领先一列。`decoder_top` 通过 RAM-I 的单 entry 功能视图输出访问 RAM-I。项目级 RTL 命名约定定义在 [`docs/naming_conventions.md`](/Users/z2901550610/Documents/Min_Sum/docs/naming_conventions.md) 中。行组方案基于奇偶：`row_group 0` 存储偶数行，`row_group 1` 存储奇数行，`row_local` 为紧凑的奇偶局部索引 `floor(row_global / 2)`。CNU/VNU 行地址调度由 RAM-I 元数据驱动。
 - `decoder_edge_meta` 和 `qc_column_preprocess` 保留在 [`rtl/reference/`](/Users/z2901550610/Documents/Min_Sum/rtl/reference) 下作为参考辅助文件。核心解码器使用 RAM-I + `h_shift` 提供活跃边元数据。
 - 静态首列元数据由 [`scripts/gen_qc_first_columns.py`](/Users/z2901550610/Documents/Min_Sum/scripts/gen_qc_first_columns.py) 离线生成，输出 hex 文件到 `rtl/generated/`。RAM-I 通过 `$readmemh` 在仿真启动时直接加载。
-- c2v 侧在列开始时缓冲活跃的 RAM-I 列，使得下一列的单 entry 移位写入不会干扰当前列的元数据视图。
+- c2v 侧在读取 RAM-I 单 entry 视图时同步填充列 k+1 metadata slot，使得下一列的单 entry 移位写入不会干扰列 k 的元数据视图。
 - 待实现：两级缩放、灵活的消息存储选择、论文中的宽字 `RAM S` 打包数据布局、组大小重平衡。RTL 使用单级 VNU 缩放。
 
 ## 状态机详解
@@ -172,7 +173,7 @@ INIT 为所有变量列构建初始压缩 c2v 对（第一次迭代的输入）�
 
 - 列 k+1 按 entry 顺序发起 c2v 读请求，列 k 处于列间等待。
 - `o_c2v_read` 每拍发起一个 RAM-M / RAM-S 读请求；下一拍 `o_c2v_write_t` 将 CNU_B/编解码结果 push 到 RAM-T，并通过 `o_vnu_accum_t` 送入 VNU 累加。
-- 每个 entry 发射后：非最后 entry 递增 `o_c2v_entry_pos`。最后 entry 触发 `o_capture_v2c_column_now`，列 k 进入 `COL_K_STAGE_FIRST`。若 `o_c2v_col_idx == LAST_VAR`，调度进入 `SCHED_DRAIN_K`；否则调度进入 `SCHED_K_KP1` 并处理下一列，`o_c2v_v2c_overlap_seen` 置位。
+- 每个 entry 发射后：非最后 entry 递增 `o_c2v_entry_pos`。最后 entry 触发 `o_col_k_meta_advance`，列 k 进入 `COL_K_STAGE_FIRST`。若 `o_c2v_col_idx == LAST_VAR`，调度进入 `SCHED_DRAIN_K`；否则调度进入 `SCHED_K_KP1` 并处理下一列，`o_c2v_v2c_overlap_seen` 置位。
 
 ##### 3b. SCHED_K_KP1 / SCHED_KP1_READY — 流水线并行
 
@@ -180,16 +181,16 @@ INIT 为所有变量列构建初始压缩 c2v 对（第一次迭代的输入）�
 
 | 微步骤 | 信号 | 功能 |
 |---|---|---|
-| `COL_K_STAGE_FIRST` | `o_vnu_prep_write`, `o_vnu_cnu_a`, `o_vnu_read_next_m` | 写入 VNU 硬判决，并发射 entry 0 的 v2c/CNU_A 更新 |
-| `COL_K_STAGE_ISSUE` | `o_vnu_cnu_a`, `o_vnu_read_next_m` | 连续读取 RAM-M、生成 v2c，并使能 CNU_A |
+| `COL_K_STAGE_FIRST` | `o_vnu_prep_write`, `o_vnu_cnu_a` | 写入 VNU 硬判决，并发射 entry 0 的 v2c/CNU_A 更新 |
+| `COL_K_STAGE_ISSUE` | `o_vnu_cnu_a` | 连续读取 RAM-M、生成 v2c，并使能 CNU_A |
 
 `COL_K_STAGE_FIRST` 和 `COL_K_STAGE_ISSUE` 每拍发射一个 v2c/CNU_A 更新。CNU_A 的输出延后一拍写入 RAM-M / RAM-S，因此稳定段可以在写回上一 entry 的同时发射下一 entry。列尾 issue 负责列切换，后一拍的 `o_vnu_write_next` 负责写回流水中的最后一个 CNU_A 结果。
 
 列尾 issue 的固定调度分流：
 
 - v2c 最后 entry 且 `o_v2c_col_idx == LAST_VAR`：等待写回 valid 后设置 `iter_check_pending = 1`，进入迭代检查。
-- `SCHED_KP1_READY`：触发 `o_promote_v2c_column_next`，列 k 进入下一列的 `COL_K_STAGE_FIRST`。
-- `SCHED_K_KP1` 且列 k+1 同拍完成：`o_capture_v2c_column_next` 与 `o_promote_v2c_column_next` 同拍触发，列 k 直接进入下一列。
+- `SCHED_KP1_READY`：触发 `o_col_k_meta_advance`，列 k 进入下一列的 `COL_K_STAGE_FIRST`。
+- `SCHED_K_KP1` 且列 k+1 同拍完成：触发 `o_col_k_meta_advance`，列 k 直接进入下一列。
 - `SCHED_K_KP1` 且列 k+1 正在填充：调度进入 `SCHED_FILL_K`，等待列 k+1 完成。
 - 其他 entry：递增 `o_v2c_entry_pos`，保持 `COL_K_STAGE_ISSUE` 连续发射。
 

@@ -26,16 +26,12 @@ module decoder_ctrl
   output logic o_init_m_write,                                 // Writes initial CNU_A result.
   output logic o_c2v_read,                                     // Reads RAM-M/RAM-S for CNU_B.
   output logic o_c2v_write_t,                                  // Writes CNU_B/codec result to RAM-T.
-  output logic o_vnu_read_t,                                   // Marks col k+1 c2v data presented to VNU accumulation.
   output logic o_vnu_accum_t,                                  // Accumulates one col k+1 c2v value in VNU.
   output logic o_vnu_prep_write,                               // Captures VNU decision.
-  output logic o_vnu_read_next_m,                              // Reads next RAM-M pair before CNU_A.
   output logic o_vnu_cnu_a,                                    // Enables CNU_A with VNU-generated v2c.
   output logic o_vnu_write_next,                               // Writes RAM-M/RAM-S for next iteration.
   output logic o_iter_check,                                   // Iteration completion/check cycle.
-  output logic o_capture_v2c_column_now,                       // Current c2v column becomes the active v2c column.
-  output logic o_capture_v2c_column_next,                      // Current c2v column becomes the buffered next v2c column.
-  output logic o_promote_v2c_column_next,                      // Buffered next v2c column becomes active.
+  output logic o_col_k_meta_advance,                           // Col k metadata slot advances to the filled col k+1 slot.
   output logic o_c2v_pipe_valid,                               // Debug c2v activity flag.
   output logic o_v2c_pipe_valid,                               // Debug v2c activity flag.
   output logic o_c2v_v2c_overlap_seen,                         // Debug flag for exposed overlap.
@@ -123,12 +119,10 @@ module decoder_ctrl
   assign o_c2v_read = col_kp1_c2v_issue_fire;
   assign o_c2v_write_t = (ctrl_state == CTRL_ITER) && col_kp1_c2v_valid_d1 && !iter_check_pending;
 
-  assign o_vnu_read_t = o_c2v_write_t;
   assign o_vnu_accum_t = o_c2v_write_t;
   assign o_vnu_prep_write =
     (ctrl_state == CTRL_ITER) && schedule_has_col_k && !iter_check_pending &&
     (col_k_stage == COL_K_STAGE_FIRST);
-  assign o_vnu_read_next_m = col_k_v2c_issue_fire;
   assign o_vnu_cnu_a = col_k_v2c_issue_fire;
   assign o_vnu_write_next = (ctrl_state == CTRL_ITER) && col_k_v2c_valid_d1 && !iter_check_pending;
   assign o_iter_check = (ctrl_state == CTRL_ITER) && iter_check_pending;
@@ -136,16 +130,15 @@ module decoder_ctrl
   assign col_kp1_done_fire = o_c2v_write_t && col_kp1_last_d1;
   assign col_k_last_write_fire = o_vnu_write_next && col_k_last_d1;
 
-  assign o_capture_v2c_column_now = col_kp1_done_fire && (sched_state == SCHED_FILL_K);
-  assign o_capture_v2c_column_next = col_kp1_done_fire && (sched_state == SCHED_K_KP1);
-  assign o_promote_v2c_column_next =
-    col_k_last_issue_fire &&
-    ((sched_state == SCHED_KP1_READY) ||
-     ((sched_state == SCHED_K_KP1) && col_kp1_done_fire));
+  assign o_col_k_meta_advance =
+    (col_kp1_done_fire && (sched_state == SCHED_FILL_K)) ||
+    (col_k_last_issue_fire &&
+     ((sched_state == SCHED_KP1_READY) ||
+      ((sched_state == SCHED_K_KP1) && col_kp1_done_fire)));
 
   assign o_c2v_pipe_valid = o_c2v_read || o_c2v_write_t;
   assign o_v2c_pipe_valid =
-    o_vnu_prep_write || o_vnu_read_next_m || o_vnu_cnu_a || o_vnu_write_next;
+    o_vnu_prep_write || o_vnu_cnu_a || o_vnu_write_next;
 
   assign o_work_col_idx = o_v2c_pipe_valid ? o_v2c_col_idx : o_c2v_col_idx;
   assign o_work_entry_pos = o_v2c_pipe_valid ? o_v2c_entry_pos : o_c2v_entry_pos;

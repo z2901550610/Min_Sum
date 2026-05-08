@@ -31,11 +31,8 @@ module decoder_top
   logic c2v_phase_active;
   logic v2c_phase_active;
   logic c2v_v2c_overlap_seen;
-  logic capture_v2c_column_now;
-  logic capture_v2c_column_next;
-  logic promote_v2c_column_next;
+  logic col_k_meta_advance;
   logic [N-1:0] error_estimate_bits;
-  logic decision_ram_rdata_unused;
   logic [R-1:0] syndrome_hist [0:I_MAX-1];
   logic [GROUP_COUNT_W-1:0] ram_i_debug_count [0:N0-1][0:L-1];
   /* verilator lint_on UNUSEDSIGNAL */
@@ -50,14 +47,8 @@ module decoder_top
   logic init_m_write;
   logic c2v_read;
   logic c2v_write_t;
-  /* verilator lint_off UNUSEDSIGNAL */
-  logic vnu_read_t;
-  /* verilator lint_on UNUSEDSIGNAL */
   logic vnu_accum_t;
   logic vnu_prep_write;
-  /* verilator lint_off UNUSEDSIGNAL */
-  logic vnu_read_next_m;
-  /* verilator lint_on UNUSEDSIGNAL */
   logic vnu_cnu_a;
   logic vnu_write_next;
   logic iter_check;
@@ -66,13 +57,10 @@ module decoder_top
   // while the v2c side keeps its own buffered copies so c2v can stay one
   // column ahead.
   logic [H_BLOCK_W-1:0] c2v_h_block_idx;
-  logic [GROUP_COUNT_W-1:0] c2v_column_group_count [0:L-1];
-  logic [GROUP_COUNT_W-1:0] v2c_column_group_count [0:L-1];
-  logic [I_ENTRY_W-1:0] v2c_column_group_entries [0:L-1][0:W-1];
-  logic [GROUP_COUNT_W-1:0] v2c_next_column_group_count [0:L-1];
-  logic [I_ENTRY_W-1:0] v2c_next_column_group_entries [0:L-1][0:W-1];
-  logic [GROUP_COUNT_W-1:0] c2v_buffer_group_count [0:L-1];
-  logic [I_ENTRY_W-1:0] c2v_buffer_group_entries [0:L-1][0:W-1];
+  logic col_k_meta_slot;
+  logic col_kp1_meta_slot;
+  logic [GROUP_COUNT_W-1:0] col_meta_group_count [0:1][0:L-1];
+  logic [I_ENTRY_W-1:0] col_meta_group_entries [0:1][0:L-1][0:W-1];
   logic [GROUP_COUNT_W-1:0] ram_i_shift_write_ptr [0:L-1];
   logic [GROUP_COUNT_W-1:0] ram_i_shift_write_ptr_next [0:L-1];
   logic [ROW_IDX_W-GROUP_IDX_W-1:0] h_shift_row_idx_group_in [0:L-1];
@@ -117,10 +105,6 @@ module decoder_top
   logic [ITER_W:0] next_iter_count_ext;
   logic [HIST_IDX_W-1:0] hist_wr_idx;
 
-  /* verilator lint_off UNUSEDSIGNAL */
-  logic [I_ENTRY_W-1:0] ram_i0_debug_entries_unused [0:N0-1][0:W-1];
-  logic [I_ENTRY_W-1:0] ram_i1_debug_entries_unused [0:N0-1][0:W-1];
-  /* verilator lint_on UNUSEDSIGNAL */
   logic [GROUP_COUNT_W-1:0] ram_i0_debug_count [0:N0-1];
   logic [GROUP_COUNT_W-1:0] ram_i1_debug_count [0:N0-1];
 
@@ -148,18 +132,12 @@ module decoder_top
   logic [ONE_IDX_W-1:0] s_write_one_idx [0:L-1];
   logic s_wdata [0:L-1];
   logic s_rdata [0:L-1];
-  /* verilator lint_off UNUSEDSIGNAL */
-  logic ram_s0_debug_mem [0:N-1][0:W-1];
-  logic ram_s1_debug_mem [0:N-1][0:W-1];
-  /* verilator lint_on UNUSEDSIGNAL */
 
   logic t_push [0:L-1];
   logic t_pop [0:L-1];
   logic [MSG_W-1:0] t_wdata [0:L-1];
   /* verilator lint_off UNUSEDSIGNAL */
   logic [MSG_W-1:0] t_rdata [0:L-1];
-  logic [MSG_W-1:0] ram_t0_debug_mem [0:W-1];
-  logic [MSG_W-1:0] ram_t1_debug_mem [0:W-1];
   /* verilator lint_on UNUSEDSIGNAL */
 
   logic decision_ram_we;
@@ -183,11 +161,6 @@ module decoder_top
   logic vnu_prev_c2v_valid [0:L-1];
   logic signed [MSG_W-1:0] vnu_prev_c2v [0:L-1];
   logic vnu_bit_out;
-  /* verilator lint_off UNUSEDSIGNAL */
-  logic vnu_c2v_to_ram_t_valid_unused [0:L-1];
-  logic [MSG_W-1:0] vnu_c2v_to_ram_t_unused [0:L-1];
-  logic vnu_v2c_tc_valid [0:L-1];
-  /* verilator lint_on UNUSEDSIGNAL */
   logic signed [VNU_TC_W-1:0] vnu_v2c_tc [0:L-1];
   logic [MSG_W-1:0] vnu_v2c_msg [0:L-1];
 
@@ -202,6 +175,47 @@ module decoder_top
       m_port_pair = (port_idx >= L);
     end
   endfunction
+
+  task automatic set_m_read_row(
+    input logic pair,
+    input logic [GROUP_IDX_W-1:0] group_idx,
+    input logic [ROW_IDX_W-1:0] row_idx_group
+  );
+    logic [1:0] port_idx;
+    begin
+      port_idx = 2'(m_index(pair, group_idx));
+      m_read_row_idx_group[port_idx] = row_idx_group;
+    end
+  endtask
+
+  task automatic set_m_write_state(
+    input logic pair,
+    input logic [GROUP_IDX_W-1:0] group_idx,
+    input logic [ROW_IDX_W-1:0] row_idx_group,
+    input logic [COMP_C2V_W-1:0] comp_c2v
+  );
+    logic [1:0] port_idx;
+    begin
+      port_idx = 2'(m_index(pair, group_idx));
+      m_we[port_idx] = 1'b1;
+      m_write_row_idx_group[port_idx] = row_idx_group;
+      m_wdata[port_idx] = comp_c2v;
+    end
+  endtask
+
+  task automatic set_s_write_bit(
+    input logic [GROUP_IDX_W-1:0] group_idx,
+    input logic [COL_W-1:0] col_idx,
+    input logic [ONE_IDX_W-1:0] one_idx,
+    input logic sign_bit
+  );
+    begin
+      s_we[group_idx] = 1'b1;
+      s_write_col_idx[group_idx] = col_idx;
+      s_write_one_idx[group_idx] = one_idx;
+      s_wdata[group_idx] = sign_bit;
+    end
+  endtask
 
   assign next_iter_count_ext = {1'b0, o_iter_count} + {{ITER_W{1'b0}}, 1'b1};
   assign hist_wr_idx = o_iter_count[HIST_IDX_W-1:0];
@@ -241,28 +255,21 @@ module decoder_top
     end
   end
 
-  // RAM-I exposes one group-local entry per lane. The c2v side consumes this
-  // single-entry view and collects the column metadata for the lagging v2c side.
-  always_comb begin
-    c2v_column_group_count[0] = ram_i_count[0];
-    c2v_column_group_count[1] = ram_i_count[1];
-  end
-
   // Decide whether each c2v/v2c column cursor is at the last active group
   // list position for the current column.
   always_comb begin
     integer c2v_max_count;
     integer v2c_max_count;
 
-    c2v_max_count = int'(c2v_column_group_count[0]);
-    if (int'(c2v_column_group_count[1]) > c2v_max_count) begin
-      c2v_max_count = int'(c2v_column_group_count[1]);
+    c2v_max_count = int'(ram_i_count[0]);
+    if (int'(ram_i_count[1]) > c2v_max_count) begin
+      c2v_max_count = int'(ram_i_count[1]);
     end
     c2v_entry_pos_last = ((int'(c2v_entry_pos) + 1) >= c2v_max_count);
 
-    v2c_max_count = int'(v2c_column_group_count[0]);
-    if (int'(v2c_column_group_count[1]) > v2c_max_count) begin
-      v2c_max_count = int'(v2c_column_group_count[1]);
+    v2c_max_count = int'(col_meta_group_count[col_k_meta_slot][0]);
+    if (int'(col_meta_group_count[col_k_meta_slot][1]) > v2c_max_count) begin
+      v2c_max_count = int'(col_meta_group_count[col_k_meta_slot][1]);
     end
     v2c_entry_pos_last = ((int'(v2c_entry_pos) + 1) >= v2c_max_count);
   end
@@ -274,7 +281,7 @@ module decoder_top
 
     for (group_idx = 0; group_idx < L; group_idx++) begin
       c2v_group_valid[group_idx] =
-        (int'(c2v_entry_pos) < int'(c2v_column_group_count[group_idx]));
+        (int'(c2v_entry_pos) < int'(ram_i_count[group_idx]));
       c2v_one_idx[group_idx] =
         ram_i_entry_rdata[group_idx][I_ENTRY_ONE_IDX_LSB +: ONE_IDX_W];
       c2v_row_idx_group[group_idx] =
@@ -289,11 +296,11 @@ module decoder_top
       end
 
       v2c_group_valid[group_idx] =
-        (int'(v2c_entry_pos) < int'(v2c_column_group_count[group_idx]));
+        (int'(v2c_entry_pos) < int'(col_meta_group_count[col_k_meta_slot][group_idx]));
       v2c_one_idx[group_idx] =
-        v2c_column_group_entries[group_idx][v2c_entry_pos][I_ENTRY_ONE_IDX_LSB +: ONE_IDX_W];
+        col_meta_group_entries[col_k_meta_slot][group_idx][v2c_entry_pos][I_ENTRY_ONE_IDX_LSB +: ONE_IDX_W];
       v2c_row_idx_group[group_idx] =
-        v2c_column_group_entries[group_idx][v2c_entry_pos][I_ENTRY_ROW_IDX_GROUP_LSB +: ROW_IDX_W];
+        col_meta_group_entries[col_k_meta_slot][group_idx][v2c_entry_pos][I_ENTRY_ROW_IDX_GROUP_LSB +: ROW_IDX_W];
       if (!v2c_group_valid[group_idx]) begin
         v2c_one_idx[group_idx] = '0;
         v2c_row_idx_group[group_idx] = '0;
@@ -308,9 +315,8 @@ module decoder_top
     shift_ram_i = init_m_write || c2v_write_t;
     shift_ram_i_last = shift_ram_i && c2v_latched_entry_pos_last;
 
-    shifted_valid[0] = shift_ram_i && c2v_latched_group_valid[0];
-    shifted_valid[1] = shift_ram_i && c2v_latched_group_valid[1];
     for (group_idx = 0; group_idx < L; group_idx++) begin
+      shifted_valid[group_idx] = shift_ram_i && c2v_latched_group_valid[group_idx];
       ram_i_shift_write_ptr_next[group_idx] = ram_i_shift_write_ptr[group_idx];
       ram_i_shift_we[group_idx] = 1'b0;
       ram_i_shift_entry_addr[group_idx] = c2v_latched_entry_pos;
@@ -345,8 +351,7 @@ module decoder_top
     if (init_m_read || c2v_read) begin
       for (group_idx = 0; group_idx < L; group_idx++) begin
         if (c2v_group_valid[group_idx]) begin
-          m_read_row_idx_group[m_index(m_read_pair, GROUP_IDX_W'(group_idx))] =
-            c2v_row_idx_group[group_idx];
+          set_m_read_row(m_read_pair, GROUP_IDX_W'(group_idx), c2v_row_idx_group[group_idx]);
         end
       end
     end
@@ -354,8 +359,11 @@ module decoder_top
     if (init_cnu_a || c2v_write_t) begin
       for (group_idx = 0; group_idx < L; group_idx++) begin
         if (c2v_latched_group_valid[group_idx]) begin
-          m_read_row_idx_group[m_index(c2v_latched_m_read_pair, GROUP_IDX_W'(group_idx))] =
-            c2v_latched_row_idx_group[group_idx];
+          set_m_read_row(
+            c2v_latched_m_read_pair,
+            GROUP_IDX_W'(group_idx),
+            c2v_latched_row_idx_group[group_idx]
+          );
         end
       end
     end
@@ -363,8 +371,7 @@ module decoder_top
     if (vnu_cnu_a) begin
       for (group_idx = 0; group_idx < L; group_idx++) begin
         if (v2c_group_valid[group_idx]) begin
-          m_read_row_idx_group[m_index(m_write_pair, GROUP_IDX_W'(group_idx))] =
-            v2c_row_idx_group[group_idx];
+          set_m_read_row(m_write_pair, GROUP_IDX_W'(group_idx), v2c_row_idx_group[group_idx]);
         end
       end
     end
@@ -372,11 +379,12 @@ module decoder_top
     if (init_m_write) begin
       for (group_idx = 0; group_idx < L; group_idx++) begin
         if (cnu_a_valid[group_idx]) begin
-          m_we[m_index(c2v_latched_m_read_pair, GROUP_IDX_W'(group_idx))] = 1'b1;
-          m_write_row_idx_group[m_index(c2v_latched_m_read_pair, GROUP_IDX_W'(group_idx))] =
-            c2v_latched_row_idx_group[group_idx];
-          m_wdata[m_index(c2v_latched_m_read_pair, GROUP_IDX_W'(group_idx))] =
-            cnu_a_comp_out[group_idx];
+          set_m_write_state(
+            c2v_latched_m_read_pair,
+            GROUP_IDX_W'(group_idx),
+            c2v_latched_row_idx_group[group_idx],
+            cnu_a_comp_out[group_idx]
+          );
         end
       end
     end
@@ -384,11 +392,12 @@ module decoder_top
     if (vnu_write_next) begin
       for (group_idx = 0; group_idx < L; group_idx++) begin
         if (cnu_a_valid[group_idx] && v2c_m_latched_group_valid[group_idx]) begin
-          m_we[m_index(v2c_m_latched_m_write_pair, GROUP_IDX_W'(group_idx))] = 1'b1;
-          m_write_row_idx_group[m_index(v2c_m_latched_m_write_pair, GROUP_IDX_W'(group_idx))] =
-            v2c_m_latched_row_idx_group[group_idx];
-          m_wdata[m_index(v2c_m_latched_m_write_pair, GROUP_IDX_W'(group_idx))] =
-            cnu_a_comp_out[group_idx];
+          set_m_write_state(
+            v2c_m_latched_m_write_pair,
+            GROUP_IDX_W'(group_idx),
+            v2c_m_latched_row_idx_group[group_idx],
+            cnu_a_comp_out[group_idx]
+          );
         end
       end
     end
@@ -407,22 +416,15 @@ module decoder_top
       s_wdata[group_idx] = 1'b0;
     end
 
-    if (c2v_read) begin
-      for (group_idx = 0; group_idx < L; group_idx++) begin
-        if (c2v_group_valid[group_idx]) begin
-          s_read_col_idx[group_idx] = c2v_col_idx;
-          s_read_one_idx[group_idx] = c2v_one_idx[group_idx];
-        end
-      end
-    end
-
     if (init_m_write) begin
       for (group_idx = 0; group_idx < L; group_idx++) begin
         if (cnu_a_valid[group_idx]) begin
-          s_we[group_idx] = 1'b1;
-          s_write_col_idx[group_idx] = c2v_latched_col;
-          s_write_one_idx[group_idx] = c2v_latched_one_idx[group_idx];
-          s_wdata[group_idx] = cnu_a_sign[group_idx];
+          set_s_write_bit(
+            GROUP_IDX_W'(group_idx),
+            c2v_latched_col,
+            c2v_latched_one_idx[group_idx],
+            cnu_a_sign[group_idx]
+          );
         end
       end
     end
@@ -430,10 +432,12 @@ module decoder_top
     if (vnu_write_next) begin
       for (group_idx = 0; group_idx < L; group_idx++) begin
         if (cnu_a_valid[group_idx] && v2c_m_latched_group_valid[group_idx]) begin
-          s_we[group_idx] = 1'b1;
-          s_write_col_idx[group_idx] = v2c_m_latched_col;
-          s_write_one_idx[group_idx] = v2c_m_latched_one_idx[group_idx];
-          s_wdata[group_idx] = cnu_a_sign[group_idx];
+          set_s_write_bit(
+            GROUP_IDX_W'(group_idx),
+            v2c_m_latched_col,
+            v2c_m_latched_one_idx[group_idx],
+            cnu_a_sign[group_idx]
+          );
         end
       end
     end
@@ -513,11 +517,10 @@ module decoder_top
     integer group_idx;
 
     if (!i_rst_n) begin
+      col_k_meta_slot <= 1'b0;
+      col_kp1_meta_slot <= 1'b1;
       for (group_idx = 0; group_idx < L; group_idx++) begin
-        c2v_buffer_group_count[group_idx] <= '0;
         ram_i_shift_write_ptr[group_idx] <= '0;
-        v2c_column_group_count[group_idx] <= '0;
-        v2c_next_column_group_count[group_idx] <= '0;
         c2v_latched_group_valid[group_idx] <= 1'b0;
         c2v_latched_one_idx[group_idx] <= '0;
         c2v_latched_row_idx_group[group_idx] <= '0;
@@ -526,10 +529,11 @@ module decoder_top
         v2c_m_latched_one_idx[group_idx] <= '0;
         v2c_m_latched_row_idx_group[group_idx] <= '0;
         for (idx = 0; idx < W; idx++) begin
-          c2v_buffer_group_entries[group_idx][idx] <= '0;
-          v2c_column_group_entries[group_idx][idx] <= '0;
-          v2c_next_column_group_entries[group_idx][idx] <= '0;
+          col_meta_group_entries[0][group_idx][idx] <= '0;
+          col_meta_group_entries[1][group_idx][idx] <= '0;
         end
+        col_meta_group_count[0][group_idx] <= '0;
+        col_meta_group_count[1][group_idx] <= '0;
       end
       c2v_latched_col <= '0;
       c2v_latched_entry_pos <= '0;
@@ -547,7 +551,8 @@ module decoder_top
           c2v_latched_one_idx[group_idx] <= c2v_one_idx[group_idx];
           c2v_latched_row_idx_group[group_idx] <= c2v_row_idx_group[group_idx];
           c2v_latched_row_idx_global[group_idx] <= c2v_row_idx_global[group_idx];
-          c2v_buffer_group_entries[group_idx][c2v_entry_pos] <= ram_i_entry_rdata[group_idx];
+          col_meta_group_entries[col_kp1_meta_slot][group_idx][c2v_entry_pos] <=
+            ram_i_entry_rdata[group_idx];
         end
         c2v_latched_col <= c2v_col_idx;
         c2v_latched_entry_pos <= c2v_entry_pos;
@@ -556,45 +561,20 @@ module decoder_top
         if (c2v_entry_pos == '0) begin
           ram_i_shift_write_ptr[0] <= '0;
           ram_i_shift_write_ptr[1] <= '0;
-          c2v_buffer_group_count[0] <= ram_i_count[0];
-          c2v_buffer_group_count[1] <= ram_i_count[1];
+          col_meta_group_count[col_kp1_meta_slot][0] <= ram_i_count[0];
+          col_meta_group_count[col_kp1_meta_slot][1] <= ram_i_count[1];
         end
       end
 
       if (shift_ram_i) begin
-        ram_i_shift_write_ptr[0] <= ram_i_shift_write_ptr_next[0];
-        ram_i_shift_write_ptr[1] <= ram_i_shift_write_ptr_next[1];
-      end
-
-      if (capture_v2c_column_now) begin
         for (group_idx = 0; group_idx < L; group_idx++) begin
-          v2c_column_group_count[group_idx] <= c2v_buffer_group_count[group_idx];
-          for (idx = 0; idx < W; idx++) begin
-            v2c_column_group_entries[group_idx][idx] <= c2v_buffer_group_entries[group_idx][idx];
-          end
+          ram_i_shift_write_ptr[group_idx] <= ram_i_shift_write_ptr_next[group_idx];
         end
       end
 
-      if (capture_v2c_column_next) begin
-        for (group_idx = 0; group_idx < L; group_idx++) begin
-          v2c_next_column_group_count[group_idx] <= c2v_buffer_group_count[group_idx];
-          for (idx = 0; idx < W; idx++) begin
-            v2c_next_column_group_entries[group_idx][idx] <= c2v_buffer_group_entries[group_idx][idx];
-          end
-        end
-      end
-
-      if (promote_v2c_column_next) begin
-        for (group_idx = 0; group_idx < L; group_idx++) begin
-          v2c_column_group_count[group_idx] <= capture_v2c_column_next ?
-                                               c2v_buffer_group_count[group_idx] :
-                                               v2c_next_column_group_count[group_idx];
-          for (idx = 0; idx < W; idx++) begin
-            v2c_column_group_entries[group_idx][idx] <= capture_v2c_column_next ?
-                                                        c2v_buffer_group_entries[group_idx][idx] :
-                                                        v2c_next_column_group_entries[group_idx][idx];
-          end
-        end
+      if (col_k_meta_advance) begin
+        col_k_meta_slot <= col_kp1_meta_slot;
+        col_kp1_meta_slot <= col_k_meta_slot;
       end
 
       if (vnu_cnu_a) begin
@@ -736,6 +716,9 @@ module decoder_top
   assign vnu_prev_c2v[0] = $signed(t_rdata[0]);
   assign vnu_prev_c2v[1] = $signed(t_rdata[1]);
 
+  /* verilator lint_off PINCONNECTEMPTY */
+  // Open observation pins keep focused module benches able to inspect the
+  // submodules while this top-level uses the data-bearing outputs.
   vnu #(
     .W(W),
     .D(D),
@@ -754,20 +737,21 @@ module decoder_top
     .i_c2v0(c2v_tc[0]),
     .i_c2v1_valid(vnu_accum_valid[1]),
     .i_c2v1(c2v_tc[1]),
-    .o_c2v_t0_valid(vnu_c2v_to_ram_t_valid_unused[0]),
-    .o_c2v_t0(vnu_c2v_to_ram_t_unused[0]),
-    .o_c2v_t1_valid(vnu_c2v_to_ram_t_valid_unused[1]),
-    .o_c2v_t1(vnu_c2v_to_ram_t_unused[1]),
+    .o_c2v_t0_valid(),
+    .o_c2v_t0(),
+    .o_c2v_t1_valid(),
+    .o_c2v_t1(),
     .o_bit_decision(vnu_bit_out),
     .i_c2v_t0_valid(vnu_prev_c2v_valid[0]),
     .i_c2v_t0(vnu_prev_c2v[0]),
     .i_c2v_t1_valid(vnu_prev_c2v_valid[1]),
     .i_c2v_t1(vnu_prev_c2v[1]),
-    .o_v2c0_valid(vnu_v2c_tc_valid[0]),
+    .o_v2c0_valid(),
     .o_v2c0(vnu_v2c_tc[0]),
-    .o_v2c1_valid(vnu_v2c_tc_valid[1]),
+    .o_v2c1_valid(),
     .o_v2c1(vnu_v2c_tc[1])
   );
+  /* verilator lint_on PINCONNECTEMPTY */
 
   msg_tc_to_signmag_sat #(
     .D(D),
@@ -813,16 +797,12 @@ module decoder_top
     .o_init_m_write(init_m_write),
     .o_c2v_read(c2v_read),
     .o_c2v_write_t(c2v_write_t),
-    .o_vnu_read_t(vnu_read_t),
     .o_vnu_accum_t(vnu_accum_t),
     .o_vnu_prep_write(vnu_prep_write),
-    .o_vnu_read_next_m(vnu_read_next_m),
     .o_vnu_cnu_a(vnu_cnu_a),
     .o_vnu_write_next(vnu_write_next),
     .o_iter_check(iter_check),
-    .o_capture_v2c_column_now(capture_v2c_column_now),
-    .o_capture_v2c_column_next(capture_v2c_column_next),
-    .o_promote_v2c_column_next(promote_v2c_column_next),
+    .o_col_k_meta_advance(col_k_meta_advance),
     .o_c2v_pipe_valid(c2v_phase_active),
     .o_v2c_pipe_valid(v2c_phase_active),
     .o_c2v_v2c_overlap_seen(c2v_v2c_overlap_seen),
@@ -831,6 +811,9 @@ module decoder_top
     .o_iter_count(o_iter_count)
   );
 
+  /* verilator lint_off PINCONNECTEMPTY */
+  // Open observation pins keep focused module benches able to inspect the
+  // submodules while this top-level uses the RAM-I counts.
   ram_i #(
     .INIT_HEX_STEM("rtl/generated/ram_i0")
   ) u_ram_i0 (
@@ -845,7 +828,7 @@ module decoder_top
     .i_count_wdata(ram_i_shift_write_ptr_next[0]),
     .o_entry_rdata(ram_i_entry_rdata[0]),
     .o_count(ram_i_count[0]),
-    .o_debug_list_entries(ram_i0_debug_entries_unused),
+    .o_debug_list_entries(),
     .o_debug_counts(ram_i0_debug_count)
   );
 
@@ -863,7 +846,7 @@ module decoder_top
     .i_count_wdata(ram_i_shift_write_ptr_next[1]),
     .o_entry_rdata(ram_i_entry_rdata[1]),
     .o_count(ram_i_count[1]),
-    .o_debug_list_entries(ram_i1_debug_entries_unused),
+    .o_debug_list_entries(),
     .o_debug_counts(ram_i1_debug_count)
   );
 
@@ -873,7 +856,7 @@ module decoder_top
     .i_we(decision_ram_we),
     .i_col_idx(decision_ram_col_idx),
     .i_wdata(decision_ram_wdata),
-    .o_rdata(decision_ram_rdata_unused),
+    .o_rdata(),
     .o_bits(error_estimate_bits)
   );
 
@@ -931,7 +914,7 @@ module decoder_top
     .i_write_one_idx(s_write_one_idx[0]),
     .i_wdata(s_wdata[0]),
     .o_rdata(s_rdata[0]),
-    .o_debug_mem(ram_s0_debug_mem)
+    .o_debug_mem()
   );
 
   ram_s u_ram_s1 (
@@ -944,7 +927,7 @@ module decoder_top
     .i_write_one_idx(s_write_one_idx[1]),
     .i_wdata(s_wdata[1]),
     .o_rdata(s_rdata[1]),
-    .o_debug_mem(ram_s1_debug_mem)
+    .o_debug_mem()
   );
 
   ram_t u_ram_t0 (
@@ -954,7 +937,7 @@ module decoder_top
     .i_pop(t_pop[0]),
     .i_wdata(t_wdata[0]),
     .o_rdata(t_rdata[0]),
-    .o_debug_mem(ram_t0_debug_mem)
+    .o_debug_mem()
   );
 
   ram_t u_ram_t1 (
@@ -964,6 +947,7 @@ module decoder_top
     .i_pop(t_pop[1]),
     .i_wdata(t_wdata[1]),
     .o_rdata(t_rdata[1]),
-    .o_debug_mem(ram_t1_debug_mem)
+    .o_debug_mem()
   );
+  /* verilator lint_on PINCONNECTEMPTY */
 endmodule
