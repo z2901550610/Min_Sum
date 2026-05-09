@@ -14,12 +14,12 @@ module decoder_ctrl
   output logic [DEC_STATE_W-1:0] o_state,                      // Coarse decoder state for debug/observation.
   output logic [DEC_PHASE_W-1:0] o_phase,                      // Current debug micro-stage.
   output logic [COL_W-1:0] o_work_col_idx,                     // Debug-selected active column.
-  output logic [ONE_IDX_W-1:0] o_work_entry_pos,               // Debug-selected entry list position.
+  output logic [ENTRY_POS_W-1:0] o_work_entry_pos,             // Debug-selected entry list position.
   output logic [COL_W-1:0] o_c2v_col_idx,                      // Column currently being reconstructed into c2v.
   output logic [COL_W-1:0] o_v2c_col_idx,                      // Column currently being updated into v2c.
-  output logic [ONE_IDX_W-1:0] o_c2v_entry_pos,                // Active entry list position inside the c2v column.
-  output logic [ONE_IDX_W-1:0] o_v2c_entry_pos,                // Active entry list position inside the v2c column.
-  output logic [ONE_IDX_W-1:0] o_active_entry_pos,             // Debug-selected entry list position.
+  output logic [ENTRY_POS_W-1:0] o_c2v_entry_pos,              // Active entry list position inside the c2v column.
+  output logic [ENTRY_POS_W-1:0] o_v2c_entry_pos,              // Active entry list position inside the v2c column.
+  output logic [ENTRY_POS_W-1:0] o_active_entry_pos,           // Debug-selected entry list position.
   output logic o_m_read_pair,                                  // RAM-M pair selected for compressed-c2v reads.
   output logic o_m_write_pair,                                 // RAM-M pair selected for compressed-c2v writes.
   output logic o_c2v_read,                                     // Reads RAM-M/RAM-S for CNU_B.
@@ -78,8 +78,8 @@ module decoder_ctrl
 
   logic [COL_W-1:0] c2v_col_idx_next;
   logic [COL_W-1:0] v2c_col_idx_next;
-  logic [ONE_IDX_W-1:0] c2v_entry_pos_next;
-  logic [ONE_IDX_W-1:0] v2c_entry_pos_next;
+  logic [ENTRY_POS_W-1:0] c2v_entry_pos_next;
+  logic [ENTRY_POS_W-1:0] v2c_entry_pos_next;
   logic m_read_pair_next;
   logic c2v_v2c_overlap_seen_next;
   logic done_next;
@@ -285,7 +285,7 @@ module decoder_ctrl
             if (i_c2v_entry_pos_last) begin
               c2v_entry_pos_next = '0;
             end else begin
-              c2v_entry_pos_next = o_c2v_entry_pos + ONE_IDX_W'(1);
+              c2v_entry_pos_next = o_c2v_entry_pos + ENTRY_POS_W'(1);
             end
           end
 
@@ -340,7 +340,7 @@ module decoder_ctrl
                 end
               end
             end else begin
-              v2c_entry_pos_next = o_v2c_entry_pos + ONE_IDX_W'(1);
+              v2c_entry_pos_next = o_v2c_entry_pos + ENTRY_POS_W'(1);
               col_k_stage_next = COL_K_STAGE_ISSUE;
             end
           end

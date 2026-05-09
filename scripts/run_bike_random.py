@@ -11,6 +11,7 @@ from pathlib import Path
 
 from ram_i_hex import first_column_tables as build_first_column_tables
 from ram_i_hex import generate_hex_files
+from ram_i_hex import lane_depth_from_counts
 
 
 RTL_CORE = [
@@ -74,20 +75,23 @@ def render_group_count_param(group_counts: list[list[int]]) -> str:
     return "\n".join(lines)
 
 
-def render_group_entry_param(group_entries: list[list[list[tuple[int, int] | None]]]) -> str:
-    lines = ["  localparam logic [I_ENTRY_W-1:0] QC_FIRST_COL_GROUP_ENTRY [0:N0-1][0:L-1][0:W-1] = '{"]
+def render_group_entry_param(
+    group_entries: list[list[list[tuple[int, int] | None]]],
+    lane_depth: int,
+) -> str:
+    lines = ["  localparam logic [I_ENTRY_W-1:0] QC_FIRST_COL_GROUP_ENTRY [0:N0-1][0:L-1][0:RAM_LANE_DEPTH-1] = '{"]
     for h_block_idx, h_block_group_entries in enumerate(group_entries):
         h_block_suffix = "," if h_block_idx != len(group_entries) - 1 else ""
         lines.append("    '{")
         for group_idx, group_entry_list in enumerate(h_block_group_entries):
             group_suffix = "," if group_idx != len(h_block_group_entries) - 1 else ""
             entry_text = []
-            for item in group_entry_list:
+            for item in group_entry_list[:lane_depth]:
                 if item is None:
                     entry_text.append("'0")
                 else:
                     one_idx, row_idx_group = item
-                    entry_text.append(f"{{ONE_IDX_W'({one_idx}), ROW_IDX_W'({row_idx_group})}}")
+                    entry_text.append(f"{{ONE_IDX_W'({one_idx}), ROW_GROUP_W'({row_idx_group})}}")
             lines.append("      '{" + ", ".join(entry_text) + "}" + group_suffix)
         lines.append("    }" + h_block_suffix)
     lines.append("  };")
@@ -106,6 +110,7 @@ def emit_pkg(
     h_base: list[list[int]],
 ) -> None:
     group_counts, group_entries = build_first_column_tables(h_base)
+    lane_depth = lane_depth_from_counts(group_counts)
     path.write_text(
         f"""`timescale 1ns/1ps
 package bike_pkg;
@@ -119,6 +124,7 @@ package bike_pkg;
   parameter int C_VAL = {c_val};
   parameter int ALPHA_SHIFT_0 = {alpha_shift_0};
   parameter int ALPHA_SHIFT_1 = {alpha_shift_1};
+  parameter int RAM_LANE_DEPTH = {lane_depth};
 
   parameter int N = N0 * R;
   parameter int L = 2;
@@ -127,6 +133,7 @@ package bike_pkg;
   parameter int MAG_MAX = (1 << D) - 1;
   parameter int MSG_W = D + 1;
   parameter int ROW_SEG_SIZE = (R + L - 1) / L;
+  parameter int ROW_GROUP_DEPTH = ROW_SEG_SIZE;
   parameter int VNU_TC_W = MSG_W + ((W > 1) ? $clog2(W + 1) : 1);
   parameter int COL_W = (N > 1) ? $clog2(N) : 1;
   parameter int H_BLOCK_W = (N0 > 1) ? $clog2(N0) : 1;
@@ -135,7 +142,9 @@ package bike_pkg;
   parameter int ONE_IDX_W = (W > 1) ? $clog2(W) : 1;
   parameter int ROW_IDX_W = (R > 1) ? $clog2(R) : 1;
   parameter int GROUP_IDX_W = (L > 1) ? $clog2(L) : 1;
-  parameter int GROUP_COUNT_W = (W > 1) ? $clog2(W + 1) : 1;
+  parameter int ROW_GROUP_W = ROW_IDX_W - GROUP_IDX_W;
+  parameter int ENTRY_POS_W = (RAM_LANE_DEPTH > 1) ? $clog2(RAM_LANE_DEPTH) : 1;
+  parameter int GROUP_COUNT_W = (RAM_LANE_DEPTH > 1) ? $clog2(RAM_LANE_DEPTH + 1) : 1;
 
   localparam int DEC_STATE_W = 4;
   localparam logic [DEC_STATE_W-1:0] DEC_WAIT_START       = 4'd0;
@@ -182,7 +191,7 @@ package bike_pkg;
   }};
 
   localparam int I_ENTRY_ROW_IDX_GROUP_LSB = 0;
-  localparam int I_ENTRY_ONE_IDX_LSB = I_ENTRY_ROW_IDX_GROUP_LSB + ROW_IDX_W;
+  localparam int I_ENTRY_ONE_IDX_LSB = I_ENTRY_ROW_IDX_GROUP_LSB + ROW_GROUP_W;
   localparam int I_ENTRY_W = I_ENTRY_ONE_IDX_LSB + ONE_IDX_W;
 
   localparam int unsigned H_BASE [0:H_NUM-1][0:N0-1][0:W-1] = '{{
@@ -192,14 +201,14 @@ package bike_pkg;
     }}
   }};
 {render_group_count_param(group_counts)}
-{render_group_entry_param(group_entries)}
+{render_group_entry_param(group_entries, lane_depth)}
   localparam logic [GROUP_COUNT_W-1:0] QC_FIRST_COL_LANE_COUNT [0:N0-1][0:L-1] =
     QC_FIRST_COL_GROUP_COUNT;
-  localparam logic [I_ENTRY_W-1:0] QC_FIRST_COL_LANE_ENTRY [0:N0-1][0:L-1][0:W-1] =
+  localparam logic [I_ENTRY_W-1:0] QC_FIRST_COL_LANE_ENTRY [0:N0-1][0:L-1][0:RAM_LANE_DEPTH-1] =
     QC_FIRST_COL_GROUP_ENTRY;
   localparam logic [GROUP_COUNT_W-1:0] QC_FIRST_COL_ROW_GROUP_COUNT [0:N0-1][0:L-1] =
     QC_FIRST_COL_GROUP_COUNT;
-  localparam logic [I_ENTRY_W-1:0] QC_FIRST_COL_ROW_GROUP_ENTRY [0:N0-1][0:L-1][0:W-1] =
+  localparam logic [I_ENTRY_W-1:0] QC_FIRST_COL_ROW_GROUP_ENTRY [0:N0-1][0:L-1][0:RAM_LANE_DEPTH-1] =
     QC_FIRST_COL_GROUP_ENTRY;
   /* verilator lint_on UNUSEDPARAM */
 endpackage

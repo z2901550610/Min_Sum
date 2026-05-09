@@ -25,10 +25,16 @@ package bike_pkg;
   parameter int N = N0 * R;
   parameter int L = 2;
   parameter int D = 4;
+`ifdef BIKE_L1_PARAMS
+  parameter int RAM_LANE_DEPTH = 37;
+`else
+  parameter int RAM_LANE_DEPTH = 2;
+`endif
   parameter int ALPHA_FRAC_W = 6;  //alpha 用6位小数表示
   parameter int MAG_MAX = (1 << D) - 1;
   parameter int MSG_W = D + 1;
   parameter int ROW_SEG_SIZE = (R + L - 1) / L;
+  parameter int ROW_GROUP_DEPTH = ROW_SEG_SIZE;
   parameter int VNU_TC_W = MSG_W + ((W > 1) ? $clog2(W + 1) : 1);
   parameter int COL_W = (N > 1) ? $clog2(N) : 1;
   parameter int H_BLOCK_W = (N0 > 1) ? $clog2(N0) : 1;
@@ -43,7 +49,9 @@ package bike_pkg;
   parameter int ONE_IDX_W   = (W > 1) ? $clog2(W)     : 1;
   parameter int ROW_IDX_W   = (R > 1) ? $clog2(R)     : 1;
   parameter int GROUP_IDX_W = (L > 1) ? $clog2(L)     : 1;
-  parameter int GROUP_COUNT_W = (W > 1) ? $clog2(W + 1) : 1;
+  parameter int ROW_GROUP_W = ROW_IDX_W - GROUP_IDX_W;
+  parameter int ENTRY_POS_W = (RAM_LANE_DEPTH > 1) ? $clog2(RAM_LANE_DEPTH) : 1;
+  parameter int GROUP_COUNT_W = (RAM_LANE_DEPTH > 1) ? $clog2(RAM_LANE_DEPTH + 1) : 1;
 
   localparam int DEC_STATE_W = 4;
   localparam logic [DEC_STATE_W-1:0] DEC_WAIT_START       = 4'd0;
@@ -90,7 +98,7 @@ package bike_pkg;
   };
 
   localparam int I_ENTRY_ROW_IDX_GROUP_LSB = 0;
-  localparam int I_ENTRY_ONE_IDX_LSB = I_ENTRY_ROW_IDX_GROUP_LSB + ROW_IDX_W;
+  localparam int I_ENTRY_ONE_IDX_LSB = I_ENTRY_ROW_IDX_GROUP_LSB + ROW_GROUP_W;
   localparam int I_ENTRY_W = I_ENTRY_ONE_IDX_LSB + ONE_IDX_W;
 
 `ifdef BIKE_L1_PARAMS

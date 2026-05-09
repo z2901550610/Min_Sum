@@ -7,25 +7,34 @@ module tb_ram_blocks;
   logic rst_n;
 
   logic m_we;
-  logic [ROW_IDX_W-1:0] m_read_row_idx_group;
-  logic [ROW_IDX_W-1:0] m_write_row_idx_group;
+  logic [ROW_GROUP_W-1:0] m_read_row_idx_group;
+  logic [ROW_GROUP_W-1:0] m_write_row_idx_group;
   logic [COMP_C2V_W-1:0] m_wdata;
   logic [COMP_C2V_W-1:0] m_rdata;
-  logic [COMP_C2V_W-1:0] m_debug [0:R-1];
+  logic [COMP_C2V_W-1:0] m_debug [0:ROW_GROUP_DEPTH-1];
 
   logic s_we;
   logic [COL_W-1:0] s_read_col_idx;
-  logic [ONE_IDX_W-1:0] s_read_one_idx;
+  logic [ENTRY_POS_W-1:0] s_read_entry_idx;
   logic [COL_W-1:0] s_write_col_idx;
-  logic [ONE_IDX_W-1:0] s_write_one_idx;
+  logic [ENTRY_POS_W-1:0] s_write_entry_idx;
   logic s_wdata;
   logic s_rdata;
-  logic s_debug [0:N-1][0:W-1];
+  logic s_debug [0:N-1][0:RAM_LANE_DEPTH-1];
+
+  logic s_pack2_we;
+  logic [COL_W-1:0] s_pack2_read_col_idx;
+  logic [ENTRY_POS_W-1:0] s_pack2_read_entry_idx;
+  logic [COL_W-1:0] s_pack2_write_col_idx;
+  logic [ENTRY_POS_W-1:0] s_pack2_write_entry_idx;
+  logic s_pack2_wdata;
+  logic s_pack2_rdata;
+  logic s_pack2_debug [0:N-1][0:RAM_LANE_DEPTH-1];
 
   logic t_push;
   logic t_pop;
-  logic [ONE_IDX_W-1:0] t_write_entry_idx;
-  logic [ONE_IDX_W-1:0] t_read_entry_idx;
+  logic [ENTRY_POS_W-1:0] t_write_entry_idx;
+  logic [ENTRY_POS_W-1:0] t_read_entry_idx;
   logic t_valid;
   logic [MSG_W-1:0] t_wdata;
   logic [MSG_W-1:0] t_rdata;
@@ -33,7 +42,7 @@ module tb_ram_blocks;
   /* verilator lint_off UNUSEDSIGNAL */
   logic [GROUP_COUNT_W-1:0] t_item_count;
   /* verilator lint_on UNUSEDSIGNAL */
-  logic [MSG_W-1:0] t_debug [0:W-1];
+  logic [MSG_W-1:0] t_debug [0:RAM_LANE_DEPTH-1];
 
   logic c_we;
   logic c_din;
@@ -56,12 +65,27 @@ module tb_ram_blocks;
     .i_rst_n(rst_n),
     .i_we(s_we),
     .i_read_col_idx(s_read_col_idx),
-    .i_read_one_idx(s_read_one_idx),
+    .i_read_entry_idx(s_read_entry_idx),
     .i_write_col_idx(s_write_col_idx),
-    .i_write_one_idx(s_write_one_idx),
+    .i_write_entry_idx(s_write_entry_idx),
     .i_wdata(s_wdata),
     .o_rdata(s_rdata),
     .o_debug_mem(s_debug)
+  );
+
+  ram_s #(
+    .S_PACK_W(1)
+  ) u_ram_s_pack2 (
+    .i_clk(clk),
+    .i_rst_n(rst_n),
+    .i_we(s_pack2_we),
+    .i_read_col_idx(s_pack2_read_col_idx),
+    .i_read_entry_idx(s_pack2_read_entry_idx),
+    .i_write_col_idx(s_pack2_write_col_idx),
+    .i_write_entry_idx(s_pack2_write_entry_idx),
+    .i_wdata(s_pack2_wdata),
+    .o_rdata(s_pack2_rdata),
+    .o_debug_mem(s_pack2_debug)
   );
 
   ram_t u_ram_t (
@@ -93,6 +117,43 @@ module tb_ram_blocks;
   initial clk = 1'b0;
   always #5 clk = ~clk;
 
+  task automatic write_pack2_sign(
+    input int col_idx,
+    input int entry_idx,
+    input logic sign_bit
+  );
+    begin
+      s_pack2_write_col_idx = COL_W'(col_idx % N);
+      s_pack2_write_entry_idx = ENTRY_POS_W'(entry_idx % RAM_LANE_DEPTH);
+      s_pack2_wdata = sign_bit;
+      s_pack2_we = 1'b1;
+      @(posedge clk);
+      #1;
+      s_pack2_we = 1'b0;
+    end
+  endtask
+
+  task automatic check_pack2_sign(
+    input int col_idx,
+    input int entry_idx,
+    input logic expected_sign
+  );
+    begin
+      s_pack2_read_col_idx = COL_W'(col_idx % N);
+      s_pack2_read_entry_idx = ENTRY_POS_W'(entry_idx % RAM_LANE_DEPTH);
+      @(posedge clk);
+      #1;
+      if (s_pack2_rdata != expected_sign) begin
+        $fatal(1, "packed ram_s read mismatch col=%0d entry=%0d got=%0b exp=%0b",
+               col_idx, entry_idx, s_pack2_rdata, expected_sign);
+      end
+      if (s_pack2_debug[col_idx % N][entry_idx % RAM_LANE_DEPTH] != expected_sign) begin
+        $fatal(1, "packed ram_s debug mismatch col=%0d entry=%0d got=%0b exp=%0b",
+               col_idx, entry_idx, s_pack2_debug[col_idx % N][entry_idx % RAM_LANE_DEPTH], expected_sign);
+      end
+    end
+  endtask
+
   initial begin
     rst_n = 1'b0;
     m_we = 1'b0;
@@ -101,10 +162,16 @@ module tb_ram_blocks;
     m_wdata = '0;
     s_we = 1'b0;
     s_read_col_idx = '0;
-    s_read_one_idx = '0;
+    s_read_entry_idx = '0;
     s_write_col_idx = '0;
-    s_write_one_idx = '0;
+    s_write_entry_idx = '0;
     s_wdata = 1'b0;
+    s_pack2_we = 1'b0;
+    s_pack2_read_col_idx = '0;
+    s_pack2_read_entry_idx = '0;
+    s_pack2_write_col_idx = '0;
+    s_pack2_write_entry_idx = '0;
+    s_pack2_wdata = 1'b0;
     t_push = 1'b0;
     t_pop = 1'b0;
     t_write_entry_idx = '0;
@@ -119,11 +186,12 @@ module tb_ram_blocks;
     #1;
     if (m_debug[0] != COMP_C2V_INIT) $fatal(1, "ram_m reset mismatch");
     if (s_debug[0][0] != 1'b0) $fatal(1, "ram_s reset mismatch");
+    if (s_pack2_debug[0][0] != 1'b0) $fatal(1, "packed ram_s reset mismatch");
     if (t_debug[0] != '0) $fatal(1, "ram_t reset mismatch");
     if (c_bits != '0) $fatal(1, "ram_c reset mismatch");
 
-    m_read_row_idx_group = ROW_IDX_W'(2 % R);
-    m_write_row_idx_group = ROW_IDX_W'(2 % R);
+    m_read_row_idx_group = ROW_GROUP_W'(2 % ROW_GROUP_DEPTH);
+    m_write_row_idx_group = ROW_GROUP_W'(2 % ROW_GROUP_DEPTH);
     m_wdata = COMP_C2V_INIT ^ COMP_C2V_W'(7);
     m_we = 1'b1;
     @(posedge clk);
@@ -134,13 +202,13 @@ module tb_ram_blocks;
     if (m_rdata != m_wdata) $fatal(1, "ram_m read-after-write mismatch");
 
     s_read_col_idx = COL_W'(3 % N);
-    s_read_one_idx = ONE_IDX_W'(1 % W);
+    s_read_entry_idx = ENTRY_POS_W'(1 % RAM_LANE_DEPTH);
     s_write_col_idx = COL_W'(3 % N);
-    s_write_one_idx = ONE_IDX_W'(1 % W);
+    s_write_entry_idx = ENTRY_POS_W'(1 % RAM_LANE_DEPTH);
     s_wdata = 1'b1;
     s_we = 1'b1;
-    t_write_entry_idx = ONE_IDX_W'(1 % W);
-    t_read_entry_idx = ONE_IDX_W'(1 % W);
+    t_write_entry_idx = ENTRY_POS_W'(1 % RAM_LANE_DEPTH);
+    t_read_entry_idx = ENTRY_POS_W'(1 % RAM_LANE_DEPTH);
     t_wdata = MSG_W'(-2);
     t_push = 1'b1;
     t_valid = 1'b1;
@@ -155,6 +223,14 @@ module tb_ram_blocks;
     @(posedge clk);
     #1;
     if (s_rdata != 1'b1) $fatal(1, "ram_s read-after-write mismatch");
+    write_pack2_sign(4, 0, 1'b1);
+    check_pack2_sign(4, 0, 1'b1);
+    write_pack2_sign(4, 1, 1'b1);
+    check_pack2_sign(4, 0, 1'b1);
+    check_pack2_sign(4, 1, 1'b1);
+    write_pack2_sign(4, 1, 1'b0);
+    check_pack2_sign(4, 1, 1'b0);
+    check_pack2_sign(4, 0, 1'b1);
     if ($signed(t_rdata) != -MSG_W'(2)) $fatal(1, "ram_t read-after-write mismatch");
     if (t_rvalid != 1'b1) $fatal(1, "ram_t valid read-after-write mismatch");
     t_pop = 1'b1;

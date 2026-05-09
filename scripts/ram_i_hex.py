@@ -29,6 +29,10 @@ def first_column_tables(
     return group_count_table, group_entry_table
 
 
+def lane_depth_from_counts(group_counts: list[list[int]]) -> int:
+    return max(max(counts) for counts in group_counts)
+
+
 def clog2_sv(value: int) -> int:
     if value <= 1:
         return 1
@@ -51,8 +55,9 @@ def generate_hex_files(
     tag: str,
     output_dir: Path,
 ) -> None:
-    row_idx_w = clog2_sv(r_value)
     group_counts, group_entries = first_column_tables(banks)
+    row_idx_w = clog2_sv((r_value + 1) // 2)
+    lane_depth = lane_depth_from_counts(group_counts)
     group_names = ["ram_i0", "ram_i1"]
     tag_suffix = f"_{tag}" if tag else ""
 
@@ -61,7 +66,7 @@ def generate_hex_files(
         counts: list[int] = []
         for h_block_idx in range(len(banks)):
             counts.append(group_counts[h_block_idx][group_idx])
-            for entry_idx in range(w_value):
+            for entry_idx in range(lane_depth):
                 item = group_entries[h_block_idx][group_idx][entry_idx]
                 if item is None:
                     entries.append(0)

@@ -17,19 +17,19 @@ module ram_i
   input  logic i_rst_n,
   input  logic i_we,
   input  logic [H_BLOCK_W-1:0] i_h_block_idx,
-  input  logic [ONE_IDX_W-1:0] i_read_entry_idx,
-  input  logic [ONE_IDX_W-1:0] i_write_entry_idx,
+  input  logic [ENTRY_POS_W-1:0] i_read_entry_idx,
+  input  logic [ENTRY_POS_W-1:0] i_write_entry_idx,
   input  logic [I_ENTRY_W-1:0] i_entry_wdata,
   input  logic i_count_we,
   input  logic [GROUP_COUNT_W-1:0] i_count_wdata,
   output logic [I_ENTRY_W-1:0] o_entry_rdata,
   output logic [GROUP_COUNT_W-1:0] o_count,
-  output logic [I_ENTRY_W-1:0] o_debug_list_entries [0:N0-1][0:W-1],
+  output logic [I_ENTRY_W-1:0] o_debug_list_entries [0:N0-1][0:RAM_LANE_DEPTH-1],
   output logic [GROUP_COUNT_W-1:0] o_debug_counts [0:N0-1]
 );
 
   // 每个 h_block 保存一个 group-local list；count 说明 list 前几项有效。
-  logic [I_ENTRY_W-1:0] list_entries_mem [0:N0-1][0:W-1];
+  logic [I_ENTRY_W-1:0] list_entries_mem [0:N0-1][0:RAM_LANE_DEPTH-1];
   logic [GROUP_COUNT_W-1:0] list_count_mem [0:N0-1];
   assign o_debug_list_entries = list_entries_mem;
   assign o_debug_counts = list_count_mem;

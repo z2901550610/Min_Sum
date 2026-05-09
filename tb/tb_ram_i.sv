@@ -7,8 +7,8 @@ module tb_ram_i;
   logic rst_n;
   logic we;
   logic [H_BLOCK_W-1:0] h_block_idx;
-  logic [ONE_IDX_W-1:0] read_entry_idx;
-  logic [ONE_IDX_W-1:0] write_entry_idx;
+  logic [ENTRY_POS_W-1:0] read_entry_idx;
+  logic [ENTRY_POS_W-1:0] write_entry_idx;
   logic [I_ENTRY_W-1:0] entry_wdata;
   logic count_we;
   logic [GROUP_COUNT_W-1:0] count_wdata;
@@ -16,7 +16,7 @@ module tb_ram_i;
   /* verilator lint_off UNUSEDSIGNAL */
   logic [GROUP_COUNT_W-1:0] count;
   /* verilator lint_on UNUSEDSIGNAL */
-  logic [I_ENTRY_W-1:0] debug_list_entries [0:N0-1][0:W-1];
+  logic [I_ENTRY_W-1:0] debug_list_entries [0:N0-1][0:RAM_LANE_DEPTH-1];
   logic [GROUP_COUNT_W-1:0] debug_counts [0:N0-1];
 
   ram_i #(
@@ -69,9 +69,9 @@ module tb_ram_i;
 
     // Single-entry write / read.
     h_block_idx = '0;
-    read_entry_idx = ONE_IDX_W'(1);
-    write_entry_idx = ONE_IDX_W'(1);
-    entry_wdata = {ONE_IDX_W'(1), ROW_IDX_W'(2)};
+    read_entry_idx = ENTRY_POS_W'(1);
+    write_entry_idx = ENTRY_POS_W'(1);
+    entry_wdata = {ONE_IDX_W'(1), ROW_GROUP_W'(2)};
     count_wdata = GROUP_COUNT_W'(1);
     we = 1'b1;
     count_we = 1'b1;
@@ -83,7 +83,7 @@ module tb_ram_i;
 
     @(posedge clk);
     #1;
-    if (entry_rdata != {ONE_IDX_W'(1), ROW_IDX_W'(2)}) $fatal(1, "ram_i single-port read mismatch");
+    if (entry_rdata != {ONE_IDX_W'(1), ROW_GROUP_W'(2)}) $fatal(1, "ram_i single-port read mismatch");
 
     // Reset clears read data register only, not the memory.
     rst_n = 1'b0;
