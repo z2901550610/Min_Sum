@@ -58,6 +58,7 @@ module decoder_top
   logic m_write_pair;
 
   logic c2v_read;
+  logic v2c_read;
   logic c2v_write_t;
   logic vnu_accum_t;
   logic vnu_prep_write;
@@ -96,6 +97,12 @@ module decoder_top
   logic ram_i_shift_we [0:L-1];
   logic [ENTRY_POS_W-1:0] ram_i_shift_entry_addr [0:L-1];
   logic [I_ENTRY_W-1:0] ram_i_shift_entry_wdata [0:L-1];
+  logic c2v_read_d1;
+  logic [COL_W-1:0] c2v_read_col_d1;
+  logic [ENTRY_POS_W-1:0] c2v_read_entry_pos_d1;
+  logic c2v_read_entry_pos_last_d1;
+  logic c2v_read_m_read_pair_d1;
+  logic [GROUP_COUNT_W-1:0] c2v_read_count_d1 [0:L-1];
   logic c2v_entry_pos_last;
   logic v2c_entry_pos_last;
 
@@ -121,6 +128,11 @@ module decoder_top
   logic [ENTRY_POS_W-1:0] v2c_m_latched_entry_pos;
   logic [COL_W-1:0] v2c_m_latched_col;
   logic v2c_m_latched_m_write_pair;
+  logic [COL_W-1:0] v2c_read_col_d1;
+  logic [ENTRY_POS_W-1:0] v2c_read_entry_pos_d1;
+  logic v2c_read_m_write_pair_d1;
+  logic v2c_read_group_valid_d1 [0:L-1];
+  logic [ROW_GROUP_W-1:0] v2c_read_row_idx_group_d1 [0:L-1];
 
   logic [R-1:0] residual_syndrome_next;
   logic decode_success;
@@ -327,7 +339,7 @@ module decoder_top
 
     for (group_idx = 0; group_idx < L; group_idx++) begin
       c2v_group_valid[group_idx] =
-        (int'(c2v_entry_pos) < int'(ram_i_count[group_idx]));
+        c2v_read_d1 && (int'(c2v_read_entry_pos_d1) < int'(c2v_read_count_d1[group_idx]));
       c2v_one_idx[group_idx] =
         ram_i_entry_rdata[group_idx][I_ENTRY_ONE_IDX_LSB +: ONE_IDX_W];
       c2v_row_idx_group[group_idx] =
@@ -466,27 +478,15 @@ module decoder_top
       m_wdata[port_idx] = COMP_C2V_INIT;
     end
 
-    if (c2v_read) begin
+    if (c2v_read_d1) begin
       for (group_idx = 0; group_idx < L; group_idx++) begin
         if (c2v_group_valid[group_idx]) begin
-          set_m_read_row(m_read_pair, GROUP_IDX_W'(group_idx), c2v_row_idx_group[group_idx]);
+          set_m_read_row(c2v_read_m_read_pair_d1, GROUP_IDX_W'(group_idx), c2v_row_idx_group[group_idx]);
         end
       end
     end
 
-    if (c2v_write_t) begin
-      for (group_idx = 0; group_idx < L; group_idx++) begin
-        if (c2v_latched_group_valid[group_idx]) begin
-          set_m_read_row(
-            c2v_latched_m_read_pair,
-            GROUP_IDX_W'(group_idx),
-            c2v_latched_row_idx_group[group_idx]
-          );
-        end
-      end
-    end
-
-    if (vnu_cnu_a) begin
+    if (v2c_read) begin
       for (group_idx = 0; group_idx < L; group_idx++) begin
         if (v2c_group_valid[group_idx]) begin
           set_m_read_row(m_write_pair, GROUP_IDX_W'(group_idx), v2c_row_idx_group[group_idx]);
@@ -514,8 +514,8 @@ module decoder_top
 
     for (group_idx = 0; group_idx < L; group_idx++) begin
       s_we[group_idx] = 1'b0;
-      s_read_col_idx[group_idx] = c2v_col_idx;
-      s_read_entry_idx[group_idx] = c2v_entry_pos;
+      s_read_col_idx[group_idx] = c2v_read_d1 ? c2v_read_col_d1 : c2v_col_idx;
+      s_read_entry_idx[group_idx] = c2v_read_d1 ? c2v_read_entry_pos_d1 : c2v_entry_pos;
       s_write_col_idx[group_idx] = c2v_latched_col;
       s_write_entry_idx[group_idx] = c2v_latched_entry_pos;
       s_wdata[group_idx] = 1'b0;
@@ -540,7 +540,7 @@ module decoder_top
     integer group_idx;
 
     t_write_entry_idx = c2v_latched_entry_pos;
-    t_read_entry_idx = v2c_entry_pos;
+    t_read_entry_idx = v2c_read ? v2c_entry_pos : v2c_read_entry_pos_d1;
     for (group_idx = 0; group_idx < L; group_idx++) begin
       t_push[group_idx] = 1'b0;
       t_pop[group_idx] = 1'b0;
@@ -614,7 +614,18 @@ module decoder_top
       col_k_meta_slot <= 1'b0;
       col_kp1_meta_slot <= 1'b1;
       ram_i_shift_commit_pending <= 1'b0;
+      c2v_read_d1 <= 1'b0;
+      c2v_read_col_d1 <= '0;
+      c2v_read_entry_pos_d1 <= '0;
+      c2v_read_entry_pos_last_d1 <= 1'b0;
+      c2v_read_m_read_pair_d1 <= 1'b0;
+      v2c_read_col_d1 <= '0;
+      v2c_read_entry_pos_d1 <= '0;
+      v2c_read_m_write_pair_d1 <= 1'b0;
       for (group_idx = 0; group_idx < L; group_idx++) begin
+        c2v_read_count_d1[group_idx] <= '0;
+        v2c_read_group_valid_d1[group_idx] <= 1'b0;
+        v2c_read_row_idx_group_d1[group_idx] <= '0;
         ram_i_shift_write_ptr[group_idx] <= '0;
         ram_i_shift_commit_count[group_idx] <= '0;
         ram_i_shift_pending_count[group_idx] <= '0;
@@ -648,6 +659,27 @@ module decoder_top
         syndrome_hist[idx] <= '0;
       end
     end else begin
+      c2v_read_d1 <= c2v_read;
+      if (c2v_read) begin
+        c2v_read_col_d1 <= c2v_col_idx;
+        c2v_read_entry_pos_d1 <= c2v_entry_pos;
+        c2v_read_entry_pos_last_d1 <= c2v_entry_pos_last;
+        c2v_read_m_read_pair_d1 <= m_read_pair;
+        for (group_idx = 0; group_idx < L; group_idx++) begin
+          c2v_read_count_d1[group_idx] <= ram_i_count[group_idx];
+        end
+      end
+
+      if (v2c_read) begin
+        v2c_read_col_d1 <= v2c_col_idx;
+        v2c_read_entry_pos_d1 <= v2c_entry_pos;
+        v2c_read_m_write_pair_d1 <= m_write_pair;
+        for (group_idx = 0; group_idx < L; group_idx++) begin
+          v2c_read_group_valid_d1[group_idx] <= v2c_group_valid[group_idx];
+          v2c_read_row_idx_group_d1[group_idx] <= v2c_row_idx_group[group_idx];
+        end
+      end
+
       ram_i_shift_commit_pending <= ram_i_shift_commit_pending_next;
       for (group_idx = 0; group_idx < L; group_idx++) begin
         ram_i_shift_pending_count[group_idx] <= ram_i_shift_pending_count_next[group_idx];
@@ -659,22 +691,22 @@ module decoder_top
         ram_i_shift_pending_wdata[group_idx][2] <= ram_i_shift_pending_wdata_next[group_idx][2];
       end
 
-      if (c2v_read) begin
+      if (c2v_read_d1) begin
         for (group_idx = 0; group_idx < L; group_idx++) begin
           c2v_latched_group_valid[group_idx] <= c2v_group_valid[group_idx];
           c2v_latched_one_idx[group_idx] <= c2v_one_idx[group_idx];
           c2v_latched_row_idx_group[group_idx] <= c2v_row_idx_group[group_idx];
           c2v_latched_row_idx_global[group_idx] <= c2v_row_idx_global[group_idx];
-          col_meta_group_entries[col_kp1_meta_slot][group_idx][c2v_entry_pos] <=
+          col_meta_group_entries[col_kp1_meta_slot][group_idx][c2v_read_entry_pos_d1] <=
             ram_i_entry_rdata[group_idx];
         end
-        c2v_latched_col <= c2v_col_idx;
-        c2v_latched_entry_pos <= c2v_entry_pos;
-        c2v_latched_entry_pos_last <= c2v_entry_pos_last;
-        c2v_latched_m_read_pair <= m_read_pair;
-        if (c2v_entry_pos == '0) begin
-          col_meta_group_count[col_kp1_meta_slot][0] <= ram_i_count[0];
-          col_meta_group_count[col_kp1_meta_slot][1] <= ram_i_count[1];
+        c2v_latched_col <= c2v_read_col_d1;
+        c2v_latched_entry_pos <= c2v_read_entry_pos_d1;
+        c2v_latched_entry_pos_last <= c2v_read_entry_pos_last_d1;
+        c2v_latched_m_read_pair <= c2v_read_m_read_pair_d1;
+        if (c2v_read_entry_pos_d1 == '0) begin
+          col_meta_group_count[col_kp1_meta_slot][0] <= c2v_read_count_d1[0];
+          col_meta_group_count[col_kp1_meta_slot][1] <= c2v_read_count_d1[1];
         end
       end
 
@@ -694,12 +726,12 @@ module decoder_top
 
       if (vnu_cnu_a) begin
         for (group_idx = 0; group_idx < L; group_idx++) begin
-          v2c_m_latched_group_valid[group_idx] <= v2c_group_valid[group_idx];
-          v2c_m_latched_row_idx_group[group_idx] <= v2c_row_idx_group[group_idx];
+          v2c_m_latched_group_valid[group_idx] <= v2c_read_group_valid_d1[group_idx];
+          v2c_m_latched_row_idx_group[group_idx] <= v2c_read_row_idx_group_d1[group_idx];
         end
-        v2c_m_latched_entry_pos <= v2c_entry_pos;
-        v2c_m_latched_col <= v2c_col_idx;
-        v2c_m_latched_m_write_pair <= m_write_pair;
+        v2c_m_latched_entry_pos <= v2c_read_entry_pos_d1;
+        v2c_m_latched_col <= v2c_read_col_d1;
+        v2c_m_latched_m_write_pair <= v2c_read_m_write_pair_d1;
       end
 
       if (iter_check) begin
@@ -732,9 +764,9 @@ module decoder_top
     end
   end
 
-  assign cnu_a_col_idx = v2c_col_idx;
-  assign cnu_a_en[0] = vnu_cnu_a && v2c_group_valid[0];
-  assign cnu_a_en[1] = vnu_cnu_a && v2c_group_valid[1];
+  assign cnu_a_col_idx = v2c_read_col_d1;
+  assign cnu_a_en[0] = vnu_cnu_a && v2c_read_group_valid_d1[0];
+  assign cnu_a_en[1] = vnu_cnu_a && v2c_read_group_valid_d1[1];
   assign cnu_a_v2c_msg[0] = vnu_v2c_msg[0];
   assign cnu_a_v2c_msg[1] = vnu_v2c_msg[1];
 
@@ -745,8 +777,8 @@ module decoder_top
     logic [ROW_GROUP_W-1:0] row_addr;
 
     for (group_idx = 0; group_idx < L; group_idx++) begin
-      port_pair = m_write_pair;
-      row_addr = v2c_row_idx_group[group_idx];
+      port_pair = v2c_read_m_write_pair_d1;
+      row_addr = v2c_read_row_idx_group_d1[group_idx];
       port_idx = 2'(m_index(port_pair, GROUP_IDX_W'(group_idx)));
       cnu_a_comp_in[group_idx] = m_comp_or_default(port_idx, port_pair, row_addr, 1'b0);
     end
@@ -914,6 +946,7 @@ module decoder_top
     .o_m_read_pair(m_read_pair),
     .o_m_write_pair(m_write_pair),
     .o_c2v_read(c2v_read),
+    .o_v2c_read(v2c_read),
     .o_c2v_write_t(c2v_write_t),
     .o_vnu_accum_t(vnu_accum_t),
     .o_vnu_prep_write(vnu_prep_write),

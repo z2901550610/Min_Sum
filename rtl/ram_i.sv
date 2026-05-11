@@ -29,16 +29,27 @@ module ram_i
 );
 
   // 每个 h_block 保存一个 group-local list；count 说明 list 前几项有效。
-  logic [I_ENTRY_W-1:0] list_entries_mem [0:N0-1][0:RAM_LANE_DEPTH-1];
+  (* ram_style = "distributed" *) logic [I_ENTRY_W-1:0] list_entries_mem [0:N0-1][0:RAM_LANE_DEPTH-1];
   logic [GROUP_COUNT_W-1:0] list_count_mem [0:N0-1];
+`ifndef SYNTHESIS
   assign o_debug_list_entries = list_entries_mem;
   assign o_debug_counts = list_count_mem;
+`else
+  always_comb begin
+    for (int h_block_idx = 0; h_block_idx < N0; h_block_idx++) begin
+      o_debug_counts[h_block_idx] = '0;
+      for (int entry_idx = 0; entry_idx < RAM_LANE_DEPTH; entry_idx++) begin
+        o_debug_list_entries[h_block_idx][entry_idx] = '0;
+      end
+    end
+  end
+`endif
 
   assign o_count = list_count_mem[i_h_block_idx];
-  assign o_entry_rdata = list_entries_mem[i_h_block_idx][i_read_entry_idx];
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin
+      o_entry_rdata <= '0;
     end else begin
       if (i_we) begin
         list_entries_mem[i_h_block_idx][i_write_entry_idx] <= i_entry_wdata;
@@ -46,6 +57,7 @@ module ram_i
       if (i_count_we) begin
         list_count_mem[i_h_block_idx] <= i_count_wdata;
       end
+      o_entry_rdata <= list_entries_mem[i_h_block_idx][i_read_entry_idx];
     end
   end
 

@@ -18,22 +18,30 @@ module ram_t
   output logic [MSG_W-1:0] o_debug_mem [0:RAM_LANE_DEPTH-1]
 );
 
-  logic [MSG_W-1:0] mem [0:RAM_LANE_DEPTH-1];
+  (* ram_style = "distributed" *) logic [MSG_W-1:0] mem [0:RAM_LANE_DEPTH-1];
   logic valid_mem [0:RAM_LANE_DEPTH-1];
   logic [GROUP_COUNT_W-1:0] valid_count;
 
-  assign o_rdata = mem[i_read_entry_idx];
-  assign o_valid = valid_mem[i_read_entry_idx];
   assign o_item_count = valid_count;
 
+`ifndef SYNTHESIS
   always_comb begin
     for (int entry_pos = 0; entry_pos < RAM_LANE_DEPTH; entry_pos++) begin
       o_debug_mem[entry_pos] = mem[entry_pos];
     end
   end
+`else
+  always_comb begin
+    for (int entry_pos = 0; entry_pos < RAM_LANE_DEPTH; entry_pos++) begin
+      o_debug_mem[entry_pos] = '0;
+    end
+  end
+`endif
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n || i_clear) begin
+      o_rdata <= '0;
+      o_valid <= 1'b0;
       for (int entry_pos = 0; entry_pos < RAM_LANE_DEPTH; entry_pos++) begin
         mem[entry_pos] <= '0;
         valid_mem[entry_pos] <= 1'b0;
@@ -46,6 +54,8 @@ module ram_t
         mem[i_write_entry_idx] <= i_wdata;
         valid_mem[i_write_entry_idx] <= i_valid;
       end
+      o_rdata <= mem[i_read_entry_idx];
+      o_valid <= valid_mem[i_read_entry_idx];
     end
   end
 

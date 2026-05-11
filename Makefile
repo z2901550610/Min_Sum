@@ -5,6 +5,8 @@ REAL_VERILATOR ?= verilator
 VERILATOR_LOG_DIR ?= build/logs/verilator
 VERILATOR_FLAGS ?= --binary --sv -Wall -Wno-fatal -I./tb -I./rtl
 SIM ?= ./scripts/run_quiet.py
+VIVADO ?= vivado
+VIVADO_BUILD_DIR ?= build/vivado
 export REAL_VERILATOR
 export VERILATOR_LOG_DIR
 
@@ -24,7 +26,7 @@ BIKE_RANDOM_BASE_SEED ?= 1
 BIKE_RANDOM_TRIALS ?= 8
 BIKE_RANDOM_ERROR_COUNT ?= 1
 
-.PHONY: all golden sim test test-unit test-integration test-bike-random golden-self-test bike-golden-self-test bike-golden-once bike-golden-batch bike-golden-calibrate FORCE
+.PHONY: all golden sim test test-unit test-integration test-bike-random vivado-synth golden-self-test bike-golden-self-test bike-golden-once bike-golden-batch bike-golden-calibrate FORCE
 
 all: test
 
@@ -87,5 +89,9 @@ test-integration: $(VECTOR_SVH) $(RAM_I_HEX)
 
 test-bike-random:
 	@python3 scripts/run_bike_random.py --base-seed $(BIKE_RANDOM_BASE_SEED) --trials $(BIKE_RANDOM_TRIALS) --error-count $(BIKE_RANDOM_ERROR_COUNT) --verilator $(VERILATOR)
+
+vivado-synth: $(RAM_I_HEX)
+	@mkdir -p $(VIVADO_BUILD_DIR)
+	@$(VIVADO) -mode batch -source scripts/vivado_synth.tcl -tclargs $(VIVADO_BUILD_DIR)
 
 sim: test

@@ -22,7 +22,8 @@ module decoder_ctrl
   output logic [ENTRY_POS_W-1:0] o_active_entry_pos,           // Debug-selected entry list position.
   output logic o_m_read_pair,                                  // RAM-M pair selected for compressed-c2v reads.
   output logic o_m_write_pair,                                 // RAM-M pair selected for compressed-c2v writes.
-  output logic o_c2v_read,                                     // Reads RAM-M/RAM-S for CNU_B.
+  output logic o_c2v_read,                                     // Issues RAM-I metadata reads for the c2v path.
+  output logic o_v2c_read,                                     // Issues RAM-M/RAM-T reads for the v2c path.
   output logic o_c2v_write_t,                                  // Writes CNU_B/codec result to RAM-T.
   output logic o_vnu_accum_t,                                  // Accumulates one col k+1 c2v value in VNU.
   output logic o_vnu_prep_write,                               // Captures VNU decision.
@@ -59,22 +60,34 @@ module decoder_ctrl
   logic iter_check_pending_next;
 
   logic col_kp1_c2v_valid_d1;
+  logic col_kp1_c2v_valid_d2;
   logic col_kp1_last_d1;
+  logic col_kp1_last_d2;
   logic col_kp1_col_last_d1;
+  logic col_kp1_col_last_d2;
   logic col_kp1_c2v_valid_d1_next;
+  logic col_kp1_c2v_valid_d2_next;
   logic col_kp1_last_d1_next;
+  logic col_kp1_last_d2_next;
   logic col_kp1_col_last_d1_next;
+  logic col_kp1_col_last_d2_next;
 
   logic [1:0] sched_state;
   logic [1:0] col_k_stage;
   logic col_k_v2c_valid_d1;
+  logic col_k_v2c_valid_d2;
   logic col_k_last_d1;
+  logic col_k_last_d2;
   logic col_k_col_last_d1;
+  logic col_k_col_last_d2;
   logic [1:0] sched_state_next;
   logic [1:0] col_k_stage_next;
   logic col_k_v2c_valid_d1_next;
+  logic col_k_v2c_valid_d2_next;
   logic col_k_last_d1_next;
+  logic col_k_last_d2_next;
   logic col_k_col_last_d1_next;
+  logic col_k_col_last_d2_next;
 
   logic [COL_W-1:0] c2v_col_idx_next;
   logic [COL_W-1:0] v2c_col_idx_next;
@@ -126,18 +139,19 @@ module decoder_ctrl
   assign col_k_last_issue_fire = col_k_v2c_issue_fire && i_v2c_entry_pos_last;
 
   assign o_c2v_read = col_kp1_c2v_issue_fire;
-  assign o_c2v_write_t = (ctrl_state == CTRL_ITER) && col_kp1_c2v_valid_d1 && !iter_check_pending;
+  assign o_v2c_read = col_k_v2c_issue_fire;
+  assign o_c2v_write_t = (ctrl_state == CTRL_ITER) && col_kp1_c2v_valid_d2 && !iter_check_pending;
 
   assign o_vnu_accum_t = o_c2v_write_t;
   assign o_vnu_prep_write =
     (ctrl_state == CTRL_ITER) && schedule_has_col_k && !iter_check_pending &&
     (col_k_stage == COL_K_STAGE_FIRST);
-  assign o_vnu_cnu_a = col_k_v2c_issue_fire;
-  assign o_vnu_write_next = (ctrl_state == CTRL_ITER) && col_k_v2c_valid_d1 && !iter_check_pending;
+  assign o_vnu_cnu_a = (ctrl_state == CTRL_ITER) && col_k_v2c_valid_d1 && !iter_check_pending;
+  assign o_vnu_write_next = (ctrl_state == CTRL_ITER) && col_k_v2c_valid_d2 && !iter_check_pending;
   assign o_iter_check = (ctrl_state == CTRL_ITER) && iter_check_pending;
 
-  assign col_kp1_done_fire = o_c2v_write_t && col_kp1_last_d1;
-  assign col_k_last_write_fire = o_vnu_write_next && col_k_last_d1;
+  assign col_kp1_done_fire = o_c2v_write_t && col_kp1_last_d2;
+  assign col_k_last_write_fire = o_vnu_write_next && col_k_last_d2;
 
   assign o_col_k_meta_advance =
     (col_kp1_done_fire && (sched_state == SCHED_FILL_K)) ||
@@ -145,9 +159,9 @@ module decoder_ctrl
      ((sched_state == SCHED_KP1_READY) ||
       ((sched_state == SCHED_K_KP1) && col_kp1_done_fire)));
 
-  assign o_c2v_pipe_valid = o_c2v_read || o_c2v_write_t;
+  assign o_c2v_pipe_valid = o_c2v_read || col_kp1_c2v_valid_d1 || o_c2v_write_t;
   assign o_v2c_pipe_valid =
-    o_vnu_prep_write || o_vnu_cnu_a || o_vnu_write_next;
+    o_vnu_prep_write || o_v2c_read || o_vnu_cnu_a || o_vnu_write_next;
 
   assign o_work_col_idx = o_v2c_pipe_valid ? o_v2c_col_idx : o_c2v_col_idx;
   assign o_work_entry_pos = o_v2c_pipe_valid ? o_v2c_entry_pos : o_c2v_entry_pos;
@@ -158,7 +172,7 @@ module decoder_ctrl
 
   assign col_kp1_is_prime =
     (ctrl_state == CTRL_ITER) &&
-    ((sched_state == SCHED_FILL_K) || col_kp1_c2v_valid_d1) &&
+    ((sched_state == SCHED_FILL_K) || col_kp1_c2v_valid_d1 || col_kp1_c2v_valid_d2) &&
     !schedule_has_col_k && (o_c2v_col_idx == '0);
 
   always_comb begin
@@ -208,11 +222,17 @@ module decoder_ctrl
     sched_state_next = sched_state;
     col_k_stage_next = col_k_stage;
     col_kp1_c2v_valid_d1_next = col_kp1_c2v_valid_d1;
+    col_kp1_c2v_valid_d2_next = col_kp1_c2v_valid_d2;
     col_kp1_last_d1_next = col_kp1_last_d1;
+    col_kp1_last_d2_next = col_kp1_last_d2;
     col_kp1_col_last_d1_next = col_kp1_col_last_d1;
+    col_kp1_col_last_d2_next = col_kp1_col_last_d2;
     col_k_v2c_valid_d1_next = col_k_v2c_valid_d1;
+    col_k_v2c_valid_d2_next = col_k_v2c_valid_d2;
     col_k_last_d1_next = col_k_last_d1;
+    col_k_last_d2_next = col_k_last_d2;
     col_k_col_last_d1_next = col_k_col_last_d1;
+    col_k_col_last_d2_next = col_k_col_last_d2;
     c2v_col_idx_next = o_c2v_col_idx;
     v2c_col_idx_next = o_v2c_col_idx;
     c2v_entry_pos_next = o_c2v_entry_pos;
@@ -233,11 +253,17 @@ module decoder_ctrl
           sched_state_next = SCHED_FILL_K;
           col_k_stage_next = COL_K_STAGE_FIRST;
           col_kp1_c2v_valid_d1_next = 1'b0;
+          col_kp1_c2v_valid_d2_next = 1'b0;
           col_kp1_last_d1_next = 1'b0;
+          col_kp1_last_d2_next = 1'b0;
           col_kp1_col_last_d1_next = 1'b0;
+          col_kp1_col_last_d2_next = 1'b0;
           col_k_v2c_valid_d1_next = 1'b0;
+          col_k_v2c_valid_d2_next = 1'b0;
           col_k_last_d1_next = 1'b0;
+          col_k_last_d2_next = 1'b0;
           col_k_col_last_d1_next = 1'b0;
+          col_k_col_last_d2_next = 1'b0;
           c2v_col_idx_next = '0;
           v2c_col_idx_next = '0;
           c2v_entry_pos_next = '0;
@@ -254,11 +280,17 @@ module decoder_ctrl
           iter_check_pending_next = 1'b0;
           iter_count_next = next_iter_count;
           col_kp1_c2v_valid_d1_next = 1'b0;
+          col_kp1_c2v_valid_d2_next = 1'b0;
           col_kp1_last_d1_next = 1'b0;
+          col_kp1_last_d2_next = 1'b0;
           col_kp1_col_last_d1_next = 1'b0;
+          col_kp1_col_last_d2_next = 1'b0;
           col_k_v2c_valid_d1_next = 1'b0;
+          col_k_v2c_valid_d2_next = 1'b0;
           col_k_last_d1_next = 1'b0;
+          col_k_last_d2_next = 1'b0;
           col_k_col_last_d1_next = 1'b0;
+          col_k_col_last_d2_next = 1'b0;
           if (i_finish_decode) begin
             ctrl_state_next = CTRL_DONE;
             sched_state_next = SCHED_FILL_K;
@@ -275,11 +307,17 @@ module decoder_ctrl
           end
         end else begin
           col_kp1_c2v_valid_d1_next = col_kp1_c2v_issue_fire;
+          col_kp1_c2v_valid_d2_next = col_kp1_c2v_valid_d1;
           col_kp1_last_d1_next = col_kp1_c2v_issue_fire && i_c2v_entry_pos_last;
+          col_kp1_last_d2_next = col_kp1_last_d1;
           col_kp1_col_last_d1_next = col_kp1_c2v_issue_fire && (o_c2v_col_idx == LAST_COL);
+          col_kp1_col_last_d2_next = col_kp1_col_last_d1;
           col_k_v2c_valid_d1_next = col_k_v2c_issue_fire;
+          col_k_v2c_valid_d2_next = col_k_v2c_valid_d1;
           col_k_last_d1_next = col_k_v2c_issue_fire && i_v2c_entry_pos_last;
+          col_k_last_d2_next = col_k_last_d1;
           col_k_col_last_d1_next = col_k_v2c_issue_fire && (o_v2c_col_idx == LAST_COL);
+          col_k_col_last_d2_next = col_k_col_last_d1;
 
           if (col_kp1_c2v_issue_fire) begin
             if (i_c2v_entry_pos_last) begin
@@ -298,7 +336,7 @@ module decoder_ctrl
               v2c_col_idx_next = o_c2v_col_idx;
               v2c_entry_pos_next = '0;
               c2v_entry_pos_next = '0;
-              if (col_kp1_col_last_d1) begin
+              if (col_kp1_col_last_d2) begin
                 sched_state_next = SCHED_DRAIN_K;
               end else begin
                 sched_state_next = SCHED_K_KP1;
@@ -345,7 +383,7 @@ module decoder_ctrl
             end
           end
 
-          if (col_k_last_write_fire && col_k_col_last_d1) begin
+          if (col_k_last_write_fire && col_k_col_last_d2) begin
             iter_check_pending_next = 1'b1;
           end
         end
@@ -359,11 +397,17 @@ module decoder_ctrl
           sched_state_next = SCHED_FILL_K;
           col_k_stage_next = COL_K_STAGE_FIRST;
           col_kp1_c2v_valid_d1_next = 1'b0;
+          col_kp1_c2v_valid_d2_next = 1'b0;
           col_kp1_last_d1_next = 1'b0;
+          col_kp1_last_d2_next = 1'b0;
           col_kp1_col_last_d1_next = 1'b0;
+          col_kp1_col_last_d2_next = 1'b0;
           col_k_v2c_valid_d1_next = 1'b0;
+          col_k_v2c_valid_d2_next = 1'b0;
           col_k_last_d1_next = 1'b0;
+          col_k_last_d2_next = 1'b0;
           col_k_col_last_d1_next = 1'b0;
+          col_k_col_last_d2_next = 1'b0;
           c2v_col_idx_next = '0;
           v2c_col_idx_next = '0;
           c2v_entry_pos_next = '0;
@@ -390,11 +434,17 @@ module decoder_ctrl
       sched_state <= SCHED_FILL_K;
       col_k_stage <= COL_K_STAGE_FIRST;
       col_kp1_c2v_valid_d1 <= 1'b0;
+      col_kp1_c2v_valid_d2 <= 1'b0;
       col_kp1_last_d1 <= 1'b0;
+      col_kp1_last_d2 <= 1'b0;
       col_kp1_col_last_d1 <= 1'b0;
+      col_kp1_col_last_d2 <= 1'b0;
       col_k_v2c_valid_d1 <= 1'b0;
+      col_k_v2c_valid_d2 <= 1'b0;
       col_k_last_d1 <= 1'b0;
+      col_k_last_d2 <= 1'b0;
       col_k_col_last_d1 <= 1'b0;
+      col_k_col_last_d2 <= 1'b0;
       o_c2v_col_idx <= '0;
       o_v2c_col_idx <= '0;
       o_c2v_entry_pos <= '0;
@@ -410,11 +460,17 @@ module decoder_ctrl
       sched_state <= sched_state_next;
       col_k_stage <= col_k_stage_next;
       col_kp1_c2v_valid_d1 <= col_kp1_c2v_valid_d1_next;
+      col_kp1_c2v_valid_d2 <= col_kp1_c2v_valid_d2_next;
       col_kp1_last_d1 <= col_kp1_last_d1_next;
+      col_kp1_last_d2 <= col_kp1_last_d2_next;
       col_kp1_col_last_d1 <= col_kp1_col_last_d1_next;
+      col_kp1_col_last_d2 <= col_kp1_col_last_d2_next;
       col_k_v2c_valid_d1 <= col_k_v2c_valid_d1_next;
+      col_k_v2c_valid_d2 <= col_k_v2c_valid_d2_next;
       col_k_last_d1 <= col_k_last_d1_next;
+      col_k_last_d2 <= col_k_last_d2_next;
       col_k_col_last_d1 <= col_k_col_last_d1_next;
+      col_k_col_last_d2 <= col_k_col_last_d2_next;
       o_c2v_col_idx <= c2v_col_idx_next;
       o_v2c_col_idx <= v2c_col_idx_next;
       o_c2v_entry_pos <= c2v_entry_pos_next;

@@ -200,7 +200,7 @@ module tb_decoder_top;
     #1;
     if (dut.m_read_pair === dut.m_write_pair) $fatal(1, "RAM M ping-pong pairs should differ");
 
-    wait (dut.c2v_read && dut.c2v_col_idx == 1 && dut.active_entry_pos == 0);
+    wait (dut.c2v_read_d1 && dut.c2v_read_col_d1 == 1 && dut.c2v_read_entry_pos_d1 == 0);
     #1;
     if (dut.ram_i_debug_count[0][0] != GROUP_COUNT_W'(2)) $fatal(1, "RAM I shifted group_idx0 count mismatch for column 1");
     if (dut.ram_i_debug_count[0][1] != GROUP_COUNT_W'(1)) $fatal(1, "RAM I shifted group_idx1 count mismatch for column 1");

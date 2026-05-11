@@ -63,6 +63,7 @@ module tb_ram_i;
     // Read back via functional port.
     h_block_idx = '0;
     read_entry_idx = '0;
+    @(posedge clk);
     #1;
     if (count != debug_counts[0]) $fatal(1, "ram_i functional count view mismatch");
     if (entry_rdata != debug_list_entries[0][0]) $fatal(1, "ram_i functional entry view mismatch");
