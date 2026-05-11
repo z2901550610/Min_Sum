@@ -6,7 +6,7 @@ module ram_i
   import bike_pkg::*;
 #(
   parameter string INIT_HEX_STEM = "rtl/generated/ram_i",
-`ifdef BIKE_L1_PARAMS
+`ifndef BIKE_TEST_PARAMS
   parameter string INIT_HEX_TAG = "_l1"
 `else
   parameter string INIT_HEX_TAG = "_test"

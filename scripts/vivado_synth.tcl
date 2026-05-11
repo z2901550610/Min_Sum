@@ -11,7 +11,7 @@ file mkdir $build_dir
 set_param general.maxThreads $threads
 puts "Vivado synthesis threads: $threads"
 create_project -in_memory -part $part min_sum_vivado
-set_property verilog_define {BIKE_L1_PARAMS SYNTHESIS} [current_fileset]
+set_property verilog_define {SYNTHESIS} [current_fileset]
 
 set rtl_files [list \
   rtl/decoder_top.sv \

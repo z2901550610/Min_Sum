@@ -1,10 +1,4 @@
 `timescale 1ns/1ps
-`ifdef SYNTHESIS
-`ifndef BIKE_L1_PARAMS
-`define BIKE_L1_PARAMS
-`endif
-`endif
-
 `ifndef BIKE_PKG_EXTERNAL
 /* verilator lint_off DECLFILENAME */
 // Shared decoder parameters, field layouts, and H-block constants.
@@ -14,7 +8,7 @@ package bike_pkg;
 
   parameter int N0 = 2;
 
-`ifdef BIKE_L1_PARAMS
+`ifndef BIKE_TEST_PARAMS
   parameter int R = 12323;
   parameter int W = 71;
   parameter int I_MAX = 6;
@@ -33,7 +27,7 @@ package bike_pkg;
   parameter int N = N0 * R;
   parameter int L = 2;
   parameter int D = 4;
-`ifdef BIKE_L1_PARAMS
+`ifndef BIKE_TEST_PARAMS
   parameter int RAM_LANE_DEPTH = 37;
 `else
   parameter int RAM_LANE_DEPTH = 2;
@@ -109,7 +103,7 @@ package bike_pkg;
   localparam int I_ENTRY_ONE_IDX_LSB = I_ENTRY_ROW_IDX_GROUP_LSB + ROW_GROUP_W;
   localparam int I_ENTRY_W = I_ENTRY_ONE_IDX_LSB + ONE_IDX_W;
 
-`ifdef BIKE_L1_PARAMS
+`ifndef BIKE_TEST_PARAMS
   localparam int unsigned H_BASE [0:H_NUM-1][0:N0-1][0:W-1] = '{
     '{
       '{
@@ -153,7 +147,7 @@ module decoder_top
 #(
   parameter string RAM_I0_HEX_STEM = "rtl/generated/ram_i0",
   parameter string RAM_I1_HEX_STEM = "rtl/generated/ram_i1",
-`ifdef BIKE_L1_PARAMS
+`ifndef BIKE_TEST_PARAMS
   parameter string RAM_I_HEX_TAG = "_l1"
 `else
   parameter string RAM_I_HEX_TAG = "_test"
