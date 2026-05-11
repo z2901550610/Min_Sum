@@ -4,14 +4,17 @@ if {$build_dir eq ""} {
 }
 
 set part [expr {[info exists ::env(VIVADO_PART)] ? $::env(VIVADO_PART) : "xc7a35tcpg236-1"}]
+set threads [expr {[info exists ::env(VIVADO_THREADS)] ? $::env(VIVADO_THREADS) : "8"}]
 set top "decoder_top"
 
 file mkdir $build_dir
+set_param general.maxThreads $threads
+puts "Vivado synthesis threads: $threads"
 create_project -in_memory -part $part min_sum_vivado
-set_property verilog_define {BIKE_L1_PARAMS} [current_fileset]
+set_property verilog_define {BIKE_L1_PARAMS SYNTHESIS} [current_fileset]
 
 set rtl_files [list \
-  rtl/bike_pkg.sv \
+  rtl/decoder_top.sv \
   rtl/ram_i.sv \
   rtl/h_shift.sv \
   rtl/msg_signmag_to_tc.sv \
@@ -24,10 +27,9 @@ set rtl_files [list \
   rtl/cnu_a.sv \
   rtl/cnu_b.sv \
   rtl/vnu.sv \
-  rtl/decoder_top.sv \
 ]
 
-read_verilog -sv -define BIKE_L1_PARAMS $rtl_files
+read_verilog -sv $rtl_files
 set_property include_dirs [list rtl] [current_fileset]
 
 foreach init_file [glob -nocomplain rtl/generated/*.hex] {
