@@ -16,10 +16,10 @@
 
 ## 参数
 
-`rtl/bike_pkg.sv` 是解码器核心的参数包。
+`rtl/bike_pkg.sv` 是解码器核心的参数包。`rtl/decoder_top.sv` 内置同名参数包，便于 Vivado GUI 直接从顶层文件展开设计。
 
-- 默认构建：小型 BIKE 演示参数（`R=8`, `W=3`），用于快速 RTL 测试
-- `BIKE_L1_PARAMS` 构建：BIKE-L1 规模参数（`R=12323`, `W=71`, `N=24646`），使用确定性的首列向量
+- 默认构建：BIKE-L1 规模参数（`R=12323`, `W=71`, `N=24646`），使用确定性的首列向量
+- `BIKE_TOY_PARAMS` 构建：小型 BIKE 演示参数（`R=8`, `W=3`），用于快速 RTL 测试
 
 其中 `W` 是每个 circulant block 的列权重，BIKE-L1 的总行重为 `N0 * W = 142`。
 
@@ -56,7 +56,7 @@ ram_i #(.INIT_HEX_STEM("rtl/generated/ram_i0")) u_ram_i0 (...);
 ram_i #(.INIT_HEX_STEM("rtl/generated/ram_i1")) u_ram_i1 (...);
 ```
 
-`INIT_TAG` 通过 `` `ifdef BIKE_L1_PARAMS `` 选择 `"_l1"` 或 `"_test"`，确保编译时匹配正确的参数集。复位期间记忆体阵列保持初始化内容，因此复位释放后 RAM-I 已包含完整的首列元数据，解码器进入 INIT 状态即可直接使用。
+`INIT_TAG` 与参数集匹配：BIKE-L1 使用 `"_l1"`，`BIKE_TOY_PARAMS` 使用 `"_test"`。复位期间记忆体阵列保持初始化内容，因此复位释放后 RAM-I 已包含完整的首列元数据，解码器进入 INIT 状态即可直接使用。
 
 ## 模块划分
 
@@ -66,8 +66,8 @@ ram_i #(.INIT_HEX_STEM("rtl/generated/ram_i1")) u_ram_i1 (...);
 - `ram_i`、`ram_m`、`ram_s`、`ram_t`、`ram_c` 均为论文风格的 RAM 原语。每个 RTL 文件对应一个编号 RAM 块。
 - `decoder_top` 按论文命名显式实例化各 RAM 块：`I0/I1`、`M0/M1/M2/M3`、`S0/S1`、`T0/T1`、`C`。
 - RAM-M 每个 numbered block 保存一个 row group 的压缩 c2v 状态，深度为 `ROW_GROUP_DEPTH = ceil(R/L)`。顶层只向 RAM-M 发送 `row_idx_group`，绝对行号只用于 syndrome bit 选择和残差syndrome重算。
-- RAM-I、RAM-S、RAM-T 的 lane 内 entry 深度统一为 `RAM_LANE_DEPTH`，表示首列元数据在各 lane 中的最大有效 entry 数。BIKE-L1 参数下 `RAM_LANE_DEPTH=37`，默认测试参数下 `RAM_LANE_DEPTH=2`。
-- RAM-S 每个 lane 以 `S_PACK_W` 位宽 word 打包保存 v2c sign bit，默认打包宽度为 8 bit。`entry_pos / S_PACK_W` 选择 packed word，`entry_pos % S_PACK_W` 选择 word 内 bit。读地址服务列 k+1 的 CNU_B，写地址服务 CNU_A 写回。读写地址独立进入 RAM-S，使列 k+1 读 sign 和列 k 写回 sign 可以在同一拍调度。
+- RAM-I、RAM-S、RAM-T 的 lane 内 entry 深度统一为 `RAM_LANE_DEPTH`，表示首列元数据在各 lane 中的最大有效 entry 数。BIKE-L1 参数下 `RAM_LANE_DEPTH=37`，`BIKE_TOY_PARAMS` 参数下 `RAM_LANE_DEPTH=2`。
+- RAM-S 每个 lane 以单 bit word 保存 v2c sign bit。读地址服务列 k+1 的 CNU_B，写地址服务 CNU_A 写回。读写地址独立进入 RAM-S，使列 k+1 读 sign 和列 k 写回 sign 可以在同一拍调度。
 - RAM-T 每个 lane 以按 entry slot 寻址的缓冲保存列 k+1 生成的 c2v 和 valid sideband。列 k+1 每个 entry slot 都写入，空 lane 写入 invalid slot；v2c 发射阶段按同一个 entry slot 读取，valid sideband 控制 VNU 的外信息相减。`ITER_CHECK` 清空 RAM-T slot 状态。
 - RAM-C 保存 syndrome 输入译码器的错误估计 bit，是一份适配 syndrome 输入语义的 `N` bit 存储。
 - 列 metadata 使用两个固定 slot：列 k 从 active slot 读取，列 k+1 从 RAM-I 单 entry 视图写入 fill slot。`o_col_k_meta_advance` 触发 active/fill slot 轮换，使列 k+1 成为新的列 k。

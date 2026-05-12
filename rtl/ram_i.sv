@@ -6,7 +6,7 @@ module ram_i
   import bike_pkg::*;
 #(
   parameter string INIT_HEX_STEM = "rtl/generated/ram_i",
-`ifndef BIKE_TEST_PARAMS
+`ifndef BIKE_TOY_PARAMS
   parameter string INIT_HEX_TAG = "_l1"
 `else
   parameter string INIT_HEX_TAG = "_test"
@@ -23,30 +23,25 @@ module ram_i
   input  logic i_count_we,
   input  logic [GROUP_COUNT_W-1:0] i_count_wdata,
   output logic [I_ENTRY_W-1:0] o_entry_rdata,
-  output logic [GROUP_COUNT_W-1:0] o_count,
+  output logic [GROUP_COUNT_W-1:0] o_count
+`ifdef BIKE_SIM_DEBUG
+  ,
   output logic [I_ENTRY_W-1:0] o_debug_list_entries [0:N0-1][0:RAM_LANE_DEPTH-1],
   output logic [GROUP_COUNT_W-1:0] o_debug_counts [0:N0-1]
+`endif
 );
 
   // 每个 h_block 保存一个 group-local list；count 说明 list 前几项有效。
   (* ram_style = "distributed" *) logic [I_ENTRY_W-1:0] list_entries_mem [0:N0-1][0:RAM_LANE_DEPTH-1];
   logic [GROUP_COUNT_W-1:0] list_count_mem [0:N0-1];
-`ifndef SYNTHESIS
+`ifdef BIKE_SIM_DEBUG
   assign o_debug_list_entries = list_entries_mem;
   assign o_debug_counts = list_count_mem;
-`else
-  always_comb begin
-    for (int h_block_idx = 0; h_block_idx < N0; h_block_idx++) begin
-      o_debug_counts[h_block_idx] = '0;
-      for (int entry_idx = 0; entry_idx < RAM_LANE_DEPTH; entry_idx++) begin
-        o_debug_list_entries[h_block_idx][entry_idx] = '0;
-      end
-    end
-  end
 `endif
 
   assign o_count = list_count_mem[i_h_block_idx];
 
+`ifdef BIKE_SIM_DEBUG
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin
       o_entry_rdata <= '0;
@@ -60,6 +55,17 @@ module ram_i
       o_entry_rdata <= list_entries_mem[i_h_block_idx][i_read_entry_idx];
     end
   end
+`else
+  always_ff @(posedge i_clk) begin
+    if (i_we) begin
+      list_entries_mem[i_h_block_idx][i_write_entry_idx] <= i_entry_wdata;
+    end
+    if (i_count_we) begin
+      list_count_mem[i_h_block_idx] <= i_count_wdata;
+    end
+    o_entry_rdata <= list_entries_mem[i_h_block_idx][i_read_entry_idx];
+  end
+`endif
 
   // 从 hex 文件加载初始数据。
   initial begin

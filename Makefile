@@ -3,7 +3,7 @@ CFLAGS ?= -std=c99 -O2 -Wall -Wextra -pedantic
 VERILATOR ?= ./scripts/verilator_quiet.py
 REAL_VERILATOR ?= verilator
 VERILATOR_LOG_DIR ?= build/logs/verilator
-VERILATOR_FLAGS ?= --binary --sv -DBIKE_TEST_PARAMS -Wall -Wno-fatal -I./tb -I./rtl
+VERILATOR_FLAGS ?= --binary --sv -DBIKE_TOY_PARAMS -DBIKE_SIM_DEBUG -Wall -Wno-fatal -I./tb -I./rtl
 SIM ?= ./scripts/run_quiet.py
 VIVADO ?= vivado
 VIVADO_BUILD_DIR ?= build/vivado

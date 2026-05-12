@@ -6,7 +6,7 @@ package bike_pkg;
 
   parameter int N0 = 2;
 
-`ifndef BIKE_TEST_PARAMS
+`ifndef BIKE_TOY_PARAMS
   parameter int R = 12323;
   parameter int W = 71;
   parameter int I_MAX = 6;
@@ -25,7 +25,7 @@ package bike_pkg;
   parameter int N = N0 * R;
   parameter int L = 2;
   parameter int D = 4;
-`ifndef BIKE_TEST_PARAMS
+`ifndef BIKE_TOY_PARAMS
   parameter int RAM_LANE_DEPTH = 37;
 `else
   parameter int RAM_LANE_DEPTH = 2;
@@ -101,7 +101,7 @@ package bike_pkg;
   localparam int I_ENTRY_ONE_IDX_LSB = I_ENTRY_ROW_IDX_GROUP_LSB + ROW_GROUP_W;
   localparam int I_ENTRY_W = I_ENTRY_ONE_IDX_LSB + ONE_IDX_W;
 
-`ifndef BIKE_TEST_PARAMS
+`ifndef BIKE_TOY_PARAMS
   localparam int unsigned H_BASE [0:H_NUM-1][0:N0-1][0:W-1] = '{
     '{
       '{

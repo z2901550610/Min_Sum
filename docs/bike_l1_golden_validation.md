@@ -89,4 +89,4 @@ The implementation was checked with the following reproducible results:
 - `--bike-l1-batch --base-seed 1 --trials 8` reported `successes=8`, `failures=0`, first successful seed `1`, first successful iterations `3`
 - `--bike-l1-calibrate --base-seed 1 --trials 4` ranked the fixed grid and selected `C=7`, `alpha=2^-4 + 2^-6`, `Imax=6` as the best tuple
 
-These checks establish that the BIKE-L1 min-sum golden is deterministic and cross-validated internally. Regular RTL regression uses the small BIKE demo parameters in `rtl/bike_pkg.sv`; defining `BIKE_L1_PARAMS` selects the BIKE-L1 dimensions.
+These checks establish that the BIKE-L1 min-sum golden is deterministic and cross-validated internally. Regular RTL regression defines `BIKE_TOY_PARAMS` for the compact demo dimensions, and Vivado-oriented builds use the BIKE-L1 dimensions from `rtl/decoder_top.sv`.

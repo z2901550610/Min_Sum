@@ -132,10 +132,10 @@ def main() -> None:
     w_values = extract_w_values(source_text)
     h_base_values = extract_h_base_values(source_text)
 
-    # Branch 0: BIKE_L1_PARAMS (first H_BASE, first R, first W)
+    # Parameter set 0: BIKE L1.
     generate_hex_files(h_base_values[0], r_values[0], w_values[0], "l1", output_dir)
 
-    # Branch 1: default test params (second H_BASE, second R, second W)
+    # Parameter set 1: compact toy tests.
     generate_hex_files(h_base_values[1], r_values[1], w_values[1], "test", output_dir)
 
     print(f"Generated hex files in {output_dir}")

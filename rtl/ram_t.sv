@@ -14,8 +14,11 @@ module ram_t
   input  logic [MSG_W-1:0] i_wdata,
   output logic [MSG_W-1:0] o_rdata,
   output logic o_valid,
-  output logic [GROUP_COUNT_W-1:0] o_item_count,
+  output logic [GROUP_COUNT_W-1:0] o_item_count
+`ifdef BIKE_SIM_DEBUG
+  ,
   output logic [MSG_W-1:0] o_debug_mem [0:RAM_LANE_DEPTH-1]
+`endif
 );
 
   (* ram_style = "distributed" *) logic [MSG_W-1:0] mem [0:RAM_LANE_DEPTH-1];
@@ -24,16 +27,10 @@ module ram_t
 
   assign o_item_count = valid_count;
 
-`ifndef SYNTHESIS
+`ifdef BIKE_SIM_DEBUG
   always_comb begin
     for (int entry_pos = 0; entry_pos < RAM_LANE_DEPTH; entry_pos++) begin
       o_debug_mem[entry_pos] = mem[entry_pos];
-    end
-  end
-`else
-  always_comb begin
-    for (int entry_pos = 0; entry_pos < RAM_LANE_DEPTH; entry_pos++) begin
-      o_debug_mem[entry_pos] = '0;
     end
   end
 `endif

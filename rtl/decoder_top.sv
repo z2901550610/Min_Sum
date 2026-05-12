@@ -8,7 +8,7 @@ package bike_pkg;
 
   parameter int N0 = 2;
 
-`ifndef BIKE_TEST_PARAMS
+`ifndef BIKE_TOY_PARAMS
   parameter int R = 12323;
   parameter int W = 71;
   parameter int I_MAX = 6;
@@ -27,7 +27,7 @@ package bike_pkg;
   parameter int N = N0 * R;
   parameter int L = 2;
   parameter int D = 4;
-`ifndef BIKE_TEST_PARAMS
+`ifndef BIKE_TOY_PARAMS
   parameter int RAM_LANE_DEPTH = 37;
 `else
   parameter int RAM_LANE_DEPTH = 2;
@@ -103,7 +103,7 @@ package bike_pkg;
   localparam int I_ENTRY_ONE_IDX_LSB = I_ENTRY_ROW_IDX_GROUP_LSB + ROW_GROUP_W;
   localparam int I_ENTRY_W = I_ENTRY_ONE_IDX_LSB + ONE_IDX_W;
 
-`ifndef BIKE_TEST_PARAMS
+`ifndef BIKE_TOY_PARAMS
   localparam int unsigned H_BASE [0:H_NUM-1][0:N0-1][0:W-1] = '{
     '{
       '{
@@ -147,7 +147,7 @@ module decoder_top
 #(
   parameter string RAM_I0_HEX_STEM = "rtl/generated/ram_i0",
   parameter string RAM_I1_HEX_STEM = "rtl/generated/ram_i1",
-`ifndef BIKE_TEST_PARAMS
+`ifndef BIKE_TOY_PARAMS
   parameter string RAM_I_HEX_TAG = "_l1"
 `else
   parameter string RAM_I_HEX_TAG = "_test"
@@ -191,7 +191,9 @@ module decoder_top
   logic col_k_meta_advance;
   logic [N-1:0] error_estimate_bits;
   logic [R-1:0] syndrome_hist [0:I_MAX-1];
+`ifdef BIKE_SIM_DEBUG
   logic [GROUP_COUNT_W-1:0] ram_i_debug_count [0:N0-1][0:L-1];
+`endif
   /* verilator lint_on UNUSEDSIGNAL */
   logic [I_ENTRY_W-1:0] ram_i_entry_rdata [0:L-1];
   logic [GROUP_COUNT_W-1:0] ram_i_count [0:L-1];
@@ -282,8 +284,10 @@ module decoder_top
   logic [ITER_W:0] next_iter_count_ext;
   logic [HIST_IDX_W-1:0] hist_wr_idx;
 
+`ifdef BIKE_SIM_DEBUG
   logic [GROUP_COUNT_W-1:0] ram_i0_debug_count [0:N0-1];
   logic [GROUP_COUNT_W-1:0] ram_i1_debug_count [0:N0-1];
+`endif
 
   // Paper-style RAM port steering. Each block is single-port, so the top
   // centralizes all enables, addresses, and write data here.
@@ -295,12 +299,14 @@ module decoder_top
   logic m_pair_epoch [0:1];
   logic m_row_valid [0:3][0:ROW_GROUP_DEPTH-1];
   logic m_row_epoch [0:3][0:ROW_GROUP_DEPTH-1];
+`ifdef BIKE_SIM_DEBUG
   /* verilator lint_off UNUSEDSIGNAL */
   logic [COMP_C2V_W-1:0] ram_m0_debug_mem [0:ROW_GROUP_DEPTH-1];
   logic [COMP_C2V_W-1:0] ram_m1_debug_mem [0:ROW_GROUP_DEPTH-1];
   logic [COMP_C2V_W-1:0] ram_m2_debug_mem [0:ROW_GROUP_DEPTH-1];
   logic [COMP_C2V_W-1:0] ram_m3_debug_mem [0:ROW_GROUP_DEPTH-1];
   /* verilator lint_on UNUSEDSIGNAL */
+`endif
 
   logic s_we [0:L-1];
   logic [COL_W-1:0] s_read_col_idx [0:L-1];
@@ -444,6 +450,7 @@ module decoder_top
     .o_row_idx_group(shifted_row_idx_group)
   );
 
+`ifdef BIKE_SIM_DEBUG
   // Aggregate the two group RAM-I debug counts into the shape expected by
   // the testbench.
   always_comb begin
@@ -454,6 +461,7 @@ module decoder_top
       ram_i_debug_count[h_block_idx][1] = ram_i1_debug_count[h_block_idx];
     end
   end
+`endif
 
   // Decide whether each c2v/v2c column cursor is at the last active group
   // list position for the current column.
@@ -1121,9 +1129,12 @@ module decoder_top
     .i_count_we(ram_i_shift_count_we),
     .i_count_wdata(ram_i_shift_count_wdata[0]),
     .o_entry_rdata(ram_i_entry_rdata[0]),
-    .o_count(ram_i_count[0]),
+    .o_count(ram_i_count[0])
+`ifdef BIKE_SIM_DEBUG
+    ,
     .o_debug_list_entries(),
     .o_debug_counts(ram_i0_debug_count)
+`endif
   );
 
   ram_i #(
@@ -1140,9 +1151,12 @@ module decoder_top
     .i_count_we(ram_i_shift_count_we),
     .i_count_wdata(ram_i_shift_count_wdata[1]),
     .o_entry_rdata(ram_i_entry_rdata[1]),
-    .o_count(ram_i_count[1]),
+    .o_count(ram_i_count[1])
+`ifdef BIKE_SIM_DEBUG
+    ,
     .o_debug_list_entries(),
     .o_debug_counts(ram_i1_debug_count)
+`endif
   );
 
   ram_c u_decision_ram (
@@ -1162,8 +1176,11 @@ module decoder_top
     .i_read_row_idx_group(m_read_row_idx_group[0]),
     .i_write_row_idx_group(m_write_row_idx_group[0]),
     .i_wdata(m_wdata[0]),
-    .o_rdata(m_rdata[0]),
+    .o_rdata(m_rdata[0])
+`ifdef BIKE_SIM_DEBUG
+    ,
     .o_debug_mem(ram_m0_debug_mem)
+`endif
   );
 
   ram_m u_ram_m1 (
@@ -1173,8 +1190,11 @@ module decoder_top
     .i_read_row_idx_group(m_read_row_idx_group[1]),
     .i_write_row_idx_group(m_write_row_idx_group[1]),
     .i_wdata(m_wdata[1]),
-    .o_rdata(m_rdata[1]),
+    .o_rdata(m_rdata[1])
+`ifdef BIKE_SIM_DEBUG
+    ,
     .o_debug_mem(ram_m1_debug_mem)
+`endif
   );
 
   ram_m u_ram_m2 (
@@ -1184,8 +1204,11 @@ module decoder_top
     .i_read_row_idx_group(m_read_row_idx_group[2]),
     .i_write_row_idx_group(m_write_row_idx_group[2]),
     .i_wdata(m_wdata[2]),
-    .o_rdata(m_rdata[2]),
+    .o_rdata(m_rdata[2])
+`ifdef BIKE_SIM_DEBUG
+    ,
     .o_debug_mem(ram_m2_debug_mem)
+`endif
   );
 
   ram_m u_ram_m3 (
@@ -1195,8 +1218,11 @@ module decoder_top
     .i_read_row_idx_group(m_read_row_idx_group[3]),
     .i_write_row_idx_group(m_write_row_idx_group[3]),
     .i_wdata(m_wdata[3]),
-    .o_rdata(m_rdata[3]),
+    .o_rdata(m_rdata[3])
+`ifdef BIKE_SIM_DEBUG
+    ,
     .o_debug_mem(ram_m3_debug_mem)
+`endif
   );
 
   ram_s u_ram_s0 (
@@ -1208,8 +1234,11 @@ module decoder_top
     .i_write_col_idx(s_write_col_idx[0]),
     .i_write_entry_idx(s_write_entry_idx[0]),
     .i_wdata(s_wdata[0]),
-    .o_rdata(s_rdata[0]),
+    .o_rdata(s_rdata[0])
+`ifdef BIKE_SIM_DEBUG
+    ,
     .o_debug_mem()
+`endif
   );
 
   ram_s u_ram_s1 (
@@ -1221,8 +1250,11 @@ module decoder_top
     .i_write_col_idx(s_write_col_idx[1]),
     .i_write_entry_idx(s_write_entry_idx[1]),
     .i_wdata(s_wdata[1]),
-    .o_rdata(s_rdata[1]),
+    .o_rdata(s_rdata[1])
+`ifdef BIKE_SIM_DEBUG
+    ,
     .o_debug_mem()
+`endif
   );
 
   ram_t u_ram_t0 (
@@ -1237,8 +1269,11 @@ module decoder_top
     .i_wdata(t_wdata[0]),
     .o_rdata(t_rdata[0]),
     .o_valid(t_rvalid[0]),
-    .o_item_count(),
+    .o_item_count()
+`ifdef BIKE_SIM_DEBUG
+    ,
     .o_debug_mem()
+`endif
   );
 
   ram_t u_ram_t1 (
@@ -1253,8 +1288,11 @@ module decoder_top
     .i_wdata(t_wdata[1]),
     .o_rdata(t_rdata[1]),
     .o_valid(t_rvalid[1]),
-    .o_item_count(),
+    .o_item_count()
+`ifdef BIKE_SIM_DEBUG
+    ,
     .o_debug_mem()
+`endif
   );
   /* verilator lint_on PINCONNECTEMPTY */
 endmodule

@@ -430,6 +430,7 @@ def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int
         "--binary",
         "--sv",
         "-DBIKE_PKG_EXTERNAL",
+        "-DBIKE_SIM_DEBUG",
         "-Wall",
         "-Wno-fatal",
         "-I./tb",
