@@ -11,14 +11,20 @@ from ram_i_hex import generate_hex_files
 
 
 def extract_r_values(text: str) -> list[int]:
-    values = [int(value) for value in re.findall(r"parameter\s+int\s+R\s*=\s*(\d+)\s*;", text)]
+    values = [
+        int(value)
+        for value in re.findall(r"(?:localparam|parameter)\s+int\s+R\s*=\s*(\d+)\s*;", text)
+    ]
     if len(values) != 2:
         raise ValueError("expected exactly two R parameter values in bike_pkg")
     return values
 
 
 def extract_w_values(text: str) -> list[int]:
-    values = [int(value) for value in re.findall(r"parameter\s+int\s+W\s*=\s*(\d+)\s*;", text)]
+    values = [
+        int(value)
+        for value in re.findall(r"(?:localparam|parameter)\s+int\s+W\s*=\s*(\d+)\s*;", text)
+    ]
     if len(values) < 2:
         raise ValueError("expected at least two W parameter values in bike_pkg")
     return values

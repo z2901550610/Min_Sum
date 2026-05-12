@@ -31,12 +31,32 @@ module ram_i
 `endif
 );
 
+  localparam int I_MEM_DEPTH = N0 * RAM_LANE_DEPTH;
+  localparam int I_MEM_ADDR_W = (I_MEM_DEPTH > 1) ? $clog2(I_MEM_DEPTH) : 1;
+
   // 每个 h_block 保存一个 group-local list；count 说明 list 前几项有效。
-  (* ram_style = "distributed" *) logic [I_ENTRY_W-1:0] list_entries_mem [0:N0-1][0:RAM_LANE_DEPTH-1];
+  (* ram_style = "block" *) logic [I_ENTRY_W-1:0] list_entries_mem [0:I_MEM_DEPTH-1];
   logic [GROUP_COUNT_W-1:0] list_count_mem [0:N0-1];
+
+  function automatic logic [I_MEM_ADDR_W-1:0] entry_addr(
+    input logic [H_BLOCK_W-1:0] h_block_idx,
+    input logic [ENTRY_POS_W-1:0] entry_idx
+  );
+    begin
+      entry_addr = I_MEM_ADDR_W'(int'(h_block_idx) * RAM_LANE_DEPTH + int'(entry_idx));
+    end
+  endfunction
+
 `ifdef BIKE_SIM_DEBUG
-  assign o_debug_list_entries = list_entries_mem;
-  assign o_debug_counts = list_count_mem;
+  always_comb begin
+    for (int h_block_idx = 0; h_block_idx < N0; h_block_idx++) begin
+      o_debug_counts[h_block_idx] = list_count_mem[h_block_idx];
+      for (int entry_idx = 0; entry_idx < RAM_LANE_DEPTH; entry_idx++) begin
+        o_debug_list_entries[h_block_idx][entry_idx] =
+          list_entries_mem[h_block_idx * RAM_LANE_DEPTH + entry_idx];
+      end
+    end
+  end
 `endif
 
   assign o_count = list_count_mem[i_h_block_idx];
@@ -47,23 +67,23 @@ module ram_i
       o_entry_rdata <= '0;
     end else begin
       if (i_we) begin
-        list_entries_mem[i_h_block_idx][i_write_entry_idx] <= i_entry_wdata;
+        list_entries_mem[entry_addr(i_h_block_idx, i_write_entry_idx)] <= i_entry_wdata;
       end
       if (i_count_we) begin
         list_count_mem[i_h_block_idx] <= i_count_wdata;
       end
-      o_entry_rdata <= list_entries_mem[i_h_block_idx][i_read_entry_idx];
+      o_entry_rdata <= list_entries_mem[entry_addr(i_h_block_idx, i_read_entry_idx)];
     end
   end
 `else
   always_ff @(posedge i_clk) begin
     if (i_we) begin
-      list_entries_mem[i_h_block_idx][i_write_entry_idx] <= i_entry_wdata;
+      list_entries_mem[entry_addr(i_h_block_idx, i_write_entry_idx)] <= i_entry_wdata;
     end
     if (i_count_we) begin
       list_count_mem[i_h_block_idx] <= i_count_wdata;
     end
-    o_entry_rdata <= list_entries_mem[i_h_block_idx][i_read_entry_idx];
+    o_entry_rdata <= list_entries_mem[entry_addr(i_h_block_idx, i_read_entry_idx)];
   end
 `endif
 

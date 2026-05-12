@@ -4,41 +4,41 @@ package bike_pkg;
 
   /* verilator lint_off UNUSEDPARAM */
 
-  parameter int N0 = 2;
+  localparam int N0 = 2;
 
 `ifndef BIKE_TOY_PARAMS
-  parameter int R = 12323;
-  parameter int W = 71;
-  parameter int I_MAX = 6;
-  parameter int C_VAL = 7;
-  parameter int ALPHA_SHIFT_0 = 4;  //对应论文中使用最多两位1表示
-  parameter int ALPHA_SHIFT_1 = 6;  //ALPHA_SHIFT_0 与 ALPHA_SHIFT_1 表示"1"的位置，即 alpha=0.000101b
+  localparam int R = 12323;
+  localparam int W = 71;
+  localparam int I_MAX = 6;
+  localparam int C_VAL = 7;
+  localparam int ALPHA_SHIFT_0 = 4;  //对应论文中使用最多两位1表示
+  localparam int ALPHA_SHIFT_1 = 6;  //ALPHA_SHIFT_0 与 ALPHA_SHIFT_1 表示"1"的位置，即 alpha=0.000101b
 `else
-  parameter int R = 8;
-  parameter int W = 3;
-  parameter int I_MAX = 4;
-  parameter int C_VAL = 9;
-  parameter int ALPHA_SHIFT_0 = 4;
-  parameter int ALPHA_SHIFT_1 = 5;
+  localparam int R = 8;
+  localparam int W = 3;
+  localparam int I_MAX = 4;
+  localparam int C_VAL = 9;
+  localparam int ALPHA_SHIFT_0 = 4;
+  localparam int ALPHA_SHIFT_1 = 5;
 `endif
 
-  parameter int N = N0 * R;
-  parameter int L = 2;
-  parameter int D = 4;
+  localparam int N = N0 * R;
+  localparam int L = 2;
+  localparam int D = 4;
 `ifndef BIKE_TOY_PARAMS
-  parameter int RAM_LANE_DEPTH = 37;
+  localparam int RAM_LANE_DEPTH = 37;
 `else
-  parameter int RAM_LANE_DEPTH = 2;
+  localparam int RAM_LANE_DEPTH = 2;
 `endif
-  parameter int ALPHA_FRAC_W = 6;  //alpha 用6位小数表示
-  parameter int MAG_MAX = (1 << D) - 1;
-  parameter int MSG_W = D + 1;
-  parameter int ROW_SEG_SIZE = (R + L - 1) / L;
-  parameter int ROW_GROUP_DEPTH = ROW_SEG_SIZE;
-  parameter int VNU_TC_W = MSG_W + ((W > 1) ? $clog2(W + 1) : 1);
-  parameter int COL_W = (N > 1) ? $clog2(N) : 1;
-  parameter int H_BLOCK_W = (N0 > 1) ? $clog2(N0) : 1;
-  parameter int H_NUM = 1;
+  localparam int ALPHA_FRAC_W = 6;  //alpha 用6位小数表示
+  localparam int MAG_MAX = (1 << D) - 1;
+  localparam int MSG_W = D + 1;
+  localparam int ROW_SEG_SIZE = (R + L - 1) / L;
+  localparam int ROW_GROUP_DEPTH = ROW_SEG_SIZE;
+  localparam int VNU_TC_W = MSG_W + ((W > 1) ? $clog2(W + 1) : 1);
+  localparam int COL_W = (N > 1) ? $clog2(N) : 1;
+  localparam int H_BLOCK_W = (N0 > 1) ? $clog2(N0) : 1;
+  localparam int H_NUM = 1;
 
   // Canonical names aligned with h_shift.sv conventions.
   // "one_idx" = index of a "1" within a column (0 .. W-1).
@@ -46,12 +46,12 @@ package bike_pkg;
   // "row_idx_group" = row index within a group/lane.
   // "group_idx" = which lane/group (0 .. L-1).
   // "group_count" = number of valid entries in a group's list.
-  parameter int ONE_IDX_W   = (W > 1) ? $clog2(W)     : 1;
-  parameter int ROW_IDX_W   = (R > 1) ? $clog2(R)     : 1;
-  parameter int GROUP_IDX_W = (L > 1) ? $clog2(L)     : 1;
-  parameter int ROW_GROUP_W = ROW_IDX_W - GROUP_IDX_W;
-  parameter int ENTRY_POS_W = (RAM_LANE_DEPTH > 1) ? $clog2(RAM_LANE_DEPTH) : 1;
-  parameter int GROUP_COUNT_W = (RAM_LANE_DEPTH > 1) ? $clog2(RAM_LANE_DEPTH + 1) : 1;
+  localparam int ONE_IDX_W   = (W > 1) ? $clog2(W)     : 1;
+  localparam int ROW_IDX_W   = (R > 1) ? $clog2(R)     : 1;
+  localparam int GROUP_IDX_W = (L > 1) ? $clog2(L)     : 1;
+  localparam int ROW_GROUP_W = ROW_IDX_W - GROUP_IDX_W;
+  localparam int ENTRY_POS_W = (RAM_LANE_DEPTH > 1) ? $clog2(RAM_LANE_DEPTH) : 1;
+  localparam int GROUP_COUNT_W = (RAM_LANE_DEPTH > 1) ? $clog2(RAM_LANE_DEPTH + 1) : 1;
 
   localparam int DEC_STATE_W = 4;
   localparam logic [DEC_STATE_W-1:0] DEC_WAIT_START       = 4'd0;
