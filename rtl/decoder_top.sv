@@ -279,8 +279,13 @@ module decoder_top
   logic [ROW_GROUP_W-1:0] v2c_read_row_idx_group_d1 [0:L-1];
 
   logic [R-1:0] residual_syndrome_next;
+  logic [R-1:0] residual_syndrome;
   logic decode_success;
   logic finish_decode;
+  logic decision_ram_old_bit;
+  logic decision_update_pending;
+  logic [COL_W-1:0] decision_update_col;
+  logic decision_update_new_bit;
   logic [ITER_W:0] next_iter_count_ext;
 `ifdef BIKE_SIM_DEBUG
   logic [HIST_IDX_W-1:0] hist_wr_idx;
@@ -746,27 +751,24 @@ module decoder_top
     end
   end
 
-  // Recompute the residual syndrome from the single hard-decision RAM, which is
-  // the source of truth for the exported error estimate.
+  // Track the residual syndrome incrementally when a hard-decision bit changes.
   always_comb begin
-    integer col_idx;
     integer one_idx;
     logic [H_BLOCK_W-1:0] residual_h_block_idx;
     integer residual_col;
     logic [ROW_IDX_W-1:0] residual_row;
 
-    residual_syndrome_next = i_syndrome;
+    residual_syndrome_next = residual_syndrome;
     residual_h_block_idx = '0;
     residual_col = 0;
     residual_row = '0;
-    for (col_idx = 0; col_idx < N; col_idx++) begin
-      if (error_estimate_bits[col_idx]) begin
-        residual_h_block_idx = H_BLOCK_W'(col_idx / R);
-        residual_col = col_idx % R;
-        for (one_idx = 0; one_idx < W; one_idx++) begin
-          residual_row = ROW_IDX_W'((H_BASE[0][residual_h_block_idx][one_idx] + residual_col) % R);
-          residual_syndrome_next[residual_row] = residual_syndrome_next[residual_row] ^ 1'b1;
-        end
+
+    if (decision_update_pending && (decision_ram_old_bit != decision_update_new_bit)) begin
+      residual_h_block_idx = H_BLOCK_W'(int'(decision_update_col) / R);
+      residual_col = int'(decision_update_col) % R;
+      for (one_idx = 0; one_idx < W; one_idx++) begin
+        residual_row = ROW_IDX_W'((H_BASE[0][residual_h_block_idx][one_idx] + residual_col) % R);
+        residual_syndrome_next[residual_row] = residual_syndrome_next[residual_row] ^ 1'b1;
       end
     end
   end
@@ -790,6 +792,10 @@ module decoder_top
       v2c_read_col_d1 <= '0;
       v2c_read_entry_pos_d1 <= '0;
       v2c_read_m_write_pair_d1 <= 1'b0;
+      residual_syndrome <= '0;
+      decision_update_pending <= 1'b0;
+      decision_update_col <= '0;
+      decision_update_new_bit <= 1'b0;
       for (group_idx = 0; group_idx < L; group_idx++) begin
         c2v_read_count_d1[group_idx] <= '0;
         v2c_read_group_valid_d1[group_idx] <= 1'b0;
@@ -829,6 +835,17 @@ module decoder_top
       end
 `endif
     end else begin
+      residual_syndrome <= residual_syndrome_next;
+      decision_update_pending <= decision_ram_we;
+      if (decision_ram_we) begin
+        decision_update_col <= decision_ram_col_idx;
+        decision_update_new_bit <= decision_ram_wdata;
+      end
+      if (i_start) begin
+        residual_syndrome <= i_syndrome;
+        decision_update_pending <= 1'b0;
+      end
+
       c2v_read_d1 <= c2v_read;
       if (c2v_read) begin
         c2v_read_col_d1 <= c2v_col_idx;
@@ -1182,7 +1199,7 @@ module decoder_top
     .i_we(decision_ram_we),
     .i_col_idx(decision_ram_col_idx),
     .i_wdata(decision_ram_wdata),
-    .o_rdata(),
+    .o_rdata(decision_ram_old_bit),
     .o_bits(error_estimate_bits)
   );
 
