@@ -12,6 +12,16 @@ set_param general.maxThreads $threads
 puts "Vivado synthesis threads: $threads"
 create_project -in_memory -part $part min_sum_vivado
 
+proc run_step {name command} {
+  puts "== $name =="
+  if {[catch {uplevel 1 $command} result options]} {
+    puts "FATAL: $name failed"
+    puts $result
+    puts [dict get $options -errorinfo]
+    return -code error $result
+  }
+}
+
 set rtl_files [list \
   rtl/decoder_top.sv \
   rtl/ram_i.sv \
@@ -28,15 +38,22 @@ set rtl_files [list \
   rtl/vnu.sv \
 ]
 
-read_verilog -sv $rtl_files
+run_step "read_verilog" {
+  read_verilog -sv $rtl_files
+}
 set_property include_dirs [list rtl] [current_fileset]
 
 foreach init_file [glob -nocomplain rtl/generated/*.hex] {
   add_files -fileset sources_1 $init_file
 }
 
-synth_design -top $top -part $part
+run_step "synth_design" {
+  synth_design -top $top -part $part
+}
 
+report_utilization -hierarchical -file [file join $build_dir utilization_hier.rpt]
 report_utilization -file [file join $build_dir utilization.rpt]
 report_timing_summary -file [file join $build_dir timing_summary.rpt]
+report_messages -file [file join $build_dir messages.rpt]
 write_checkpoint -force [file join $build_dir post_synth.dcp]
+puts "Vivado synthesis completed. Reports written to $build_dir"

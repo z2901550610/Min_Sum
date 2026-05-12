@@ -24,7 +24,7 @@ module ram_t
 `ifdef BIKE_SIM_DEBUG
   (* ram_style = "distributed" *) logic [MSG_W-1:0] mem [0:RAM_LANE_DEPTH-1];
 `else
-  (* ram_style = "block" *) logic [MSG_W-1:0] mem [0:RAM_LANE_DEPTH-1];
+  (* ram_style = "distributed" *) logic [MSG_W-1:0] mem [0:RAM_LANE_DEPTH-1];
 `endif
   logic valid_mem [0:RAM_LANE_DEPTH-1];
   logic [GROUP_COUNT_W-1:0] valid_count;
