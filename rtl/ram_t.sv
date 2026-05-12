@@ -21,7 +21,11 @@ module ram_t
 `endif
 );
 
+`ifdef BIKE_SIM_DEBUG
   (* ram_style = "distributed" *) logic [MSG_W-1:0] mem [0:RAM_LANE_DEPTH-1];
+`else
+  (* ram_style = "block" *) logic [MSG_W-1:0] mem [0:RAM_LANE_DEPTH-1];
+`endif
   logic valid_mem [0:RAM_LANE_DEPTH-1];
   logic [GROUP_COUNT_W-1:0] valid_count;
 
@@ -35,6 +39,7 @@ module ram_t
   end
 `endif
 
+`ifdef BIKE_SIM_DEBUG
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n || i_clear) begin
       o_rdata <= '0;
@@ -55,6 +60,31 @@ module ram_t
       o_valid <= valid_mem[i_read_entry_idx];
     end
   end
+`else
+  always_ff @(posedge i_clk) begin
+    if (i_rst_n && !i_clear && i_push) begin
+      mem[i_write_entry_idx] <= i_wdata;
+    end
+    o_rdata <= mem[i_read_entry_idx];
+  end
+
+  always_ff @(posedge i_clk or negedge i_rst_n) begin
+    if (!i_rst_n || i_clear) begin
+      o_valid <= 1'b0;
+      for (int entry_pos = 0; entry_pos < RAM_LANE_DEPTH; entry_pos++) begin
+        valid_mem[entry_pos] <= 1'b0;
+      end
+    end else begin
+      if (i_pop) begin
+        valid_mem[i_read_entry_idx] <= 1'b0;
+      end
+      if (i_push) begin
+        valid_mem[i_write_entry_idx] <= i_valid;
+      end
+      o_valid <= valid_mem[i_read_entry_idx];
+    end
+  end
+`endif
 
   always_comb begin
     valid_count = '0;
