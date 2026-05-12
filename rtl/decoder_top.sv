@@ -298,11 +298,9 @@ module decoder_top
   logic [ROW_GROUP_W-1:0] m_write_row_idx_group [0:3];
   logic [COMP_C2V_W-1:0] m_wdata [0:3];
   logic [COMP_C2V_W-1:0] m_rdata [0:3];
-  logic m_pair_epoch [0:1];
-  localparam int M_ROW_STATE_DEPTH = 4 * ROW_GROUP_DEPTH;
+  localparam int M_ROW_STATE_DEPTH = L * ROW_GROUP_DEPTH;
   localparam int M_ROW_STATE_ADDR_W = (M_ROW_STATE_DEPTH > 1) ? $clog2(M_ROW_STATE_DEPTH) : 1;
-  logic m_row_valid [0:M_ROW_STATE_DEPTH-1];
-  logic m_row_epoch [0:M_ROW_STATE_DEPTH-1];
+  logic m_write_row_seen [0:M_ROW_STATE_DEPTH-1];
 `ifdef BIKE_SIM_DEBUG
   /* verilator lint_off UNUSEDSIGNAL */
   logic [COMP_C2V_W-1:0] ram_m0_debug_mem [0:ROW_GROUP_DEPTH-1];
@@ -362,18 +360,12 @@ module decoder_top
     end
   endfunction
 
-  function automatic logic m_port_pair(input int port_idx);
-    begin
-      m_port_pair = (port_idx >= L);
-    end
-  endfunction
-
-  function automatic logic [M_ROW_STATE_ADDR_W-1:0] m_row_state_addr(
-    input int port_idx,
+  function automatic logic [M_ROW_STATE_ADDR_W-1:0] m_write_seen_addr(
+    input logic [GROUP_IDX_W-1:0] group_idx,
     input logic [ROW_GROUP_W-1:0] row_idx_group
   );
     begin
-      m_row_state_addr = M_ROW_STATE_ADDR_W'((port_idx * ROW_GROUP_DEPTH) + int'(row_idx_group));
+      m_write_seen_addr = M_ROW_STATE_ADDR_W'((int'(group_idx) * ROW_GROUP_DEPTH) + int'(row_idx_group));
     end
   endfunction
 
@@ -418,22 +410,31 @@ module decoder_top
     end
   endtask
 
-  function automatic logic [COMP_C2V_W-1:0] m_comp_or_default(
+  function automatic logic [COMP_C2V_W-1:0] m_write_comp_or_init(
     input logic [1:0] port_idx,
-    input logic port_pair,
     input logic [ROW_GROUP_W-1:0] row_addr,
-    input logic use_first_iter_default
+    input logic [GROUP_IDX_W-1:0] group_idx
   );
     logic [M_ROW_STATE_ADDR_W-1:0] state_addr;
     begin
-      state_addr = m_row_state_addr(int'(port_idx), row_addr);
-      if (m_row_valid[state_addr] &&
-          (m_row_epoch[state_addr] == m_pair_epoch[port_pair])) begin
-        m_comp_or_default = m_rdata[port_idx];
-      end else if (use_first_iter_default) begin
-        m_comp_or_default = FIRST_ITER_C2V_COMP;
+      state_addr = m_write_seen_addr(group_idx, row_addr);
+      if (m_write_row_seen[state_addr]) begin
+        m_write_comp_or_init = m_rdata[port_idx];
       end else begin
-        m_comp_or_default = COMP_C2V_INIT;
+        m_write_comp_or_init = COMP_C2V_INIT;
+      end
+    end
+  endfunction
+
+  function automatic logic [COMP_C2V_W-1:0] m_read_comp_or_first(
+    input logic [1:0] port_idx,
+    input logic use_first_iter_default
+  );
+    begin
+      if (use_first_iter_default) begin
+        m_read_comp_or_first = FIRST_ITER_C2V_COMP;
+      end else begin
+        m_read_comp_or_first = m_rdata[port_idx];
       end
     end
   endfunction
@@ -915,22 +916,19 @@ module decoder_top
     logic [M_ROW_STATE_ADDR_W-1:0] state_addr;
 
     if (!i_rst_n) begin
-      for (int pair_idx = 0; pair_idx < 2; pair_idx++) begin
-        m_pair_epoch[pair_idx] <= 1'b0;
-      end
       for (int row_state_idx = 0; row_state_idx < M_ROW_STATE_DEPTH; row_state_idx++) begin
-        m_row_valid[row_state_idx] <= 1'b0;
-        m_row_epoch[row_state_idx] <= 1'b0;
+        m_write_row_seen[row_state_idx] <= 1'b0;
       end
     end else begin
-      if (iter_check && !finish_decode) begin
-        m_pair_epoch[m_read_pair] <= ~m_pair_epoch[m_read_pair];
+      if ((iter_check && !finish_decode) || i_start) begin
+        for (int row_state_idx = 0; row_state_idx < M_ROW_STATE_DEPTH; row_state_idx++) begin
+          m_write_row_seen[row_state_idx] <= 1'b0;
+        end
       end
       for (int port_idx = 0; port_idx < 4; port_idx++) begin
         if (m_we[port_idx]) begin
-          state_addr = m_row_state_addr(port_idx, m_write_row_idx_group[port_idx]);
-          m_row_valid[state_addr] <= 1'b1;
-          m_row_epoch[state_addr] <= m_pair_epoch[m_port_pair(port_idx)];
+          state_addr = m_write_seen_addr(GROUP_IDX_W'(port_idx % L), m_write_row_idx_group[port_idx]);
+          m_write_row_seen[state_addr] <= 1'b1;
         end
       end
     end
@@ -952,7 +950,7 @@ module decoder_top
       port_pair = v2c_read_m_write_pair_d1;
       row_addr = v2c_read_row_idx_group_d1[group_idx];
       port_idx = 2'(m_index(port_pair, GROUP_IDX_W'(group_idx)));
-      cnu_a_comp_in[group_idx] = m_comp_or_default(port_idx, port_pair, row_addr, 1'b0);
+      cnu_a_comp_in[group_idx] = m_write_comp_or_init(port_idx, row_addr, GROUP_IDX_W'(group_idx));
     end
   end
 
@@ -960,14 +958,12 @@ module decoder_top
     integer group_idx;
     logic [1:0] port_idx;
     logic port_pair;
-    logic [ROW_GROUP_W-1:0] row_addr;
 
     for (group_idx = 0; group_idx < L; group_idx++) begin
       port_pair = c2v_latched_m_read_pair;
       port_idx = 2'(m_index(port_pair, GROUP_IDX_W'(group_idx)));
-      row_addr = c2v_latched_row_idx_group[group_idx];
       cnu_b_comp_in[group_idx] =
-        m_comp_or_default(port_idx, port_pair, row_addr, (o_iter_count == '0));
+        m_read_comp_or_first(port_idx, (o_iter_count == '0));
     end
   end
 
