@@ -56,8 +56,12 @@ module tb_vnu;
     begin
       abs_value = (value < 0) ? -value : value;
       scaled_abs = 0;
-      scaled_abs += abs_value << (ALPHA_FRAC_W - ALPHA_SHIFT_0);
-      scaled_abs += abs_value << (ALPHA_FRAC_W - ALPHA_SHIFT_1);
+      if ((ALPHA_SHIFT_0 > 0) && (ALPHA_SHIFT_0 <= ALPHA_FRAC_W)) begin
+        scaled_abs += abs_value << (ALPHA_FRAC_W - ALPHA_SHIFT_0);
+      end
+      if ((ALPHA_SHIFT_1 > 0) && (ALPHA_SHIFT_1 <= ALPHA_FRAC_W)) begin
+        scaled_abs += abs_value << (ALPHA_FRAC_W - ALPHA_SHIFT_1);
+      end
       scaled_abs += 1 << (ALPHA_FRAC_W - 1);
       scaled_abs = scaled_abs >> ALPHA_FRAC_W;
       alpha_scale_ref = (value < 0) ? -scaled_abs : scaled_abs;

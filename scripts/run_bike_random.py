@@ -246,6 +246,8 @@ module tb_bike_decoder_random;
   logic start;
   logic done;
   logic success;
+  logic [COL_W-1:0] e_read_col_idx;
+  logic e_rdata;
   logic [N-1:0] e_out;
   logic [$clog2(I_MAX + 1)-1:0] iter_count;
 
@@ -258,9 +260,10 @@ module tb_bike_decoder_random;
     .i_rst_n(rst_n),
     .i_start(start),
     .i_syndrome(INPUT_SYNDROME),
+    .i_e_read_col_idx(e_read_col_idx),
     .o_done(done),
     .o_success(success),
-    .o_e(e_out),
+    .o_e_rdata(e_rdata),
     .o_iter_count(iter_count)
   );
 
@@ -316,6 +319,7 @@ module tb_bike_decoder_random;
 
     rst_n = 1'b0;
     start = 1'b0;
+    e_read_col_idx = '0;
     repeat (2) @(posedge clk);
     rst_n = 1'b1;
     @(posedge clk);
@@ -331,6 +335,14 @@ module tb_bike_decoder_random;
     end
     if (done !== 1'b1) begin
       $fatal(1, "seed=%0d timeout after %0d cycles", TEST_SEED, cycles);
+    end
+
+    e_out = '0;
+    for (int col_idx = 0; col_idx < N; col_idx++) begin
+      e_read_col_idx = COL_W'(col_idx);
+      @(posedge clk);
+      #1;
+      e_out[col_idx] = e_rdata;
     end
 
     residual = residual_of(e_out);

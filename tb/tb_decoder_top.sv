@@ -13,6 +13,8 @@ module tb_decoder_top;
   logic [R-1:0] syndrome_in;
   logic done;
   logic success;
+  logic [COL_W-1:0] e_read_col_idx;
+  logic e_rdata;
   logic [N-1:0] e_out;
   logic [$clog2(I_MAX + 1)-1:0] iter_count;
   logic checks_active;
@@ -29,9 +31,10 @@ module tb_decoder_top;
     .i_rst_n(rst_n),
     .i_start(start),
     .i_syndrome(syndrome_in),
+    .i_e_read_col_idx(e_read_col_idx),
     .o_done(done),
     .o_success(success),
-    .o_e(e_out),
+    .o_e_rdata(e_rdata),
     .o_iter_count(iter_count)
   );
 
@@ -50,6 +53,7 @@ module tb_decoder_top;
       saw_ram_i_count_commit = 1'b0;
       saw_drain_state = 1'b0;
       start = 1'b0;
+      e_read_col_idx = '0;
       syndrome_in = '0;
       repeat (2) @(posedge clk);
       rst_n = 1'b1;
@@ -73,6 +77,18 @@ module tb_decoder_top;
         if (int'(dut.syndrome_hist[idx]) != expected_hist[idx]) begin
           $fatal(1, "syndrome_hist[%0d] mismatch: got %0d exp %0d", idx, dut.syndrome_hist[idx], expected_hist[idx]);
         end
+      end
+    end
+  endtask
+
+  task automatic read_error_vector(output logic [N-1:0] error_bits);
+    begin
+      error_bits = '0;
+      for (int col_idx = 0; col_idx < N; col_idx++) begin
+        e_read_col_idx = COL_W'(col_idx);
+        @(posedge clk);
+        #1;
+        error_bits[col_idx] = e_rdata;
       end
     end
   endtask
@@ -110,10 +126,6 @@ module tb_decoder_top;
   /* verilator lint_on UNUSEDSIGNAL */
 
   always @(posedge clk) begin
-    if (checks_active && (dut.error_estimate_bits !== e_out)) begin
-      $fatal(1, "decision RAM and o_e diverged: ram=%h out=%h", dut.error_estimate_bits, e_out);
-    end
-
     if (checks_active) begin
       if (!dut.ram_i_shift_ready) begin
         if (dut.c2v_read) begin
@@ -235,10 +247,10 @@ module tb_decoder_top;
       $fatal(1, "residual syndrome history mismatch after first iteration");
     end
     if (dut.m_read_pair === dut.m_write_pair) $fatal(1, "RAM M pairs collapsed before iteration swap");
-    if (dut.error_estimate_bits !== e_out) $fatal(1, "decision RAM mirror mismatch at completion");
 
     wait (done === 1'b1);
     @(posedge clk);
+    read_error_vector(e_out);
     if (int'(success) != CASE1_SUCCESS) $fatal(1, "CASE1 success mismatch: got %0d exp %0d", success, CASE1_SUCCESS);
     if (int'(iter_count) != CASE1_ITERATIONS) $fatal(1, "CASE1 iterations mismatch: got %0d exp %0d", iter_count, CASE1_ITERATIONS);
     if (e_out !== CASE1_OUTPUT) $fatal(1, "CASE1 e_out mismatch: got %h exp %h", e_out, CASE1_OUTPUT);

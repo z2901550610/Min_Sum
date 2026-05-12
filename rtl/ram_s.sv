@@ -1,36 +1,32 @@
 `timescale 1ns/1ps
-// RAM S stores packed v2c sign bits for one processing group.
+// RAM S stores packed v2c sign-bit words for one processing group.
 module ram_s
   import bike_pkg::*;
 #(
-  parameter int S_PACK_W = 8
+  parameter int S_PACK_W = 8,
+  parameter int S_WORDS_PER_COL = (RAM_LANE_DEPTH + S_PACK_W - 1) / S_PACK_W,
+  parameter int S_WORD_DEPTH = N * S_WORDS_PER_COL,
+  parameter int S_WORD_ADDR_W = (S_WORD_DEPTH > 1) ? $clog2(S_WORD_DEPTH) : 1
 )
 (
   input  logic i_clk,
   input  logic i_rst_n,
   input  logic i_we,
-  input  logic [COL_W-1:0] i_read_col_idx,
-  input  logic [ENTRY_POS_W-1:0] i_read_entry_idx,
-  input  logic [COL_W-1:0] i_write_col_idx,
-  input  logic [ENTRY_POS_W-1:0] i_write_entry_idx,
-  input  logic i_wdata,
-  output logic o_rdata
+  input  logic [S_WORD_ADDR_W-1:0] i_read_word_addr,
+  input  logic [S_WORD_ADDR_W-1:0] i_write_word_addr,
+  input  logic [S_PACK_W-1:0] i_wdata,
+  output logic [S_PACK_W-1:0] o_rdata
 `ifdef BIKE_SIM_DEBUG
   ,
   output logic o_debug_mem [0:N-1][0:RAM_LANE_DEPTH-1]
 `endif
 );
 
-  localparam int S_MEM_DEPTH = N * RAM_LANE_DEPTH;
+  (* ram_style = "block" *) logic [S_PACK_W-1:0] mem [0:S_WORD_DEPTH-1];
 
-  (* ram_style = "block" *) logic mem [0:S_MEM_DEPTH-1];
-
-  function automatic int mem_addr(
-    input logic [COL_W-1:0] col_idx,
-    input logic [ENTRY_POS_W-1:0] entry_idx
-  );
+  function automatic int debug_word_addr(input int col_idx, input int entry_idx);
     begin
-      mem_addr = int'(col_idx) * RAM_LANE_DEPTH + int'(entry_idx);
+      debug_word_addr = col_idx * S_WORDS_PER_COL + (entry_idx / S_PACK_W);
     end
   endfunction
 
@@ -38,7 +34,8 @@ module ram_s
   always_comb begin
     for (int col_idx = 0; col_idx < N; col_idx++) begin
       for (int entry_idx = 0; entry_idx < RAM_LANE_DEPTH; entry_idx++) begin
-        o_debug_mem[col_idx][entry_idx] = mem[col_idx * RAM_LANE_DEPTH + entry_idx];
+        o_debug_mem[col_idx][entry_idx] =
+          mem[debug_word_addr(col_idx, entry_idx)][entry_idx % S_PACK_W];
       end
     end
   end
@@ -53,23 +50,23 @@ module ram_s
 `ifdef BIKE_SIM_DEBUG
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin
-      o_rdata <= 1'b0;
-      for (int addr = 0; addr < S_MEM_DEPTH; addr++) begin
-        mem[addr] <= '0;
+      o_rdata <= '0;
+      for (int word_addr = 0; word_addr < S_WORD_DEPTH; word_addr++) begin
+        mem[word_addr] <= '0;
       end
     end else begin
       if (i_we) begin
-        mem[mem_addr(i_write_col_idx, i_write_entry_idx)] <= i_wdata;
+        mem[i_write_word_addr] <= i_wdata;
       end
-      o_rdata <= mem[mem_addr(i_read_col_idx, i_read_entry_idx)];
+      o_rdata <= mem[i_read_word_addr];
     end
   end
 `else
   always_ff @(posedge i_clk) begin
     if (i_we) begin
-      mem[mem_addr(i_write_col_idx, i_write_entry_idx)] <= i_wdata;
+      mem[i_write_word_addr] <= i_wdata;
     end
-    o_rdata <= mem[mem_addr(i_read_col_idx, i_read_entry_idx)];
+    o_rdata <= mem[i_read_word_addr];
   end
 `endif
 endmodule

@@ -34,7 +34,7 @@ BIKE does not provide official min-sum defaults for `C`, `alpha`, and `Imax`. Th
 Current shipped defaults:
 
 - `C = 7`
-- `alpha = 2^-4 + 2^-6`
+- `alpha = 2^-4`
 - `Imax = 6`
 - message magnitude width = 4 bits with saturation at `15`
 - scaling uses rounding
@@ -85,8 +85,8 @@ make bike-golden-calibrate BIKE_CAL_BASE_SEED=1 BIKE_CAL_TRIALS=4
 The implementation was checked with the following reproducible results:
 
 - `--self-test` passed
-- `--bike-l1-once --seed 1` reported `models_agree=yes`, `success=1`, `iterations=3`, `final_residual_weight=0`, with defaults `C=7`, `alpha=2^-4 + 2^-6`, `Imax=6`
+- `--bike-l1-once --seed 1` reported `models_agree=yes`, `success=1`, `iterations=3`, `final_residual_weight=0`, with defaults `C=7`, `alpha=2^-4`, `Imax=6`
 - `--bike-l1-batch --base-seed 1 --trials 8` reported `successes=8`, `failures=0`, first successful seed `1`, first successful iterations `3`
-- `--bike-l1-calibrate --base-seed 1 --trials 4` ranked the fixed grid and selected `C=7`, `alpha=2^-4 + 2^-6`, `Imax=6` as the best tuple
+- `--bike-l1-calibrate --base-seed 1 --trials 4` ranked the fixed grid and selected `C=7`, `alpha=2^-4`, `Imax=6` as the best tuple
 
 These checks establish that the BIKE-L1 min-sum golden is deterministic and cross-validated internally. Regular RTL regression defines `BIKE_TOY_PARAMS` for the compact demo dimensions, and Vivado-oriented builds use the BIKE-L1 dimensions from `rtl/decoder_top.sv`.

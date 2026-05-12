@@ -43,7 +43,7 @@ static const bike_candidate_t BIKE_CALIBRATION_CANDIDATES[] = {
     {11, 5, 6, 8},
 };
 
-static const bike_candidate_t BIKE_L1_DEFAULTS = {7, 4, 6, 6};
+static const bike_candidate_t BIKE_L1_DEFAULTS = {7, 4, 0, 6};
 
 typedef struct {
     uint8_t sign;
@@ -300,8 +300,12 @@ static int alpha_scale(const bike_config_t *cfg, int value) {
     int abs_value = value < 0 ? -value : value;
     int scaled_abs = 0;
 
-    scaled_abs += abs_value << (cfg->alpha_frac_w - cfg->alpha_shift_0);
-    scaled_abs += abs_value << (cfg->alpha_frac_w - cfg->alpha_shift_1);
+    if (cfg->alpha_shift_0 > 0) {
+        scaled_abs += abs_value << (cfg->alpha_frac_w - cfg->alpha_shift_0);
+    }
+    if (cfg->alpha_shift_1 > 0) {
+        scaled_abs += abs_value << (cfg->alpha_frac_w - cfg->alpha_shift_1);
+    }
     scaled_abs += 1 << (cfg->alpha_frac_w - 1);
     scaled_abs >>= cfg->alpha_frac_w;
     return value < 0 ? -scaled_abs : scaled_abs;
@@ -853,7 +857,10 @@ static bike_candidate_t bike_candidate_with_overrides(const cli_options_t *optio
 }
 
 static void print_alpha(FILE *stream, const bike_candidate_t *candidate) {
-    fprintf(stream, "2^-%d + 2^-%d", candidate->alpha_shift_0, candidate->alpha_shift_1);
+    fprintf(stream, "2^-%d", candidate->alpha_shift_0);
+    if (candidate->alpha_shift_1 > 0) {
+        fprintf(stream, " + 2^-%d", candidate->alpha_shift_1);
+    }
 }
 
 static void print_candidate_summary(FILE *stream, const bike_candidate_t *candidate) {
@@ -1404,7 +1411,9 @@ static int parse_cli(int argc, char **argv, cli_options_t *options) {
     }
 
     if (options->have_alpha_override &&
-        (options->alpha_shift_0 <= 0 || options->alpha_shift_1 <= 0 || options->alpha_shift_0 == options->alpha_shift_1)) {
+        (options->alpha_shift_0 <= 0 || options->alpha_shift_1 < 0 ||
+         options->alpha_shift_0 > BIKE_ALPHA_FRAC_W || options->alpha_shift_1 > BIKE_ALPHA_FRAC_W ||
+         options->alpha_shift_0 == options->alpha_shift_1)) {
         return -1;
     }
 

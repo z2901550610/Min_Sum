@@ -11,8 +11,8 @@
 解码器接受初始syndrome，根据静态首列向量填充各 circulant bank，并估计错误向量：
 
 - 输入：`i_syndrome[R-1:0]`
-- 输出：`o_e[N-1:0]`
-- 成功条件：`i_syndrome ^ H*o_e == 0`
+- 错误估计读口：`i_e_read_col_idx` 选择列，`o_e_rdata` 返回该列的硬判决 bit
+- 成功条件：`i_syndrome ^ H*e_hat == 0`
 
 ## 参数
 
@@ -28,6 +28,7 @@
 解码器从全零错误估计开始。
 
 - `ram_c` 存储运行中的错误估计（硬判决位）
+- 顶层通过 `i_e_read_col_idx/o_e_rdata` 串行导出最终错误估计
 - `CNU_A` 初始化输入使用 `{sign=0, mag=C_VAL}`
 - `VNU` 先验值始终为 `+C_VAL`
 - `CNU_A` 仅累积每个压缩 c2v 状态中传入的 `u` 符号
@@ -37,7 +38,7 @@
 row_sign_xor ^ edge_u_sign ^ syndrome[row]
 ```
 
-每次迭代结束时，从 RAM C 的内容重新计算残差syndrome，RAM C 是导出错误估计 `o_e` 的唯一数据源。残差为零时解码成功，达到 `I_MAX` 次迭代后仍未清零则解码失败。
+残差syndrome随 RAM C 中硬判决 bit 的变化增量更新。残差为零时解码成功，达到 `I_MAX` 次迭代后仍未清零则解码失败。
 
 ## 初始化
 
@@ -61,17 +62,17 @@ ram_i #(.INIT_HEX_STEM("rtl/generated/ram_i1")) u_ram_i1 (...);
 ## 模块划分
 
 - `decoder_ctrl` 负责解码控制、c2v/v2c 列上下文、RAM-M 乒乓 bank、列缓冲切换事件以及 done/success 状态管理。ITER 内部调度由固定 `SCHED_*` 状态表驱动，列 k 内部使用 `COL_K_STAGE_*` 表示 v2c 发射流水阶段。
-- `decoder_top` 是解码器核心数据通路和结构互连。它实例化各编号 RAM 块、`decoder_ctrl`、`h_shift`、CNU/VNU 单元和消息编解码适配器；顶层逻辑仅限于 RAM 端口选择、RAM-I 行组 entry 处理、数据锁存和残差syndrome重算。
+- `decoder_top` 是解码器核心数据通路和结构互连。它实例化各编号 RAM 块、`decoder_ctrl`、`h_shift`、CNU/VNU 单元和消息编解码适配器；顶层逻辑覆盖 RAM 端口选择、RAM-I 行组 entry 处理、数据锁存和残差syndrome增量维护。
 - `vnu` 以 2's-complement 格式消费 c2v 并生成未饱和的 2's-complement v2c。符号-幅值转换在 VNU 输入/输出边界的外部 `msg_codec` 适配器中完成；RAM-T 和 VNU 缩放数据通路保持在 2's-complement 域内。
 - `ram_i`、`ram_m`、`ram_s`、`ram_t`、`ram_c` 均为论文风格的 RAM 原语。每个 RTL 文件对应一个编号 RAM 块。
 - `decoder_top` 按论文命名显式实例化各 RAM 块：`I0/I1`、`M0/M1/M2/M3`、`S0/S1`、`T0/T1`、`C`。
-- RAM-M 每个 numbered block 保存一个 row group 的压缩 c2v 状态，深度为 `ROW_GROUP_DEPTH = ceil(R/L)`。顶层只向 RAM-M 发送 `row_idx_group`，绝对行号只用于 syndrome bit 选择和残差syndrome重算。
+- RAM-M 每个 numbered block 保存一个 row group 的压缩 c2v 状态和 1 bit epoch，深度为 `ROW_GROUP_DEPTH = ceil(R/L)`。顶层只向 RAM-M 发送 `row_idx_group`，绝对行号只用于 syndrome bit 选择和残差syndrome增量维护。
 - RAM-I、RAM-S、RAM-T 的 lane 内 entry 深度统一为 `RAM_LANE_DEPTH`，表示首列元数据在各 lane 中的最大有效 entry 数。BIKE-L1 参数下 `RAM_LANE_DEPTH=37`，`BIKE_TOY_PARAMS` 参数下 `RAM_LANE_DEPTH=2`。
-- RAM-S 每个 lane 以单 bit word 保存 v2c sign bit。读地址服务列 k+1 的 CNU_B，写地址服务 CNU_A 写回。读写地址独立进入 RAM-S，使列 k+1 读 sign 和列 k 写回 sign 可以在同一拍调度。
+- RAM-S 每个 lane 以 `S_PACK_W` bit word 保存 v2c sign bit，BIKE-L1 配置使用 8 bit 打包。顶层读写 shift buffer 在 entry bit 流和打包 word 之间转换；RAM-S 只提供 word 级读写。
 - RAM-T 每个 lane 以按 entry slot 寻址的缓冲保存列 k+1 生成的 c2v 和 valid sideband。列 k+1 每个 entry slot 都写入，空 lane 写入 invalid slot；v2c 发射阶段按同一个 entry slot 读取，valid sideband 控制 VNU 的外信息相减。`ITER_CHECK` 清空 RAM-T slot 状态。
-- RAM-C 保存 syndrome 输入译码器的错误估计 bit，是一份适配 syndrome 输入语义的 `N` bit 存储。
+- RAM-C 保存 syndrome 输入译码器的错误估计 bit，是一份适配 syndrome 输入语义的 `N` bit 存储，并提供串行读口用于导出最终估计。
 - 列 metadata 使用两个固定 slot：列 k 从 active slot 读取，列 k+1 从 RAM-I 单 entry 视图写入 fill slot。`o_col_k_meta_advance` 触发 active/fill slot 轮换，使列 k+1 成为新的列 k。
-- `decoder_ctrl` 遵循论文的 Fig.8 式单端口调度：每次迭代先填充并累加列 0，然后进入列重叠流水线——c2v 侧重建并累加列 `k+1` 的同时 v2c 侧更新列 `k`，最后排空 v2c 的最后一列，进入 `ITER_CHECK`。复用的 RAM-M 行通过逐行 epoch 追踪器实现 `COMP_C2V_INIT` 语义。`phase` 信号仅用于调试；数据通路时序由固定调度脉冲和 metadata slot 轮换驱动。
+- `decoder_ctrl` 遵循论文的 Fig.8 式单端口调度：每次迭代先填充并累加列 0，然后进入列重叠流水线——c2v 侧重建并累加列 `k+1` 的同时 v2c 侧更新列 `k`，最后排空 v2c 的最后一列，进入 `ITER_CHECK`。复用的 RAM-M 行通过 RAM word epoch 实现 `COMP_C2V_INIT` 语义。`phase` 信号仅用于调试；数据通路时序由固定调度脉冲和 metadata slot 轮换驱动。
 - RAM-I 在仿真启动时通过 `$readmemh` 从 hex 文件加载首列元数据。解码期间，活跃列的行/局部行/边索引元数据来自 RAM-I 的单 entry 读口。`h_shift` 为每个 RAM-I 块设置一个 entry 输入，为每个 lane 设置一个移位后的 entry 输出，数据通路通过 RAM-I 的单 entry 写端口将每个移位后的 entry 写入下一个 c2v 列。RAM-I shift writer 为每个目标 bank 保留一个 pending entry；多个移位 entry 指向同一 bank 时，writer 先写入一个 entry，并在后续周期写入 pending entry。列尾 count 在 pending entry 清空后提交，`decoder_ctrl` 通过 `i_ram_i_shift_ready` 暂停下一次 c2v 读发射。v2c 元数据独立缓冲，使 c2v 侧的 RAM-I 可以领先一列。`decoder_top` 通过 RAM-I 的单 entry 功能视图输出访问 RAM-I。项目级 RTL 命名约定定义在 [`docs/naming_conventions.md`](/Users/z2901550610/Documents/Min_Sum/docs/naming_conventions.md) 中。行组方案基于奇偶：`row_group 0` 存储偶数行，`row_group 1` 存储奇数行，`row_local` 为紧凑的奇偶局部索引 `floor(row_global / 2)`。CNU/VNU 行地址调度由 RAM-I 元数据驱动。
 - `decoder_edge_meta` 和 `qc_column_preprocess` 保留在 [`rtl/reference/`](/Users/z2901550610/Documents/Min_Sum/rtl/reference) 下作为参考辅助文件。核心解码器使用 RAM-I + `h_shift` 提供活跃边元数据。
 - 静态首列元数据由 [`scripts/gen_qc_first_columns.py`](/Users/z2901550610/Documents/Min_Sum/scripts/gen_qc_first_columns.py) 离线生成，输出 hex 文件到 `rtl/generated/`。RAM-I 通过 `$readmemh` 在仿真启动时直接加载。

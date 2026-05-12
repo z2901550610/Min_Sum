@@ -13,8 +13,8 @@ package bike_pkg;
   localparam int W = 71;
   localparam int I_MAX = 6;
   localparam int C_VAL = 7;
-  localparam int ALPHA_SHIFT_0 = 4;  //对应论文中使用最多两位1表示
-  localparam int ALPHA_SHIFT_1 = 6;  //ALPHA_SHIFT_0 与 ALPHA_SHIFT_1 表示"1"的位置，即 alpha=0.000101b
+  localparam int ALPHA_SHIFT_0 = 4;
+  localparam int ALPHA_SHIFT_1 = 0;
 `else
   localparam int R = 8;
   localparam int W = 3;
@@ -158,9 +158,10 @@ module decoder_top
   input  logic i_rst_n,
   input  logic i_start,                         // Starts a new decode operation.
   input  logic [R-1:0] i_syndrome,              // Input syndrome to be cancelled by the estimate.
+  input  logic [COL_W-1:0] i_e_read_col_idx,    // Column address for serial error-estimate readout.
   output logic o_done,                          // High when decoding has finished.
   output logic o_success,                       // High when the final residual syndrome is zero.
-  output logic [N-1:0] o_e,                     // Final error estimate vector.
+  output logic o_e_rdata,                       // Error-estimate bit at i_e_read_col_idx.
   output logic [$clog2(I_MAX + 1)-1:0] o_iter_count  // Number of iterations that completed.
 );
 
@@ -172,6 +173,11 @@ module decoder_top
     D'(C_VAL),
     D'(C_VAL)
   };
+  localparam int S_PACK_W = 8;
+  localparam int S_WORDS_PER_COL = (RAM_LANE_DEPTH + S_PACK_W - 1) / S_PACK_W;
+  localparam int S_WORD_DEPTH = N * S_WORDS_PER_COL;
+  localparam int S_WORD_ADDR_W = (S_WORD_DEPTH > 1) ? $clog2(S_WORD_DEPTH) : 1;
+  localparam int S_PACK_IDX_W = (S_PACK_W > 1) ? $clog2(S_PACK_W) : 1;
 
   /* verilator lint_off UNUSEDSIGNAL */
   // Debug/control visibility exported to the testbench. The real scheduling
@@ -189,7 +195,6 @@ module decoder_top
   logic v2c_phase_active;
   logic c2v_v2c_overlap_seen;
   logic col_k_meta_advance;
-  logic [N-1:0] error_estimate_bits;
 `ifdef BIKE_SIM_DEBUG
   logic [R-1:0] syndrome_hist [0:I_MAX-1];
   logic [GROUP_COUNT_W-1:0] ram_i_debug_count [0:N0-1][0:L-1];
@@ -303,9 +308,8 @@ module decoder_top
   logic [ROW_GROUP_W-1:0] m_write_row_idx_group [0:3];
   logic [COMP_C2V_W-1:0] m_wdata [0:3];
   logic [COMP_C2V_W-1:0] m_rdata [0:3];
-  localparam int M_ROW_STATE_DEPTH = L * ROW_GROUP_DEPTH;
-  localparam int M_ROW_STATE_ADDR_W = (M_ROW_STATE_DEPTH > 1) ? $clog2(M_ROW_STATE_DEPTH) : 1;
-  logic m_write_row_seen [0:M_ROW_STATE_DEPTH-1];
+  logic m_repoch [0:3];
+  logic m_pair_epoch [0:1];
 `ifdef BIKE_SIM_DEBUG
   /* verilator lint_off UNUSEDSIGNAL */
   logic [COMP_C2V_W-1:0] ram_m0_debug_mem [0:ROW_GROUP_DEPTH-1];
@@ -318,10 +322,17 @@ module decoder_top
   logic s_we [0:L-1];
   logic [COL_W-1:0] s_read_col_idx [0:L-1];
   logic [ENTRY_POS_W-1:0] s_read_entry_idx [0:L-1];
-  logic [COL_W-1:0] s_write_col_idx [0:L-1];
   logic [ENTRY_POS_W-1:0] s_write_entry_idx [0:L-1];
   logic s_wdata [0:L-1];
   logic s_rdata [0:L-1];
+  logic s_word_we [0:L-1];
+  logic [S_WORD_ADDR_W-1:0] s_read_word_addr [0:L-1];
+  logic [S_WORD_ADDR_W-1:0] s_write_word_addr [0:L-1];
+  logic [S_PACK_W-1:0] s_word_wdata [0:L-1];
+  logic [S_PACK_W-1:0] s_word_rdata [0:L-1];
+  logic [S_PACK_W-1:0] s_read_shift [0:L-1];
+  logic [S_PACK_W-1:0] s_write_shift [0:L-1];
+  logic s_read_word_load_pending [0:L-1];
 
   logic t_push [0:L-1];
   logic t_pop [0:L-1];
@@ -336,6 +347,7 @@ module decoder_top
 
   logic decision_ram_we;
   logic [COL_W-1:0] decision_ram_col_idx;
+  logic [COL_W-1:0] decision_ram_access_col_idx;
   logic decision_ram_wdata;
 
   logic [COL_W-1:0] cnu_a_col_idx;
@@ -362,15 +374,6 @@ module decoder_top
   function automatic int m_index(input logic pair, input logic [GROUP_IDX_W-1:0] group_idx);
     begin
       m_index = (pair ? 2 : 0) + int'(group_idx);
-    end
-  endfunction
-
-  function automatic logic [M_ROW_STATE_ADDR_W-1:0] m_write_seen_addr(
-    input logic [GROUP_IDX_W-1:0] group_idx,
-    input logic [ROW_GROUP_W-1:0] row_idx_group
-  );
-    begin
-      m_write_seen_addr = M_ROW_STATE_ADDR_W'((int'(group_idx) * ROW_GROUP_DEPTH) + int'(row_idx_group));
     end
   endfunction
 
@@ -403,27 +406,38 @@ module decoder_top
 
   task automatic set_s_write_bit(
     input logic [GROUP_IDX_W-1:0] group_idx,
-    input logic [COL_W-1:0] col_idx,
     input logic [ENTRY_POS_W-1:0] entry_idx,
     input logic sign_bit
   );
     begin
       s_we[group_idx] = 1'b1;
-      s_write_col_idx[group_idx] = col_idx;
       s_write_entry_idx[group_idx] = entry_idx;
       s_wdata[group_idx] = sign_bit;
     end
   endtask
 
-  function automatic logic [COMP_C2V_W-1:0] m_write_comp_or_init(
-    input logic [1:0] port_idx,
-    input logic [ROW_GROUP_W-1:0] row_addr,
-    input logic [GROUP_IDX_W-1:0] group_idx
+  function automatic logic [S_WORD_ADDR_W-1:0] s_word_addr(
+    input logic [COL_W-1:0] col_idx,
+    input logic [ENTRY_POS_W-1:0] entry_idx
   );
-    logic [M_ROW_STATE_ADDR_W-1:0] state_addr;
     begin
-      state_addr = m_write_seen_addr(group_idx, row_addr);
-      if (m_write_row_seen[state_addr]) begin
+      s_word_addr = S_WORD_ADDR_W'(int'(col_idx) * S_WORDS_PER_COL + int'(entry_idx) / S_PACK_W);
+    end
+  endfunction
+
+  function automatic logic [S_PACK_IDX_W-1:0] s_word_bit_idx(
+    input logic [ENTRY_POS_W-1:0] entry_idx
+  );
+    begin
+      s_word_bit_idx = S_PACK_IDX_W'(int'(entry_idx) % S_PACK_W);
+    end
+  endfunction
+
+  function automatic logic [COMP_C2V_W-1:0] m_write_comp_or_init(
+    input logic [1:0] port_idx
+  );
+    begin
+      if (m_repoch[port_idx] == m_pair_epoch[port_idx[1]]) begin
         m_write_comp_or_init = m_rdata[port_idx];
       end else begin
         m_write_comp_or_init = COMP_C2V_INIT;
@@ -451,7 +465,16 @@ module decoder_top
   assign decode_success = (residual_syndrome_next == '0);
   assign finish_decode = decode_success || (next_iter_count_ext >= (ITER_W + 1)'(I_MAX));
   assign c2v_h_block_idx = H_BLOCK_W'(int'(c2v_col_idx) / R);
-  assign o_e = error_estimate_bits;
+  assign decision_ram_access_col_idx = decision_ram_we ? decision_ram_col_idx : i_e_read_col_idx;
+
+  always_comb begin
+    integer group_idx;
+
+    for (group_idx = 0; group_idx < L; group_idx++) begin
+      s_rdata[group_idx] =
+        s_read_word_load_pending[group_idx] ? s_word_rdata[group_idx][0] : s_read_shift[group_idx][0];
+    end
+  end
 
   always_comb begin
     integer group_idx;
@@ -684,14 +707,23 @@ module decoder_top
   // RAM-S steering for v2c sign bits.
   always_comb begin
     integer group_idx;
+    logic [S_PACK_IDX_W-1:0] write_bit_idx;
+    logic write_group_last;
+
+    write_bit_idx = '0;
+    write_group_last = 1'b0;
 
     for (group_idx = 0; group_idx < L; group_idx++) begin
       s_we[group_idx] = 1'b0;
       s_read_col_idx[group_idx] = c2v_read_d1 ? c2v_read_col_d1 : c2v_col_idx;
       s_read_entry_idx[group_idx] = c2v_read_d1 ? c2v_read_entry_pos_d1 : c2v_entry_pos;
-      s_write_col_idx[group_idx] = c2v_latched_col;
       s_write_entry_idx[group_idx] = c2v_latched_entry_pos;
       s_wdata[group_idx] = 1'b0;
+      s_word_we[group_idx] = 1'b0;
+      s_read_word_addr[group_idx] =
+        s_word_addr(s_read_col_idx[group_idx], s_read_entry_idx[group_idx]);
+      s_write_word_addr[group_idx] = '0;
+      s_word_wdata[group_idx] = '0;
     end
 
     if (vnu_write_next) begin
@@ -699,10 +731,18 @@ module decoder_top
         if (cnu_a_valid[group_idx] && v2c_m_latched_group_valid[group_idx]) begin
           set_s_write_bit(
             GROUP_IDX_W'(group_idx),
-            v2c_m_latched_col,
             v2c_m_latched_entry_pos,
             cnu_a_sign[group_idx]
           );
+          write_bit_idx = s_word_bit_idx(v2c_m_latched_entry_pos);
+          write_group_last =
+            ((int'(v2c_m_latched_entry_pos) + 1) >=
+             int'(col_meta_group_count[col_k_meta_slot][group_idx]));
+          s_write_word_addr[group_idx] =
+            s_word_addr(v2c_m_latched_col, v2c_m_latched_entry_pos);
+          s_word_wdata[group_idx] = s_write_shift[group_idx];
+          s_word_wdata[group_idx][write_bit_idx] = cnu_a_sign[group_idx];
+          s_word_we[group_idx] = (write_bit_idx == S_PACK_IDX_W'(S_PACK_W - 1)) || write_group_last;
         end
       end
     end
@@ -763,7 +803,8 @@ module decoder_top
     residual_col = 0;
     residual_row = '0;
 
-    if (decision_update_pending && (decision_ram_old_bit != decision_update_new_bit)) begin
+    if (decision_update_pending &&
+        (((o_iter_count == '0) ? 1'b0 : decision_ram_old_bit) != decision_update_new_bit)) begin
       residual_h_block_idx = H_BLOCK_W'(int'(decision_update_col) / R);
       residual_col = int'(decision_update_col) % R;
       for (one_idx = 0; one_idx < W; one_idx++) begin
@@ -815,6 +856,9 @@ module decoder_top
         c2v_latched_row_idx_global[group_idx] <= '0;
         v2c_m_latched_group_valid[group_idx] <= 1'b0;
         v2c_m_latched_row_idx_group[group_idx] <= '0;
+        s_read_shift[group_idx] <= '0;
+        s_write_shift[group_idx] <= '0;
+        s_read_word_load_pending[group_idx] <= 1'b0;
         for (idx = 0; idx < RAM_LANE_DEPTH; idx++) begin
           col_meta_group_entries[0][group_idx][idx] <= '0;
           col_meta_group_entries[1][group_idx][idx] <= '0;
@@ -844,6 +888,11 @@ module decoder_top
       if (i_start) begin
         residual_syndrome <= i_syndrome;
         decision_update_pending <= 1'b0;
+        for (group_idx = 0; group_idx < L; group_idx++) begin
+          s_read_shift[group_idx] <= '0;
+          s_write_shift[group_idx] <= '0;
+          s_read_word_load_pending[group_idx] <= 1'b0;
+        end
       end
 
       c2v_read_d1 <= c2v_read;
@@ -869,6 +918,20 @@ module decoder_top
 
       ram_i_shift_commit_pending <= ram_i_shift_commit_pending_next;
       for (group_idx = 0; group_idx < L; group_idx++) begin
+        s_read_word_load_pending[group_idx] <=
+          c2v_read_d1 && (s_word_bit_idx(s_read_entry_idx[group_idx]) == '0);
+        if (s_read_word_load_pending[group_idx]) begin
+          s_read_shift[group_idx] <= {{1{1'b0}}, s_word_rdata[group_idx][S_PACK_W-1:1]};
+        end else if (c2v_write_t) begin
+          s_read_shift[group_idx] <= {{1{1'b0}}, s_read_shift[group_idx][S_PACK_W-1:1]};
+        end
+        if (s_we[group_idx]) begin
+          s_write_shift[group_idx][s_word_bit_idx(s_write_entry_idx[group_idx])] <=
+            s_wdata[group_idx];
+          if (s_word_we[group_idx]) begin
+            s_write_shift[group_idx] <= '0;
+          end
+        end
         ram_i_shift_pending_count[group_idx] <= ram_i_shift_pending_count_next[group_idx];
         ram_i_shift_pending_addr[group_idx][0] <= ram_i_shift_pending_addr_next[group_idx][0];
         ram_i_shift_pending_addr[group_idx][1] <= ram_i_shift_pending_addr_next[group_idx][1];
@@ -931,21 +994,14 @@ module decoder_top
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin
-      for (int row_state_idx = 0; row_state_idx < M_ROW_STATE_DEPTH; row_state_idx++) begin
-        m_write_row_seen[row_state_idx] <= 1'b0;
-      end
+      m_pair_epoch[0] <= 1'b0;
+      m_pair_epoch[1] <= 1'b0;
     end else begin
-      if ((iter_check && !finish_decode) || i_start) begin
-        for (int row_state_idx = 0; row_state_idx < M_ROW_STATE_DEPTH; row_state_idx++) begin
-          m_write_row_seen[row_state_idx] <= 1'b0;
-        end
+      if (i_start) begin
+        m_pair_epoch[1] <= ~m_pair_epoch[1];
       end
-      for (int port_idx = 0; port_idx < 4; port_idx++) begin
-        if (m_we[port_idx]) begin
-          m_write_row_seen[
-            m_write_seen_addr(GROUP_IDX_W'(port_idx % L), m_write_row_idx_group[port_idx])
-          ] <= 1'b1;
-        end
+      if (iter_check && !finish_decode) begin
+        m_pair_epoch[m_read_pair] <= ~m_pair_epoch[m_read_pair];
       end
     end
   end
@@ -960,13 +1016,11 @@ module decoder_top
     integer group_idx;
     logic [1:0] port_idx;
     logic port_pair;
-    logic [ROW_GROUP_W-1:0] row_addr;
 
     for (group_idx = 0; group_idx < L; group_idx++) begin
       port_pair = v2c_read_m_write_pair_d1;
-      row_addr = v2c_read_row_idx_group_d1[group_idx];
       port_idx = 2'(m_index(port_pair, GROUP_IDX_W'(group_idx)));
-      cnu_a_comp_in[group_idx] = m_write_comp_or_init(port_idx, row_addr, GROUP_IDX_W'(group_idx));
+      cnu_a_comp_in[group_idx] = m_write_comp_or_init(port_idx);
     end
   end
 
@@ -1195,13 +1249,13 @@ module decoder_top
 
   ram_c u_decision_ram (
     .i_clk(i_clk),
-    .i_rst_n(i_rst_n),
     .i_we(decision_ram_we),
-    .i_col_idx(decision_ram_col_idx),
+    .i_col_idx(decision_ram_access_col_idx),
     .i_wdata(decision_ram_wdata),
-    .o_rdata(decision_ram_old_bit),
-    .o_bits(error_estimate_bits)
+    .o_rdata(decision_ram_old_bit)
   );
+
+  assign o_e_rdata = decision_ram_old_bit;
 
   ram_m u_ram_m0 (
     .i_clk(i_clk),
@@ -1209,8 +1263,10 @@ module decoder_top
     .i_we(m_we[0]),
     .i_read_row_idx_group(m_read_row_idx_group[0]),
     .i_write_row_idx_group(m_write_row_idx_group[0]),
+    .i_epoch(m_pair_epoch[0]),
     .i_wdata(m_wdata[0]),
-    .o_rdata(m_rdata[0])
+    .o_rdata(m_rdata[0]),
+    .o_epoch(m_repoch[0])
 `ifdef BIKE_SIM_DEBUG
     ,
     .o_debug_mem(ram_m0_debug_mem)
@@ -1223,8 +1279,10 @@ module decoder_top
     .i_we(m_we[1]),
     .i_read_row_idx_group(m_read_row_idx_group[1]),
     .i_write_row_idx_group(m_write_row_idx_group[1]),
+    .i_epoch(m_pair_epoch[0]),
     .i_wdata(m_wdata[1]),
-    .o_rdata(m_rdata[1])
+    .o_rdata(m_rdata[1]),
+    .o_epoch(m_repoch[1])
 `ifdef BIKE_SIM_DEBUG
     ,
     .o_debug_mem(ram_m1_debug_mem)
@@ -1237,8 +1295,10 @@ module decoder_top
     .i_we(m_we[2]),
     .i_read_row_idx_group(m_read_row_idx_group[2]),
     .i_write_row_idx_group(m_write_row_idx_group[2]),
+    .i_epoch(m_pair_epoch[1]),
     .i_wdata(m_wdata[2]),
-    .o_rdata(m_rdata[2])
+    .o_rdata(m_rdata[2]),
+    .o_epoch(m_repoch[2])
 `ifdef BIKE_SIM_DEBUG
     ,
     .o_debug_mem(ram_m2_debug_mem)
@@ -1251,40 +1311,48 @@ module decoder_top
     .i_we(m_we[3]),
     .i_read_row_idx_group(m_read_row_idx_group[3]),
     .i_write_row_idx_group(m_write_row_idx_group[3]),
+    .i_epoch(m_pair_epoch[1]),
     .i_wdata(m_wdata[3]),
-    .o_rdata(m_rdata[3])
+    .o_rdata(m_rdata[3]),
+    .o_epoch(m_repoch[3])
 `ifdef BIKE_SIM_DEBUG
     ,
     .o_debug_mem(ram_m3_debug_mem)
 `endif
   );
 
-  ram_s u_ram_s0 (
+  ram_s #(
+    .S_PACK_W(S_PACK_W),
+    .S_WORDS_PER_COL(S_WORDS_PER_COL),
+    .S_WORD_DEPTH(S_WORD_DEPTH),
+    .S_WORD_ADDR_W(S_WORD_ADDR_W)
+  ) u_ram_s0 (
     .i_clk(i_clk),
     .i_rst_n(i_rst_n),
-    .i_we(s_we[0]),
-    .i_read_col_idx(s_read_col_idx[0]),
-    .i_read_entry_idx(s_read_entry_idx[0]),
-    .i_write_col_idx(s_write_col_idx[0]),
-    .i_write_entry_idx(s_write_entry_idx[0]),
-    .i_wdata(s_wdata[0]),
-    .o_rdata(s_rdata[0])
+    .i_we(s_word_we[0]),
+    .i_read_word_addr(s_read_word_addr[0]),
+    .i_write_word_addr(s_write_word_addr[0]),
+    .i_wdata(s_word_wdata[0]),
+    .o_rdata(s_word_rdata[0])
 `ifdef BIKE_SIM_DEBUG
     ,
     .o_debug_mem()
 `endif
   );
 
-  ram_s u_ram_s1 (
+  ram_s #(
+    .S_PACK_W(S_PACK_W),
+    .S_WORDS_PER_COL(S_WORDS_PER_COL),
+    .S_WORD_DEPTH(S_WORD_DEPTH),
+    .S_WORD_ADDR_W(S_WORD_ADDR_W)
+  ) u_ram_s1 (
     .i_clk(i_clk),
     .i_rst_n(i_rst_n),
-    .i_we(s_we[1]),
-    .i_read_col_idx(s_read_col_idx[1]),
-    .i_read_entry_idx(s_read_entry_idx[1]),
-    .i_write_col_idx(s_write_col_idx[1]),
-    .i_write_entry_idx(s_write_entry_idx[1]),
-    .i_wdata(s_wdata[1]),
-    .o_rdata(s_rdata[1])
+    .i_we(s_word_we[1]),
+    .i_read_word_addr(s_read_word_addr[1]),
+    .i_write_word_addr(s_write_word_addr[1]),
+    .i_wdata(s_word_wdata[1]),
+    .o_rdata(s_word_rdata[1])
 `ifdef BIKE_SIM_DEBUG
     ,
     .o_debug_mem()
@@ -1302,10 +1370,10 @@ module decoder_top
     .i_valid(t_valid[0]),
     .i_wdata(t_wdata[0]),
     .o_rdata(t_rdata[0]),
-    .o_valid(t_rvalid[0]),
-    .o_item_count()
+    .o_valid(t_rvalid[0])
 `ifdef BIKE_SIM_DEBUG
     ,
+    .o_item_count(),
     .o_debug_mem()
 `endif
   );
@@ -1321,10 +1389,10 @@ module decoder_top
     .i_valid(t_valid[1]),
     .i_wdata(t_wdata[1]),
     .o_rdata(t_rdata[1]),
-    .o_valid(t_rvalid[1]),
-    .o_item_count()
+    .o_valid(t_rvalid[1])
 `ifdef BIKE_SIM_DEBUG
     ,
+    .o_item_count(),
     .o_debug_mem()
 `endif
   );

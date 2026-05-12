@@ -59,7 +59,7 @@ module vnu
   logic signed [VNU_TC_W-1:0] prior_msg_sign_extend;  // 符号位扩展的先验 LLR
   logic                       accum_valid_any;        // 本拍是否至少收到一个有效 c2v
 
-  // 按 alpha 系数缩放二进制补码值，并四舍五入到整数(alpha 由 ALPHA_SHIFT_0 和 ALPHA_SHIFT_1 定义)
+  // 按 alpha 系数缩放二进制补码值，并四舍五入到整数。
   function automatic logic signed [VNU_TC_W-1:0] alpha_scale(
     input logic signed [VNU_TC_W-1:0] tc_value
   );
@@ -75,10 +75,14 @@ module vnu
     begin
       scale_ext = SCALE_W'($signed(tc_value));
       scaled_full = '0;
-      scaled_full =
-        scaled_full + (scale_ext <<< (ALPHA_FRAC_W - ALPHA_SHIFT_0));
-      scaled_full =
-        scaled_full + (scale_ext <<< (ALPHA_FRAC_W - ALPHA_SHIFT_1));
+      if ((ALPHA_SHIFT_0 > 0) && (ALPHA_SHIFT_0 <= ALPHA_FRAC_W)) begin
+        scaled_full =
+          scaled_full + (scale_ext <<< (ALPHA_FRAC_W - ALPHA_SHIFT_0));
+      end
+      if ((ALPHA_SHIFT_1 > 0) && (ALPHA_SHIFT_1 <= ALPHA_FRAC_W)) begin
+        scaled_full =
+          scaled_full + (scale_ext <<< (ALPHA_FRAC_W - ALPHA_SHIFT_1));
+      end
 
       floor_tc = scaled_full[SCALE_W-1:ALPHA_FRAC_W];
       frac_bits = scaled_full[ALPHA_FRAC_W-1:0];

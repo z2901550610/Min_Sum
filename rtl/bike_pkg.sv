@@ -11,8 +11,8 @@ package bike_pkg;
   localparam int W = 71;
   localparam int I_MAX = 6;
   localparam int C_VAL = 7;
-  localparam int ALPHA_SHIFT_0 = 4;  //对应论文中使用最多两位1表示
-  localparam int ALPHA_SHIFT_1 = 6;  //ALPHA_SHIFT_0 与 ALPHA_SHIFT_1 表示"1"的位置，即 alpha=0.000101b
+  localparam int ALPHA_SHIFT_0 = 4;
+  localparam int ALPHA_SHIFT_1 = 0;
 `else
   localparam int R = 8;
   localparam int W = 3;
