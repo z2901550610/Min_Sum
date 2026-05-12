@@ -190,8 +190,8 @@ module decoder_top
   logic c2v_v2c_overlap_seen;
   logic col_k_meta_advance;
   logic [N-1:0] error_estimate_bits;
-  logic [R-1:0] syndrome_hist [0:I_MAX-1];
 `ifdef BIKE_SIM_DEBUG
+  logic [R-1:0] syndrome_hist [0:I_MAX-1];
   logic [GROUP_COUNT_W-1:0] ram_i_debug_count [0:N0-1][0:L-1];
 `endif
   /* verilator lint_on UNUSEDSIGNAL */
@@ -282,7 +282,9 @@ module decoder_top
   logic decode_success;
   logic finish_decode;
   logic [ITER_W:0] next_iter_count_ext;
+`ifdef BIKE_SIM_DEBUG
   logic [HIST_IDX_W-1:0] hist_wr_idx;
+`endif
 
 `ifdef BIKE_SIM_DEBUG
   logic [GROUP_COUNT_W-1:0] ram_i0_debug_count [0:N0-1];
@@ -297,8 +299,10 @@ module decoder_top
   logic [COMP_C2V_W-1:0] m_wdata [0:3];
   logic [COMP_C2V_W-1:0] m_rdata [0:3];
   logic m_pair_epoch [0:1];
-  logic m_row_valid [0:3][0:ROW_GROUP_DEPTH-1];
-  logic m_row_epoch [0:3][0:ROW_GROUP_DEPTH-1];
+  localparam int M_ROW_STATE_DEPTH = 4 * ROW_GROUP_DEPTH;
+  localparam int M_ROW_STATE_ADDR_W = (M_ROW_STATE_DEPTH > 1) ? $clog2(M_ROW_STATE_DEPTH) : 1;
+  logic m_row_valid [0:M_ROW_STATE_DEPTH-1];
+  logic m_row_epoch [0:M_ROW_STATE_DEPTH-1];
 `ifdef BIKE_SIM_DEBUG
   /* verilator lint_off UNUSEDSIGNAL */
   logic [COMP_C2V_W-1:0] ram_m0_debug_mem [0:ROW_GROUP_DEPTH-1];
@@ -364,6 +368,15 @@ module decoder_top
     end
   endfunction
 
+  function automatic logic [M_ROW_STATE_ADDR_W-1:0] m_row_state_addr(
+    input int port_idx,
+    input logic [ROW_GROUP_W-1:0] row_idx_group
+  );
+    begin
+      m_row_state_addr = M_ROW_STATE_ADDR_W'((port_idx * ROW_GROUP_DEPTH) + int'(row_idx_group));
+    end
+  endfunction
+
   task automatic set_m_read_row(
     input logic pair,
     input logic [GROUP_IDX_W-1:0] group_idx,
@@ -411,9 +424,11 @@ module decoder_top
     input logic [ROW_GROUP_W-1:0] row_addr,
     input logic use_first_iter_default
   );
+    logic [M_ROW_STATE_ADDR_W-1:0] state_addr;
     begin
-      if (m_row_valid[port_idx][row_addr] &&
-          (m_row_epoch[port_idx][row_addr] == m_pair_epoch[port_pair])) begin
+      state_addr = m_row_state_addr(int'(port_idx), row_addr);
+      if (m_row_valid[state_addr] &&
+          (m_row_epoch[state_addr] == m_pair_epoch[port_pair])) begin
         m_comp_or_default = m_rdata[port_idx];
       end else if (use_first_iter_default) begin
         m_comp_or_default = FIRST_ITER_C2V_COMP;
@@ -424,7 +439,9 @@ module decoder_top
   endfunction
 
   assign next_iter_count_ext = {1'b0, o_iter_count} + {{ITER_W{1'b0}}, 1'b1};
+`ifdef BIKE_SIM_DEBUG
   assign hist_wr_idx = o_iter_count[HIST_IDX_W-1:0];
+`endif
   assign decode_success = (residual_syndrome_next == '0);
   assign finish_decode = decode_success || (next_iter_count_ext >= (ITER_W + 1)'(I_MAX));
   assign c2v_h_block_idx = H_BLOCK_W'(int'(c2v_col_idx) / R);
@@ -805,9 +822,11 @@ module decoder_top
       v2c_m_latched_entry_pos <= '0;
       v2c_m_latched_col <= '0;
       v2c_m_latched_m_write_pair <= 1'b0;
+`ifdef BIKE_SIM_DEBUG
       for (idx = 0; idx < I_MAX; idx++) begin
         syndrome_hist[idx] <= '0;
       end
+`endif
     end else begin
       c2v_read_d1 <= c2v_read;
       if (c2v_read) begin
@@ -884,22 +903,24 @@ module decoder_top
         v2c_m_latched_m_write_pair <= v2c_read_m_write_pair_d1;
       end
 
+`ifdef BIKE_SIM_DEBUG
       if (iter_check) begin
         syndrome_hist[hist_wr_idx] <= residual_syndrome_next;
       end
+`endif
     end
   end
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
+    logic [M_ROW_STATE_ADDR_W-1:0] state_addr;
+
     if (!i_rst_n) begin
       for (int pair_idx = 0; pair_idx < 2; pair_idx++) begin
         m_pair_epoch[pair_idx] <= 1'b0;
       end
-      for (int port_idx = 0; port_idx < 4; port_idx++) begin
-        for (int row_idx = 0; row_idx < ROW_GROUP_DEPTH; row_idx++) begin
-          m_row_valid[port_idx][row_idx] <= 1'b0;
-          m_row_epoch[port_idx][row_idx] <= 1'b0;
-        end
+      for (int row_state_idx = 0; row_state_idx < M_ROW_STATE_DEPTH; row_state_idx++) begin
+        m_row_valid[row_state_idx] <= 1'b0;
+        m_row_epoch[row_state_idx] <= 1'b0;
       end
     end else begin
       if (iter_check && !finish_decode) begin
@@ -907,8 +928,9 @@ module decoder_top
       end
       for (int port_idx = 0; port_idx < 4; port_idx++) begin
         if (m_we[port_idx]) begin
-          m_row_valid[port_idx][m_write_row_idx_group[port_idx]] <= 1'b1;
-          m_row_epoch[port_idx][m_write_row_idx_group[port_idx]] <= m_pair_epoch[m_port_pair(port_idx)];
+          state_addr = m_row_state_addr(port_idx, m_write_row_idx_group[port_idx]);
+          m_row_valid[state_addr] <= 1'b1;
+          m_row_epoch[state_addr] <= m_pair_epoch[m_port_pair(port_idx)];
         end
       end
     end
