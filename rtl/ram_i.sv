@@ -17,8 +17,8 @@ module ram_i
   input  logic i_rst_n,
   input  logic i_we,
   input  logic [H_BLOCK_W-1:0] i_h_block_idx,
-  input  logic [ENTRY_POS_W-1:0] i_read_entry_idx,
-  input  logic [ENTRY_POS_W-1:0] i_write_entry_idx,
+  input  logic [RAM_ENTRY_POS_W-1:0] i_read_entry_idx,
+  input  logic [RAM_ENTRY_POS_W-1:0] i_write_entry_idx,
   input  logic [I_ENTRY_W-1:0] i_entry_wdata,
   input  logic i_count_we,
   input  logic [GROUP_COUNT_W-1:0] i_count_wdata,
@@ -40,7 +40,7 @@ module ram_i
 
   function automatic logic [I_MEM_ADDR_W-1:0] entry_addr(
     input logic [H_BLOCK_W-1:0] h_block_idx,
-    input logic [ENTRY_POS_W-1:0] entry_idx
+    input logic [RAM_ENTRY_POS_W-1:0] entry_idx
   );
     begin
       entry_addr = I_MEM_ADDR_W'(int'(h_block_idx) * RAM_LANE_DEPTH + int'(entry_idx));

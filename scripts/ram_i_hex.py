@@ -54,10 +54,11 @@ def generate_hex_files(
     w_value: int,
     tag: str,
     output_dir: Path,
+    lane_depth: int | None = None,
 ) -> None:
     group_counts, group_entries = first_column_tables(banks)
     row_idx_w = clog2_sv((r_value + 1) // 2)
-    lane_depth = lane_depth_from_counts(group_counts)
+    lane_depth = lane_depth if lane_depth is not None else lane_depth_from_counts(group_counts)
     group_names = ["ram_i0", "ram_i1"]
     tag_suffix = f"_{tag}" if tag else ""
 
@@ -65,9 +66,12 @@ def generate_hex_files(
         entries: list[int] = []
         counts: list[int] = []
         for h_block_idx in range(len(banks)):
-            counts.append(group_counts[h_block_idx][group_idx])
+            counts.append(min(group_counts[h_block_idx][group_idx], lane_depth))
             for entry_idx in range(lane_depth):
-                item = group_entries[h_block_idx][group_idx][entry_idx]
+                if entry_idx < len(group_entries[h_block_idx][group_idx]):
+                    item = group_entries[h_block_idx][group_idx][entry_idx]
+                else:
+                    item = None
                 if item is None:
                     entries.append(0)
                 else:

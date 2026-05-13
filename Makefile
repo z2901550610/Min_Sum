@@ -25,8 +25,10 @@ BIKE_CAL_TRIALS ?= 4
 BIKE_RANDOM_BASE_SEED ?= 1
 BIKE_RANDOM_TRIALS ?= 8
 BIKE_RANDOM_ERROR_COUNT ?= 1
+BIKE_RANDOM_RAM_LANE_DEPTH ?=
+BIKE_RANDOM_SUPPORT_MODE ?= random
 
-.PHONY: all golden sim test test-unit test-integration test-bike-random vivado-synth golden-self-test bike-golden-self-test bike-golden-once bike-golden-batch bike-golden-calibrate FORCE
+.PHONY: all golden sim test test-unit test-integration test-bike-random test-bike-overflow-cases test-bike-l1-cycle vivado-synth golden-self-test bike-golden-self-test bike-golden-once bike-golden-batch bike-golden-calibrate FORCE
 
 all: test
 
@@ -88,7 +90,14 @@ test-integration: $(VECTOR_SVH) $(RAM_I_HEX)
 	@$(SIM) ./obj_dir/Vtb_decoder_top +verilator+quiet
 
 test-bike-random:
-	@python3 scripts/run_bike_random.py --base-seed $(BIKE_RANDOM_BASE_SEED) --trials $(BIKE_RANDOM_TRIALS) --error-count $(BIKE_RANDOM_ERROR_COUNT) --verilator $(VERILATOR)
+	@python3 scripts/run_bike_random.py --base-seed $(BIKE_RANDOM_BASE_SEED) --trials $(BIKE_RANDOM_TRIALS) --error-count $(BIKE_RANDOM_ERROR_COUNT) --support-mode $(BIKE_RANDOM_SUPPORT_MODE) $(if $(BIKE_RANDOM_RAM_LANE_DEPTH),--ram-lane-depth $(BIKE_RANDOM_RAM_LANE_DEPTH),) --verilator $(VERILATOR)
+
+test-bike-overflow-cases:
+	@python3 scripts/run_bike_random.py --base-seed $(BIKE_RANDOM_BASE_SEED) --trials 4 --r 257 --w 71 --i-max 2 --error-count $(BIKE_RANDOM_ERROR_COUNT) --timeout-cycles 1000000 --ram-lane-depth 40 --support-mode sweep --out-dir tb/generated/bike_overflow_cases --verilator $(VERILATOR)
+
+test-bike-l1-cycle: $(RAM_I_HEX)
+	@$(VERILATOR) --binary --sv -DBIKE_PKG_EXTERNAL -DBIKE_SIM_DEBUG -Wall -Wno-fatal -I./tb -I./rtl --top-module tb_bike_l1_cycle rtl/bike_pkg.sv $(RTL) tb/tb_bike_l1_cycle.sv
+	@$(SIM) ./obj_dir/Vtb_bike_l1_cycle +verilator+quiet
 
 vivado-synth: $(RAM_I_HEX)
 	@mkdir -p $(VIVADO_BUILD_DIR)

@@ -57,7 +57,7 @@ ram_i #(.INIT_HEX_STEM("rtl/generated/ram_i0")) u_ram_i0 (...);
 ram_i #(.INIT_HEX_STEM("rtl/generated/ram_i1")) u_ram_i1 (...);
 ```
 
-`INIT_TAG` 与参数集匹配：BIKE-L1 使用 `"_l1"`，`BIKE_TOY_PARAMS` 使用 `"_test"`。复位期间记忆体阵列保持初始化内容，因此复位释放后 RAM-I 已包含完整的首列元数据，解码器进入 INIT 状态即可直接使用。
+`INIT_TAG` 与参数集匹配：BIKE-L1 使用 `"_l1"`，`BIKE_TOY_PARAMS` 使用 `"_test"`。复位期间记忆体阵列保持初始化内容，因此复位释放后 RAM-I 已包含完整的首列元数据，解码器进入 ITER 调度即可直接使用。
 
 ## 模块划分
 
@@ -67,13 +67,13 @@ ram_i #(.INIT_HEX_STEM("rtl/generated/ram_i1")) u_ram_i1 (...);
 - `ram_i`、`ram_m`、`ram_s`、`ram_t`、`ram_c` 均为论文风格的 RAM 原语。每个 RTL 文件对应一个编号 RAM 块。
 - `decoder_top` 按论文命名显式实例化各 RAM 块：`I0/I1`、`M0/M1/M2/M3`、`S0/S1`、`T0/T1`、`C`。
 - RAM-M 每个 numbered block 保存一个 row group 的压缩 c2v 状态和 1 bit epoch，深度为 `ROW_GROUP_DEPTH = ceil(R/L)`。顶层只向 RAM-M 发送 `row_idx_group`，绝对行号只用于 syndrome bit 选择和残差syndrome增量维护。
-- RAM-I、RAM-S、RAM-T 的 lane 内 entry 深度统一为 `RAM_LANE_DEPTH`，表示首列元数据在各 lane 中的最大有效 entry 数。BIKE-L1 参数下 `RAM_LANE_DEPTH=37`，`BIKE_TOY_PARAMS` 参数下 `RAM_LANE_DEPTH=2`。
-- RAM-S 每个 lane 以 `S_PACK_W` bit word 保存 v2c sign bit，BIKE-L1 配置使用 8 bit 打包。顶层读写 shift buffer 在 entry bit 流和打包 word 之间转换；RAM-S 只提供 word 级读写。
-- RAM-T 每个 lane 以按 entry slot 寻址的缓冲保存列 k+1 生成的 c2v 和 valid sideband。列 k+1 每个 entry slot 都写入，空 lane 写入 invalid slot；v2c 发射阶段按同一个 entry slot 读取，valid sideband 控制 VNU 的外信息相减。`ITER_CHECK` 清空 RAM-T slot 状态。
+- lane 内逻辑 entry 深度为 `ENTRY_DEPTH=W`，计数和控制指针覆盖单列全部非零项。BIKE-L1 参数下 RAM-I 主区 `RAM_LANE_DEPTH=40`，溢出区 `RAM_OVERFLOW_DEPTH=31`；`BIKE_TOY_PARAMS` 参数下 RAM-I 主区 `RAM_LANE_DEPTH=2`，溢出区 `RAM_OVERFLOW_DEPTH=1`。
+- RAM-S 每个 lane 以 `S_PACK_W` bit word 保存 v2c sign bit，按 `ENTRY_DEPTH` 为每列分配 sign bit slot，BIKE-L1 配置使用 8 bit 打包。顶层读写 shift buffer 在 entry bit 流和打包 word 之间转换；RAM-S 只提供 word 级读写。
+- RAM-T 每个 lane 以按 entry slot 寻址的缓冲保存列 k+1 生成的 c2v 和 valid sideband，slot 数为 `ENTRY_DEPTH`。列 k+1 每个 entry slot 都写入，空 lane 写入 invalid slot；v2c 发射阶段按同一个 entry slot 读取，valid sideband 控制 VNU 的外信息相减。`ITER_CHECK` 清空 RAM-T slot 状态。
 - RAM-C 保存 syndrome 输入译码器的错误估计 bit，是一份适配 syndrome 输入语义的 `N` bit 存储，并提供串行读口用于导出最终估计。
 - 列 metadata 使用两个固定 slot：列 k 从 active slot 读取，列 k+1 从 RAM-I 单 entry 视图写入 fill slot。`o_col_k_meta_advance` 触发 active/fill slot 轮换，使列 k+1 成为新的列 k。
 - `decoder_ctrl` 遵循论文的 Fig.8 式单端口调度：每次迭代先填充并累加列 0，然后进入列重叠流水线——c2v 侧重建并累加列 `k+1` 的同时 v2c 侧更新列 `k`，最后排空 v2c 的最后一列，进入 `ITER_CHECK`。复用的 RAM-M 行通过 RAM word epoch 实现 `COMP_C2V_INIT` 语义。`phase` 信号仅用于调试；数据通路时序由固定调度脉冲和 metadata slot 轮换驱动。
-- RAM-I 在仿真启动时通过 `$readmemh` 从 hex 文件加载首列元数据。解码期间，活跃列的行/局部行/边索引元数据来自 RAM-I 的单 entry 读口。`h_shift` 为每个 RAM-I 块设置一个 entry 输入，为每个 lane 设置一个移位后的 entry 输出，数据通路通过 RAM-I 的单 entry 写端口将每个移位后的 entry 写入下一个 c2v 列。RAM-I shift writer 为每个目标 bank 保留一个 pending entry；多个移位 entry 指向同一 bank 时，writer 先写入一个 entry，并在后续周期写入 pending entry。列尾 count 在 pending entry 清空后提交，`decoder_ctrl` 通过 `i_ram_i_shift_ready` 暂停下一次 c2v 读发射。v2c 元数据独立缓冲，使 c2v 侧的 RAM-I 可以领先一列。`decoder_top` 通过 RAM-I 的单 entry 功能视图输出访问 RAM-I。项目级 RTL 命名约定定义在 [`docs/naming_conventions.md`](/Users/z2901550610/Documents/Min_Sum/docs/naming_conventions.md) 中。行组方案基于奇偶：`row_group 0` 存储偶数行，`row_group 1` 存储奇数行，`row_local` 为紧凑的奇偶局部索引 `floor(row_global / 2)`。CNU/VNU 行地址调度由 RAM-I 元数据驱动。
+- RAM-I 在仿真启动时通过 `$readmemh` 从 hex 文件加载首列主区元数据，溢出区由 `decoder_top` 根据 `H_BASE` 初始化。解码期间，活跃列的行/局部行/边索引元数据来自 RAM-I 主区和溢出区组合出的单 entry 视图。`h_shift` 为每个 RAM-I 块设置一个 entry 输入，为每个 lane 设置一个移位后的 entry 输出，数据通路通过 RAM-I shift writer 将每个移位后的 entry 写入下一个 c2v 列。entry 位置小于 `RAM_LANE_DEPTH` 时写入 RAM-I 主区，其余 entry 写入溢出区。RAM-I shift writer 为每个目标 bank 保留 pending entry；多个移位 entry 指向同一 bank 时，writer 先写入一个 entry，并在后续周期写入 pending entry。列尾主区 count 和溢出 count 在 pending entry 清空后提交，`decoder_ctrl` 通过 `i_ram_i_shift_ready` 暂停下一次 c2v 读发射。v2c 元数据独立缓冲，使 c2v 侧的 RAM-I 可以领先一列。`decoder_top` 通过 RAM-I 的单 entry 功能视图输出访问 RAM-I。项目级 RTL 命名约定定义在 [`docs/naming_conventions.md`](/Users/z2901550610/Documents/Min_Sum/docs/naming_conventions.md) 中。行组方案基于奇偶：`row_group 0` 存储偶数行，`row_group 1` 存储奇数行，`row_local` 为紧凑的奇偶局部索引 `floor(row_global / 2)`。CNU/VNU 行地址调度由 RAM-I 元数据驱动。
 - `decoder_edge_meta` 和 `qc_column_preprocess` 保留在 [`rtl/reference/`](/Users/z2901550610/Documents/Min_Sum/rtl/reference) 下作为参考辅助文件。核心解码器使用 RAM-I + `h_shift` 提供活跃边元数据。
 - 静态首列元数据由 [`scripts/gen_qc_first_columns.py`](/Users/z2901550610/Documents/Min_Sum/scripts/gen_qc_first_columns.py) 离线生成，输出 hex 文件到 `rtl/generated/`。RAM-I 通过 `$readmemh` 在仿真启动时直接加载。
 - c2v 侧在读取 RAM-I 单 entry 视图时同步填充列 k+1 metadata slot，使得下一列的单 entry 移位写入不会干扰列 k 的元数据视图。
@@ -81,7 +81,7 @@ ram_i #(.INIT_HEX_STEM("rtl/generated/ram_i1")) u_ram_i1 (...);
 
 ## 状态机详解
 
-`decoder_ctrl` 使用 4 个宏状态加嵌套子状态的层次化 FSM，实现 Fig.8 式列重叠调度。RAM-I 的首列元数据通过 `$readmemh` 在仿真启动时从 hex 文件加载，无需状态机参与。
+`decoder_ctrl` 使用 WAIT、ITER、DONE 三个宏状态加 ITER 内部调度状态，实现 Fig.8 式列重叠调度。RAM-I 的首列元数据通过 `$readmemh` 在仿真启动时从 hex 文件加载。
 
 ### 状态转移总览
 
@@ -89,16 +89,7 @@ ram_i #(.INIT_HEX_STEM("rtl/generated/ram_i1")) u_ram_i1 (...);
 stateDiagram-v2
     [*] --> WAIT
 
-    WAIT --> INIT : i_start=1
-
-    state INIT {
-        [*] --> READ
-        READ --> CNU_A
-        CNU_A --> WRITE
-        WRITE --> READ : 递增 entry 或进入下一列
-    }
-
-    INIT --> ITER : 所有列初始化完成
+    WAIT --> ITER : i_start=1
 
     state ITER {
         [*] --> FILL_K
@@ -119,34 +110,16 @@ stateDiagram-v2
 
     ITER --> DONE : i_finish_decode=1
 
-    DONE --> INIT : i_start=1
+    DONE --> ITER : i_start=1
 ```
 
 ### 宏状态
 
 #### 1. CTRL_WAIT — 上电空闲
 
-`i_rst_n` 复位后的初始状态。解码器在此等待首次 `i_start` 信号。当 `i_start` 置位时，复位所有内部计数器、子状态、列索引和 entry 位置指针，跳转到 **CTRL_INIT**。后续解码完成后再收到 `i_start` 时，状态机从 **CTRL_DONE** 直接跳回 **CTRL_INIT**，不会再次经过 WAIT。WAIT 仅存在于复位路径，为硬件上电提供一个确定的起点。
+`i_rst_n` 复位后的初始状态。解码器在此等待首次 `i_start` 信号。当 `i_start` 置位时，复位所有内部计数器、子状态、列索引和 entry 位置指针，跳转到 **CTRL_ITER**。解码完成后再收到 `i_start` 时，状态机从 **CTRL_DONE** 跳回 **CTRL_ITER**。WAIT 仅存在于复位路径，为硬件上电提供一个确定的起点。
 
-#### 2. CTRL_INIT — 初始压缩 c2v 对构建
-
-RAM-I 的首列元数据在仿真启动时通过 `$readmemh` 从 hex 文件自动加载（由 `gen_qc_first_columns.py` 根据 `H_BASE` 预生成），无需运行时播种。
-
-INIT 为所有变量列构建初始压缩 c2v 对（第一次迭代的输入），内部有以下微步骤，按列遍历，每列内按 entry 位置步进：
-
-| 微步骤 | 信号 | 功能 |
-|---|---|---|
-| `INIT_STEP_READ` | `o_init_m_read` | 从 RAM-M 读取当前 entry 的压缩 c2v 状态 |
-| `INIT_STEP_CNU_A` | `o_init_cnu_a` | 使能 CNU_A 进行初始累加运算 |
-| `INIT_STEP_WRITE` | `o_init_m_write` | 将 CNU_A 结果写回 RAM-M / RAM-S |
-
-播种完成后，每个 entry 依次经过 READ → CNU_A → WRITE 三步。entry 步进规则：
-
-- 非最后 entry（`i_c2v_entry_pos_last = 0`）：递增 `o_c2v_entry_pos`，回到 `INIT_STEP_READ`。
-- 最后 entry 但非最后列：`o_c2v_entry_pos` 归零，`o_c2v_col_idx` 递增，回到 `INIT_STEP_READ`。
-- 最后 entry 且最后列（`o_c2v_col_idx == LAST_VAR`）：所有列初始化完成，进入 **CTRL_ITER** 的 `SCHED_FILL_K`，列索引归零。
-
-#### 3. CTRL_ITER — 迭代解码（核心）
+#### 2. CTRL_ITER — 迭代解码（核心）
 
 `CTRL_ITER` 实现 **Fig.8 列重叠调度**：列 k+1 侧重建并累加后一列的 LLR，列 k 侧对当前列进行 v2c 更新。两列重叠运行，c2v 始终领先 v2c 一列。
 
@@ -186,9 +159,9 @@ INIT 为所有变量列构建初始压缩 c2v 对（第一次迭代的输入）�
 - `i_finish_decode = 1`（残差为零或达到最大迭代次数）：跳转到 **CTRL_DONE**，输出 `o_done = 1`，锁存 `o_success = i_decode_success`。
 - `i_finish_decode = 0`：交换 RAM-M pair（`o_m_read_pair` 翻转），复位所有子状态和列指针，进入 `SCHED_FILL_K` 开始下一轮迭代。
 
-#### 4. CTRL_DONE — 解码完成
+#### 3. CTRL_DONE — 解码完成
 
-输出 `o_done = 1`，锁存 `o_success` 和 `o_iter_count`。等待新一轮 `i_start`，收到后回到 **CTRL_INIT** 开始新的解码。
+输出 `o_done = 1`，锁存 `o_success` 和 `o_iter_count`。等待新一轮 `i_start`，收到后回到 **CTRL_ITER** 开始新的解码。
 
 ### ITER 内部流水线时空示意
 
@@ -207,7 +180,7 @@ CONS                   [V2C]            [V2C]        ... [V2C]
 
 ### 资源与性能特征
 
-- **状态寄存器**：3 位宏状态 + 2 位 INIT 子状态 + 2 位 ITER 固定调度状态、发射有效位、列尾标记、列 k stage 和 `iter_check_pending`。
+- **状态寄存器**：3 位宏状态 + 2 位 ITER 固定调度状态、发射有效位、列尾标记、列 k stage 和 `iter_check_pending`。
 - **关键路径**：控制逻辑为纯组合译码，不产生时序收敛瓶颈。时序关键路径位于 CNU/VNU 数据通路。
 - **流水线效率**：稳定重叠阶段中，每个时钟周期同时进行一个 c2v 操作和一个 v2c 操作，实现接近 2 entry/周期的吞吐。
 

@@ -4,7 +4,7 @@ module ram_s
   import bike_pkg::*;
 #(
   parameter int S_PACK_W = 8,
-  parameter int S_WORDS_PER_COL = (RAM_LANE_DEPTH + S_PACK_W - 1) / S_PACK_W,
+  parameter int S_WORDS_PER_COL = (ENTRY_DEPTH + S_PACK_W - 1) / S_PACK_W,
   parameter int S_WORD_DEPTH = N * S_WORDS_PER_COL,
   parameter int S_WORD_ADDR_W = (S_WORD_DEPTH > 1) ? $clog2(S_WORD_DEPTH) : 1
 )
@@ -18,7 +18,7 @@ module ram_s
   output logic [S_PACK_W-1:0] o_rdata
 `ifdef BIKE_SIM_DEBUG
   ,
-  output logic o_debug_mem [0:N-1][0:RAM_LANE_DEPTH-1]
+  output logic o_debug_mem [0:N-1][0:ENTRY_DEPTH-1]
 `endif
 );
 
@@ -33,7 +33,7 @@ module ram_s
 `ifdef BIKE_SIM_DEBUG
   always_comb begin
     for (int col_idx = 0; col_idx < N; col_idx++) begin
-      for (int entry_idx = 0; entry_idx < RAM_LANE_DEPTH; entry_idx++) begin
+      for (int entry_idx = 0; entry_idx < ENTRY_DEPTH; entry_idx++) begin
         o_debug_mem[col_idx][entry_idx] =
           mem[debug_word_addr(col_idx, entry_idx)][entry_idx % S_PACK_W];
       end

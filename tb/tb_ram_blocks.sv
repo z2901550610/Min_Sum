@@ -16,11 +16,11 @@ module tb_ram_blocks;
   logic [COMP_C2V_W-1:0] m_debug [0:ROW_GROUP_DEPTH-1];
 
   localparam int TB_S_PACK_W = 8;
-  localparam int TB_S_WORDS_PER_COL = (RAM_LANE_DEPTH + TB_S_PACK_W - 1) / TB_S_PACK_W;
+  localparam int TB_S_WORDS_PER_COL = (ENTRY_DEPTH + TB_S_PACK_W - 1) / TB_S_PACK_W;
   localparam int TB_S_WORD_DEPTH = N * TB_S_WORDS_PER_COL;
   localparam int TB_S_WORD_ADDR_W = (TB_S_WORD_DEPTH > 1) ? $clog2(TB_S_WORD_DEPTH) : 1;
-  localparam int TB_S_PACK1_WORDS_PER_COL = RAM_LANE_DEPTH;
-  localparam int TB_S_PACK1_WORD_DEPTH = N * RAM_LANE_DEPTH;
+  localparam int TB_S_PACK1_WORDS_PER_COL = ENTRY_DEPTH;
+  localparam int TB_S_PACK1_WORD_DEPTH = N * ENTRY_DEPTH;
   localparam int TB_S_PACK1_WORD_ADDR_W = (TB_S_PACK1_WORD_DEPTH > 1) ? $clog2(TB_S_PACK1_WORD_DEPTH) : 1;
 
   logic s_we;
@@ -28,14 +28,14 @@ module tb_ram_blocks;
   logic [TB_S_WORD_ADDR_W-1:0] s_write_word_addr;
   logic [TB_S_PACK_W-1:0] s_wdata;
   logic [TB_S_PACK_W-1:0] s_rdata;
-  logic s_debug [0:N-1][0:RAM_LANE_DEPTH-1];
+  logic s_debug [0:N-1][0:ENTRY_DEPTH-1];
 
   logic s_pack2_we;
   logic [TB_S_PACK1_WORD_ADDR_W-1:0] s_pack2_read_word_addr;
   logic [TB_S_PACK1_WORD_ADDR_W-1:0] s_pack2_write_word_addr;
   logic [0:0] s_pack2_wdata;
   logic [0:0] s_pack2_rdata;
-  logic s_pack2_debug [0:N-1][0:RAM_LANE_DEPTH-1];
+  logic s_pack2_debug [0:N-1][0:ENTRY_DEPTH-1];
 
   logic t_push;
   logic t_pop;
@@ -48,7 +48,7 @@ module tb_ram_blocks;
   /* verilator lint_off UNUSEDSIGNAL */
   logic [GROUP_COUNT_W-1:0] t_item_count;
   /* verilator lint_on UNUSEDSIGNAL */
-  logic [MSG_W-1:0] t_debug [0:RAM_LANE_DEPTH-1];
+  logic [MSG_W-1:0] t_debug [0:ENTRY_DEPTH-1];
 
   logic c_we;
   logic c_din;
@@ -128,14 +128,14 @@ module tb_ram_blocks;
 
   function automatic int s_bit_addr(input int col_idx, input int entry_idx);
     begin
-      s_bit_addr = (col_idx % N) * RAM_LANE_DEPTH + (entry_idx % RAM_LANE_DEPTH);
+      s_bit_addr = (col_idx % N) * ENTRY_DEPTH + (entry_idx % ENTRY_DEPTH);
     end
   endfunction
 
   function automatic int s_word_addr(input int col_idx, input int entry_idx);
     begin
       s_word_addr = (col_idx % N) * TB_S_WORDS_PER_COL +
-                    ((entry_idx % RAM_LANE_DEPTH) / TB_S_PACK_W);
+                    ((entry_idx % ENTRY_DEPTH) / TB_S_PACK_W);
     end
   endfunction
 
@@ -167,9 +167,9 @@ module tb_ram_blocks;
         $fatal(1, "packed ram_s read mismatch col=%0d entry=%0d got=%0b exp=%0b",
                col_idx, entry_idx, s_pack2_rdata[0], expected_sign);
       end
-      if (s_pack2_debug[col_idx % N][entry_idx % RAM_LANE_DEPTH] != expected_sign) begin
+      if (s_pack2_debug[col_idx % N][entry_idx % ENTRY_DEPTH] != expected_sign) begin
         $fatal(1, "packed ram_s debug mismatch col=%0d entry=%0d got=%0b exp=%0b",
-               col_idx, entry_idx, s_pack2_debug[col_idx % N][entry_idx % RAM_LANE_DEPTH], expected_sign);
+               col_idx, entry_idx, s_pack2_debug[col_idx % N][entry_idx % ENTRY_DEPTH], expected_sign);
       end
     end
   endtask
@@ -224,8 +224,8 @@ module tb_ram_blocks;
     s_wdata = '0;
     s_wdata[s_bit_addr(3, 1) % TB_S_PACK_W] = 1'b1;
     s_we = 1'b1;
-    t_write_entry_idx = ENTRY_POS_W'(1 % RAM_LANE_DEPTH);
-    t_read_entry_idx = ENTRY_POS_W'(1 % RAM_LANE_DEPTH);
+    t_write_entry_idx = ENTRY_POS_W'(1 % ENTRY_DEPTH);
+    t_read_entry_idx = ENTRY_POS_W'(1 % ENTRY_DEPTH);
     t_wdata = MSG_W'(-2);
     t_push = 1'b1;
     t_valid = 1'b1;

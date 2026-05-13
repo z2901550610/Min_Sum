@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import random
+import re
 import shlex
 import subprocess
 from pathlib import Path
@@ -42,6 +43,35 @@ def bit_vector_hex(bits: list[int], width: int) -> str:
 
 def sample_support(rng: random.Random, r: int, w: int) -> list[int]:
     return sorted(rng.sample(range(r), w))
+
+
+def shaped_support(r: int, w: int, group0_count: int) -> list[int]:
+    if group0_count < 0 or group0_count > w:
+        raise ValueError("group0_count must be in the range 0..w")
+    if group0_count > (r + 1) // 2:
+        raise ValueError("r is too small for the requested even-row support count")
+    if (w - group0_count) > r // 2:
+        raise ValueError("r is too small for the requested odd-row support count")
+
+    even_rows = [2 * idx for idx in range(group0_count)]
+    odd_rows = [2 * idx + 1 for idx in range(w - group0_count)]
+    return sorted(even_rows + odd_rows)
+
+
+def support_mode_group0_count(mode: str, w: int, ram_lane_depth: int | None) -> int | None:
+    if mode == "random":
+        return None
+    if ram_lane_depth is None:
+        raise ValueError(f"--support-mode {mode} requires --ram-lane-depth")
+    if mode == "under-main":
+        return max(0, min(w, ram_lane_depth - 1))
+    if mode == "exact-main":
+        return min(w, ram_lane_depth)
+    if mode == "overflow":
+        return min(w, ram_lane_depth + 1)
+    if mode == "worst":
+        return w
+    raise ValueError(f"unsupported support mode: {mode}")
 
 
 def calc_syndrome(h_base: list[list[int]], error_bits: list[int], r: int, w: int) -> list[int]:
@@ -86,7 +116,8 @@ def render_group_entry_param(
         for group_idx, group_entry_list in enumerate(h_block_group_entries):
             group_suffix = "," if group_idx != len(h_block_group_entries) - 1 else ""
             entry_text = []
-            for item in group_entry_list[:lane_depth]:
+            for entry_idx in range(lane_depth):
+                item = group_entry_list[entry_idx] if entry_idx < len(group_entry_list) else None
                 if item is None:
                     entry_text.append("'0")
                 else:
@@ -108,9 +139,10 @@ def emit_pkg(
     alpha_shift_0: int,
     alpha_shift_1: int,
     h_base: list[list[int]],
+    ram_lane_depth: int | None,
 ) -> None:
     group_counts, group_entries = build_first_column_tables(h_base)
-    lane_depth = lane_depth_from_counts(group_counts)
+    lane_depth = ram_lane_depth if ram_lane_depth is not None else lane_depth_from_counts(group_counts)
     path.write_text(
         f"""`timescale 1ns/1ps
 package bike_pkg;
@@ -125,6 +157,8 @@ package bike_pkg;
   parameter int ALPHA_SHIFT_0 = {alpha_shift_0};
   parameter int ALPHA_SHIFT_1 = {alpha_shift_1};
   parameter int RAM_LANE_DEPTH = {lane_depth};
+  parameter int ENTRY_DEPTH = W;
+  parameter int RAM_OVERFLOW_DEPTH = (ENTRY_DEPTH > RAM_LANE_DEPTH) ? (ENTRY_DEPTH - RAM_LANE_DEPTH) : 1;
 
   parameter int N = N0 * R;
   parameter int L = 2;
@@ -143,8 +177,10 @@ package bike_pkg;
   parameter int ROW_IDX_W = (R > 1) ? $clog2(R) : 1;
   parameter int GROUP_IDX_W = (L > 1) ? $clog2(L) : 1;
   parameter int ROW_GROUP_W = ROW_IDX_W - GROUP_IDX_W;
-  parameter int ENTRY_POS_W = (RAM_LANE_DEPTH > 1) ? $clog2(RAM_LANE_DEPTH) : 1;
-  parameter int GROUP_COUNT_W = (RAM_LANE_DEPTH > 1) ? $clog2(RAM_LANE_DEPTH + 1) : 1;
+  parameter int ENTRY_POS_W = (ENTRY_DEPTH > 1) ? $clog2(ENTRY_DEPTH) : 1;
+  parameter int RAM_ENTRY_POS_W = (RAM_LANE_DEPTH > 1) ? $clog2(RAM_LANE_DEPTH) : 1;
+  parameter int RAM_OVERFLOW_POS_W = (RAM_OVERFLOW_DEPTH > 1) ? $clog2(RAM_OVERFLOW_DEPTH) : 1;
+  parameter int GROUP_COUNT_W = (ENTRY_DEPTH > 1) ? $clog2(ENTRY_DEPTH + 1) : 1;
 
   localparam int DEC_STATE_W = 4;
   localparam logic [DEC_STATE_W-1:0] DEC_WAIT_START       = 4'd0;
@@ -250,6 +286,7 @@ module tb_bike_decoder_random;
   logic e_rdata;
   logic [N-1:0] e_out;
   logic [$clog2(I_MAX + 1)-1:0] iter_count;
+  logic checks_active;
 
   decoder_top #(
     .RAM_I0_HEX_STEM("{ram_i0_hex_stem}"),
@@ -313,6 +350,64 @@ module tb_bike_decoder_random;
     end
   endfunction
 
+  task automatic check_initial_ram_i_partition;
+    int total_count;
+    int expected_main_count;
+    int expected_overflow_count;
+    begin
+      for (int h_block_idx = 0; h_block_idx < N0; h_block_idx++) begin
+        for (int group_idx = 0; group_idx < L; group_idx++) begin
+          total_count = int'(QC_FIRST_COL_GROUP_COUNT[h_block_idx][group_idx]);
+          expected_main_count = (total_count > RAM_LANE_DEPTH) ? RAM_LANE_DEPTH : total_count;
+          expected_overflow_count = (total_count > RAM_LANE_DEPTH) ? (total_count - RAM_LANE_DEPTH) : 0;
+          if (int'(dut.ram_i_debug_count[h_block_idx][group_idx]) != expected_main_count) begin
+            $fatal(
+              1,
+              "seed=%0d initial RAM-I main count mismatch h=%0d group=%0d got=%0d exp=%0d total=%0d",
+              TEST_SEED,
+              h_block_idx,
+              group_idx,
+              int'(dut.ram_i_debug_count[h_block_idx][group_idx]),
+              expected_main_count,
+              total_count
+            );
+          end
+          if (int'(dut.ram_i_overflow_count[h_block_idx][group_idx]) != expected_overflow_count) begin
+            $fatal(
+              1,
+              "seed=%0d initial RAM-I overflow count mismatch h=%0d group=%0d got=%0d exp=%0d total=%0d",
+              TEST_SEED,
+              h_block_idx,
+              group_idx,
+              int'(dut.ram_i_overflow_count[h_block_idx][group_idx]),
+              expected_overflow_count,
+              total_count
+            );
+          end
+        end
+      end
+    end
+  endtask
+
+  always @(posedge clk) begin
+    if (checks_active) begin
+      for (int h_block_idx = 0; h_block_idx < N0; h_block_idx++) begin
+        for (int group_idx = 0; group_idx < L; group_idx++) begin
+          if (int'(dut.ram_i_debug_count[h_block_idx][group_idx]) > RAM_LANE_DEPTH) begin
+            $fatal(1, "seed=%0d RAM-I main count overflow h=%0d group=%0d", TEST_SEED, h_block_idx, group_idx);
+          end
+          if (int'(dut.ram_i_overflow_count[h_block_idx][group_idx]) > RAM_OVERFLOW_DEPTH) begin
+            $fatal(1, "seed=%0d RAM-I overflow count overflow h=%0d group=%0d", TEST_SEED, h_block_idx, group_idx);
+          end
+          if ((int'(dut.ram_i_debug_count[h_block_idx][group_idx]) +
+               int'(dut.ram_i_overflow_count[h_block_idx][group_idx])) > W) begin
+            $fatal(1, "seed=%0d RAM-I total count overflow h=%0d group=%0d", TEST_SEED, h_block_idx, group_idx);
+          end
+        end
+      end
+    end
+  end
+
   initial begin
     int cycles;
     logic [R-1:0] residual;
@@ -320,12 +415,17 @@ module tb_bike_decoder_random;
     rst_n = 1'b0;
     start = 1'b0;
     e_read_col_idx = '0;
+    checks_active = 1'b0;
     repeat (2) @(posedge clk);
     rst_n = 1'b1;
     @(posedge clk);
+    #1;
+    check_initial_ram_i_partition();
+    checks_active = 1'b1;
 
+    @(negedge clk);
     start = 1'b1;
-    @(posedge clk);
+    @(negedge clk);
     start = 1'b0;
 
     cycles = 0;
@@ -334,7 +434,21 @@ module tb_bike_decoder_random;
       @(posedge clk);
     end
     if (done !== 1'b1) begin
-      $fatal(1, "seed=%0d timeout after %0d cycles", TEST_SEED, cycles);
+      $fatal(
+        1,
+        "seed=%0d timeout after %0d cycles state=%0d phase=%0d c2v_col=%0d c2v_pos=%0d v2c_col=%0d v2c_pos=%0d shift_ready=%0d pending0=%0d pending1=%0d",
+        TEST_SEED,
+        cycles,
+        dut.state,
+        dut.phase,
+        dut.c2v_col_idx,
+        dut.c2v_entry_pos,
+        dut.v2c_col_idx,
+        dut.v2c_entry_pos,
+        dut.ram_i_shift_ready,
+        dut.ram_i_shift_pending_count[0],
+        dut.ram_i_shift_pending_count[1]
+      );
     end
 
     e_out = '0;
@@ -375,7 +489,7 @@ endmodule
     )
 
 
-def run_command(command: list[str], cwd: Path) -> None:
+def run_command(command: list[str], cwd: Path, *, capture: bool = False) -> str:
     exe = Path(command[0]).name
     if "verilator" in exe:
         top = "unknown"
@@ -388,10 +502,26 @@ def run_command(command: list[str], cwd: Path) -> None:
         print(f"+ sim {Path(command[1]).name}", flush=True)
     else:
         print("+ " + shlex.join(command), flush=True)
+    if capture:
+        completed = subprocess.run(command, cwd=cwd, check=True, text=True, capture_output=True)
+        if completed.stdout:
+            print(completed.stdout, end="", flush=True)
+        if completed.stderr:
+            print(completed.stderr, end="", flush=True)
+        return completed.stdout + completed.stderr
     subprocess.run(command, cwd=cwd, check=True)
+    return ""
 
 
-def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int) -> bool:
+def parse_result_line(output: str) -> dict[str, int]:
+    result: dict[str, int] = {}
+    pattern = re.compile(r"(success|iter|cycles|target_weight|output_weight|residual_weight|exact)=([0-9]+)")
+    for key, value in pattern.findall(output):
+        result[key] = int(value)
+    return result
+
+
+def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int) -> dict[str, int]:
     rng = random.Random(seed)
     out_dir_arg = Path(args.out_dir)
     case_dir = out_dir_arg / f"case_{case_idx:03d}_seed_{seed}"
@@ -406,7 +536,18 @@ def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int
     if args.w < 1 or args.w > args.r:
         raise ValueError("--w must be between 1 and --r")
 
-    h_base = [sample_support(rng, args.r, args.w), sample_support(rng, args.r, args.w)]
+    support_mode = args.support_mode
+    if support_mode == "sweep":
+        sweep_modes = ["under-main", "exact-main", "overflow", "worst"]
+        support_mode = sweep_modes[case_idx % len(sweep_modes)]
+    group0_count = support_mode_group0_count(support_mode, args.w, args.ram_lane_depth)
+    if group0_count is None:
+        h_base = [sample_support(rng, args.r, args.w), sample_support(rng, args.r, args.w)]
+    else:
+        h_base = [
+            shaped_support(args.r, args.w, group0_count),
+            shaped_support(args.r, args.w, max(0, args.w - group0_count)),
+        ]
     error_positions = sorted(rng.sample(range(n), args.error_count))
     error_bits = [0 for _ in range(n)]
     for pos in error_positions:
@@ -424,8 +565,9 @@ def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int
         alpha_shift_0=args.alpha_shift_0,
         alpha_shift_1=args.alpha_shift_1,
         h_base=h_base,
+        ram_lane_depth=args.ram_lane_depth,
     )
-    generate_hex_files(h_base, args.r, args.w, "", out_dir)
+    generate_hex_files(h_base, args.r, args.w, "", out_dir, args.ram_lane_depth)
     emit_tb(
         tb_path,
         seed=seed,
@@ -455,8 +597,12 @@ def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int
         str(tb_path),
     ]
     run_command(command, repo_root)
-    run_command(["scripts/run_quiet.py", str(obj_dir / "Vtb_bike_decoder_random"), "+verilator+quiet"], repo_root)
-    return True
+    sim_output = run_command(
+        ["scripts/run_quiet.py", str(obj_dir / "Vtb_bike_decoder_random"), "+verilator+quiet"],
+        repo_root,
+        capture=True,
+    )
+    return parse_result_line(sim_output)
 
 
 def parse_args() -> argparse.Namespace:
@@ -476,6 +622,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--alpha-shift-0", type=int, default=4)
     parser.add_argument("--alpha-shift-1", type=int, default=5)
     parser.add_argument(
+        "--ram-lane-depth",
+        type=int,
+        default=None,
+        help="Main RAM-I entries per lane. Defaults to the generated first-column maximum.",
+    )
+    parser.add_argument(
+        "--support-mode",
+        choices=["random", "under-main", "exact-main", "overflow", "worst", "sweep"],
+        default="random",
+        help="H support distribution. sweep cycles under-main/exact-main/overflow/worst.",
+    )
+    parser.add_argument(
         "--require-success",
         action="store_true",
         help="Treat non-convergence as a test failure instead of only checking flag/residual consistency.",
@@ -488,12 +646,31 @@ def main() -> int:
     repo_root = Path(__file__).resolve().parents[1]
     if args.trials < 1:
         raise ValueError("--trials must be positive")
+    if args.ram_lane_depth is not None and (args.ram_lane_depth < 1 or args.ram_lane_depth > args.w):
+        raise ValueError("--ram-lane-depth must be in the range 1..w")
 
+    results: list[dict[str, int]] = []
     for case_idx in range(args.trials):
         seed = args.base_seed + case_idx
-        print(f"== BIKE random case {case_idx + 1}/{args.trials}: seed={seed} ==", flush=True)
-        run_case(args, repo_root, case_idx, seed)
+        print(
+            f"== BIKE random case {case_idx + 1}/{args.trials}: seed={seed} mode={args.support_mode} ==",
+            flush=True,
+        )
+        results.append(run_case(args, repo_root, case_idx, seed))
 
+    success_count = sum(result.get("success", 0) for result in results)
+    exact_count = sum(result.get("exact", 0) for result in results)
+    timeout_free_count = len(results)
+    cycle_values = [result["cycles"] for result in results if "cycles" in result]
+    residual_values = [result["residual_weight"] for result in results if "residual_weight" in result]
+    max_cycles = max(cycle_values) if cycle_values else 0
+    max_residual = max(residual_values) if residual_values else 0
+    print(
+        "SUMMARY: "
+        f"trials={args.trials} completed={timeout_free_count} "
+        f"success={success_count} exact={exact_count} "
+        f"max_cycles={max_cycles} max_residual_weight={max_residual}"
+    )
     print(f"PASS: ran {args.trials} BIKE random decoder testbench(es) one at a time")
     return 0
 

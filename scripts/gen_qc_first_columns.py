@@ -30,6 +30,16 @@ def extract_w_values(text: str) -> list[int]:
     return values
 
 
+def extract_ram_lane_depth_values(text: str) -> list[int]:
+    values = [
+        int(value)
+        for value in re.findall(r"localparam\s+int\s+RAM_LANE_DEPTH\s*=\s*(\d+)\s*;", text)
+    ]
+    if len(values) != 2:
+        raise ValueError("expected exactly two RAM_LANE_DEPTH parameter values in bike_pkg")
+    return values
+
+
 def extract_h_base_literal(text: str, start: int) -> str:
     eq_idx = text.find("=", start)
     brace_idx = text.find("{", eq_idx)
@@ -136,13 +146,28 @@ def main() -> None:
     source_text = input_path.read_text(encoding="utf-8")
     r_values = extract_r_values(source_text)
     w_values = extract_w_values(source_text)
+    ram_lane_depth_values = extract_ram_lane_depth_values(source_text)
     h_base_values = extract_h_base_values(source_text)
 
     # Parameter set 0: BIKE L1.
-    generate_hex_files(h_base_values[0], r_values[0], w_values[0], "l1", output_dir)
+    generate_hex_files(
+        h_base_values[0],
+        r_values[0],
+        w_values[0],
+        "l1",
+        output_dir,
+        ram_lane_depth_values[0],
+    )
 
     # Parameter set 1: compact toy tests.
-    generate_hex_files(h_base_values[1], r_values[1], w_values[1], "test", output_dir)
+    generate_hex_files(
+        h_base_values[1],
+        r_values[1],
+        w_values[1],
+        "test",
+        output_dir,
+        ram_lane_depth_values[1],
+    )
 
     print(f"Generated hex files in {output_dir}")
 

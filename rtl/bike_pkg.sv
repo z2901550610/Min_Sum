@@ -26,10 +26,12 @@ package bike_pkg;
   localparam int L = 2;
   localparam int D = 4;
 `ifndef BIKE_TOY_PARAMS
-  localparam int RAM_LANE_DEPTH = 37;
+  localparam int RAM_LANE_DEPTH = 40;
 `else
   localparam int RAM_LANE_DEPTH = 2;
 `endif
+  localparam int ENTRY_DEPTH = W;
+  localparam int RAM_OVERFLOW_DEPTH = (ENTRY_DEPTH > RAM_LANE_DEPTH) ? (ENTRY_DEPTH - RAM_LANE_DEPTH) : 1;
   localparam int ALPHA_FRAC_W = 6;  //alpha 用6位小数表示
   localparam int MAG_MAX = (1 << D) - 1;
   localparam int MSG_W = D + 1;
@@ -50,8 +52,10 @@ package bike_pkg;
   localparam int ROW_IDX_W   = (R > 1) ? $clog2(R)     : 1;
   localparam int GROUP_IDX_W = (L > 1) ? $clog2(L)     : 1;
   localparam int ROW_GROUP_W = ROW_IDX_W - GROUP_IDX_W;
-  localparam int ENTRY_POS_W = (RAM_LANE_DEPTH > 1) ? $clog2(RAM_LANE_DEPTH) : 1;
-  localparam int GROUP_COUNT_W = (RAM_LANE_DEPTH > 1) ? $clog2(RAM_LANE_DEPTH + 1) : 1;
+  localparam int ENTRY_POS_W = (ENTRY_DEPTH > 1) ? $clog2(ENTRY_DEPTH) : 1;
+  localparam int RAM_ENTRY_POS_W = (RAM_LANE_DEPTH > 1) ? $clog2(RAM_LANE_DEPTH) : 1;
+  localparam int RAM_OVERFLOW_POS_W = (RAM_OVERFLOW_DEPTH > 1) ? $clog2(RAM_OVERFLOW_DEPTH) : 1;
+  localparam int GROUP_COUNT_W = (ENTRY_DEPTH > 1) ? $clog2(ENTRY_DEPTH + 1) : 1;
 
   localparam int DEC_STATE_W = 4;
   localparam logic [DEC_STATE_W-1:0] DEC_WAIT_START       = 4'd0;
