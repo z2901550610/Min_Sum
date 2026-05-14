@@ -10,7 +10,7 @@
 #define BIKE_L1_WH 71
 #define BIKE_L1_W (BIKE_L1_N0 * BIKE_L1_WH)
 #define BIKE_L1_N (BIKE_L1_N0 * BIKE_L1_R)
-#define BIKE_L1_T 134
+#define BIKE_L1_T 201
 #define BIKE_L1_L 2
 #define BIKE_ALPHA_FRAC_W 6
 #define BIKE_MAG_MAX 15

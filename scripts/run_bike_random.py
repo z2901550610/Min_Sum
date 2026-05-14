@@ -23,6 +23,7 @@ RTL_CORE = [
     "rtl/ram_c.sv",
     "rtl/ram_m.sv",
     "rtl/ram_s.sv",
+    "rtl/ram_syndrome.sv",
     "rtl/ram_t.sv",
     "rtl/cnu_a.sv",
     "rtl/cnu_b.sv",
@@ -246,6 +247,9 @@ module tb_bike_decoder_random;
   logic start;
   logic done;
   logic success;
+  logic syndrome_we;
+  logic [ROW_IDX_W-1:0] syndrome_addr;
+  logic syndrome_wdata;
   logic [COL_W-1:0] e_read_col_idx;
   logic e_rdata;
   logic [N-1:0] e_out;
@@ -259,7 +263,9 @@ module tb_bike_decoder_random;
     .i_clk(clk),
     .i_rst_n(rst_n),
     .i_start(start),
-    .i_syndrome(INPUT_SYNDROME),
+    .i_syndrome_we(syndrome_we),
+    .i_syndrome_addr(syndrome_addr),
+    .i_syndrome_wdata(syndrome_wdata),
     .i_e_read_col_idx(e_read_col_idx),
     .o_done(done),
     .o_success(success),
@@ -269,6 +275,21 @@ module tb_bike_decoder_random;
 
   initial clk = 1'b0;
   always #5 clk = ~clk;
+
+  task automatic load_syndrome(input logic [R-1:0] syndrome);
+    begin
+      for (int row_idx = 0; row_idx < R; row_idx++) begin
+        syndrome_we = 1'b1;
+        syndrome_addr = ROW_IDX_W'(row_idx);
+        syndrome_wdata = syndrome[row_idx];
+        @(posedge clk);
+      end
+      syndrome_we = 1'b0;
+      syndrome_addr = '0;
+      syndrome_wdata = 1'b0;
+      @(posedge clk);
+    end
+  endtask
 
   function automatic logic [R-1:0] residual_of(input logic [N-1:0] candidate);
     logic [R-1:0] residual;
@@ -319,10 +340,15 @@ module tb_bike_decoder_random;
 
     rst_n = 1'b0;
     start = 1'b0;
+    syndrome_we = 1'b0;
+    syndrome_addr = '0;
+    syndrome_wdata = 1'b0;
     e_read_col_idx = '0;
     repeat (2) @(posedge clk);
     rst_n = 1'b1;
     @(posedge clk);
+
+    load_syndrome(INPUT_SYNDROME);
 
     start = 1'b1;
     @(posedge clk);
@@ -346,13 +372,10 @@ module tb_bike_decoder_random;
     end
 
     residual = residual_of(e_out);
-    if ((success === 1'b1) && (residual != '0)) begin
-      $fatal(1, "seed=%0d success with nonzero residual %0d", TEST_SEED, weight_r(residual));
+    if (success !== 1'b0) begin
+      $fatal(1, "seed=%0d fixed-iteration core should leave success low", TEST_SEED);
     end
-    if ((success !== 1'b1) && (residual == '0)) begin
-      $fatal(1, "seed=%0d failure flag with zero residual", TEST_SEED);
-    end
-    if (REQUIRE_SUCCESS && (success !== 1'b1)) begin
+    if (REQUIRE_SUCCESS && (residual != '0)) begin
       $fatal(1, "seed=%0d did not converge; residual_weight=%0d", TEST_SEED, weight_r(residual));
     end
 

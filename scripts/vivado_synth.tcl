@@ -7,6 +7,7 @@ set part [expr {[info exists ::env(VIVADO_PART)] ? $::env(VIVADO_PART) : "xc7a35
 set threads [expr {[info exists ::env(VIVADO_THREADS)] ? $::env(VIVADO_THREADS) : "8"}]
 set synth_directive [expr {[info exists ::env(VIVADO_SYNTH_DIRECTIVE)] ? $::env(VIVADO_SYNTH_DIRECTIVE) : "Default"}]
 set flatten_hierarchy [expr {[info exists ::env(VIVADO_FLATTEN_HIERARCHY)] ? $::env(VIVADO_FLATTEN_HIERARCHY) : "rebuilt"}]
+set xdc_file [expr {[info exists ::env(VIVADO_XDC)] ? $::env(VIVADO_XDC) : "constraints/decoder_top.xdc"}]
 set top "decoder_top"
 
 file mkdir $build_dir
@@ -36,6 +37,7 @@ set rtl_files [list \
   rtl/ram_c.sv \
   rtl/ram_m.sv \
   rtl/ram_s.sv \
+  rtl/ram_syndrome.sv \
   rtl/ram_t.sv \
   rtl/cnu_a.sv \
   rtl/cnu_b.sv \
@@ -49,6 +51,14 @@ set_property include_dirs [list rtl] [current_fileset]
 
 foreach init_file [glob -nocomplain rtl/generated/*.hex] {
   add_files -fileset sources_1 $init_file
+}
+
+if {[file exists $xdc_file]} {
+  run_step "read_xdc" {
+    read_xdc $xdc_file
+  }
+} else {
+  puts "Vivado XDC not found: $xdc_file"
 }
 
 run_step "synth_design" {

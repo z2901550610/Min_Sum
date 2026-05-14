@@ -22,7 +22,7 @@ This implementation locks the structural baseline to the user-requested set:
 - per-half first-column weight `wh = 71`
 - total row weight `w = 142`
 - code length `n = 24646`
-- error weight `t = 134`
+- error weight `t = 201`
 - row-group count `L = 2`
 
 The matrix is generated as `H = [H0 | H1]` from deterministic seeded first-column supports.
@@ -85,8 +85,6 @@ make bike-golden-calibrate BIKE_CAL_BASE_SEED=1 BIKE_CAL_TRIALS=4
 The implementation was checked with the following reproducible results:
 
 - `--self-test` passed
-- `--bike-l1-once --seed 1` reported `models_agree=yes`, `success=1`, `iterations=3`, `final_residual_weight=0`, with defaults `C=7`, `alpha=2^-4`, `Imax=6`
-- `--bike-l1-batch --base-seed 1 --trials 8` reported `successes=8`, `failures=0`, first successful seed `1`, first successful iterations `3`
-- `--bike-l1-calibrate --base-seed 1 --trials 4` ranked the fixed grid and selected `C=7`, `alpha=2^-4`, `Imax=6` as the best tuple
+- `--bike-l1-once --seed 1` reported `models_agree=yes`, `success=0`, `iterations=6`, `final_residual_weight=5545`, with defaults `C=7`, `alpha=2^-4`, `Imax=6`
 
 These checks establish that the BIKE-L1 min-sum golden is deterministic and cross-validated internally. Regular RTL regression defines `BIKE_TOY_PARAMS` for the compact demo dimensions, and Vivado-oriented builds use the BIKE-L1 dimensions from `rtl/decoder_top.sv`.

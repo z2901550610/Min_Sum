@@ -157,10 +157,12 @@ module decoder_top
   input  logic i_clk,
   input  logic i_rst_n,
   input  logic i_start,                         // Starts a new decode operation.
-  input  logic [R-1:0] i_syndrome,              // Input syndrome to be cancelled by the estimate.
+  input  logic i_syndrome_we,                   // Writes one input syndrome bit before starting decode.
+  input  logic [ROW_IDX_W-1:0] i_syndrome_addr, // Row address for serial syndrome loading.
+  input  logic i_syndrome_wdata,                // Syndrome bit write data.
   input  logic [COL_W-1:0] i_e_read_col_idx,    // Column address for serial error-estimate readout.
   output logic o_done,                          // High when decoding has finished.
-  output logic o_success,                       // High when the final residual syndrome is zero.
+  output logic o_success,                       // Residual checking is handled outside this core.
   output logic o_e_rdata,                       // Error-estimate bit at i_e_read_col_idx.
   output logic [$clog2(I_MAX + 1)-1:0] o_iter_count  // Number of iterations that completed.
 );
@@ -266,7 +268,6 @@ module decoder_top
   logic c2v_latched_group_valid [0:L-1];
   logic [ONE_IDX_W-1:0] c2v_latched_one_idx [0:L-1];
   logic [ROW_GROUP_W-1:0] c2v_latched_row_idx_group [0:L-1];
-  logic [ROW_IDX_W-1:0] c2v_latched_row_idx_global [0:L-1];
   logic [ENTRY_POS_W-1:0] c2v_latched_entry_pos;
   logic c2v_latched_entry_pos_last;
   logic [COL_W-1:0] c2v_latched_col;
@@ -283,14 +284,9 @@ module decoder_top
   logic v2c_read_group_valid_d1 [0:L-1];
   logic [ROW_GROUP_W-1:0] v2c_read_row_idx_group_d1 [0:L-1];
 
-  logic [R-1:0] residual_syndrome_next;
-  logic [R-1:0] residual_syndrome;
   logic decode_success;
   logic finish_decode;
   logic decision_ram_old_bit;
-  logic decision_update_pending;
-  logic [COL_W-1:0] decision_update_col;
-  logic decision_update_new_bit;
   logic [ITER_W:0] next_iter_count_ext;
 `ifdef BIKE_SIM_DEBUG
   logic [HIST_IDX_W-1:0] hist_wr_idx;
@@ -349,6 +345,8 @@ module decoder_top
   logic [COL_W-1:0] decision_ram_col_idx;
   logic [COL_W-1:0] decision_ram_access_col_idx;
   logic decision_ram_wdata;
+  logic [ROW_IDX_W-1:0] syndrome_read_row_idx [0:L-1];
+  logic syndrome_rdata [0:L-1];
 
   logic [COL_W-1:0] cnu_a_col_idx;
   logic cnu_a_en [0:L-1];
@@ -462,10 +460,18 @@ module decoder_top
 `ifdef BIKE_SIM_DEBUG
   assign hist_wr_idx = o_iter_count[HIST_IDX_W-1:0];
 `endif
-  assign decode_success = (residual_syndrome_next == '0);
-  assign finish_decode = decode_success || (next_iter_count_ext >= (ITER_W + 1)'(I_MAX));
+  assign decode_success = 1'b0;
+  assign finish_decode = (next_iter_count_ext >= (ITER_W + 1)'(I_MAX));
   assign c2v_h_block_idx = H_BLOCK_W'(int'(c2v_col_idx) / R);
   assign decision_ram_access_col_idx = decision_ram_we ? decision_ram_col_idx : i_e_read_col_idx;
+
+  always_comb begin
+    integer group_idx;
+
+    for (group_idx = 0; group_idx < L; group_idx++) begin
+      syndrome_read_row_idx[group_idx] = c2v_row_idx_global[group_idx];
+    end
+  end
 
   always_comb begin
     integer group_idx;
@@ -791,29 +797,6 @@ module decoder_top
     end
   end
 
-  // Track the residual syndrome incrementally when a hard-decision bit changes.
-  always_comb begin
-    integer one_idx;
-    logic [H_BLOCK_W-1:0] residual_h_block_idx;
-    integer residual_col;
-    logic [ROW_IDX_W-1:0] residual_row;
-
-    residual_syndrome_next = residual_syndrome;
-    residual_h_block_idx = '0;
-    residual_col = 0;
-    residual_row = '0;
-
-    if (decision_update_pending &&
-        (((o_iter_count == '0) ? 1'b0 : decision_ram_old_bit) != decision_update_new_bit)) begin
-      residual_h_block_idx = H_BLOCK_W'(int'(decision_update_col) / R);
-      residual_col = int'(decision_update_col) % R;
-      for (one_idx = 0; one_idx < W; one_idx++) begin
-        residual_row = ROW_IDX_W'((H_BASE[0][residual_h_block_idx][one_idx] + residual_col) % R);
-        residual_syndrome_next[residual_row] = residual_syndrome_next[residual_row] ^ 1'b1;
-      end
-    end
-  end
-
   // Sequential latches that bridge the single-port memories and the multi-cycle
   // control schedule. These registers keep the edge metadata stable across the
   // c2v/v2c handoff.
@@ -833,10 +816,6 @@ module decoder_top
       v2c_read_col_d1 <= '0;
       v2c_read_entry_pos_d1 <= '0;
       v2c_read_m_write_pair_d1 <= 1'b0;
-      residual_syndrome <= '0;
-      decision_update_pending <= 1'b0;
-      decision_update_col <= '0;
-      decision_update_new_bit <= 1'b0;
       for (group_idx = 0; group_idx < L; group_idx++) begin
         c2v_read_count_d1[group_idx] <= '0;
         v2c_read_group_valid_d1[group_idx] <= 1'b0;
@@ -853,7 +832,6 @@ module decoder_top
         c2v_latched_group_valid[group_idx] <= 1'b0;
         c2v_latched_one_idx[group_idx] <= '0;
         c2v_latched_row_idx_group[group_idx] <= '0;
-        c2v_latched_row_idx_global[group_idx] <= '0;
         v2c_m_latched_group_valid[group_idx] <= 1'b0;
         v2c_m_latched_row_idx_group[group_idx] <= '0;
         s_read_shift[group_idx] <= '0;
@@ -879,15 +857,7 @@ module decoder_top
       end
 `endif
     end else begin
-      residual_syndrome <= residual_syndrome_next;
-      decision_update_pending <= decision_ram_we;
-      if (decision_ram_we) begin
-        decision_update_col <= decision_ram_col_idx;
-        decision_update_new_bit <= decision_ram_wdata;
-      end
       if (i_start) begin
-        residual_syndrome <= i_syndrome;
-        decision_update_pending <= 1'b0;
         for (group_idx = 0; group_idx < L; group_idx++) begin
           s_read_shift[group_idx] <= '0;
           s_write_shift[group_idx] <= '0;
@@ -946,7 +916,6 @@ module decoder_top
           c2v_latched_group_valid[group_idx] <= c2v_group_valid[group_idx];
           c2v_latched_one_idx[group_idx] <= c2v_one_idx[group_idx];
           c2v_latched_row_idx_group[group_idx] <= c2v_row_idx_group[group_idx];
-          c2v_latched_row_idx_global[group_idx] <= c2v_row_idx_global[group_idx];
           col_meta_group_entries[col_kp1_meta_slot][group_idx][c2v_read_entry_pos_d1] <=
             ram_i_entry_rdata[group_idx];
         end
@@ -986,7 +955,7 @@ module decoder_top
 
 `ifdef BIKE_SIM_DEBUG
       if (iter_check) begin
-        syndrome_hist[hist_wr_idx] <= residual_syndrome_next;
+        syndrome_hist[hist_wr_idx] <= '0;
       end
 `endif
     end
@@ -1061,10 +1030,21 @@ module decoder_top
     .o_valid(cnu_a_valid[1])
   );
 
+  ram_syndrome u_syndrome_ram (
+    .i_clk(i_clk),
+    .i_we(i_syndrome_we),
+    .i_write_row_idx(i_syndrome_addr),
+    .i_wdata(i_syndrome_wdata),
+    .i_read_row_idx0(syndrome_read_row_idx[0]),
+    .i_read_row_idx1(syndrome_read_row_idx[1]),
+    .o_rdata0(syndrome_rdata[0]),
+    .o_rdata1(syndrome_rdata[1])
+  );
+
   cnu_b u_cnu_b0 (
     .i_comp_c2v(cnu_b_comp_in[0]),
     .i_v2c_sign(s_rdata[0]),
-    .i_syndrome_bit(i_syndrome[c2v_latched_row_idx_global[0]]),
+    .i_syndrome_bit(syndrome_rdata[0]),
     .i_col_idx(c2v_latched_col),
     .o_c2v_msg(c2v_msg[0])
   );
@@ -1072,7 +1052,7 @@ module decoder_top
   cnu_b u_cnu_b1 (
     .i_comp_c2v(cnu_b_comp_in[1]),
     .i_v2c_sign(s_rdata[1]),
-    .i_syndrome_bit(i_syndrome[c2v_latched_row_idx_global[1]]),
+    .i_syndrome_bit(syndrome_rdata[1]),
     .i_col_idx(c2v_latched_col),
     .o_c2v_msg(c2v_msg[1])
   );
