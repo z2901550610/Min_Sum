@@ -1,4 +1,4 @@
-`timescale 1ns/1ps
+`timescale 1ns / 1ps
 
 module tb_vnu;
   import bike_pkg::*;
@@ -10,35 +10,41 @@ module tb_vnu;
   // 4) 相邻两列交替计算的调度下新旧列数据不混用
   // 5) 0/极值/单拍结束列等边界情况
 
-  logic clk;
-  logic rst_n;
-  logic col_start;
-  logic col_end;
-  logic signed [MSG_W-1:0] initial_llr;
-  logic c2v_tc_valid0;
-  logic signed [MSG_W-1:0] c2v_tc0;
-  logic c2v_tc_valid1;
-  logic signed [MSG_W-1:0] c2v_tc1;
+  logic                       clk;
+  logic                       rst_n;
+  logic                       col_start;
+  logic                       col_end;
+  logic signed [   MSG_W-1:0] initial_llr;
+  logic                       c2v_tc_valid0;
+  logic signed [   MSG_W-1:0] c2v_tc0;
+  logic                       c2v_tc_valid1;
+  logic signed [   MSG_W-1:0] c2v_tc1;
+  logic                       c2v_tc_valid[0:L-1];
+  logic signed [   MSG_W-1:0] c2v_tc[0:L-1];
   /* verilator lint_off UNUSEDSIGNAL */
-  logic c2v_to_ram_t0_valid;
-  logic [MSG_W-1:0] c2v_to_ram_t0;
-  logic c2v_to_ram_t1_valid;
-  logic [MSG_W-1:0] c2v_to_ram_t1;
+  logic                       c2v_to_ram_t0_valid;
+  logic        [   MSG_W-1:0] c2v_to_ram_t0;
+  logic                       c2v_to_ram_t1_valid;
+  logic        [   MSG_W-1:0] c2v_to_ram_t1;
+  logic                       c2v_to_ram_t_valid[0:L-1];
+  logic        [   MSG_W-1:0] c2v_to_ram_t[0:L-1];
   /* verilator lint_on UNUSEDSIGNAL */
-  logic bit_decision;
-  logic prev_c2v_tc_valid0;
-  logic signed [MSG_W-1:0] prev_c2v_tc0;
-  logic prev_c2v_tc_valid1;
-  logic signed [MSG_W-1:0] prev_c2v_tc1;
-  logic v2c_tc_valid0;
+  logic                       bit_decision;
+  logic                       prev_c2v_tc_valid0;
+  logic signed [   MSG_W-1:0] prev_c2v_tc0;
+  logic                       prev_c2v_tc_valid1;
+  logic signed [   MSG_W-1:0] prev_c2v_tc1;
+  logic                       prev_c2v_tc_valid[0:L-1];
+  logic signed [   MSG_W-1:0] prev_c2v_tc[0:L-1];
+  logic                       v2c_tc_valid0;
   logic signed [VNU_TC_W-1:0] v2c_tc0;
-  logic v2c_tc_valid1;
+  logic                       v2c_tc_valid1;
   logic signed [VNU_TC_W-1:0] v2c_tc1;
+  logic                       v2c_tc_valid[0:L-1];
+  logic signed [VNU_TC_W-1:0] v2c_tc[0:L-1];
 
-  function automatic logic signed [MSG_W-1:0] msg_tc(
-    input logic msg_sign,
-    input logic [D-1:0] msg_mag
-  );
+  function automatic logic signed [MSG_W-1:0] msg_tc(input  logic msg_sign,
+                                                     input  logic [D-1:0] msg_mag);
     logic signed [MSG_W-1:0] mag_tc;
     begin
       mag_tc = $signed({1'b0, msg_mag});
@@ -54,7 +60,7 @@ module tb_vnu;
     int abs_value;
     int scaled_abs;
     begin
-      abs_value = (value < 0) ? -value : value;
+      abs_value  = (value < 0) ? -value : value;
       scaled_abs = 0;
       if ((ALPHA_SHIFT_0 > 0) && (ALPHA_SHIFT_0 <= ALPHA_FRAC_W)) begin
         scaled_abs += abs_value << (ALPHA_FRAC_W - ALPHA_SHIFT_0);
@@ -68,37 +74,57 @@ module tb_vnu;
     end
   endfunction
 
+  always_comb begin
+    for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
+      c2v_tc_valid[lane_idx] = 1'b0;
+      c2v_tc[lane_idx] = '0;
+      prev_c2v_tc_valid[lane_idx] = 1'b0;
+      prev_c2v_tc[lane_idx] = '0;
+    end
+
+    c2v_tc_valid[0] = c2v_tc_valid0;
+    c2v_tc[0] = c2v_tc0;
+    c2v_tc_valid[1] = c2v_tc_valid1;
+    c2v_tc[1] = c2v_tc1;
+    prev_c2v_tc_valid[0] = prev_c2v_tc_valid0;
+    prev_c2v_tc[0] = prev_c2v_tc0;
+    prev_c2v_tc_valid[1] = prev_c2v_tc_valid1;
+    prev_c2v_tc[1] = prev_c2v_tc1;
+
+    c2v_to_ram_t0_valid = c2v_to_ram_t_valid[0];
+    c2v_to_ram_t0 = c2v_to_ram_t[0];
+    c2v_to_ram_t1_valid = c2v_to_ram_t_valid[1];
+    c2v_to_ram_t1 = c2v_to_ram_t[1];
+    v2c_tc_valid0 = v2c_tc_valid[0];
+    v2c_tc0 = v2c_tc[0];
+    v2c_tc_valid1 = v2c_tc_valid[1];
+    v2c_tc1 = v2c_tc[1];
+  end
+
   vnu #(
-    .W(W),
-    .D(D),
-    .MSG_W(MSG_W),
-    .ALPHA_FRAC_W(ALPHA_FRAC_W),
-    .ALPHA_SHIFT_0(ALPHA_SHIFT_0),
-    .ALPHA_SHIFT_1(ALPHA_SHIFT_1),
-    .VNU_TC_W(VNU_TC_W)
+      .W(W),
+      .D(D),
+      .MSG_W(MSG_W),
+      .L(L),
+      .ALPHA_FRAC_W(ALPHA_FRAC_W),
+      .ALPHA_SHIFT_0(ALPHA_SHIFT_0),
+      .ALPHA_SHIFT_1(ALPHA_SHIFT_1),
+      .VNU_TC_W(VNU_TC_W)
   ) dut (
-    .i_clk(clk),
-    .i_rst_n(rst_n),
-    .i_col_start(col_start),
-    .i_col_end(col_end),
-    .i_initial_llr(initial_llr),
-    .i_c2v0_valid(c2v_tc_valid0),
-    .i_c2v0(c2v_tc0),
-    .i_c2v1_valid(c2v_tc_valid1),
-    .i_c2v1(c2v_tc1),
-    .o_c2v_t0_valid(c2v_to_ram_t0_valid),
-    .o_c2v_t0(c2v_to_ram_t0),
-    .o_c2v_t1_valid(c2v_to_ram_t1_valid),
-    .o_c2v_t1(c2v_to_ram_t1),
-    .o_bit_decision(bit_decision),
-    .i_c2v_t0_valid(prev_c2v_tc_valid0),
-    .i_c2v_t0(prev_c2v_tc0),
-    .i_c2v_t1_valid(prev_c2v_tc_valid1),
-    .i_c2v_t1(prev_c2v_tc1),
-    .o_v2c0_valid(v2c_tc_valid0),
-    .o_v2c0(v2c_tc0),
-    .o_v2c1_valid(v2c_tc_valid1),
-    .o_v2c1(v2c_tc1)
+      .i_clk(clk),
+      .i_rst_n(rst_n),
+      .i_col_start(col_start),
+      .i_col_end(col_end),
+      .i_initial_llr(initial_llr),
+      .i_c2v_valid(c2v_tc_valid),
+      .i_c2v(c2v_tc),
+      .o_c2v_t_valid(c2v_to_ram_t_valid),
+      .o_c2v_t(c2v_to_ram_t),
+      .o_bit_decision(bit_decision),
+      .i_c2v_t_valid(prev_c2v_tc_valid),
+      .i_c2v_t(prev_c2v_tc),
+      .o_v2c_valid(v2c_tc_valid),
+      .o_v2c(v2c_tc)
   );
 
   initial clk = 1'b0;
@@ -120,13 +146,9 @@ module tb_vnu;
   endtask
 
   // 驱动一次列累加输入。用于模拟论文/RTL中的“每拍累加最多 L=2 个 c2v”。
-  task automatic drive_accum_pair(
-    input logic start_i,
-    input logic end_i,
-    input logic signed [MSG_W-1:0] msg0_i,
-    input logic valid1_i,
-    input logic signed [MSG_W-1:0] msg1_i
-  );
+  task automatic drive_accum_pair(input  logic start_i, input  logic end_i,
+                                  input  logic signed [MSG_W-1:0] msg0_i, input  logic valid1_i,
+                                  input  logic signed [MSG_W-1:0] msg1_i);
     begin
       col_start = start_i;
       col_end = end_i;
@@ -141,11 +163,8 @@ module tb_vnu;
 
   // 检查 alpha_scale 的组合结果是否与参考模型一致。
   // 这里只看“当前拍列和 -> alpha 缩放”的纯组合行为。
-  task automatic check_scale_pair(
-    input logic signed [MSG_W-1:0] msg0_i,
-    input logic valid1_i,
-    input logic signed [MSG_W-1:0] msg1_i
-  );
+  task automatic check_scale_pair(input  logic signed [MSG_W-1:0] msg0_i, input  logic valid1_i,
+                                  input  logic signed [MSG_W-1:0] msg1_i);
     int sum_i;
     int expected_scale;
     begin
@@ -159,8 +178,8 @@ module tb_vnu;
       sum_i = int'($signed(msg0_i)) + (valid1_i ? int'($signed(msg1_i)) : 0);
       expected_scale = alpha_scale_ref(sum_i);
       if (int'($signed(dut.scaled_sum)) != expected_scale) begin
-        $fatal(1, "scale mismatch for sum %0d: got %0d exp %0d",
-               sum_i, $signed(dut.scaled_sum), expected_scale);
+        $fatal(1, "scale mismatch for sum %0d: got %0d exp %0d", sum_i, $signed(dut.scaled_sum),
+               expected_scale);
       end
       idle_inputs();
     end
@@ -227,10 +246,17 @@ module tb_vnu;
       initial_llr = 9;
       drive_accum_pair(1'b1, 1'b0, msg_tc(1'b0, D'(15)), 1'b1, msg_tc(1'b0, D'(15)));
       expected_partial_sum = VNU_TC_W'(30);
-      if (dut.accum_sum_reg !== expected_partial_sum) $fatal(1, "case0 partial accumulation mismatch: got %0d exp %0d", dut.accum_sum_reg, expected_partial_sum);
+      if (dut.accum_sum_reg !== expected_partial_sum)
+        $fatal(
+            1,
+            "case0 partial accumulation mismatch: got %0d exp %0d",
+            dut.accum_sum_reg,
+            expected_partial_sum
+        );
 
       drive_accum_pair(1'b0, 1'b1, msg_tc(1'b1, D'(9)), 1'b0, '0);
-      if ($signed(dut.posterior_reg) != 11) $fatal(1, "case0 posterior mismatch: got %0d exp 11", $signed(dut.posterior_reg));
+      if ($signed(dut.posterior_reg) != 11)
+        $fatal(1, "case0 posterior mismatch: got %0d exp 11", $signed(dut.posterior_reg));
       if (bit_decision !== 0) $fatal(1, "case0 bit decision mismatch");
 
       idle_inputs();
@@ -259,7 +285,8 @@ module tb_vnu;
       initial_llr = MSG_W'(MAG_MAX);
       drive_accum_pair(1'b1, 1'b0, msg_tc(1'b1, D'(15)), 1'b1, msg_tc(1'b1, D'(15)));
       drive_accum_pair(1'b0, 1'b1, msg_tc(1'b1, D'(15)), 1'b0, '0);
-      if ($signed(dut.posterior_reg) != 11) $fatal(1, "case1 posterior mismatch: got %0d exp 11", $signed(dut.posterior_reg));
+      if ($signed(dut.posterior_reg) != 11)
+        $fatal(1, "case1 posterior mismatch: got %0d exp 11", $signed(dut.posterior_reg));
       if (bit_decision !== 0) $fatal(1, "case1 bit decision mismatch");
 
       idle_inputs();
@@ -281,7 +308,8 @@ module tb_vnu;
       initial_llr = 9;
       drive_accum_pair(1'b1, 1'b0, msg_tc(1'b0, D'(15)), 1'b1, msg_tc(1'b0, D'(15)));
       drive_accum_pair(1'b0, 1'b1, msg_tc(1'b1, D'(9)), 1'b0, '0);
-      if ($signed(dut.posterior_reg) != 11) $fatal(1, "overlap setup posterior mismatch: got %0d exp 11", $signed(dut.posterior_reg));
+      if ($signed(dut.posterior_reg) != 11)
+        $fatal(1, "overlap setup posterior mismatch: got %0d exp 11", $signed(dut.posterior_reg));
 
       idle_inputs();
       col_start = 1'b1;
@@ -294,7 +322,8 @@ module tb_vnu;
       prev_c2v_tc0 = msg_tc(1'b0, D'(15));
       prev_c2v_tc_valid1 = 1'b0;
       #1;
-      if (v2c_tc_valid0 !== 1'b1 || $signed(v2c_tc0) != 10) $fatal(1, "overlap v2c update used wrong posterior");
+      if (v2c_tc_valid0 !== 1'b1 || $signed(v2c_tc0) != 10)
+        $fatal(1, "overlap v2c update used wrong posterior");
       @(posedge clk);
       #1;
 
@@ -302,7 +331,8 @@ module tb_vnu;
       col_end = 1'b1;
       @(posedge clk);
       #1;
-      if ($signed(dut.posterior_reg) != 12) $fatal(1, "overlap delayed posterior mismatch: got %0d exp 12", $signed(dut.posterior_reg));
+      if ($signed(dut.posterior_reg) != 12)
+        $fatal(1, "overlap delayed posterior mismatch: got %0d exp 12", $signed(dut.posterior_reg));
       idle_inputs();
     end
   endtask
@@ -338,7 +368,8 @@ module tb_vnu;
       initial_llr = -MSG_W'(MAG_MAX + 1);
       drive_accum_pair(1'b1, 1'b1, msg_tc(1'b1, D'(15)), 1'b1, msg_tc(1'b1, D'(15)));
       if ($signed(dut.posterior_reg) != -19) begin
-        $fatal(1, "negative-boundary posterior mismatch: got %0d exp -19", $signed(dut.posterior_reg));
+        $fatal(1, "negative-boundary posterior mismatch: got %0d exp -19", $signed(
+                                                                               dut.posterior_reg));
       end
       if (bit_decision !== 1'b1) begin
         $fatal(1, "negative-boundary bit decision mismatch");

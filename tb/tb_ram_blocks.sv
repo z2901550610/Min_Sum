@@ -1,19 +1,19 @@
-`timescale 1ns/1ps
+`timescale 1ns / 1ps
 
 module tb_ram_blocks;
   import bike_pkg::*;
 
-  logic clk;
-  logic rst_n;
+  logic                   clk;
+  logic                   rst_n;
 
-  logic m_we;
+  logic                   m_we;
   logic [ROW_GROUP_W-1:0] m_read_row_idx_group;
   logic [ROW_GROUP_W-1:0] m_write_row_idx_group;
-  logic m_epoch;
-  logic [COMP_C2V_W-1:0] m_wdata;
-  logic [COMP_C2V_W-1:0] m_rdata;
-  logic m_repoch;
-  logic [COMP_C2V_W-1:0] m_debug [0:ROW_GROUP_DEPTH-1];
+  logic                   m_epoch;
+  logic [ COMP_C2V_W-1:0] m_wdata;
+  logic [ COMP_C2V_W-1:0] m_rdata;
+  logic                   m_repoch;
+  logic [ COMP_C2V_W-1:0] m_debug[0:ROW_GROUP_DEPTH-1];
 
   localparam int TB_S_PACK_W = 8;
   localparam int TB_S_WORDS_PER_COL = (RAM_LANE_DEPTH + TB_S_PACK_W - 1) / TB_S_PACK_W;
@@ -21,21 +21,23 @@ module tb_ram_blocks;
   localparam int TB_S_WORD_ADDR_W = (TB_S_WORD_DEPTH > 1) ? $clog2(TB_S_WORD_DEPTH) : 1;
   localparam int TB_S_PACK1_WORDS_PER_COL = RAM_LANE_DEPTH;
   localparam int TB_S_PACK1_WORD_DEPTH = N * RAM_LANE_DEPTH;
-  localparam int TB_S_PACK1_WORD_ADDR_W = (TB_S_PACK1_WORD_DEPTH > 1) ? $clog2(TB_S_PACK1_WORD_DEPTH) : 1;
+  localparam int TB_S_PACK1_WORD_ADDR_W = (TB_S_PACK1_WORD_DEPTH > 1) ? $clog2(
+      TB_S_PACK1_WORD_DEPTH
+  ) : 1;
 
   logic s_we;
   logic [TB_S_WORD_ADDR_W-1:0] s_read_word_addr;
   logic [TB_S_WORD_ADDR_W-1:0] s_write_word_addr;
   logic [TB_S_PACK_W-1:0] s_wdata;
   logic [TB_S_PACK_W-1:0] s_rdata;
-  logic s_debug [0:N-1][0:RAM_LANE_DEPTH-1];
+  logic s_debug[0:N-1][0:RAM_LANE_DEPTH-1];
 
   logic s_pack2_we;
   logic [TB_S_PACK1_WORD_ADDR_W-1:0] s_pack2_read_word_addr;
   logic [TB_S_PACK1_WORD_ADDR_W-1:0] s_pack2_write_word_addr;
   logic [0:0] s_pack2_wdata;
   logic [0:0] s_pack2_rdata;
-  logic s_pack2_debug [0:N-1][0:RAM_LANE_DEPTH-1];
+  logic s_pack2_debug[0:N-1][0:RAM_LANE_DEPTH-1];
 
   logic t_push;
   logic t_pop;
@@ -48,79 +50,79 @@ module tb_ram_blocks;
   /* verilator lint_off UNUSEDSIGNAL */
   logic [GROUP_COUNT_W-1:0] t_item_count;
   /* verilator lint_on UNUSEDSIGNAL */
-  logic [MSG_W-1:0] t_debug [0:RAM_LANE_DEPTH-1];
+  logic [MSG_W-1:0] t_debug[0:RAM_LANE_DEPTH-1];
 
   logic c_we;
   logic c_din;
   logic c_dout;
 
   ram_m u_ram_m (
-    .i_clk(clk),
-    .i_rst_n(rst_n),
-    .i_we(m_we),
-    .i_read_row_idx_group(m_read_row_idx_group),
-    .i_write_row_idx_group(m_write_row_idx_group),
-    .i_epoch(m_epoch),
-    .i_wdata(m_wdata),
-    .o_rdata(m_rdata),
-    .o_epoch(m_repoch),
-    .o_debug_mem(m_debug)
+      .i_clk(clk),
+      .i_rst_n(rst_n),
+      .i_we(m_we),
+      .i_read_row_idx_group(m_read_row_idx_group),
+      .i_write_row_idx_group(m_write_row_idx_group),
+      .i_epoch(m_epoch),
+      .i_wdata(m_wdata),
+      .o_rdata(m_rdata),
+      .o_epoch(m_repoch),
+      .o_debug_mem(m_debug)
   );
 
   ram_s #(
-    .S_PACK_W(TB_S_PACK_W),
-    .S_WORDS_PER_COL(TB_S_WORDS_PER_COL),
-    .S_WORD_DEPTH(TB_S_WORD_DEPTH),
-    .S_WORD_ADDR_W(TB_S_WORD_ADDR_W)
+      .RAM_S_PACK_W(TB_S_PACK_W),
+      .RAM_S_WORDS_PER_COL(TB_S_WORDS_PER_COL),
+      .RAM_S_WORD_DEPTH(TB_S_WORD_DEPTH),
+      .RAM_S_WORD_ADDR_W(TB_S_WORD_ADDR_W)
   ) u_ram_s (
-    .i_clk(clk),
-    .i_rst_n(rst_n),
-    .i_we(s_we),
-    .i_read_word_addr(s_read_word_addr),
-    .i_write_word_addr(s_write_word_addr),
-    .i_wdata(s_wdata),
-    .o_rdata(s_rdata),
-    .o_debug_mem(s_debug)
+      .i_clk(clk),
+      .i_rst_n(rst_n),
+      .i_we(s_we),
+      .i_read_word_addr(s_read_word_addr),
+      .i_write_word_addr(s_write_word_addr),
+      .i_wdata(s_wdata),
+      .o_rdata(s_rdata),
+      .o_debug_mem(s_debug)
   );
 
   ram_s #(
-    .S_PACK_W(1),
-    .S_WORDS_PER_COL(TB_S_PACK1_WORDS_PER_COL),
-    .S_WORD_DEPTH(TB_S_PACK1_WORD_DEPTH),
-    .S_WORD_ADDR_W(TB_S_PACK1_WORD_ADDR_W)
+      .RAM_S_PACK_W(1),
+      .RAM_S_WORDS_PER_COL(TB_S_PACK1_WORDS_PER_COL),
+      .RAM_S_WORD_DEPTH(TB_S_PACK1_WORD_DEPTH),
+      .RAM_S_WORD_ADDR_W(TB_S_PACK1_WORD_ADDR_W)
   ) u_ram_s_pack2 (
-    .i_clk(clk),
-    .i_rst_n(rst_n),
-    .i_we(s_pack2_we),
-    .i_read_word_addr(s_pack2_read_word_addr),
-    .i_write_word_addr(s_pack2_write_word_addr),
-    .i_wdata(s_pack2_wdata),
-    .o_rdata(s_pack2_rdata),
-    .o_debug_mem(s_pack2_debug)
+      .i_clk(clk),
+      .i_rst_n(rst_n),
+      .i_we(s_pack2_we),
+      .i_read_word_addr(s_pack2_read_word_addr),
+      .i_write_word_addr(s_pack2_write_word_addr),
+      .i_wdata(s_pack2_wdata),
+      .o_rdata(s_pack2_rdata),
+      .o_debug_mem(s_pack2_debug)
   );
 
   ram_t u_ram_t (
-    .i_clk(clk),
-    .i_rst_n(rst_n),
-    .i_clear(1'b0),
-    .i_push(t_push),
-    .i_pop(t_pop),
-    .i_write_entry_idx(t_write_entry_idx),
-    .i_read_entry_idx(t_read_entry_idx),
-    .i_valid(t_valid),
-    .i_wdata(t_wdata),
-    .o_rdata(t_rdata),
-    .o_valid(t_rvalid),
-    .o_item_count(t_item_count),
-    .o_debug_mem(t_debug)
+      .i_clk(clk),
+      .i_rst_n(rst_n),
+      .i_clear(1'b0),
+      .i_push(t_push),
+      .i_pop(t_pop),
+      .i_write_entry_idx(t_write_entry_idx),
+      .i_read_entry_idx(t_read_entry_idx),
+      .i_valid(t_valid),
+      .i_wdata(t_wdata),
+      .o_rdata(t_rdata),
+      .o_valid(t_rvalid),
+      .o_item_count(t_item_count),
+      .o_debug_mem(t_debug)
   );
 
   ram_c u_ram_c (
-    .i_clk(clk),
-    .i_we(c_we),
-    .i_col_idx(COL_W'(3 % N)),
-    .i_wdata(c_din),
-    .o_rdata(c_dout)
+      .i_clk(clk),
+      .i_we(c_we),
+      .i_col_idx(COL_W'(3 % N)),
+      .i_wdata(c_din),
+      .o_rdata(c_dout)
   );
 
   initial clk = 1'b0;
@@ -139,11 +141,7 @@ module tb_ram_blocks;
     end
   endfunction
 
-  task automatic write_pack2_sign(
-    input int col_idx,
-    input int entry_idx,
-    input logic sign_bit
-  );
+  task automatic write_pack2_sign(input int col_idx, input int entry_idx, input  logic sign_bit);
     begin
       s_pack2_write_word_addr = TB_S_PACK1_WORD_ADDR_W'(s_bit_addr(col_idx, entry_idx));
       s_pack2_wdata = {sign_bit};
@@ -154,22 +152,19 @@ module tb_ram_blocks;
     end
   endtask
 
-  task automatic check_pack2_sign(
-    input int col_idx,
-    input int entry_idx,
-    input logic expected_sign
-  );
+  task automatic check_pack2_sign(input int col_idx, input int entry_idx,
+                                  input  logic expected_sign);
     begin
       s_pack2_read_word_addr = TB_S_PACK1_WORD_ADDR_W'(s_bit_addr(col_idx, entry_idx));
       @(posedge clk);
       #1;
       if (s_pack2_rdata[0] != expected_sign) begin
-        $fatal(1, "packed ram_s read mismatch col=%0d entry=%0d got=%0b exp=%0b",
-               col_idx, entry_idx, s_pack2_rdata[0], expected_sign);
+        $fatal(1, "packed ram_s read mismatch col=%0d entry=%0d got=%0b exp=%0b", col_idx,
+               entry_idx, s_pack2_rdata[0], expected_sign);
       end
-      if (s_pack2_debug[col_idx % N][entry_idx % RAM_LANE_DEPTH] != expected_sign) begin
-        $fatal(1, "packed ram_s debug mismatch col=%0d entry=%0d got=%0b exp=%0b",
-               col_idx, entry_idx, s_pack2_debug[col_idx % N][entry_idx % RAM_LANE_DEPTH], expected_sign);
+      if (s_pack2_debug[col_idx%N][entry_idx%RAM_LANE_DEPTH] != expected_sign) begin
+        $fatal(1, "packed ram_s debug mismatch col=%0d entry=%0d got=%0b exp=%0b", col_idx,
+               entry_idx, s_pack2_debug[col_idx%N][entry_idx%RAM_LANE_DEPTH], expected_sign);
       end
     end
   endtask
@@ -222,7 +217,7 @@ module tb_ram_blocks;
     s_read_word_addr = TB_S_WORD_ADDR_W'(s_word_addr(3, 1));
     s_write_word_addr = TB_S_WORD_ADDR_W'(s_word_addr(3, 1));
     s_wdata = '0;
-    s_wdata[s_bit_addr(3, 1) % TB_S_PACK_W] = 1'b1;
+    s_wdata[s_bit_addr(3, 1)%TB_S_PACK_W] = 1'b1;
     s_we = 1'b1;
     t_write_entry_idx = ENTRY_POS_W'(1 % RAM_LANE_DEPTH);
     t_read_entry_idx = ENTRY_POS_W'(1 % RAM_LANE_DEPTH);
@@ -239,7 +234,7 @@ module tb_ram_blocks;
     c_we = 1'b0;
     @(posedge clk);
     #1;
-    if (s_rdata[s_bit_addr(3, 1) % TB_S_PACK_W] != 1'b1) $fatal(1, "ram_s read-after-write mismatch");
+    if (s_rdata[s_bit_addr(3, 1)%TB_S_PACK_W] != 1'b1) $fatal(1, "ram_s read-after-write mismatch");
     write_pack2_sign(4, 0, 1'b1);
     check_pack2_sign(4, 0, 1'b1);
     write_pack2_sign(4, 1, 1'b1);

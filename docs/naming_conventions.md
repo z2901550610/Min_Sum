@@ -167,7 +167,7 @@ row_idx_group:
 
 row_idx_global:
   绝对校验行号
-  用于跨 group 比较、生成 syndrome、或和 golden/reference 模型对齐
+  用于跨 group 比较、生成 syndrome、或和参考数据对齐
 ```
 
 不要把局部行号命名成 `row_idx` 或 `row`，除非所在上下文已经非常明确，且不会跨
@@ -196,7 +196,7 @@ c2v/v2c 列交叠调度中，列元数据在两侧之间传递，相关命名约
 
 | 名称模式 | 含义 |
 | --- | --- |
-| `capture_*_now` | 立即将 c2v 侧当前列元数据捕获为 v2c 活跃列 |
+| `capture_*_active_cycle` | 在当前调度周期将 c2v 侧列元数据捕获为 v2c 活跃列 |
 | `capture_*_next` | 将 c2v 侧当前列元数据缓冲为 v2c "下一列"（消费者尚在处理当前列） |
 | `promote_*_next` | 将缓冲的"下一列"元数据提升为 v2c 活跃列 |
 | `*_buffer_*` | 快照/缓冲数据，隔离生产者和消费者的读写冲突 |
@@ -227,6 +227,26 @@ c2v/v2c 列交叠调度中，列元数据在两侧之间传递，相关命名约
 i_entry_wdata
 o_entry_rdata
 ```
+
+## 声明排版
+
+端口和主要信号声明按方向、`logic`、位宽和名字分列对齐。无位宽信号在位宽列留空，
+unpacked 数组维度紧跟名字。
+
+```systemverilog
+input  logic                 i_clk,
+input  logic [ROW_IDX_W-1:0] i_read_row_idx[0:L-1],
+output logic                 o_rdata[0:L-1]
+```
+
+带属性的 RAM 声明在属性和 `logic` 之间保留一个空格：
+
+```systemverilog
+(* ram_style = "block" *) logic [MSG_W-1:0] mem[0:RAM_LANE_DEPTH-1];
+```
+
+`make format-rtl` 使用 Verible 做 SystemVerilog 格式化，并运行项目声明 cleanup，
+保持 `input  logic`、属性声明空格和 unpacked 数组维度排版一致。
 
 ## 常见模块示例
 

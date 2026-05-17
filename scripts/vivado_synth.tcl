@@ -28,6 +28,7 @@ proc run_step {name command} {
 }
 
 set rtl_files [list \
+  rtl/bike_pkg.sv \
   rtl/decoder_top.sv \
   rtl/ram_i.sv \
   rtl/h_shift.sv \

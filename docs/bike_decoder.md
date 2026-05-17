@@ -5,7 +5,7 @@
 本 RTL 实现了一个 BIKE 风格的syndrome解码器。校验矩阵为双循环矩阵：
 
 - `H = [H0 | H1]`
-- `H0` 和 `H1` 由各自的首列向量表示，存储在 `bike_pkg.H_BASE[h_sel][h_block_idx][one_idx]` 中
+- `H0` 和 `H1` 由各自的首列支撑集表示，生成脚本将支撑集转换成 RAM-I 初始化 hex
 - `h_block_idx = 0` 对应 `H0`，`h_block_idx = 1` 对应 `H1`
 
 解码器接受初始syndrome，根据静态首列向量填充各 circulant bank，并估计错误向量：
@@ -16,9 +16,9 @@
 
 ## 参数
 
-`rtl/bike_pkg.sv` 是解码器核心的参数包。`rtl/decoder_top.sv` 内置同名参数包，便于 Vivado GUI 直接从顶层文件展开设计。
+`rtl/bike_pkg.sv` 是解码器核心的参数包，包含尺寸、位宽、RAM 几何和消息格式常量。
 
-- 默认构建：BIKE-L1 规模参数（`R=12323`, `W=71`, `N=24646`），使用确定性的首列向量
+- 默认构建：BIKE-L1 形状参数（`R=11677`, `W=71`, `N=23354`），使用脚本侧的确定性首列支撑集
 - `BIKE_TOY_PARAMS` 构建：小型 BIKE 演示参数（`R=8`, `W=3`），用于快速 RTL 测试
 
 其中 `W` 是每个 circulant block 的列权重，BIKE-L1 的总行重为 `N0 * W = 142`。
@@ -46,7 +46,7 @@ row_sign_xor ^ edge_u_sign ^ syndrome[row]
 
 ### 离线生成 hex 文件
 
-初始化数据由 `scripts/gen_qc_first_columns.py` 离线生成。该脚本解析 `rtl/bike_pkg.sv` 中的 `H_BASE` 数组，对每个 circulant block 的首列支撑集按 row group 分 lane，打包为 `{one_idx, row_idx_group}` 格式的 entry，输出 hex 文件到 `rtl/generated/`。
+初始化数据由 `scripts/gen_qc_first_columns.py` 离线生成。该脚本读取 `rtl/bike_pkg.sv` 的尺寸参数，并使用 `scripts/qc_matrix_data.py` 中的首列支撑集，对每个 circulant block 按 row group 分 bank，打包为 `{one_idx, row_idx_group}` 格式的 entry，输出 hex 文件到 `rtl/generated/`。
 
 ### 仿真启动加载
 
@@ -57,7 +57,7 @@ ram_i #(.INIT_HEX_STEM("rtl/generated/ram_i0")) u_ram_i0 (...);
 ram_i #(.INIT_HEX_STEM("rtl/generated/ram_i1")) u_ram_i1 (...);
 ```
 
-`INIT_TAG` 与参数集匹配：BIKE-L1 使用 `"_l1"`，`BIKE_TOY_PARAMS` 使用 `"_test"`。复位期间记忆体阵列保持初始化内容，因此复位释放后 RAM-I 已包含完整的首列元数据，解码器进入 INIT 状态即可直接使用。
+`INIT_TAG` 与参数集匹配：BIKE-L1 使用 `"_l1"`，`BIKE_TOY_PARAMS` 使用 `"_test"`。复位期间记忆体阵列保持初始化内容，因此复位释放后 RAM-I 已包含完整的首列元数据。
 
 ## 模块划分
 
@@ -67,14 +67,13 @@ ram_i #(.INIT_HEX_STEM("rtl/generated/ram_i1")) u_ram_i1 (...);
 - `ram_i`、`ram_m`、`ram_s`、`ram_t`、`ram_c` 均为论文风格的 RAM 原语。每个 RTL 文件对应一个编号 RAM 块。
 - `decoder_top` 按论文命名显式实例化各 RAM 块：`I0/I1`、`M0/M1/M2/M3`、`S0/S1`、`T0/T1`、`C`。
 - RAM-M 每个 numbered block 保存一个 row group 的压缩 c2v 状态和 1 bit epoch，深度为 `ROW_GROUP_DEPTH = ceil(R/L)`。顶层只向 RAM-M 发送 `row_idx_group`，绝对行号只用于 syndrome bit 选择和残差syndrome增量维护。
-- RAM-I、RAM-S、RAM-T 的 lane 内 entry 深度统一为 `RAM_LANE_DEPTH`，表示首列元数据在各 lane 中的最大有效 entry 数。BIKE-L1 参数下 `RAM_LANE_DEPTH=37`，`BIKE_TOY_PARAMS` 参数下 `RAM_LANE_DEPTH=2`。
+- RAM-I、RAM-S、RAM-T 的 lane 内 entry 深度统一为 `RAM_LANE_DEPTH`，表示首列元数据在各 lane 中的最大有效 entry 数。默认 BIKE-L1 形状参数下 `RAM_LANE_DEPTH=43`，`BIKE_TOY_PARAMS` 参数下 `RAM_LANE_DEPTH=2`。
 - RAM-S 每个 lane 以 `S_PACK_W` bit word 保存 v2c sign bit，BIKE-L1 配置使用 8 bit 打包。顶层读写 shift buffer 在 entry bit 流和打包 word 之间转换；RAM-S 只提供 word 级读写。
 - RAM-T 每个 lane 以按 entry slot 寻址的缓冲保存列 k+1 生成的 c2v 和 valid sideband。列 k+1 每个 entry slot 都写入，空 lane 写入 invalid slot；v2c 发射阶段按同一个 entry slot 读取，valid sideband 控制 VNU 的外信息相减。`ITER_CHECK` 清空 RAM-T slot 状态。
 - RAM-C 保存 syndrome 输入译码器的错误估计 bit，是一份适配 syndrome 输入语义的 `N` bit 存储，并提供串行读口用于导出最终估计。
 - 列 metadata 使用两个固定 slot：列 k 从 active slot 读取，列 k+1 从 RAM-I 单 entry 视图写入 fill slot。`o_col_k_meta_advance` 触发 active/fill slot 轮换，使列 k+1 成为新的列 k。
-- `decoder_ctrl` 遵循论文的 Fig.8 式单端口调度：每次迭代先填充并累加列 0，然后进入列重叠流水线——c2v 侧重建并累加列 `k+1` 的同时 v2c 侧更新列 `k`，最后排空 v2c 的最后一列，进入 `ITER_CHECK`。复用的 RAM-M 行通过 RAM word epoch 实现 `COMP_C2V_INIT` 语义。`phase` 信号仅用于调试；数据通路时序由固定调度脉冲和 metadata slot 轮换驱动。
-- RAM-I 在仿真启动时通过 `$readmemh` 从 hex 文件加载首列元数据。解码期间，活跃列的行/局部行/边索引元数据来自 RAM-I 的单 entry 读口。`h_shift` 为每个 RAM-I 块设置一个 entry 输入，为每个 lane 设置一个移位后的 entry 输出，数据通路通过 RAM-I 的单 entry 写端口将每个移位后的 entry 写入下一个 c2v 列。RAM-I shift writer 为每个目标 bank 保留一个 pending entry；多个移位 entry 指向同一 bank 时，writer 先写入一个 entry，并在后续周期写入 pending entry。列尾 count 在 pending entry 清空后提交，`decoder_ctrl` 通过 `i_ram_i_shift_ready` 暂停下一次 c2v 读发射。v2c 元数据独立缓冲，使 c2v 侧的 RAM-I 可以领先一列。`decoder_top` 通过 RAM-I 的单 entry 功能视图输出访问 RAM-I。项目级 RTL 命名约定定义在 [`docs/naming_conventions.md`](/Users/z2901550610/Documents/Min_Sum/docs/naming_conventions.md) 中。行组方案基于奇偶：`row_group 0` 存储偶数行，`row_group 1` 存储奇数行，`row_local` 为紧凑的奇偶局部索引 `floor(row_global / 2)`。CNU/VNU 行地址调度由 RAM-I 元数据驱动。
-- `decoder_edge_meta` 和 `qc_column_preprocess` 保留在 [`rtl/reference/`](/Users/z2901550610/Documents/Min_Sum/rtl/reference) 下作为参考辅助文件。核心解码器使用 RAM-I + `h_shift` 提供活跃边元数据。
+- `decoder_ctrl` 遵循论文的 Fig.8 式单端口调度：每次迭代先填充并累加列 0，然后进入列重叠流水线——c2v 侧重建并累加列 `k+1` 的同时 v2c 侧更新列 `k`，最后排空 v2c 的最后一列，进入 `ITER_CHECK`。复用的 RAM-M 行通过 RAM word epoch 实现 `COMP_C2V_INIT` 语义。数据通路时序由固定调度脉冲和 metadata slot 轮换驱动。
+- RAM-I 在仿真启动时通过 `$readmemh` 从 hex 文件加载首列元数据。解码期间，活跃列的行/局部行/边索引元数据来自 RAM-I 的单 entry 读口。`h_shift` 为每个 RAM-I 块设置一个 entry 输入，为每个 lane 设置一个移位后的 entry 输出，数据通路通过 RAM-I 的单 entry 写端口将每个移位后的 entry 写入下一个 c2v 列。RAM-I shift writer 为每个目标 bank 保留一个 pending entry；多个移位 entry 指向同一 bank 时，writer 先写入一个 entry，并在后续周期写入 pending entry。列尾 count 在 pending entry 清空后提交，`decoder_ctrl` 通过 `i_ram_i_shift_ready` 暂停下一次 c2v 读发射。v2c 元数据独立缓冲，使 c2v 侧的 RAM-I 可以领先一列。`decoder_top` 通过 RAM-I 的单 entry 功能视图输出访问 RAM-I。项目级 RTL 命名约定定义在 [`docs/naming_conventions.md`](/Users/z2901550610/Documents/Min_Sum/docs/naming_conventions.md) 中。行组方案使用 `group_idx` 选择 row bank，`row_idx_group` 表示紧凑局部行号，`row_idx_global = B * row_idx_group + group_idx`。CNU/VNU 行地址调度由 RAM-I 元数据驱动。
 - 静态首列元数据由 [`scripts/gen_qc_first_columns.py`](/Users/z2901550610/Documents/Min_Sum/scripts/gen_qc_first_columns.py) 离线生成，输出 hex 文件到 `rtl/generated/`。RAM-I 通过 `$readmemh` 在仿真启动时直接加载。
 - c2v 侧在读取 RAM-I 单 entry 视图时同步填充列 k+1 metadata slot，使得下一列的单 entry 移位写入不会干扰列 k 的元数据视图。
 - 设计边界：RTL 使用单级 VNU 缩放；灵活的消息存储选择、两级缩放、组大小重平衡属于扩展功能。
@@ -130,7 +129,7 @@ stateDiagram-v2
 
 #### 2. CTRL_INIT — 初始压缩 c2v 对构建
 
-RAM-I 的首列元数据在仿真启动时通过 `$readmemh` 从 hex 文件自动加载（由 `gen_qc_first_columns.py` 根据 `H_BASE` 预生成），无需运行时播种。
+RAM-I 的首列元数据在仿真启动时通过 `$readmemh` 从 hex 文件自动加载。hex 文件由 `gen_qc_first_columns.py` 预生成。
 
 INIT 为所有变量列构建初始压缩 c2v 对（第一次迭代的输入），内部有以下微步骤，按列遍历，每列内按 entry 位置步进：
 
@@ -219,12 +218,10 @@ CONS                   [V2C]            [V2C]        ... [V2C]
 make test
 ```
 
-BIKE-L1 黄金模型在 BIKE-L1 规模的双循环矩阵上使用相同的syndrome输入 min-sum 公式：
+随机 BIKE 形状用例由脚本生成，并通过顶层 testbench 执行：
 
 ```sh
-make bike-golden-self-test
-make bike-golden-once BIKE_SEED=1
-make bike-golden-batch BIKE_BASE_SEED=1 BIKE_TRIALS=8
+make test-bike-random BIKE_RANDOM_TRIALS=1
 ```
 
 本仓库实现的是面向 BIKE 输入的 min-sum 解码器，并非官方的 BIKE bit-flipping 解码器系列。

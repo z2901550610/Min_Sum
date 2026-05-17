@@ -63,7 +63,7 @@ def sv_array(values: list[int]) -> str:
 
 
 def render_group_count_param(group_counts: list[list[int]]) -> str:
-    lines = ["  localparam logic [GROUP_COUNT_W-1:0] QC_FIRST_COL_GROUP_COUNT [0:N0-1][0:L-1] = '{"]
+    lines = ["  localparam logic [GROUP_COUNT_W-1:0] QC_FIRST_COL_GROUP_COUNT [0:N0-1][0:B-1] = '{"]
     for h_block_idx, h_block_group_counts in enumerate(group_counts):
         suffix = "," if h_block_idx != len(group_counts) - 1 else ""
         lines.append(
@@ -80,14 +80,15 @@ def render_group_entry_param(
     group_entries: list[list[list[tuple[int, int] | None]]],
     lane_depth: int,
 ) -> str:
-    lines = ["  localparam logic [I_ENTRY_W-1:0] QC_FIRST_COL_GROUP_ENTRY [0:N0-1][0:L-1][0:RAM_LANE_DEPTH-1] = '{"]
+    lines = ["  localparam logic [I_ENTRY_W-1:0] QC_FIRST_COL_GROUP_ENTRY [0:N0-1][0:B-1][0:RAM_LANE_DEPTH-1] = '{"]
     for h_block_idx, h_block_group_entries in enumerate(group_entries):
         h_block_suffix = "," if h_block_idx != len(group_entries) - 1 else ""
         lines.append("    '{")
         for group_idx, group_entry_list in enumerate(h_block_group_entries):
             group_suffix = "," if group_idx != len(h_block_group_entries) - 1 else ""
             entry_text = []
-            for item in group_entry_list[:lane_depth]:
+            for entry_idx in range(lane_depth):
+                item = group_entry_list[entry_idx] if entry_idx < len(group_entry_list) else None
                 if item is None:
                     entry_text.append("'0")
                 else:
@@ -108,10 +109,12 @@ def emit_pkg(
     c_val: int,
     alpha_shift_0: int,
     alpha_shift_1: int,
+    l: int,
+    b: int,
     h_base: list[list[int]],
 ) -> None:
-    group_counts, group_entries = build_first_column_tables(h_base)
-    lane_depth = lane_depth_from_counts(group_counts)
+    group_counts, group_entries = build_first_column_tables(h_base, group_count=b)
+    lane_depth = lane_depth_from_counts(group_counts, issue_width=l)
     path.write_text(
         f"""`timescale 1ns/1ps
 package bike_pkg;
@@ -128,12 +131,13 @@ package bike_pkg;
   parameter int RAM_LANE_DEPTH = {lane_depth};
 
   parameter int N = N0 * R;
-  parameter int L = 2;
+  parameter int L = {l};
+  parameter int B = {b};
   parameter int D = 4;
   parameter int ALPHA_FRAC_W = 6;
   parameter int MAG_MAX = (1 << D) - 1;
   parameter int MSG_W = D + 1;
-  parameter int ROW_SEG_SIZE = (R + L - 1) / L;
+  parameter int ROW_SEG_SIZE = (R + B - 1) / B;
   parameter int ROW_GROUP_DEPTH = ROW_SEG_SIZE;
   parameter int VNU_TC_W = MSG_W + ((W > 1) ? $clog2(W + 1) : 1);
   parameter int COL_W = (N > 1) ? $clog2(N) : 1;
@@ -142,10 +146,25 @@ package bike_pkg;
 
   parameter int ONE_IDX_W = (W > 1) ? $clog2(W) : 1;
   parameter int ROW_IDX_W = (R > 1) ? $clog2(R) : 1;
-  parameter int GROUP_IDX_W = (L > 1) ? $clog2(L) : 1;
-  parameter int ROW_GROUP_W = ROW_IDX_W - GROUP_IDX_W;
+  parameter int LANE_IDX_W = (L > 1) ? $clog2(L) : 1;
+  parameter int GROUP_IDX_W = (B > 1) ? $clog2(B) : 1;
+  parameter int ROW_GROUP_W = (ROW_GROUP_DEPTH > 1) ? $clog2(ROW_GROUP_DEPTH) : 1;
   parameter int ENTRY_POS_W = (RAM_LANE_DEPTH > 1) ? $clog2(RAM_LANE_DEPTH) : 1;
   parameter int GROUP_COUNT_W = (RAM_LANE_DEPTH > 1) ? $clog2(RAM_LANE_DEPTH + 1) : 1;
+  parameter int ITER_W = $clog2(I_MAX + 1);
+  parameter int HIST_IDX_W = (I_MAX > 1) ? $clog2(I_MAX) : 1;
+  parameter int S_PACK_W = 8;
+  parameter int S_WORDS_PER_COL = (RAM_LANE_DEPTH + S_PACK_W - 1) / S_PACK_W;
+  parameter int S_WORD_DEPTH = N * S_WORDS_PER_COL;
+  parameter int S_WORD_ADDR_W = (S_WORD_DEPTH > 1) ? $clog2(S_WORD_DEPTH) : 1;
+  parameter int S_PACK_IDX_W = (S_PACK_W > 1) ? $clog2(S_PACK_W) : 1;
+  parameter int M_BANKS = 2 * B;
+  parameter int M_BANK_IDX_W = (M_BANKS > 1) ? $clog2(M_BANKS) : 1;
+  parameter int SHIFT_PENDING_DEPTH = L + 2;
+  parameter int SHIFT_PENDING_IDX_W =
+    (SHIFT_PENDING_DEPTH > 1) ? $clog2(SHIFT_PENDING_DEPTH) : 1;
+  parameter int SHIFT_PENDING_COUNT_W =
+    (SHIFT_PENDING_DEPTH > 1) ? $clog2(SHIFT_PENDING_DEPTH + 1) : 1;
 
   localparam int DEC_STATE_W = 4;
   localparam logic [DEC_STATE_W-1:0] DEC_WAIT_START       = 4'd0;
@@ -154,27 +173,6 @@ package bike_pkg;
   localparam logic [DEC_STATE_W-1:0] DEC_ITER_V2C_DRAIN   = 4'd6;
   localparam logic [DEC_STATE_W-1:0] DEC_ITER_CHECK       = 4'd8;
   localparam logic [DEC_STATE_W-1:0] DEC_DONE             = 4'd9;
-
-  localparam int DEC_PHASE_W = 5;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_WAIT                = 5'd0;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_PRIME_READ          = 5'd7;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_PRIME_WRITE         = 5'd8;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_OVERLAP_ACCUM_READ  = 5'd9;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_OVERLAP_ACCUM_USE   = 5'd10;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_OVERLAP_PREP        = 5'd11;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_OVERLAP_EMIT_READ   = 5'd12;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_OVERLAP_EMIT_CNU_A  = 5'd13;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_OVERLAP_EMIT_WRITE  = 5'd14;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_PROD_FINISH_READ    = 5'd15;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_PROD_FINISH_WRITE   = 5'd16;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_DRAIN_ACCUM_READ    = 5'd17;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_DRAIN_ACCUM_USE     = 5'd18;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_DRAIN_PREP          = 5'd19;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_DRAIN_EMIT_READ     = 5'd20;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_DRAIN_EMIT_CNU_A    = 5'd21;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_DRAIN_EMIT_WRITE    = 5'd22;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_ITER_CHECK          = 5'd23;
-  localparam logic [DEC_PHASE_W-1:0] DEC_PH_DONE                = 5'd24;
 
   localparam int MSG_MAG_LSB = 0;
   localparam int MSG_SIGN_BIT = D;
@@ -190,26 +188,25 @@ package bike_pkg;
     D'(MAG_MAX),
     D'(MAG_MAX)
   }};
+  localparam logic [COMP_C2V_W-1:0] FIRST_ITER_C2V_COMP = {{
+    1'b0,
+    COL_W'(0),
+    D'(C_VAL),
+    D'(C_VAL)
+  }};
 
   localparam int I_ENTRY_ROW_IDX_GROUP_LSB = 0;
   localparam int I_ENTRY_ONE_IDX_LSB = I_ENTRY_ROW_IDX_GROUP_LSB + ROW_GROUP_W;
   localparam int I_ENTRY_W = I_ENTRY_ONE_IDX_LSB + ONE_IDX_W;
-
-  localparam int unsigned H_BASE [0:H_NUM-1][0:N0-1][0:W-1] = '{{
-    '{{
-      {sv_array(h_base[0])},
-      {sv_array(h_base[1])}
-    }}
-  }};
 {render_group_count_param(group_counts)}
 {render_group_entry_param(group_entries, lane_depth)}
-  localparam logic [GROUP_COUNT_W-1:0] QC_FIRST_COL_LANE_COUNT [0:N0-1][0:L-1] =
+  localparam logic [GROUP_COUNT_W-1:0] QC_FIRST_COL_LANE_COUNT [0:N0-1][0:B-1] =
     QC_FIRST_COL_GROUP_COUNT;
-  localparam logic [I_ENTRY_W-1:0] QC_FIRST_COL_LANE_ENTRY [0:N0-1][0:L-1][0:RAM_LANE_DEPTH-1] =
+  localparam logic [I_ENTRY_W-1:0] QC_FIRST_COL_LANE_ENTRY [0:N0-1][0:B-1][0:RAM_LANE_DEPTH-1] =
     QC_FIRST_COL_GROUP_ENTRY;
-  localparam logic [GROUP_COUNT_W-1:0] QC_FIRST_COL_ROW_GROUP_COUNT [0:N0-1][0:L-1] =
+  localparam logic [GROUP_COUNT_W-1:0] QC_FIRST_COL_ROW_GROUP_COUNT [0:N0-1][0:B-1] =
     QC_FIRST_COL_GROUP_COUNT;
-  localparam logic [I_ENTRY_W-1:0] QC_FIRST_COL_ROW_GROUP_ENTRY [0:N0-1][0:L-1][0:RAM_LANE_DEPTH-1] =
+  localparam logic [I_ENTRY_W-1:0] QC_FIRST_COL_ROW_GROUP_ENTRY [0:N0-1][0:B-1][0:RAM_LANE_DEPTH-1] =
     QC_FIRST_COL_GROUP_ENTRY;
   /* verilator lint_on UNUSEDPARAM */
 endpackage
@@ -226,8 +223,8 @@ def emit_tb(
     syndrome_hex: str,
     target_hex: str,
     require_success: bool,
-    ram_i0_hex_stem: str,
-    ram_i1_hex_stem: str,
+    ram_i_hex_prefix: str,
+    h_base: list[list[int]],
 ) -> None:
     require_success_sv = "1'b1" if require_success else "1'b0"
     path.write_text(
@@ -241,6 +238,10 @@ module tb_bike_decoder_random;
   localparam bit REQUIRE_SUCCESS = {require_success_sv};
   localparam logic [R-1:0] INPUT_SYNDROME = {syndrome_hex};
   localparam logic [N-1:0] TARGET_ERROR = {target_hex};
+  localparam int unsigned TEST_SUPPORTS [0:N0-1][0:W-1] = '{{
+    {sv_array(h_base[0])},
+    {sv_array(h_base[1])}
+  }};
 
   logic clk;
   logic rst_n;
@@ -253,11 +254,10 @@ module tb_bike_decoder_random;
   logic [COL_W-1:0] e_read_col_idx;
   logic e_rdata;
   logic [N-1:0] e_out;
-  logic [$clog2(I_MAX + 1)-1:0] iter_count;
+  logic [ITER_W-1:0] iter_count;
 
   decoder_top #(
-    .RAM_I0_HEX_STEM("{ram_i0_hex_stem}"),
-    .RAM_I1_HEX_STEM("{ram_i1_hex_stem}"),
+    .RAM_I_HEX_PREFIX("{ram_i_hex_prefix}"),
     .RAM_I_HEX_TAG("")
   ) dut (
     .i_clk(clk),
@@ -305,7 +305,7 @@ module tb_bike_decoder_random;
           h_block_idx = H_BLOCK_W'(var_idx / R);
           col_idx = var_idx % R;
           for (edge_idx = 0; edge_idx < W; edge_idx++) begin
-            row_idx = ROW_IDX_W'((H_BASE[0][h_block_idx][edge_idx] + col_idx) % R);
+            row_idx = ROW_IDX_W'((TEST_SUPPORTS[h_block_idx][edge_idx] + col_idx) % R);
             residual[row_idx] = residual[row_idx] ^ 1'b1;
           end
         end
@@ -446,9 +446,22 @@ def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int
         c_val=args.c_val,
         alpha_shift_0=args.alpha_shift_0,
         alpha_shift_1=args.alpha_shift_1,
+        l=args.parallel_l,
+        b=args.row_banks,
         h_base=h_base,
     )
-    generate_hex_files(h_base, args.r, args.w, "", out_dir)
+    generate_hex_files(
+        h_base,
+        args.r,
+        args.w,
+        "",
+        out_dir,
+        group_count=args.row_banks,
+        memory_depth=lane_depth_from_counts(
+            build_first_column_tables(h_base, group_count=args.row_banks)[0],
+            issue_width=args.parallel_l,
+        ),
+    )
     emit_tb(
         tb_path,
         seed=seed,
@@ -456,8 +469,8 @@ def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int
         syndrome_hex=bit_vector_hex(syndrome, args.r),
         target_hex=bit_vector_hex(error_bits, n),
         require_success=args.require_success,
-        ram_i0_hex_stem=str((sv_case_dir / "ram_i0").as_posix()),
-        ram_i1_hex_stem=str((sv_case_dir / "ram_i1").as_posix()),
+        ram_i_hex_prefix=str((sv_case_dir / "ram_i").as_posix()),
+        h_base=h_base,
     )
 
     command = [
@@ -498,10 +511,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--c-val", type=int, default=9)
     parser.add_argument("--alpha-shift-0", type=int, default=4)
     parser.add_argument("--alpha-shift-1", type=int, default=5)
+    parser.add_argument("--parallel-l", type=int, default=2)
+    parser.add_argument("--row-banks", type=int, default=2)
     parser.add_argument(
         "--require-success",
         action="store_true",
-        help="Treat non-convergence as a test failure instead of only checking flag/residual consistency.",
+        help="Treat non-convergence as a test failure while checking flag/residual consistency.",
     )
     return parser.parse_args()
 
@@ -511,6 +526,10 @@ def main() -> int:
     repo_root = Path(__file__).resolve().parents[1]
     if args.trials < 1:
         raise ValueError("--trials must be positive")
+    if args.parallel_l < 1:
+        raise ValueError("--parallel-l must be positive")
+    if args.row_banks < 1:
+        raise ValueError("--row-banks must be positive")
 
     for case_idx in range(args.trials):
         seed = args.base_seed + case_idx

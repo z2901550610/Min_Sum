@@ -3,7 +3,7 @@
 ## Project Snapshot
 
 - SystemVerilog RTL for a BIKE/MDPC-style min-sum decoder.
-- Golden C models live in `golden/`; RTL lives in `rtl/`; testbenches live in `tb/`.
+- RTL lives in `rtl/`; testbenches live in `tb/`; helper scripts live in `scripts/`.
 - Generated files are under `rtl/generated/` and `tb/generated/`.
 
 ## Common Commands
@@ -26,8 +26,6 @@
 - `docs/references/cai-zhang-2023-low-complexity-parallel-min-sum-mdpc-decoder.pdf` - reference paper for the decoder architecture.
 - `rtl/bike_pkg.sv` - shared parameters/types.
 - `rtl/decoder_top.sv` - top-level decoder RTL.
-- `golden/mdpc_min_sum_golden.c` - toy/default golden model and vector generator.
-- `golden/bike_l1_min_sum_golden.c` - BIKE-L1-shaped golden validation.
 - `scripts/run_bike_random.py` - generated random decoder simulations.
 
 ## Working Notes

@@ -1,28 +1,27 @@
-`timescale 1ns/1ps
-// Syndrome bit store with one load/write port and two registered read ports.
+`timescale 1ns / 1ps
+// Syndrome bit store with one load/write port and L registered read ports.
 module ram_syndrome
   import bike_pkg::*;
 (
-  input  logic                 i_clk,
-  input  logic                 i_we,
-  input  logic [ROW_IDX_W-1:0] i_write_row_idx,
-  input  logic                 i_wdata,
-  input  logic [ROW_IDX_W-1:0] i_read_row_idx0,
-  input  logic [ROW_IDX_W-1:0] i_read_row_idx1,
-  output logic                 o_rdata0,
-  output logic                 o_rdata1
+    input  logic                 i_clk,
+    input  logic                 i_we,
+    input  logic [ROW_IDX_W-1:0] i_write_row_idx,
+    input  logic                 i_wdata,
+    input  logic [ROW_IDX_W-1:0] i_read_row_idx[0:L-1],
+    output logic                 o_rdata[0:L-1]
 );
 
-  (* ram_style = "block" *) logic mem0 [0:R-1];
-  (* ram_style = "block" *) logic mem1 [0:R-1];
+  (* ram_style = "block" *) logic mem[0:L-1][0:R-1];
 
   always_ff @(posedge i_clk) begin
     if (i_we) begin
-      mem0[i_write_row_idx] <= i_wdata;
-      mem1[i_write_row_idx] <= i_wdata;
+      for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
+        mem[lane_idx][i_write_row_idx] <= i_wdata;
+      end
     end
 
-    o_rdata0 <= mem0[i_read_row_idx0];
-    o_rdata1 <= mem1[i_read_row_idx1];
+    for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
+      o_rdata[lane_idx] <= mem[lane_idx][i_read_row_idx[lane_idx]];
+    end
   end
 endmodule

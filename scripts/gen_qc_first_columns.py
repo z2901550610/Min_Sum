@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate RAM-I initialization hex files from bike_pkg.H_BASE."""
+"""Generate RAM-I initialization hex files from script-owned QC matrix data."""
 
 from __future__ import annotations
 
@@ -7,117 +7,39 @@ import argparse
 import re
 from pathlib import Path
 
+from qc_matrix_data import DEFAULT_SUPPORTS
 from ram_i_hex import generate_hex_files
 
 
-def extract_r_values(text: str) -> list[int]:
-    values = [
+def extract_param_values(text: str, name: str) -> list[int]:
+    return [
         int(value)
-        for value in re.findall(r"(?:localparam|parameter)\s+int\s+R\s*=\s*(\d+)\s*;", text)
+        for value in re.findall(
+            rf"(?:localparam|parameter)\s+int\s+{re.escape(name)}\s*=\s*(\d+)\s*;",
+            text,
+        )
     ]
-    if len(values) != 2:
-        raise ValueError("expected exactly two R parameter values in bike_pkg")
-    return values
 
 
-def extract_w_values(text: str) -> list[int]:
-    values = [
-        int(value)
-        for value in re.findall(r"(?:localparam|parameter)\s+int\s+W\s*=\s*(\d+)\s*;", text)
-    ]
-    if len(values) < 2:
-        raise ValueError("expected at least two W parameter values in bike_pkg")
-    return values
+def pair_values(values: list[int], default: int | None = None) -> list[int]:
+    if not values:
+        if default is None:
+            raise ValueError("missing required parameter value")
+        return [default, default]
+    if len(values) == 1:
+        return [values[0], values[0]]
+    return values[:2]
 
 
-def extract_h_base_literal(text: str, start: int) -> str:
-    eq_idx = text.find("=", start)
-    brace_idx = text.find("{", eq_idx)
-    if eq_idx < 0 or brace_idx < 0:
-        raise ValueError("malformed H_BASE declaration")
-
-    depth = 0
-    end_idx = -1
-    for idx in range(brace_idx, len(text)):
-        char = text[idx]
-        if char == "{":
-            depth += 1
-        elif char == "}":
-            depth -= 1
-            if depth == 0:
-                end_idx = idx
-                break
-    if end_idx < 0:
-        raise ValueError("unterminated H_BASE literal")
-    return text[brace_idx:end_idx + 1]
-
-
-def tokenize_literal(literal: str) -> list[str]:
-    tokens: list[str] = []
-    idx = 0
-    while idx < len(literal):
-        char = literal[idx]
-        if char.isspace() or char == "," or char == "'":
-            idx += 1
-            continue
-        if char in "{}":
-            tokens.append(char)
-            idx += 1
-            continue
-        if char.isdigit():
-            end = idx + 1
-            while end < len(literal) and literal[end].isdigit():
-                end += 1
-            tokens.append(literal[idx:end])
-            idx = end
-            continue
-        raise ValueError(f"unexpected character {char!r} in H_BASE literal")
-    return tokens
-
-
-def parse_list(tokens: list[str], pos: int = 0) -> tuple[object, int]:
-    if tokens[pos] != "{":
-        raise ValueError("expected '{' while parsing H_BASE literal")
-    pos += 1
-    values: list[object] = []
-    while pos < len(tokens) and tokens[pos] != "}":
-        token = tokens[pos]
-        if token == "{":
-            value, pos = parse_list(tokens, pos)
-            values.append(value)
-        else:
-            values.append(int(token))
-            pos += 1
-    if pos >= len(tokens) or tokens[pos] != "}":
-        raise ValueError("unterminated list in H_BASE literal")
-    return values, pos + 1
-
-
-def parse_h_base_literal(literal: str) -> list[list[int]]:
-    parsed, end_pos = parse_list(tokenize_literal(literal))
-    if end_pos < 0:
-        raise ValueError("failed to parse H_BASE literal")
-    if not isinstance(parsed, list) or len(parsed) != 1:
-        raise ValueError("expected H_NUM=1 outer dimension in H_BASE literal")
-    banks = parsed[0]
-    if not isinstance(banks, list):
-        raise ValueError("expected bank list in H_BASE literal")
-    return banks
-
-
-def extract_h_base_values(text: str) -> list[list[list[int]]]:
-    marker = "localparam int unsigned H_BASE"
-    positions: list[int] = []
-    search_from = 0
-    while True:
-        pos = text.find(marker, search_from)
-        if pos < 0:
-            break
-        positions.append(pos)
-        search_from = pos + len(marker)
-    if len(positions) != 2:
-        raise ValueError("expected exactly two H_BASE declarations in bike_pkg")
-    return [parse_h_base_literal(extract_h_base_literal(text, pos)) for pos in positions]
+def validate_supports(name: str, supports: list[list[int]], r_value: int, w_value: int) -> None:
+    if len(supports) != 2:
+        raise ValueError(f"{name} must contain two circulant-block supports")
+    for block_idx, support in enumerate(supports):
+        if len(support) != w_value:
+            raise ValueError(f"{name}[{block_idx}] has {len(support)} entries, expected {w_value}")
+        for row_idx in support:
+            if row_idx < 0 or row_idx >= r_value:
+                raise ValueError(f"{name}[{block_idx}] row {row_idx} is outside 0..{r_value - 1}")
 
 
 def main() -> None:
@@ -134,15 +56,27 @@ def main() -> None:
     output_dir = Path(args.output_dir)
 
     source_text = input_path.read_text(encoding="utf-8")
-    r_values = extract_r_values(source_text)
-    w_values = extract_w_values(source_text)
-    h_base_values = extract_h_base_values(source_text)
+    r_values = pair_values(extract_param_values(source_text, "R"))
+    w_values = pair_values(extract_param_values(source_text, "W"))
+    b_values = pair_values(extract_param_values(source_text, "B"), default=2)
+    lane_depth_values = pair_values(extract_param_values(source_text, "RAM_LANE_DEPTH"))
 
-    # Parameter set 0: BIKE L1.
-    generate_hex_files(h_base_values[0], r_values[0], w_values[0], "l1", output_dir)
+    jobs = [
+        ("l1", DEFAULT_SUPPORTS["l1"], r_values[0], w_values[0], b_values[0], lane_depth_values[0]),
+        ("test", DEFAULT_SUPPORTS["test"], r_values[1], w_values[1], b_values[1], lane_depth_values[1]),
+    ]
 
-    # Parameter set 1: compact toy tests.
-    generate_hex_files(h_base_values[1], r_values[1], w_values[1], "test", output_dir)
+    for tag, supports, r_value, w_value, b_value, lane_depth in jobs:
+        validate_supports(tag, supports, r_value, w_value)
+        generate_hex_files(
+            supports,
+            r_value,
+            w_value,
+            tag,
+            output_dir,
+            group_count=b_value,
+            memory_depth=lane_depth,
+        )
 
     print(f"Generated hex files in {output_dir}")
 

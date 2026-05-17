@@ -1,38 +1,35 @@
-`timescale 1ns/1ps
+`timescale 1ns / 1ps
 
 module tb_cnu_a;
   import bike_pkg::*;
 
-  logic clk;
-  logic rst_n;
-  logic in_valid;
-  logic [MSG_W-1:0] v2c_msg_in;
-  logic [COL_W-1:0] src_col_idx;
+  logic                  clk;
+  logic                  rst_n;
+  logic                  in_valid;
+  logic [     MSG_W-1:0] v2c_msg_in;
+  logic [     COL_W-1:0] src_col_idx;
   logic [COMP_C2V_W-1:0] comp_c2v_in;
   logic [COMP_C2V_W-1:0] comp_c2v_out;
-  logic v2c_sign_out;
-  logic out_valid;
+  logic                  v2c_sign_out;
+  logic                  out_valid;
 
   cnu_a dut (
-    .i_clk(clk),
-    .i_rst_n(rst_n),
-    .i_en(in_valid),
-    .i_v2c_msg(v2c_msg_in),
-    .i_col_idx(src_col_idx),
-    .i_comp_c2v(comp_c2v_in),
-    .o_comp_c2v(comp_c2v_out),
-    .o_sign(v2c_sign_out),
-    .o_valid(out_valid)
+      .i_clk(clk),
+      .i_rst_n(rst_n),
+      .i_en(in_valid),
+      .i_v2c_msg(v2c_msg_in),
+      .i_col_idx(src_col_idx),
+      .i_comp_c2v(comp_c2v_in),
+      .o_comp_c2v(comp_c2v_out),
+      .o_sign(v2c_sign_out),
+      .o_valid(out_valid)
   );
 
   initial clk = 1'b0;
   always #5 clk = ~clk;
 
-  task automatic drive_step(
-    input logic [COMP_C2V_W-1:0] comp_c2v_state_in,
-    input logic [MSG_W-1:0] msg_in,
-    input logic [COL_W-1:0] col_idx
-  );
+  task automatic drive_step(input  logic [COMP_C2V_W-1:0] comp_c2v_state_in,
+                            input  logic [MSG_W-1:0] msg_in, input  logic [COL_W-1:0] col_idx);
     begin
       comp_c2v_in = comp_c2v_state_in;
       v2c_msg_in = msg_in;
@@ -44,19 +41,33 @@ module tb_cnu_a;
     end
   endtask
 
-  task automatic expect_state(
-    input int exp_min1,
-    input int exp_min2,
-    input int exp_min_id,
-    input int exp_sign_xor,
-    input int exp_sign_bit
-  );
+  task automatic expect_state(input int exp_min1, input int exp_min2, input int exp_min_id,
+                              input int exp_sign_xor, input int exp_sign_bit);
     begin
-      if (int'(comp_c2v_out[COMP_C2V_MIN1_LSB +: D]) != exp_min1) $fatal(1, "min1 mismatch: got %0d exp %0d", int'(comp_c2v_out[COMP_C2V_MIN1_LSB +: D]), exp_min1);
-      if (int'(comp_c2v_out[COMP_C2V_MIN2_LSB +: D]) != exp_min2) $fatal(1, "min2 mismatch: got %0d exp %0d", int'(comp_c2v_out[COMP_C2V_MIN2_LSB +: D]), exp_min2);
-      if (int'(comp_c2v_out[COMP_C2V_MIN_ID_LSB +: COL_W]) != exp_min_id) $fatal(1, "min_id mismatch: got %0d exp %0d", int'(comp_c2v_out[COMP_C2V_MIN_ID_LSB +: COL_W]), exp_min_id);
-      if (int'(comp_c2v_out[COMP_C2V_SIGN_XOR_BIT]) != exp_sign_xor) $fatal(1, "sign_xor mismatch: got %0d exp %0d", int'(comp_c2v_out[COMP_C2V_SIGN_XOR_BIT]), exp_sign_xor);
-      if (int'(v2c_sign_out) != exp_sign_bit) $fatal(1, "sign_bit mismatch: got %0d exp %0d", int'(v2c_sign_out), exp_sign_bit);
+      if (int'(comp_c2v_out[COMP_C2V_MIN1_LSB+:D]) != exp_min1)
+        $fatal(
+            1, "min1 mismatch: got %0d exp %0d", int'(comp_c2v_out[COMP_C2V_MIN1_LSB+:D]), exp_min1
+        );
+      if (int'(comp_c2v_out[COMP_C2V_MIN2_LSB+:D]) != exp_min2)
+        $fatal(
+            1, "min2 mismatch: got %0d exp %0d", int'(comp_c2v_out[COMP_C2V_MIN2_LSB+:D]), exp_min2
+        );
+      if (int'(comp_c2v_out[COMP_C2V_MIN_ID_LSB+:COL_W]) != exp_min_id)
+        $fatal(
+            1,
+            "min_id mismatch: got %0d exp %0d",
+            int'(comp_c2v_out[COMP_C2V_MIN_ID_LSB+:COL_W]),
+            exp_min_id
+        );
+      if (int'(comp_c2v_out[COMP_C2V_SIGN_XOR_BIT]) != exp_sign_xor)
+        $fatal(
+            1,
+            "sign_xor mismatch: got %0d exp %0d",
+            int'(comp_c2v_out[COMP_C2V_SIGN_XOR_BIT]),
+            exp_sign_xor
+        );
+      if (int'(v2c_sign_out) != exp_sign_bit)
+        $fatal(1, "sign_bit mismatch: got %0d exp %0d", int'(v2c_sign_out), exp_sign_bit);
     end
   endtask
 

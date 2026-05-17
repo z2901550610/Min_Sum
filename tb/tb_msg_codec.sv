@@ -1,4 +1,4 @@
-`timescale 1ns/1ps
+`timescale 1ns / 1ps
 
 module tb_msg_codec;
   import bike_pkg::*;
@@ -8,37 +8,34 @@ module tb_msg_codec;
   // 2) two's-complement -> sign-magnitude 的符号/绝对值/饱和行为
   // 3) 关键边界值：0、-0、±MAG_MAX、刚好越界时的饱和
 
-  logic [MSG_W-1:0] signmag_msg;
-  logic signed [MSG_W-1:0] signmag_tc;
+  logic        [   MSG_W-1:0] signmag_msg;
+  logic signed [   MSG_W-1:0] signmag_tc;
 
   logic signed [VNU_TC_W-1:0] tc_in;
-  logic [MSG_W-1:0] tc_msg;
+  logic        [   MSG_W-1:0] tc_msg;
 
   msg_signmag_to_tc #(
-    .D(D),
-    .MSG_W(MSG_W),
-    .MSG_MAG_LSB(MSG_MAG_LSB),
-    .MSG_SIGN_BIT(MSG_SIGN_BIT)
+      .D(D),
+      .MSG_W(MSG_W),
+      .MSG_MAG_LSB(MSG_MAG_LSB),
+      .MSG_SIGN_BIT(MSG_SIGN_BIT)
   ) u_signmag_to_tc (
-    .i_msg(signmag_msg),
-    .o_tc(signmag_tc)
+      .i_msg(signmag_msg),
+      .o_tc (signmag_tc)
   );
 
   msg_tc_to_signmag_sat #(
-    .D(D),
-    .MSG_W(MSG_W),
-    .VNU_TC_W(VNU_TC_W),
-    .MAG_MAX(MAG_MAX)
+      .D(D),
+      .MSG_W(MSG_W),
+      .VNU_TC_W(VNU_TC_W),
+      .MAG_MAX(MAG_MAX)
   ) u_tc_to_signmag (
-    .i_tc(tc_in),
-    .o_msg(tc_msg)
+      .i_tc (tc_in),
+      .o_msg(tc_msg)
   );
 
   // 参考模型：把 sign-magnitude 解释为有符号整数。
-  function automatic int signmag_to_int(
-    input logic sign_i,
-    input logic [D-1:0] mag_i
-  );
+  function automatic int signmag_to_int(input  logic sign_i, input  logic [D-1:0] mag_i);
     begin
       if (sign_i && (mag_i != '0)) begin
         signmag_to_int = -int'(mag_i);
@@ -50,11 +47,11 @@ module tb_msg_codec;
 
   // 参考模型：把有符号整数编码成带饱和的 sign-magnitude。
   function automatic logic [MSG_W-1:0] int_to_signmag_sat(input int value_i);
-    int abs_value;
-    logic sign_bit;
+    int           abs_value;
+    logic         sign_bit;
     logic [D-1:0] mag_bits;
     begin
-      sign_bit = (value_i < 0);
+      sign_bit  = (value_i < 0);
       abs_value = (value_i < 0) ? -value_i : value_i;
       if (abs_value > MAG_MAX) begin
         mag_bits = D'(MAG_MAX);
@@ -66,10 +63,7 @@ module tb_msg_codec;
   endfunction
 
   // 检查 sign-magnitude -> tc：-0 必须规范化为 0。
-  task automatic check_signmag_to_tc(
-    input logic sign_i,
-    input logic [D-1:0] mag_i
-  );
+  task automatic check_signmag_to_tc(input  logic sign_i, input  logic [D-1:0] mag_i);
     int expected_value;
     begin
       signmag_msg = {sign_i, mag_i};
@@ -77,16 +71,14 @@ module tb_msg_codec;
 
       expected_value = signmag_to_int(sign_i, mag_i);
       if (int'($signed(signmag_tc)) != expected_value) begin
-        $fatal(1, "signmag->tc value mismatch: sign=%0b mag=%0d got=%0d exp=%0d",
-               sign_i, mag_i, int'($signed(signmag_tc)), expected_value);
+        $fatal(1, "signmag->tc value mismatch: sign=%0b mag=%0d got=%0d exp=%0d", sign_i, mag_i,
+               int'($signed(signmag_tc)), expected_value);
       end
     end
   endtask
 
   // 检查 tc -> sign-magnitude：超出 MAG_MAX 时饱和。
-  task automatic check_tc_to_signmag(
-    input logic signed [VNU_TC_W-1:0] value_i
-  );
+  task automatic check_tc_to_signmag(input  logic signed [VNU_TC_W-1:0] value_i);
     logic [MSG_W-1:0] expected_msg;
     begin
       tc_in = value_i;
@@ -94,8 +86,8 @@ module tb_msg_codec;
 
       expected_msg = int_to_signmag_sat(int'($signed(value_i)));
       if (tc_msg != expected_msg) begin
-        $fatal(1, "tc->signmag value mismatch: in=%0d got=%b exp=%b",
-               $signed(value_i), tc_msg, expected_msg);
+        $fatal(1, "tc->signmag value mismatch: in=%0d got=%b exp=%b", $signed(value_i), tc_msg,
+               expected_msg);
       end
     end
   endtask
@@ -139,7 +131,7 @@ module tb_msg_codec;
       check_tc_to_signmag(-VNU_TC_W'(MAG_MAX + 1));
       check_tc_to_signmag(VNU_TC_W'(28));
       check_tc_to_signmag(-VNU_TC_W'(28));
-      check_tc_to_signmag($signed({1'b1, {(VNU_TC_W-1){1'b0}}}));
+      check_tc_to_signmag($signed({1'b1, {(VNU_TC_W - 1) {1'b0}}}));
     end
   endtask
 
