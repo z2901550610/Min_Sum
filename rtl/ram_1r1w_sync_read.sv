@@ -1,0 +1,67 @@
+`timescale 1ns / 1ps
+// Generic one-read/one-write synchronous RAM primitive.
+module ram_1r1w_sync_read #(
+    parameter int                 DATA_W        = 1,
+    parameter int                 DEPTH         = 2,
+    parameter int                 ADDR_W        = (DEPTH > 1) ? $clog2(DEPTH) : 1,
+    parameter string              INIT_FILE     = "",
+    /* verilator lint_off UNUSEDPARAM */
+    parameter string              RAM_STYLE     = "block",
+    /* verilator lint_on UNUSEDPARAM */
+    parameter bit                 INIT_TO_VALUE = 1'b0,
+    parameter bit                 RESET_MEM     = 1'b0,
+    parameter logic  [DATA_W-1:0] RESET_VALUE   = '0
+) (
+    input  logic              i_clk,
+    input  logic              i_rst_n,
+    input  logic              i_clear,
+    input  logic              i_we,
+    input  logic [ADDR_W-1:0] i_write_addr,
+    input  logic [DATA_W-1:0] i_wdata,
+    input  logic [ADDR_W-1:0] i_read_addr,
+    output logic [DATA_W-1:0] o_rdata,
+    output logic [DATA_W-1:0] o_debug_mem[0:DEPTH-1]
+);
+
+  (* ram_style = RAM_STYLE *) logic [DATA_W-1:0] mem[0:DEPTH-1];
+
+  always_comb begin
+    for (int addr = 0; addr < DEPTH; addr++) begin
+      o_debug_mem[addr] = mem[addr];
+    end
+  end
+
+  initial begin
+    o_rdata = RESET_VALUE;
+    if (INIT_FILE != "") begin
+      $readmemh(INIT_FILE, mem);
+    end else if (INIT_TO_VALUE) begin
+      for (int addr = 0; addr < DEPTH; addr++) begin
+        mem[addr] = RESET_VALUE;
+      end
+    end
+  end
+
+  always_ff @(posedge i_clk or negedge i_rst_n) begin
+    if (!i_rst_n) begin
+      o_rdata <= RESET_VALUE;
+      if (RESET_MEM) begin
+        for (int addr = 0; addr < DEPTH; addr++) begin
+          mem[addr] <= RESET_VALUE;
+        end
+      end
+    end else if (i_clear) begin
+      o_rdata <= RESET_VALUE;
+      if (RESET_MEM) begin
+        for (int addr = 0; addr < DEPTH; addr++) begin
+          mem[addr] <= RESET_VALUE;
+        end
+      end
+    end else begin
+      if (i_we) begin
+        mem[i_write_addr] <= i_wdata;
+      end
+      o_rdata <= mem[i_read_addr];
+    end
+  end
+endmodule

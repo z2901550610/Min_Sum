@@ -17,7 +17,8 @@ VECTOR_SVH := tb/generated/bike_demo_vectors.svh
 RAM_I_HEX := rtl/generated/ram_i0_entries_test.hex rtl/generated/ram_i0_counts_test.hex rtl/generated/ram_i1_entries_test.hex rtl/generated/ram_i1_counts_test.hex rtl/generated/ram_i0_entries_l1.hex rtl/generated/ram_i0_counts_l1.hex rtl/generated/ram_i1_entries_l1.hex rtl/generated/ram_i1_counts_l1.hex
 RAM_I_HEX_STAMP := rtl/generated/.ram_i_hex.stamp
 RTL_PKG := rtl/bike_pkg.sv
-RTL_CORE := rtl/decoder_top.sv rtl/ram_i.sv rtl/h_shift.sv rtl/msg_signmag_to_tc.sv rtl/msg_tc_to_signmag_sat.sv rtl/decoder_ctrl.sv rtl/ram_c.sv rtl/ram_m.sv rtl/ram_s.sv rtl/ram_syndrome.sv rtl/ram_t.sv rtl/cnu_a.sv rtl/cnu_b.sv rtl/vnu.sv
+RTL_PRIMS := rtl/ram_1r1w_sync_read.sv rtl/ram_1r1w_async_read.sv rtl/sign_bit_pack.sv
+RTL_CORE := $(RTL_PRIMS) rtl/edge_message_pipe.sv rtl/decoder_top.sv rtl/ram_i.sv rtl/msg_signmag_to_tc.sv rtl/msg_tc_to_signmag_sat.sv rtl/decoder_ctrl.sv rtl/ram_c.sv rtl/ram_m.sv rtl/ram_s.sv rtl/ram_syndrome.sv rtl/ram_t.sv rtl/cnu_a.sv rtl/cnu_b.sv rtl/vnu.sv
 RTL := $(RTL_PKG) $(RTL_CORE)
 MAINTAINED_SV := $(sort $(wildcard rtl/*.sv) $(wildcard tb/*.sv))
 BIKE_RANDOM_BASE_SEED ?= 1
@@ -40,12 +41,16 @@ test: test-unit test-integration
 test-unit: $(VECTOR_SVH) $(RAM_I_HEX_STAMP)
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_msg_codec rtl/bike_pkg.sv rtl/msg_signmag_to_tc.sv rtl/msg_tc_to_signmag_sat.sv tb/tb_msg_codec.sv
 	@$(SIM) ./obj_dir/Vtb_msg_codec +verilator+quiet
-	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_i rtl/bike_pkg.sv rtl/ram_i.sv tb/tb_ram_i.sv
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_i rtl/bike_pkg.sv rtl/ram_1r1w_sync_read.sv rtl/ram_1r1w_async_read.sv rtl/ram_i.sv tb/tb_ram_i.sv
 	@$(SIM) ./obj_dir/Vtb_ram_i +verilator+quiet
-	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_blocks rtl/bike_pkg.sv rtl/ram_c.sv rtl/ram_m.sv rtl/ram_s.sv rtl/ram_t.sv tb/tb_ram_blocks.sv
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_blocks rtl/bike_pkg.sv rtl/ram_1r1w_sync_read.sv rtl/ram_c.sv rtl/ram_m.sv rtl/ram_s.sv rtl/ram_t.sv tb/tb_ram_blocks.sv
 	@$(SIM) ./obj_dir/Vtb_ram_blocks +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_h_shift rtl/bike_pkg.sv rtl/h_shift.sv tb/tb_h_shift.sv
 	@$(SIM) ./obj_dir/Vtb_h_shift +verilator+quiet
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_decoder_ctrl rtl/bike_pkg.sv rtl/decoder_ctrl.sv tb/tb_decoder_ctrl.sv
+	@$(SIM) ./obj_dir/Vtb_decoder_ctrl +verilator+quiet
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_edge_message_pipe rtl/bike_pkg.sv rtl/sign_bit_pack.sv rtl/edge_message_pipe.sv tb/tb_edge_message_pipe.sv
+	@$(SIM) ./obj_dir/Vtb_edge_message_pipe +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_cnu_a rtl/bike_pkg.sv rtl/cnu_a.sv tb/tb_cnu_a.sv
 	@$(SIM) ./obj_dir/Vtb_cnu_a +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_cnu_b rtl/bike_pkg.sv rtl/cnu_b.sv tb/tb_cnu_b.sv

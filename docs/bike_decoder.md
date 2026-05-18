@@ -61,7 +61,7 @@ ram_i #(.INIT_HEX_STEM("rtl/generated/ram_i1")) u_ram_i1 (...);
 
 ## 模块划分
 
-- `decoder_ctrl` 负责解码控制、c2v/v2c 列上下文、RAM-M 乒乓 bank、列缓冲切换事件以及 done/success 状态管理。ITER 内部调度由固定 `SCHED_*` 状态表驱动，列 k 内部使用 `COL_K_STAGE_*` 表示 v2c 发射流水阶段。
+- `decoder_ctrl` 负责解码控制、c2v/v2c 列上下文、RAM-M 乒乓 bank、列缓冲切换事件以及 done 状态管理。ITER 内部调度由固定 `SCHED_*` 状态表驱动，列 k 内部使用 `COL_K_STAGE_*` 表示 v2c 发射流水阶段。
 - `decoder_top` 是解码器核心数据通路和结构互连。它实例化各编号 RAM 块、`decoder_ctrl`、`h_shift`、CNU/VNU 单元和消息编解码适配器；顶层逻辑覆盖 RAM 端口选择、RAM-I 行组 entry 处理、数据锁存和残差syndrome增量维护。
 - `vnu` 以 2's-complement 格式消费 c2v 并生成未饱和的 2's-complement v2c。符号-幅值转换在 VNU 输入/输出边界的外部 `msg_codec` 适配器中完成；RAM-T 和 VNU 缩放数据通路保持在 2's-complement 域内。
 - `ram_i`、`ram_m`、`ram_s`、`ram_t`、`ram_c` 均为论文风格的 RAM 原语。每个 RTL 文件对应一个编号 RAM 块。
@@ -73,9 +73,9 @@ ram_i #(.INIT_HEX_STEM("rtl/generated/ram_i1")) u_ram_i1 (...);
 - RAM-C 保存 syndrome 输入译码器的错误估计 bit，是一份适配 syndrome 输入语义的 `N` bit 存储，并提供串行读口用于导出最终估计。
 - 列 metadata 使用两个固定 slot：列 k 从 active slot 读取，列 k+1 从 RAM-I 单 entry 视图写入 fill slot。`o_col_k_meta_advance` 触发 active/fill slot 轮换，使列 k+1 成为新的列 k。
 - `decoder_ctrl` 遵循论文的 Fig.8 式单端口调度：每次迭代先填充并累加列 0，然后进入列重叠流水线——c2v 侧重建并累加列 `k+1` 的同时 v2c 侧更新列 `k`，最后排空 v2c 的最后一列，进入 `ITER_CHECK`。复用的 RAM-M 行通过 RAM word epoch 实现 `COMP_C2V_INIT` 语义。数据通路时序由固定调度脉冲和 metadata slot 轮换驱动。
-- RAM-I 在仿真启动时通过 `$readmemh` 从 hex 文件加载首列元数据。解码期间，活跃列的行/局部行/边索引元数据来自 RAM-I 的单 entry 读口。`h_shift` 为每个 RAM-I 块设置一个 entry 输入，为每个 lane 设置一个移位后的 entry 输出，数据通路通过 RAM-I 的单 entry 写端口将每个移位后的 entry 写入下一个 c2v 列。RAM-I shift writer 为每个目标 bank 保留一个 pending entry；多个移位 entry 指向同一 bank 时，writer 先写入一个 entry，并在后续周期写入 pending entry。列尾 count 在 pending entry 清空后提交，`decoder_ctrl` 通过 `i_ram_i_shift_ready` 暂停下一次 c2v 读发射。v2c 元数据独立缓冲，使 c2v 侧的 RAM-I 可以领先一列。`decoder_top` 通过 RAM-I 的单 entry 功能视图输出访问 RAM-I。项目级 RTL 命名约定定义在 [`docs/naming_conventions.md`](/Users/z2901550610/Documents/Min_Sum/docs/naming_conventions.md) 中。行组方案使用 `group_idx` 选择 row bank，`row_idx_group` 表示紧凑局部行号，`row_idx_global = B * row_idx_group + group_idx`。CNU/VNU 行地址调度由 RAM-I 元数据驱动。
+- RAM-I 在仿真启动时通过 `$readmemh` 从 hex 文件加载首列元数据。解码期间，c2v 侧按 `h_block` 和 entry 位置读取首列 entry，并在 `decoder_top` 中用 `row_idx_global = (base_row_idx_global + col_idx % R) % R` 组合得到活跃列的行地址。v2c 元数据独立缓冲，使 c2v 侧可以领先一列。`decoder_top` 通过 RAM-I 的单 entry 功能视图输出访问 RAM-I。项目级 RTL 命名约定定义在 [`docs/naming_conventions.md`](/Users/z2901550610/Documents/Min_Sum/docs/naming_conventions.md) 中。行组方案使用 `group_idx` 选择 row group，`row_idx_group` 表示紧凑局部行号，`row_idx_global = L * row_idx_group + group_idx`。CNU/VNU 行地址调度由 RAM-I 元数据驱动。
 - 静态首列元数据由 [`scripts/gen_qc_first_columns.py`](/Users/z2901550610/Documents/Min_Sum/scripts/gen_qc_first_columns.py) 离线生成，输出 hex 文件到 `rtl/generated/`。RAM-I 通过 `$readmemh` 在仿真启动时直接加载。
-- c2v 侧在读取 RAM-I 单 entry 视图时同步填充列 k+1 metadata slot，使得下一列的单 entry 移位写入不会干扰列 k 的元数据视图。
+- c2v 侧在读取 RAM-I 单 entry 视图时同步填充列 k+1 metadata slot，使列 k 的 v2c 消费和列 k+1 的 c2v 生产保持独立。
 - 设计边界：RTL 使用单级 VNU 缩放；灵活的消息存储选择、两级缩放、组大小重平衡属于扩展功能。
 
 ## 状态机详解
@@ -161,10 +161,10 @@ INIT 为所有变量列构建初始压缩 c2v 对（第一次迭代的输入）�
 
 | 微步骤 | 信号 | 功能 |
 |---|---|---|
-| `COL_K_STAGE_FIRST` | `o_vnu_prep_write`, `o_vnu_cnu_a` | 写入 VNU 硬判决，并发射 entry 0 的 v2c/CNU_A 更新 |
-| `COL_K_STAGE_ISSUE` | `o_vnu_cnu_a` | 连续读取 RAM-M、生成 v2c，并使能 CNU_A |
+| `COL_K_STAGE_FIRST` | `o_decision_write`, `o_v2c_emit_to_cnu_a` | 写入 VNU 硬判决，并发射 entry 0 的 v2c/CNU_A 更新 |
+| `COL_K_STAGE_ISSUE` | `o_v2c_emit_to_cnu_a` | 连续读取 RAM-M、生成 v2c，并使能 CNU_A |
 
-`COL_K_STAGE_FIRST` 和 `COL_K_STAGE_ISSUE` 每拍发射一个 v2c/CNU_A 更新。CNU_A 的输出延后一拍写入 RAM-M / RAM-S，因此稳定段可以在写回上一 entry 的同时发射下一 entry。列尾 issue 负责列切换，后一拍的 `o_vnu_write_next` 负责写回流水中的最后一个 CNU_A 结果。
+`COL_K_STAGE_FIRST` 和 `COL_K_STAGE_ISSUE` 每拍发射一个 v2c/CNU_A 更新。CNU_A 的输出延后一拍写入 RAM-M / RAM-S，因此稳定段可以在写回上一 entry 的同时发射下一 entry。列尾 issue 负责列切换，后一拍的 `o_cnu_a_writeback` 负责写回流水中的最后一个 CNU_A 结果。
 
 列尾 issue 的固定调度分流：
 
@@ -182,12 +182,12 @@ INIT 为所有变量列构建初始压缩 c2v 对（第一次迭代的输入）�
 
 `iter_check_pending` 置位后的下一个时钟周期执行。迭代计数器 `o_iter_count` 递增。
 
-- `i_finish_decode = 1`（残差为零或达到最大迭代次数）：跳转到 **CTRL_DONE**，输出 `o_done = 1`，锁存 `o_success = i_decode_success`。
-- `i_finish_decode = 0`：交换 RAM-M pair（`o_m_read_pair` 翻转），复位所有子状态和列指针，进入 `SCHED_FILL_K` 开始下一轮迭代。
+- `i_finish_decode = 1`：跳转到 **CTRL_DONE**，输出 `o_done = 1`。
+- `i_finish_decode = 0`：交换 RAM-M pair（`o_ram_m_read_pair_sel` 翻转），复位所有子状态和列指针，进入 `SCHED_FILL_K` 开始下一轮迭代。
 
 #### 4. CTRL_DONE — 解码完成
 
-输出 `o_done = 1`，锁存 `o_success` 和 `o_iter_count`。等待新一轮 `i_start`，收到后回到 **CTRL_INIT** 开始新的解码。
+输出 `o_done = 1`，保持 `o_iter_count`。等待新一轮 `i_start`，收到后回到 **CTRL_INIT** 开始新的解码。
 
 ### ITER 内部流水线时空示意
 

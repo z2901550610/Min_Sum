@@ -10,12 +10,24 @@ module ram_c
     output logic             o_rdata
 );
 
-  (* ram_style = "block" *) logic mem[0:N-1];
+  /* verilator lint_off UNUSEDSIGNAL */
+  logic debug_mem[0:N-1];
+  /* verilator lint_on UNUSEDSIGNAL */
 
-  always_ff @(posedge i_clk) begin
-    if (i_we) begin
-      mem[i_col_idx] <= i_wdata;
-    end
-    o_rdata <= mem[i_col_idx];
-  end
+  ram_1r1w_sync_read #(
+      .DATA_W(1),
+      .DEPTH(N),
+      .ADDR_W(COL_W),
+      .RAM_STYLE("block")
+  ) u_mem (
+      .i_clk(i_clk),
+      .i_rst_n(1'b1),
+      .i_clear(1'b0),
+      .i_we(i_we),
+      .i_write_addr(i_col_idx),
+      .i_wdata(i_wdata),
+      .i_read_addr(i_col_idx),
+      .o_rdata(o_rdata),
+      .o_debug_mem(debug_mem)
+  );
 endmodule

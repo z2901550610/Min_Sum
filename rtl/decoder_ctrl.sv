@@ -7,10 +7,8 @@ module decoder_ctrl
     input  logic                   i_rst_n,
     input  logic                   i_start,
     input  logic                   i_finish_decode,
-    input  logic                   i_decode_success,
     input  logic                   i_c2v_entry_pos_last,
     input  logic                   i_v2c_entry_pos_last,
-    input  logic                   i_ram_i_shift_ready,
     output logic [DEC_STATE_W-1:0] o_state,
     output logic [      COL_W-1:0] o_work_col_idx,
     output logic [ENTRY_POS_W-1:0] o_work_entry_pos,
@@ -19,22 +17,21 @@ module decoder_ctrl
     output logic [ENTRY_POS_W-1:0] o_c2v_entry_pos,
     output logic [ENTRY_POS_W-1:0] o_v2c_entry_pos,
     output logic [ENTRY_POS_W-1:0] o_active_entry_pos,
-    output logic                   o_m_read_pair,
-    output logic                   o_m_write_pair,
+    output logic                   o_ram_m_read_pair_sel,
+    output logic                   o_ram_m_write_pair_sel,
     output logic                   o_c2v_read,
     output logic                   o_v2c_read,
     output logic                   o_c2v_write_t,
     output logic                   o_vnu_accum_t,
-    output logic                   o_vnu_prep_write,
-    output logic                   o_vnu_cnu_a,
-    output logic                   o_vnu_write_next,
+    output logic                   o_decision_write,
+    output logic                   o_v2c_emit_to_cnu_a,
+    output logic                   o_cnu_a_writeback,
     output logic                   o_iter_check,
     output logic                   o_col_k_meta_advance,
     output logic                   o_c2v_pipe_valid,
     output logic                   o_v2c_pipe_valid,
     output logic                   o_c2v_v2c_overlap_seen,
     output logic                   o_done,
-    output logic                   o_success,
     output logic [     ITER_W-1:0] o_iter_count
 );
 
@@ -91,10 +88,9 @@ module decoder_ctrl
   logic [      COL_W-1:0] v2c_col_idx_next;
   logic [ENTRY_POS_W-1:0] c2v_entry_pos_next;
   logic [ENTRY_POS_W-1:0] v2c_entry_pos_next;
-  logic                   m_read_pair_next;
+  logic                   ram_m_read_pair_sel_next;
   logic                   c2v_v2c_overlap_seen_next;
   logic                   done_next;
-  logic                   success_next;
   logic [     ITER_W-1:0] iter_count_next;
 
   logic                   col_kp1_c2v_issue_fire;
@@ -115,7 +111,7 @@ module decoder_ctrl
   endfunction
 
   assign next_iter_count = o_iter_count + 1'b1;
-  assign o_m_write_pair = ~o_m_read_pair;
+  assign o_ram_m_write_pair_sel = ~o_ram_m_read_pair_sel;
 
   assign schedule_has_col_kp1 = (sched_state == SCHED_FILL_K) || (sched_state == SCHED_K_KP1);
   assign schedule_has_col_k =
@@ -124,8 +120,7 @@ module decoder_ctrl
     (sched_state == SCHED_DRAIN_K);
 
   assign col_kp1_c2v_issue_fire =
-    (ctrl_state == CTRL_ITER) && schedule_has_col_kp1 &&
-    !iter_check_pending && i_ram_i_shift_ready;
+    (ctrl_state == CTRL_ITER) && schedule_has_col_kp1 && !iter_check_pending;
 
   assign col_k_v2c_issue_fire =
     (ctrl_state == CTRL_ITER) && schedule_has_col_k && !iter_check_pending &&
@@ -138,15 +133,15 @@ module decoder_ctrl
   assign o_c2v_write_t = (ctrl_state == CTRL_ITER) && col_kp1_c2v_valid_d2 && !iter_check_pending;
 
   assign o_vnu_accum_t = o_c2v_write_t;
-  assign o_vnu_prep_write =
+  assign o_decision_write =
     (ctrl_state == CTRL_ITER) && schedule_has_col_k && !iter_check_pending &&
     (col_k_stage == COL_K_STAGE_FIRST);
-  assign o_vnu_cnu_a = (ctrl_state == CTRL_ITER) && col_k_v2c_valid_d1 && !iter_check_pending;
-  assign o_vnu_write_next = (ctrl_state == CTRL_ITER) && col_k_v2c_valid_d2 && !iter_check_pending;
+  assign o_v2c_emit_to_cnu_a = (ctrl_state == CTRL_ITER) && col_k_v2c_valid_d1 && !iter_check_pending;
+  assign o_cnu_a_writeback = (ctrl_state == CTRL_ITER) && col_k_v2c_valid_d2 && !iter_check_pending;
   assign o_iter_check = (ctrl_state == CTRL_ITER) && iter_check_pending;
 
   assign col_kp1_done_fire = o_c2v_write_t && col_kp1_last_d2;
-  assign col_k_last_write_fire = o_vnu_write_next && col_k_last_d2;
+  assign col_k_last_write_fire = o_cnu_a_writeback && col_k_last_d2;
 
   assign o_col_k_meta_advance =
     (col_kp1_done_fire && (sched_state == SCHED_FILL_K)) ||
@@ -155,7 +150,7 @@ module decoder_ctrl
       ((sched_state == SCHED_K_KP1) && col_kp1_done_fire)));
 
   assign o_c2v_pipe_valid = o_c2v_read || col_kp1_c2v_valid_d1 || o_c2v_write_t;
-  assign o_v2c_pipe_valid = o_vnu_prep_write || o_v2c_read || o_vnu_cnu_a || o_vnu_write_next;
+  assign o_v2c_pipe_valid = o_decision_write || o_v2c_read || o_v2c_emit_to_cnu_a || o_cnu_a_writeback;
 
   assign o_work_col_idx = o_v2c_pipe_valid ? o_v2c_col_idx : o_c2v_col_idx;
   assign o_work_entry_pos = o_v2c_pipe_valid ? o_v2c_entry_pos : o_c2v_entry_pos;
@@ -213,16 +208,14 @@ module decoder_ctrl
     v2c_col_idx_next = o_v2c_col_idx;
     c2v_entry_pos_next = o_c2v_entry_pos;
     v2c_entry_pos_next = o_v2c_entry_pos;
-    m_read_pair_next = o_m_read_pair;
+    ram_m_read_pair_sel_next = o_ram_m_read_pair_sel;
     c2v_v2c_overlap_seen_next = o_c2v_v2c_overlap_seen;
     done_next = o_done;
-    success_next = o_success;
     iter_count_next = o_iter_count;
 
     case (ctrl_state)
       CTRL_WAIT: begin
         done_next = 1'b0;
-        success_next = 1'b0;
         if (i_start) begin
           ctrl_state_next = CTRL_ITER;
           iter_check_pending_next = 1'b0;
@@ -244,7 +237,7 @@ module decoder_ctrl
           v2c_col_idx_next = '0;
           c2v_entry_pos_next = '0;
           v2c_entry_pos_next = '0;
-          m_read_pair_next = 1'b0;
+          ram_m_read_pair_sel_next = 1'b0;
           c2v_v2c_overlap_seen_next = 1'b0;
           iter_count_next = '0;
         end
@@ -271,13 +264,12 @@ module decoder_ctrl
             ctrl_state_next = CTRL_DONE;
             sched_state_next = SCHED_FILL_K;
             done_next = 1'b1;
-            success_next = i_decode_success;
           end else begin
-            m_read_pair_next   = o_m_write_pair;
-            sched_state_next   = SCHED_FILL_K;
-            col_k_stage_next   = COL_K_STAGE_FIRST;
-            c2v_col_idx_next   = '0;
-            v2c_col_idx_next   = '0;
+            ram_m_read_pair_sel_next = o_ram_m_write_pair_sel;
+            sched_state_next = SCHED_FILL_K;
+            col_k_stage_next = COL_K_STAGE_FIRST;
+            c2v_col_idx_next = '0;
+            v2c_col_idx_next = '0;
             c2v_entry_pos_next = '0;
             v2c_entry_pos_next = '0;
           end
@@ -388,10 +380,9 @@ module decoder_ctrl
           v2c_col_idx_next = '0;
           c2v_entry_pos_next = '0;
           v2c_entry_pos_next = '0;
-          m_read_pair_next = 1'b0;
+          ram_m_read_pair_sel_next = 1'b0;
           c2v_v2c_overlap_seen_next = 1'b0;
           done_next = 1'b0;
-          success_next = 1'b0;
           iter_count_next = '0;
         end
       end
@@ -425,10 +416,9 @@ module decoder_ctrl
       o_v2c_col_idx <= '0;
       o_c2v_entry_pos <= '0;
       o_v2c_entry_pos <= '0;
-      o_m_read_pair <= 1'b0;
+      o_ram_m_read_pair_sel <= 1'b0;
       o_c2v_v2c_overlap_seen <= 1'b0;
       o_done <= 1'b0;
-      o_success <= 1'b0;
       o_iter_count <= '0;
     end else begin
       ctrl_state <= ctrl_state_next;
@@ -451,10 +441,9 @@ module decoder_ctrl
       o_v2c_col_idx <= v2c_col_idx_next;
       o_c2v_entry_pos <= c2v_entry_pos_next;
       o_v2c_entry_pos <= v2c_entry_pos_next;
-      o_m_read_pair <= m_read_pair_next;
+      o_ram_m_read_pair_sel <= ram_m_read_pair_sel_next;
       o_c2v_v2c_overlap_seen <= c2v_v2c_overlap_seen_next;
       o_done <= done_next;
-      o_success <= success_next;
       o_iter_count <= iter_count_next;
     end
   end

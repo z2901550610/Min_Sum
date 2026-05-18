@@ -9,7 +9,7 @@ package bike_pkg;
 `ifndef BIKE_TOY_PARAMS
   localparam int R = 11677;
   localparam int W = 71;
-  localparam int I_MAX = 6;
+  localparam int I_MAX = 7;
   localparam int C_VAL = 7;
   localparam int ALPHA_SHIFT_0 = 4;
   localparam int ALPHA_SHIFT_1 = 0;
@@ -24,7 +24,6 @@ package bike_pkg;
 
   localparam int N = N0 * R;
   localparam int L = 2;
-  localparam int B = 2;
   localparam int D = 4;
 `ifndef BIKE_TOY_PARAMS
   localparam int RAM_LANE_DEPTH = 43;
@@ -34,7 +33,7 @@ package bike_pkg;
   localparam int ALPHA_FRAC_W = 6;  //alpha 用6位小数表示
   localparam int MAG_MAX = (1 << D) - 1;
   localparam int MSG_W = D + 1;
-  localparam int ROW_SEG_SIZE = (R + B - 1) / B;
+  localparam int ROW_SEG_SIZE = (R + L - 1) / L;
   localparam int ROW_GROUP_DEPTH = ROW_SEG_SIZE;
   localparam int VNU_TC_W = MSG_W + ((W > 1) ? $clog2(W + 1) : 1);
   localparam int COL_W = (N > 1) ? $clog2(N) : 1;
@@ -46,29 +45,23 @@ package bike_pkg;
   // "row_idx_global" = global row index (0 .. R-1).
   // "lane_idx" = physical processing lane (0 .. L-1).
   // "row_idx_group" = row index within a virtual row bank.
-  // "group_idx" = virtual row-bank index (0 .. B-1).
+  // "group_idx" = virtual row-bank index (0 .. L-1).
   // "group_count" = number of valid entries in a group's list.
   localparam int ONE_IDX_W = (W > 1) ? $clog2(W) : 1;
   localparam int ROW_IDX_W = (R > 1) ? $clog2(R) : 1;
   localparam int LANE_IDX_W = (L > 1) ? $clog2(L) : 1;
-  localparam int GROUP_IDX_W = (B > 1) ? $clog2(B) : 1;
+  localparam int GROUP_IDX_W = (L > 1) ? $clog2(L) : 1;
   localparam int ROW_GROUP_W = (ROW_GROUP_DEPTH > 1) ? $clog2(ROW_GROUP_DEPTH) : 1;
   localparam int ENTRY_POS_W = (RAM_LANE_DEPTH > 1) ? $clog2(RAM_LANE_DEPTH) : 1;
   localparam int GROUP_COUNT_W = (RAM_LANE_DEPTH > 1) ? $clog2(RAM_LANE_DEPTH + 1) : 1;
   localparam int ITER_W = $clog2(I_MAX + 1);
-  localparam int HIST_IDX_W = (I_MAX > 1) ? $clog2(I_MAX) : 1;
   localparam int S_PACK_W = 8;
   localparam int S_WORDS_PER_COL = (RAM_LANE_DEPTH + S_PACK_W - 1) / S_PACK_W;
   localparam int S_WORD_DEPTH = N * S_WORDS_PER_COL;
   localparam int S_WORD_ADDR_W = (S_WORD_DEPTH > 1) ? $clog2(S_WORD_DEPTH) : 1;
   localparam int S_PACK_IDX_W = (S_PACK_W > 1) ? $clog2(S_PACK_W) : 1;
-  localparam int M_BANKS = 2 * B;
+  localparam int M_BANKS = 2 * L;
   localparam int M_BANK_IDX_W = (M_BANKS > 1) ? $clog2(M_BANKS) : 1;
-  localparam int SHIFT_PENDING_DEPTH = L + 2;
-  localparam int SHIFT_PENDING_IDX_W = (SHIFT_PENDING_DEPTH > 1) ? $clog2(SHIFT_PENDING_DEPTH) : 1;
-  localparam int SHIFT_PENDING_COUNT_W = (SHIFT_PENDING_DEPTH > 1) ? $clog2(
-      SHIFT_PENDING_DEPTH + 1
-  ) : 1;
 
   localparam int DEC_STATE_W = 4;
   localparam logic [DEC_STATE_W-1:0] DEC_WAIT_START = 4'd0;

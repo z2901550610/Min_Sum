@@ -1,0 +1,238 @@
+`timescale 1ns / 1ps
+
+module tb_edge_message_pipe;
+  import bike_pkg::*;
+
+  logic                            clk;
+  logic                            rst_n;
+  logic                            start;
+  logic                            c2v_read_d1;
+  logic                            c2v_write_t;
+  logic                            v2c_emit_to_cnu_a;
+  logic                            vnu_accum_t;
+  logic                            cnu_a_writeback;
+  logic        [        COL_W-1:0] c2v_col_idx;
+  logic        [        COL_W-1:0] c2v_read_col_d1;
+  logic                            v2c_read;
+  logic        [  ENTRY_POS_W-1:0] c2v_entry_pos;
+  logic        [  ENTRY_POS_W-1:0] c2v_read_entry_pos_d1;
+  logic        [  ENTRY_POS_W-1:0] v2c_entry_pos;
+  logic        [  ENTRY_POS_W-1:0] v2c_read_entry_pos_d1;
+  logic        [  ENTRY_POS_W-1:0] c2v_latched_entry_pos;
+  logic                            c2v_latched_entry_pos_last;
+  logic        [        COL_W-1:0] v2c_m_latched_col;
+  logic        [  ENTRY_POS_W-1:0] v2c_m_latched_entry_pos;
+  logic                            v2c_m_latched_group_valid[0:L-1];
+  logic                            c2v_latched_group_valid[0:L-1];
+  logic        [GROUP_COUNT_W-1:0] col_meta_slot_count;
+  logic                            cnu_a_valid[0:L-1];
+  logic                            cnu_a_sign[0:L-1];
+  logic signed [        MSG_W-1:0] c2v_tc[0:L-1];
+  logic        [     S_PACK_W-1:0] s_word_rdata[0:L-1];
+  logic                            t_rvalid[0:L-1];
+  logic        [        MSG_W-1:0] t_rdata[0:L-1];
+  /* verilator lint_off UNUSEDSIGNAL */
+  logic                            s_rdata[0:L-1];
+  /* verilator lint_on UNUSEDSIGNAL */
+  logic                            s_word_we[0:L-1];
+  logic        [S_WORD_ADDR_W-1:0] s_read_word_addr[0:L-1];
+  logic        [S_WORD_ADDR_W-1:0] s_write_word_addr[0:L-1];
+  logic        [     S_PACK_W-1:0] s_word_wdata[0:L-1];
+  logic                            t_push[0:L-1];
+  logic                            t_pop[0:L-1];
+  logic                            t_valid[0:L-1];
+  logic        [  ENTRY_POS_W-1:0] t_write_entry_idx;
+  logic        [  ENTRY_POS_W-1:0] t_read_entry_idx;
+  logic        [        MSG_W-1:0] t_wdata[0:L-1];
+  logic                            vnu_col_start;
+  logic                            vnu_col_end;
+  logic                            vnu_accum_valid[0:L-1];
+  logic                            vnu_prev_c2v_valid[0:L-1];
+  logic signed [        MSG_W-1:0] vnu_prev_c2v[0:L-1];
+
+  edge_message_pipe dut (
+      .i_clk(clk),
+      .i_rst_n(rst_n),
+      .i_start(start),
+      .i_c2v_read_d1(c2v_read_d1),
+      .i_c2v_write_t(c2v_write_t),
+      .i_v2c_emit_to_cnu_a(v2c_emit_to_cnu_a),
+      .i_vnu_accum_t(vnu_accum_t),
+      .i_cnu_a_writeback(cnu_a_writeback),
+      .i_c2v_col_idx(c2v_col_idx),
+      .i_c2v_read_col_d1(c2v_read_col_d1),
+      .i_v2c_read(v2c_read),
+      .i_c2v_entry_pos(c2v_entry_pos),
+      .i_c2v_read_entry_pos_d1(c2v_read_entry_pos_d1),
+      .i_v2c_entry_pos(v2c_entry_pos),
+      .i_v2c_read_entry_pos_d1(v2c_read_entry_pos_d1),
+      .i_c2v_latched_entry_pos(c2v_latched_entry_pos),
+      .i_c2v_latched_entry_pos_last(c2v_latched_entry_pos_last),
+      .i_v2c_m_latched_col(v2c_m_latched_col),
+      .i_v2c_m_latched_entry_pos(v2c_m_latched_entry_pos),
+      .i_v2c_m_latched_group_valid(v2c_m_latched_group_valid),
+      .i_c2v_latched_group_valid(c2v_latched_group_valid),
+      .i_col_meta_slot_count(col_meta_slot_count),
+      .i_cnu_a_valid(cnu_a_valid),
+      .i_cnu_a_sign(cnu_a_sign),
+      .i_c2v_tc(c2v_tc),
+      .i_s_word_rdata(s_word_rdata),
+      .i_t_rvalid(t_rvalid),
+      .i_t_rdata(t_rdata),
+      .o_s_rdata(s_rdata),
+      .o_s_word_we(s_word_we),
+      .o_s_read_word_addr(s_read_word_addr),
+      .o_s_write_word_addr(s_write_word_addr),
+      .o_s_word_wdata(s_word_wdata),
+      .o_t_push(t_push),
+      .o_t_pop(t_pop),
+      .o_t_valid(t_valid),
+      .o_t_write_entry_idx(t_write_entry_idx),
+      .o_t_read_entry_idx(t_read_entry_idx),
+      .o_t_wdata(t_wdata),
+      .o_vnu_col_start(vnu_col_start),
+      .o_vnu_col_end(vnu_col_end),
+      .o_vnu_accum_valid(vnu_accum_valid),
+      .o_vnu_prev_c2v_valid(vnu_prev_c2v_valid),
+      .o_vnu_prev_c2v(vnu_prev_c2v)
+  );
+
+  initial clk = 1'b0;
+  always #5 clk = ~clk;
+
+  function automatic logic [S_WORD_ADDR_W-1:0] expected_s_word_addr(input int col_idx,
+                                                                    input int entry_idx);
+    begin
+      expected_s_word_addr = S_WORD_ADDR_W'(col_idx * S_WORDS_PER_COL + entry_idx / S_PACK_W);
+    end
+  endfunction
+
+  task automatic drive_idle;
+    begin
+      start = 1'b0;
+      c2v_read_d1 = 1'b0;
+      c2v_write_t = 1'b0;
+      v2c_emit_to_cnu_a = 1'b0;
+      vnu_accum_t = 1'b0;
+      cnu_a_writeback = 1'b0;
+      c2v_col_idx = '0;
+      c2v_read_col_d1 = '0;
+      v2c_read = 1'b0;
+      c2v_entry_pos = '0;
+      c2v_read_entry_pos_d1 = '0;
+      v2c_entry_pos = '0;
+      v2c_read_entry_pos_d1 = '0;
+      c2v_latched_entry_pos = '0;
+      c2v_latched_entry_pos_last = 1'b0;
+      v2c_m_latched_col = '0;
+      v2c_m_latched_entry_pos = '0;
+      col_meta_slot_count = '0;
+      for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
+        v2c_m_latched_group_valid[lane_idx] = 1'b0;
+        c2v_latched_group_valid[lane_idx] = 1'b0;
+        cnu_a_valid[lane_idx] = 1'b0;
+        cnu_a_sign[lane_idx] = 1'b0;
+        c2v_tc[lane_idx] = '0;
+        s_word_rdata[lane_idx] = '0;
+        t_rvalid[lane_idx] = 1'b0;
+        t_rdata[lane_idx] = '0;
+      end
+    end
+  endtask
+
+  initial begin
+    drive_idle();
+    rst_n = 1'b0;
+    repeat (2) @(posedge clk);
+    rst_n = 1'b1;
+    @(posedge clk);
+
+    c2v_col_idx   = COL_W'(2);
+    c2v_entry_pos = ENTRY_POS_W'(1);
+    #1;
+    if (s_read_word_addr[0] != expected_s_word_addr(2, 1)) begin
+      $fatal(1, "RAM-S read address did not use live c2v column/entry");
+    end
+
+    c2v_read_d1 = 1'b1;
+    c2v_read_col_d1 = COL_W'(3);
+    c2v_read_entry_pos_d1 = ENTRY_POS_W'(0);
+    #1;
+    if (s_read_word_addr[0] != expected_s_word_addr(3, 0)) begin
+      $fatal(1, "RAM-S read address did not use d1 c2v column/entry");
+    end
+
+    c2v_latched_entry_pos = ENTRY_POS_W'(1);
+    c2v_latched_entry_pos_last = 1'b1;
+    c2v_latched_group_valid[0] = 1'b1;
+    c2v_latched_group_valid[1] = 1'b0;
+    c2v_tc[0] = MSG_W'(5);
+    c2v_tc[1] = MSG_W'(3);
+    c2v_write_t = 1'b1;
+    vnu_accum_t = 1'b1;
+    #1;
+    if (!(t_push[0] && t_push[1])) $fatal(1, "RAM-T push should be asserted for all lanes");
+    if (!(t_valid[0] && !t_valid[1])) $fatal(1, "RAM-T valid sideband mismatch");
+    if (t_write_entry_idx != ENTRY_POS_W'(1)) $fatal(1, "RAM-T write entry mismatch");
+    if (t_wdata[0] != MSG_W'(5)) $fatal(1, "RAM-T write data mismatch");
+    if (!(vnu_col_end && !vnu_col_start)) $fatal(1, "VNU column end pulse mismatch");
+    if (!(vnu_accum_valid[0] && !vnu_accum_valid[1])) $fatal(1, "VNU accum valid mismatch");
+
+    c2v_latched_entry_pos = '0;
+    c2v_latched_entry_pos_last = 1'b0;
+    #1;
+    if (!(vnu_col_start && !vnu_col_end)) $fatal(1, "VNU column start pulse mismatch");
+
+    c2v_write_t = 1'b0;
+    vnu_accum_t = 1'b0;
+    v2c_read = 1'b1;
+    v2c_entry_pos = ENTRY_POS_W'(1);
+    v2c_read_entry_pos_d1 = '0;
+    #1;
+    if (t_read_entry_idx != ENTRY_POS_W'(1)) $fatal(1, "RAM-T read entry should use v2c issue");
+
+    v2c_read = 1'b0;
+    #1;
+    if (t_read_entry_idx != '0) $fatal(1, "RAM-T read entry should use v2c d1 fallback");
+
+    v2c_emit_to_cnu_a = 1'b1;
+    t_rvalid[0] = 1'b1;
+    t_rvalid[1] = 1'b0;
+    t_rdata[0] = MSG_W'(7);
+    t_rdata[1] = MSG_W'(4);
+    #1;
+    if (!(t_pop[0] && t_pop[1])) $fatal(1, "RAM-T pop should be asserted for all lanes");
+    if (!(vnu_prev_c2v_valid[0] && !vnu_prev_c2v_valid[1])) begin
+      $fatal(1, "VNU previous-c2v valid mismatch");
+    end
+    if (vnu_prev_c2v[0] != $signed(MSG_W'(7))) $fatal(1, "VNU previous-c2v data mismatch");
+
+    v2c_emit_to_cnu_a = 1'b0;
+    cnu_a_writeback = 1'b1;
+    v2c_m_latched_col = COL_W'(5);
+    v2c_m_latched_entry_pos = ENTRY_POS_W'(1);
+    col_meta_slot_count = GROUP_COUNT_W'(2);
+    v2c_m_latched_group_valid[0] = 1'b1;
+    v2c_m_latched_group_valid[1] = 1'b0;
+    cnu_a_valid[0] = 1'b1;
+    cnu_a_valid[1] = 1'b1;
+    cnu_a_sign[0] = 1'b1;
+    cnu_a_sign[1] = 1'b1;
+    #1;
+    if (!(s_word_we[0] && s_word_we[1])) $fatal(1, "RAM-S write enable mismatch");
+    if (s_write_word_addr[0] != expected_s_word_addr(5, 1))
+      $fatal(1, "RAM-S write address mismatch");
+    if (s_write_word_addr[1] != expected_s_word_addr(5, 1))
+      $fatal(1, "RAM-S invalid-lane flush address mismatch");
+    if (s_word_wdata[0][1] != 1'b1) $fatal(1, "RAM-S packed sign bit mismatch");
+    if (s_word_wdata[1] != '0) $fatal(1, "RAM-S invalid-lane flush data mismatch");
+
+    start = 1'b1;
+    @(posedge clk);
+    start = 1'b0;
+    @(posedge clk);
+
+    $display("tb_edge_message_pipe PASS");
+    $finish;
+  end
+endmodule

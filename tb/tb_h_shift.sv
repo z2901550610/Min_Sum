@@ -10,7 +10,7 @@ module tb_h_shift;
 
   localparam int ODD_R = 9;
   localparam int ODD_ROW_IDX_W = (ODD_R > 1) ? $clog2(ODD_R) : 1;
-  localparam int ODD_ROW_GROUP_DEPTH = (ODD_R + B - 1) / B;
+  localparam int ODD_ROW_GROUP_DEPTH = (ODD_R + L - 1) / L;
   localparam int ODD_ROW_GROUP_W = (ODD_ROW_GROUP_DEPTH > 1) ? $clog2(ODD_ROW_GROUP_DEPTH) : 1;
 
   logic [    GROUP_IDX_W-1:0] odd_group_idx_in[0:L-1];
@@ -21,7 +21,6 @@ module tb_h_shift;
   h_shift #(
       .R(R),
       .L(L),
-      .B(B),
       .ROW_IDX_W(ROW_IDX_W),
       .GROUP_IDX_W(GROUP_IDX_W),
       .ROW_GROUP_DEPTH(ROW_GROUP_DEPTH),
@@ -36,7 +35,6 @@ module tb_h_shift;
   h_shift #(
       .R(ODD_R),
       .L(L),
-      .B(B),
       .ROW_IDX_W(ODD_ROW_IDX_W),
       .GROUP_IDX_W(GROUP_IDX_W),
       .ROW_GROUP_DEPTH(ODD_ROW_GROUP_DEPTH),
@@ -50,7 +48,7 @@ module tb_h_shift;
 
   function automatic int row_global_from_group(input int group_idx_i, input int row_idx_group_i);
     begin
-      row_global_from_group = (row_idx_group_i * B) + group_idx_i;
+      row_global_from_group = (row_idx_group_i * L) + group_idx_i;
     end
   endfunction
 
@@ -65,7 +63,7 @@ module tb_h_shift;
     int next_row_global;
     begin
       next_row_global = shifted_row_global(row_global_from_group(group_idx_i, row_idx_group_i));
-      expected_target_idx = GROUP_IDX_W'(next_row_global % B);
+      expected_target_idx = GROUP_IDX_W'(next_row_global % L);
     end
   endfunction
 
@@ -74,7 +72,7 @@ module tb_h_shift;
     int next_row_global;
     begin
       next_row_global = shifted_row_global(row_global_from_group(group_idx_i, row_idx_group_i));
-      expected_row_idx_group = ROW_GROUP_W'(next_row_global / B);
+      expected_row_idx_group = ROW_GROUP_W'(next_row_global / L);
     end
   endfunction
 

@@ -25,7 +25,7 @@ module ram_t
 `endif
 );
 
-  (* ram_style = "distributed" *) logic [MSG_W-1:0] mem[0:RAM_LANE_DEPTH-1];
+  logic [MSG_W-1:0] debug_words[0:RAM_LANE_DEPTH-1];
   logic             valid_mem[0:RAM_LANE_DEPTH-1];
 `ifdef BIKE_SIM_DEBUG
   logic [GROUP_COUNT_W-1:0] valid_count;
@@ -36,18 +36,39 @@ module ram_t
 `ifdef BIKE_SIM_DEBUG
   always_comb begin
     for (int entry_pos = 0; entry_pos < RAM_LANE_DEPTH; entry_pos++) begin
-      o_debug_mem[entry_pos] = mem[entry_pos];
+      o_debug_mem[entry_pos] = debug_words[entry_pos];
     end
   end
 `endif
 
+  ram_1r1w_sync_read #(
+      .DATA_W(MSG_W),
+      .DEPTH(RAM_LANE_DEPTH),
+      .ADDR_W(ENTRY_POS_W),
+      .RAM_STYLE("distributed"),
+`ifdef BIKE_SIM_DEBUG
+      .RESET_MEM(1'b1),
+`else
+      .RESET_MEM(1'b0),
+`endif
+      .RESET_VALUE('0)
+  ) u_mem (
+      .i_clk(i_clk),
+      .i_rst_n(i_rst_n),
+      .i_clear(i_clear),
+      .i_we(i_push),
+      .i_write_addr(i_write_entry_idx),
+      .i_wdata(i_wdata),
+      .i_read_addr(i_read_entry_idx),
+      .o_rdata(o_rdata),
+      .o_debug_mem(debug_words)
+  );
+
 `ifdef BIKE_SIM_DEBUG
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n || i_clear) begin
-      o_rdata <= '0;
       o_valid <= 1'b0;
       for (int entry_pos = 0; entry_pos < RAM_LANE_DEPTH; entry_pos++) begin
-        mem[entry_pos] <= '0;
         valid_mem[entry_pos] <= 1'b0;
       end
     end else begin
@@ -55,21 +76,12 @@ module ram_t
         valid_mem[i_read_entry_idx] <= 1'b0;
       end
       if (i_push) begin
-        mem[i_write_entry_idx] <= i_wdata;
         valid_mem[i_write_entry_idx] <= i_valid;
       end
-      o_rdata <= mem[i_read_entry_idx];
       o_valid <= valid_mem[i_read_entry_idx];
     end
   end
 `else
-  always_ff @(posedge i_clk) begin
-    if (i_rst_n && !i_clear && i_push) begin
-      mem[i_write_entry_idx] <= i_wdata;
-    end
-    o_rdata <= mem[i_read_entry_idx];
-  end
-
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n || i_clear) begin
       o_valid <= 1'b0;

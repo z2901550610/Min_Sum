@@ -32,8 +32,8 @@ group。很多模块只处理其中一个 group，因此端口名必须清楚区
 应使用 `ptr`（pointer）后缀。例如：
 
 - `ram_i_count` — 有效条目数（正确）
-- `ram_i_shift_write_ptr` — 移位写回的递增指针（正确）
-- `ram_i_shift_write_count` — 易与 list cardinality 混淆（不推荐）
+- `ram_i_read_ptr` — RAM-I entry 读取游标（正确）
+- `ram_i_read_count` — 易与 list cardinality 混淆（不推荐）
 
 ### `_global` / `_idx_group` 后缀使用规则
 
@@ -184,8 +184,8 @@ RAM-M 使用双 pair 乒乓结构，相关命名约定：
 
 | 名称 | 含义 |
 | --- | --- |
-| `m_read_pair` | 当前迭代读取的 RAM-M pair 编号（0 或 1） |
-| `m_write_pair` | 当前迭代写入的 RAM-M pair 编号（= ~m_read_pair） |
+| `ram_m_read_pair_sel` | 当前迭代读取的 RAM-M pair 编号（0 或 1） |
+| `ram_m_write_pair_sel` | 当前迭代写入的 RAM-M pair 编号（= ~ram_m_read_pair_sel） |
 | `m_pair_epoch` | 每个 pair 的"世代"标记位，写入时翻转，用于区分新旧数据 |
 | `m_row_valid` | 某行是否已被当前 pair 写入过有效数据 |
 | `m_row_epoch` | 某行的 epoch 值，与 `m_pair_epoch` 比较判断数据是否属于当前迭代 |
@@ -205,7 +205,7 @@ c2v/v2c 列交叠调度中，列元数据在两侧之间传递，相关命名约
 
 | 名称 | 含义 |
 | --- | --- |
-| `shift_ram_i` | 当前周期是否执行 RAM-I 移位写回 |
+| `shift_ram_i` | 当前周期是否计算 RAM-I 派生行地址 |
 | `shift_ram_i_last` | 当前移位是否是当前列最后一个 entry |
 | `shifted_valid` | 移位后的 entry 是否有效（源 entry 是否有效） |
 | `shifted_group_idx` | 移位后 entry 所属的 group 编号 |

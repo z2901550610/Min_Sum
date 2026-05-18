@@ -6,7 +6,8 @@ module tb_ram_i;
   logic                     clk;
   logic                     rst_n;
   logic                     we;
-  logic [    H_BLOCK_W-1:0] h_block_idx;
+  logic [    H_BLOCK_W-1:0] read_h_block_idx;
+  logic [    H_BLOCK_W-1:0] write_h_block_idx;
   logic [  ENTRY_POS_W-1:0] read_entry_idx;
   logic [  ENTRY_POS_W-1:0] write_entry_idx;
   logic [    I_ENTRY_W-1:0] entry_wdata;
@@ -25,7 +26,8 @@ module tb_ram_i;
       .i_clk(clk),
       .i_rst_n(rst_n),
       .i_we(we),
-      .i_h_block_idx(h_block_idx),
+      .i_read_h_block_idx(read_h_block_idx),
+      .i_write_h_block_idx(write_h_block_idx),
       .i_read_entry_idx(read_entry_idx),
       .i_write_entry_idx(write_entry_idx),
       .i_entry_wdata(entry_wdata),
@@ -43,7 +45,8 @@ module tb_ram_i;
   initial begin
     rst_n = 1'b0;
     we = 1'b0;
-    h_block_idx = '0;
+    read_h_block_idx = '0;
+    write_h_block_idx = '0;
     read_entry_idx = '0;
     write_entry_idx = '0;
     entry_wdata = '0;
@@ -63,15 +66,16 @@ module tb_ram_i;
       $fatal(1, "ram_i init count h_block 1 mismatch: %0d", debug_counts[1]);
 
     // Read back via functional port.
-    h_block_idx = '0;
-    read_entry_idx = '0;
+    read_h_block_idx = '0;
+    read_entry_idx   = '0;
     @(posedge clk);
     #1;
     if (count != debug_counts[0]) $fatal(1, "ram_i functional count view mismatch");
     if (entry_rdata != debug_list_entries[0][0]) $fatal(1, "ram_i functional entry view mismatch");
 
     // Single-entry write / read.
-    h_block_idx = '0;
+    read_h_block_idx = '0;
+    write_h_block_idx = '0;
     read_entry_idx = ENTRY_POS_W'(1);
     write_entry_idx = ENTRY_POS_W'(1);
     entry_wdata = {ONE_IDX_W'(1), ROW_GROUP_W'(2)};

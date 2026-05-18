@@ -12,6 +12,8 @@
 - `make test-integration` - run the full decoder testbench.
 - `make test-bike-random BIKE_RANDOM_TRIALS=1` - run one generated random BIKE decoder case.
 - `make test` - run unit plus integration tests.
+- `make format-rtl` - format maintained RTL/testbench SV files.
+- `make check-format-rtl && make lint-rtl` - check RTL formatting and Verible lint.
 
 ## Verilator Output
 
@@ -31,6 +33,7 @@
 ## Working Notes
 
 - Prefer Makefile targets over hand-written Verilator commands.
+- Use `make format-rtl` for RTL/TB formatting. Declarations align direction/`logic`/packed width/name; unpacked dimensions stay tight to the name, e.g. `foo[0:L-1]`.
 - Keep terminal output compact; inspect saved logs only when a failure needs detail.
 - Do not delete generated files casually; many tests depend on generated SV headers.
 - 文档和代码注释中只描述当前状态，不写与旧版本的对比（避免"不再"、"目前已改为"、"no longer"、"now"、"instead of"、"rather than"等表述）。设计文档应描述成品架构，而非修改记录。

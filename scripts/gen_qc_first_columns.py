@@ -58,15 +58,15 @@ def main() -> None:
     source_text = input_path.read_text(encoding="utf-8")
     r_values = pair_values(extract_param_values(source_text, "R"))
     w_values = pair_values(extract_param_values(source_text, "W"))
-    b_values = pair_values(extract_param_values(source_text, "B"), default=2)
+    l_values = pair_values(extract_param_values(source_text, "L"), default=2)
     lane_depth_values = pair_values(extract_param_values(source_text, "RAM_LANE_DEPTH"))
 
     jobs = [
-        ("l1", DEFAULT_SUPPORTS["l1"], r_values[0], w_values[0], b_values[0], lane_depth_values[0]),
-        ("test", DEFAULT_SUPPORTS["test"], r_values[1], w_values[1], b_values[1], lane_depth_values[1]),
+        ("l1", DEFAULT_SUPPORTS["l1"], r_values[0], w_values[0], l_values[0], lane_depth_values[0]),
+        ("test", DEFAULT_SUPPORTS["test"], r_values[1], w_values[1], l_values[1], lane_depth_values[1]),
     ]
 
-    for tag, supports, r_value, w_value, b_value, lane_depth in jobs:
+    for tag, supports, r_value, w_value, l_value, lane_depth in jobs:
         validate_supports(tag, supports, r_value, w_value)
         generate_hex_files(
             supports,
@@ -74,7 +74,7 @@ def main() -> None:
             w_value,
             tag,
             output_dir,
-            group_count=b_value,
+            group_count=l_value,
             memory_depth=lane_depth,
         )
 

@@ -24,13 +24,13 @@ module ram_m
   localparam int M_WORD_EPOCH_BIT = COMP_C2V_W;
   localparam int M_WORD_W = COMP_C2V_W + 1;
 
-  (* ram_style = "block" *) logic [M_WORD_W-1:0] mem[0:ROW_GROUP_DEPTH-1];
   logic [M_WORD_W-1:0] rword;
+  logic [M_WORD_W-1:0] debug_words[0:ROW_GROUP_DEPTH-1];
 
 `ifdef BIKE_SIM_DEBUG
   always_comb begin
     for (int row_idx = 0; row_idx < ROW_GROUP_DEPTH; row_idx++) begin
-      o_debug_mem[row_idx] = mem[row_idx][COMP_C2V_W-1:0];
+      o_debug_mem[row_idx] = debug_words[row_idx][COMP_C2V_W-1:0];
     end
   end
 `endif
@@ -38,33 +38,27 @@ module ram_m
   assign o_rdata = rword[COMP_C2V_W-1:0];
   assign o_epoch = rword[M_WORD_EPOCH_BIT];
 
-  initial begin
-    rword = {1'b0, COMP_C2V_INIT};
-    for (int row_idx = 0; row_idx < ROW_GROUP_DEPTH; row_idx++) begin
-      mem[row_idx] = {1'b0, COMP_C2V_INIT};
-    end
-  end
-
+  ram_1r1w_sync_read #(
+      .DATA_W(M_WORD_W),
+      .DEPTH(ROW_GROUP_DEPTH),
+      .ADDR_W(ROW_GROUP_W),
+      .RAM_STYLE("block"),
+      .INIT_TO_VALUE(1'b1),
 `ifdef BIKE_SIM_DEBUG
-  always_ff @(posedge i_clk or negedge i_rst_n) begin
-    if (!i_rst_n) begin
-      rword <= {1'b0, COMP_C2V_INIT};
-      for (int row_idx = 0; row_idx < ROW_GROUP_DEPTH; row_idx++) begin
-        mem[row_idx] <= {1'b0, COMP_C2V_INIT};
-      end
-    end else begin
-      if (i_we) begin
-        mem[i_write_row_idx_group] <= {i_epoch, i_wdata};
-      end
-      rword <= mem[i_read_row_idx_group];
-    end
-  end
+      .RESET_MEM(1'b1),
 `else
-  always_ff @(posedge i_clk) begin
-    if (i_we) begin
-      mem[i_write_row_idx_group] <= {i_epoch, i_wdata};
-    end
-    rword <= mem[i_read_row_idx_group];
-  end
+      .RESET_MEM(1'b0),
 `endif
+      .RESET_VALUE({1'b0, COMP_C2V_INIT})
+  ) u_mem (
+      .i_clk(i_clk),
+      .i_rst_n(i_rst_n),
+      .i_clear(1'b0),
+      .i_we(i_we),
+      .i_write_addr(i_write_row_idx_group),
+      .i_wdata({i_epoch, i_wdata}),
+      .i_read_addr(i_read_row_idx_group),
+      .o_rdata(rword),
+      .o_debug_mem(debug_words)
+  );
 endmodule
