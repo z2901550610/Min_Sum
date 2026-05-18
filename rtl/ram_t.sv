@@ -25,15 +25,13 @@ module ram_t
 `endif
 );
 
-  logic [MSG_W-1:0] debug_words[0:RAM_LANE_DEPTH-1];
-  logic             valid_mem[0:RAM_LANE_DEPTH-1];
+  logic valid_mem[0:RAM_LANE_DEPTH-1];
 `ifdef BIKE_SIM_DEBUG
+  logic [        MSG_W-1:0] debug_words[0:RAM_LANE_DEPTH-1];
   logic [GROUP_COUNT_W-1:0] valid_count;
 
   assign o_item_count = valid_count;
-`endif
 
-`ifdef BIKE_SIM_DEBUG
   always_comb begin
     for (int entry_pos = 0; entry_pos < RAM_LANE_DEPTH; entry_pos++) begin
       o_debug_mem[entry_pos] = debug_words[entry_pos];
@@ -60,8 +58,12 @@ module ram_t
       .i_write_addr(i_write_entry_idx),
       .i_wdata(i_wdata),
       .i_read_addr(i_read_entry_idx),
+`ifdef BIKE_SIM_DEBUG
       .o_rdata(o_rdata),
       .o_debug_mem(debug_words)
+`else
+      .o_rdata(o_rdata)
+`endif
   );
 
 `ifdef BIKE_SIM_DEBUG

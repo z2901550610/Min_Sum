@@ -10,9 +10,11 @@ module ram_c
     output logic             o_rdata
 );
 
+`ifdef BIKE_SIM_DEBUG
   /* verilator lint_off UNUSEDSIGNAL */
   logic debug_mem[0:N-1];
   /* verilator lint_on UNUSEDSIGNAL */
+`endif
 
   ram_1r1w_sync_read #(
       .DATA_W(1),
@@ -27,7 +29,11 @@ module ram_c
       .i_write_addr(i_col_idx),
       .i_wdata(i_wdata),
       .i_read_addr(i_col_idx),
+`ifdef BIKE_SIM_DEBUG
       .o_rdata(o_rdata),
       .o_debug_mem(debug_mem)
+`else
+      .o_rdata(o_rdata)
+`endif
   );
 endmodule

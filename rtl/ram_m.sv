@@ -25,9 +25,9 @@ module ram_m
   localparam int M_WORD_W = COMP_C2V_W + 1;
 
   logic [M_WORD_W-1:0] rword;
+`ifdef BIKE_SIM_DEBUG
   logic [M_WORD_W-1:0] debug_words[0:ROW_GROUP_DEPTH-1];
 
-`ifdef BIKE_SIM_DEBUG
   always_comb begin
     for (int row_idx = 0; row_idx < ROW_GROUP_DEPTH; row_idx++) begin
       o_debug_mem[row_idx] = debug_words[row_idx][COMP_C2V_W-1:0];
@@ -58,7 +58,11 @@ module ram_m
       .i_write_addr(i_write_row_idx_group),
       .i_wdata({i_epoch, i_wdata}),
       .i_read_addr(i_read_row_idx_group),
+`ifdef BIKE_SIM_DEBUG
       .o_rdata(rword),
       .o_debug_mem(debug_words)
+`else
+      .o_rdata(rword)
+`endif
   );
 endmodule

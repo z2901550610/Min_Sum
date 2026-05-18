@@ -4,7 +4,9 @@ module ram_s
   import bike_pkg::*;
 #(
     parameter int RAM_S_PACK_W        = S_PACK_W,
+    /* verilator lint_off UNUSEDPARAM */
     parameter int RAM_S_WORDS_PER_COL = S_WORDS_PER_COL,
+    /* verilator lint_on UNUSEDPARAM */
     parameter int RAM_S_WORD_DEPTH    = S_WORD_DEPTH,
     parameter int RAM_S_WORD_ADDR_W   = S_WORD_ADDR_W
 ) (
@@ -24,15 +26,14 @@ module ram_s
 `endif
 );
 
+`ifdef BIKE_SIM_DEBUG
   logic [RAM_S_PACK_W-1:0] debug_words[0:RAM_S_WORD_DEPTH-1];
-
   function automatic int debug_word_addr(input int col_idx, input int entry_idx);
     begin
       debug_word_addr = col_idx * RAM_S_WORDS_PER_COL + (entry_idx / RAM_S_PACK_W);
     end
   endfunction
 
-`ifdef BIKE_SIM_DEBUG
   always_comb begin
     for (int col_idx = 0; col_idx < N; col_idx++) begin
       for (int entry_idx = 0; entry_idx < RAM_LANE_DEPTH; entry_idx++) begin
@@ -43,11 +44,13 @@ module ram_s
   end
 `endif
 
+`ifndef SYNTHESIS
   initial begin
     if ((RAM_S_PACK_W <= 0) || ((RAM_S_PACK_W & (RAM_S_PACK_W - 1)) != 0)) begin
       $fatal(1, "ram_s RAM_S_PACK_W must be a positive power of two");
     end
   end
+`endif
 
   ram_1r1w_sync_read #(
       .DATA_W(RAM_S_PACK_W),
@@ -68,7 +71,11 @@ module ram_s
       .i_write_addr(i_write_word_addr),
       .i_wdata(i_wdata),
       .i_read_addr(i_read_word_addr),
+`ifdef BIKE_SIM_DEBUG
       .o_rdata(o_rdata),
       .o_debug_mem(debug_words)
+`else
+      .o_rdata(o_rdata)
+`endif
   );
 endmodule

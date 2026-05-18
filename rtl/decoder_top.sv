@@ -773,13 +773,15 @@ module decoder_top
   assign o_e_rdata = decision_ram_old_bit;
 
   for (genvar ram_m_idx = 0; ram_m_idx < M_BANKS; ram_m_idx++) begin : g_ram_m
+    localparam int RAM_M_PAIR_IDX = (ram_m_idx >= L) ? 1 : 0;
+
     ram_m u_ram_m (
         .i_clk(i_clk),
         .i_rst_n(i_rst_n),
         .i_we(m_we[ram_m_idx]),
         .i_read_row_idx_group(m_read_row_idx_group[ram_m_idx]),
         .i_write_row_idx_group(m_write_row_idx_group[ram_m_idx]),
-        .i_epoch(m_pair_epoch[(ram_m_idx>=L)?1 : 0]),
+        .i_epoch(m_pair_epoch[RAM_M_PAIR_IDX]),
         .i_wdata(m_wdata[ram_m_idx]),
         .o_rdata(m_rdata[ram_m_idx]),
 `ifdef BIKE_SIM_DEBUG

@@ -11,19 +11,25 @@ module ram_1r1w_async_read #(
     input  logic [ADDR_W-1:0] i_write_addr,
     input  logic [DATA_W-1:0] i_wdata,
     input  logic [ADDR_W-1:0] i_read_addr,
+`ifdef BIKE_SIM_DEBUG
     output logic [DATA_W-1:0] o_rdata,
     output logic [DATA_W-1:0] o_debug_mem[0:DEPTH-1]
+`else
+    output logic [DATA_W-1:0] o_rdata
+`endif
 );
 
   logic [DATA_W-1:0] mem[0:DEPTH-1];
 
   assign o_rdata = mem[i_read_addr];
 
+`ifdef BIKE_SIM_DEBUG
   always_comb begin
     for (int addr = 0; addr < DEPTH; addr++) begin
       o_debug_mem[addr] = mem[addr];
     end
   end
+`endif
 
   initial begin
     if (INIT_FILE != "") begin

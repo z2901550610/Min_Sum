@@ -29,9 +29,11 @@ proc run_step {name command} {
 
 set rtl_files [list \
   rtl/bike_pkg.sv \
+  rtl/ram_1r1w_sync_read.sv \
+  rtl/sign_bit_pack.sv \
   rtl/decoder_top.sv \
+  rtl/edge_message_pipe.sv \
   rtl/ram_i.sv \
-  rtl/h_shift.sv \
   rtl/msg_signmag_to_tc.sv \
   rtl/msg_tc_to_signmag_sat.sv \
   rtl/decoder_ctrl.sv \
@@ -53,6 +55,7 @@ set_property include_dirs [list rtl] [current_fileset]
 foreach init_file [glob -nocomplain rtl/generated/*.hex] {
   add_files -fileset sources_1 $init_file
 }
+set ram_i_hex_prefix [file normalize rtl/generated/ram_i]
 
 if {[file exists $xdc_file]} {
   run_step "read_xdc" {
@@ -66,6 +69,7 @@ run_step "synth_design" {
   synth_design \
     -top $top \
     -part $part \
+    -generic "RAM_I_HEX_PREFIX=$ram_i_hex_prefix" \
     -directive $synth_directive \
     -flatten_hierarchy $flatten_hierarchy
 }
