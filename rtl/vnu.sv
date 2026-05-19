@@ -15,6 +15,7 @@ module vnu #(
     input  logic                       i_rst_n,
     input  logic                       i_col_start,
     input  logic                       i_col_end,
+    input  logic                       i_finalize,
     input  logic signed [   MSG_W-1:0] i_initial_llr,
     input  logic                       i_c2v_valid[0:L-1],
     input  logic signed [   MSG_W-1:0] i_c2v[0:L-1],
@@ -32,6 +33,7 @@ module vnu #(
   logic signed [VNU_TC_W-1:0] cycle_sum;  // 当前拍收到的 c2v 和
   logic signed [VNU_TC_W-1:0] accum_sum_reg;  // 列内先前累加保存的 c2v 和
   logic signed [VNU_TC_W-1:0] accum_sum_next;  // 本拍更新后的列累加和
+  logic signed [VNU_TC_W-1:0] final_sum_reg;  // 列结束时缓存的累加和
   logic signed [VNU_TC_W-1:0] scaled_sum;             // 本拍更新后的累加和经过 alpha 缩放后的结果
   logic signed [VNU_TC_W-1:0] posterior_reg;  // 已锁存的后验值，供下一拍生成 v2c
   logic signed [VNU_TC_W-1:0] posterior_next;  // 本拍组合计算得到的后验值
@@ -116,7 +118,7 @@ module vnu #(
       accum_sum_next = accum_sum_reg + cycle_sum;
     end
 
-    scaled_sum = alpha_scale(accum_sum_next);
+    scaled_sum = alpha_scale(final_sum_reg);
     posterior_next = prior_msg_sign_extend + scaled_sum;
 
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
@@ -135,9 +137,13 @@ module vnu #(
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin
       accum_sum_reg <= '0;
+      final_sum_reg <= '0;
       posterior_reg <= '0;
     end else begin
       if (i_col_end) begin
+        final_sum_reg <= accum_sum_next;
+      end
+      if (i_finalize) begin
         posterior_reg <= posterior_next;
       end
       if ((i_col_start || accum_valid_any) && !i_col_end) begin

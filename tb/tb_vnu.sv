@@ -14,6 +14,7 @@ module tb_vnu;
   logic                       rst_n;
   logic                       col_start;
   logic                       col_end;
+  logic                       finalize;
   logic signed [   MSG_W-1:0] initial_llr;
   logic                       c2v_tc_valid0;
   logic signed [   MSG_W-1:0] c2v_tc0;
@@ -115,6 +116,7 @@ module tb_vnu;
       .i_rst_n(rst_n),
       .i_col_start(col_start),
       .i_col_end(col_end),
+      .i_finalize(finalize),
       .i_initial_llr(initial_llr),
       .i_c2v_valid(c2v_tc_valid),
       .i_c2v(c2v_tc),
@@ -134,6 +136,7 @@ module tb_vnu;
     begin
       col_start = 1'b0;
       col_end = 1'b0;
+      finalize = 1'b0;
       c2v_tc_valid0 = 1'b0;
       c2v_tc_valid1 = 1'b0;
       c2v_tc0 = '0;
@@ -152,12 +155,23 @@ module tb_vnu;
     begin
       col_start = start_i;
       col_end = end_i;
+      finalize = 1'b0;
       c2v_tc_valid0 = 1'b1;
       c2v_tc0 = msg0_i;
       c2v_tc_valid1 = valid1_i;
       c2v_tc1 = msg1_i;
       @(posedge clk);
       #1;
+    end
+  endtask
+
+  task automatic finalize_column;
+    begin
+      idle_inputs();
+      finalize = 1'b1;
+      @(posedge clk);
+      #1;
+      finalize = 1'b0;
     end
   endtask
 
@@ -170,10 +184,15 @@ module tb_vnu;
     begin
       idle_inputs();
       col_start = 1'b1;
+      col_end = 1'b1;
       c2v_tc_valid0 = 1'b1;
       c2v_tc0 = msg0_i;
       c2v_tc_valid1 = valid1_i;
       c2v_tc1 = msg1_i;
+      @(posedge clk);
+      #1;
+      idle_inputs();
+      finalize = 1'b1;
       #1;
       sum_i = int'($signed(msg0_i)) + (valid1_i ? int'($signed(msg1_i)) : 0);
       expected_scale = alpha_scale_ref(sum_i);
@@ -181,6 +200,8 @@ module tb_vnu;
         $fatal(1, "scale mismatch for sum %0d: got %0d exp %0d", sum_i, $signed(dut.scaled_sum),
                expected_scale);
       end
+      @(posedge clk);
+      #1;
       idle_inputs();
     end
   endtask
@@ -255,6 +276,7 @@ module tb_vnu;
         );
 
       drive_accum_pair(1'b0, 1'b1, msg_tc(1'b1, D'(9)), 1'b0, '0);
+      finalize_column();
       if ($signed(dut.posterior_reg) != 11)
         $fatal(1, "case0 posterior mismatch: got %0d exp 11", $signed(dut.posterior_reg));
       if (bit_decision !== 0) $fatal(1, "case0 bit decision mismatch");
@@ -285,6 +307,7 @@ module tb_vnu;
       initial_llr = MSG_W'(MAG_MAX);
       drive_accum_pair(1'b1, 1'b0, msg_tc(1'b1, D'(15)), 1'b1, msg_tc(1'b1, D'(15)));
       drive_accum_pair(1'b0, 1'b1, msg_tc(1'b1, D'(15)), 1'b0, '0);
+      finalize_column();
       if ($signed(dut.posterior_reg) != 11)
         $fatal(1, "case1 posterior mismatch: got %0d exp 11", $signed(dut.posterior_reg));
       if (bit_decision !== 0) $fatal(1, "case1 bit decision mismatch");
@@ -308,6 +331,7 @@ module tb_vnu;
       initial_llr = 9;
       drive_accum_pair(1'b1, 1'b0, msg_tc(1'b0, D'(15)), 1'b1, msg_tc(1'b0, D'(15)));
       drive_accum_pair(1'b0, 1'b1, msg_tc(1'b1, D'(9)), 1'b0, '0);
+      finalize_column();
       if ($signed(dut.posterior_reg) != 11)
         $fatal(1, "overlap setup posterior mismatch: got %0d exp 11", $signed(dut.posterior_reg));
 
@@ -331,6 +355,7 @@ module tb_vnu;
       col_end = 1'b1;
       @(posedge clk);
       #1;
+      finalize_column();
       if ($signed(dut.posterior_reg) != 12)
         $fatal(1, "overlap delayed posterior mismatch: got %0d exp 12", $signed(dut.posterior_reg));
       idle_inputs();
@@ -351,6 +376,7 @@ module tb_vnu;
       col_end = 1'b1;
       @(posedge clk);
       #1;
+      finalize_column();
       if ($signed(dut.posterior_reg) != 18) begin
         $fatal(1, "single-cycle posterior mismatch: got %0d exp 18", $signed(dut.posterior_reg));
       end
@@ -367,6 +393,7 @@ module tb_vnu;
     begin
       initial_llr = -MSG_W'(MAG_MAX + 1);
       drive_accum_pair(1'b1, 1'b1, msg_tc(1'b1, D'(15)), 1'b1, msg_tc(1'b1, D'(15)));
+      finalize_column();
       if ($signed(dut.posterior_reg) != -19) begin
         $fatal(1, "negative-boundary posterior mismatch: got %0d exp -19", $signed(
                                                                                dut.posterior_reg));

@@ -23,6 +23,7 @@ module tb_decoder_ctrl;
   logic                   v2c_read;
   logic                   c2v_write_t;
   logic                   vnu_accum_t;
+  logic                   vnu_finalize;
   logic                   decision_write;
   logic                   v2c_emit_to_cnu_a;
   logic                   cnu_a_writeback;
@@ -61,6 +62,7 @@ module tb_decoder_ctrl;
       .o_v2c_read(v2c_read),
       .o_c2v_write_t(c2v_write_t),
       .o_vnu_accum_t(vnu_accum_t),
+      .o_vnu_finalize(vnu_finalize),
       .o_decision_write(decision_write),
       .o_v2c_emit_to_cnu_a(v2c_emit_to_cnu_a),
       .o_cnu_a_writeback(cnu_a_writeback),
@@ -95,6 +97,9 @@ module tb_decoder_ctrl;
       end
       if (vnu_accum_t != c2v_write_t) begin
         $fatal(1, "VNU accumulation pulse should match c2v write pulse");
+      end
+      if (vnu_finalize && (c2v_read || v2c_read || decision_write)) begin
+        $fatal(1, "data-path issue pulse active during VNU finalize");
       end
       if (iter_check && (c2v_read || v2c_read || c2v_write_t || cnu_a_writeback)) begin
         $fatal(1, "data-path issue pulse active during iter_check");

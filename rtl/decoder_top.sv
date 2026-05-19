@@ -56,6 +56,7 @@ module decoder_top
   logic                     v2c_read;
   logic                     c2v_write_t;
   logic                     vnu_accum_t;
+  logic                     vnu_finalize;
   logic                     decision_write;
   logic                     v2c_emit_to_cnu_a;
   logic                     cnu_a_writeback;
@@ -693,6 +694,7 @@ module decoder_top
       .i_rst_n(i_rst_n),
       .i_col_start(vnu_col_start),
       .i_col_end(vnu_col_end),
+      .i_finalize(vnu_finalize),
       .i_initial_llr($signed(MSG_W'(C_VAL))),
       .i_c2v_valid(vnu_accum_valid),
       .i_c2v(c2v_tc),
@@ -739,6 +741,7 @@ module decoder_top
       .o_v2c_read(v2c_read),
       .o_c2v_write_t(c2v_write_t),
       .o_vnu_accum_t(vnu_accum_t),
+      .o_vnu_finalize(vnu_finalize),
       .o_decision_write(decision_write),
       .o_v2c_emit_to_cnu_a(v2c_emit_to_cnu_a),
       .o_cnu_a_writeback(cnu_a_writeback),
