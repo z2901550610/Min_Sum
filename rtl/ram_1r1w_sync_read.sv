@@ -5,9 +5,6 @@ module ram_1r1w_sync_read #(
     parameter int                 DEPTH         = 2,
     parameter int                 ADDR_W        = (DEPTH > 1) ? $clog2(DEPTH) : 1,
     parameter string              INIT_FILE     = "",
-    /* verilator lint_off UNUSEDPARAM */
-    parameter string              RAM_STYLE     = "block",
-    /* verilator lint_on UNUSEDPARAM */
     parameter bit                 INIT_TO_VALUE = 1'b0,
     parameter bit                 RESET_MEM     = 1'b0,
     parameter logic  [DATA_W-1:0] RESET_VALUE   = '0
@@ -27,7 +24,15 @@ module ram_1r1w_sync_read #(
 `endif
 );
 
-  (* ram_style = "block" *) logic [DATA_W-1:0] mem[0:DEPTH-1];
+  logic [DATA_W-1:0] mem[0:DEPTH-1];
+
+  /* verilator lint_off UNUSEDPARAM */
+  localparam bit UNUSED_RESET_MEM = RESET_MEM;
+  /* verilator lint_on UNUSEDPARAM */
+  /* verilator lint_off UNUSEDSIGNAL */
+  logic unused_controls;
+  assign unused_controls = ^{i_rst_n, i_clear, UNUSED_RESET_MEM};
+  /* verilator lint_on UNUSEDSIGNAL */
 
 `ifdef BIKE_SIM_DEBUG
   always_comb begin
@@ -48,26 +53,10 @@ module ram_1r1w_sync_read #(
     end
   end
 
-  always_ff @(posedge i_clk or negedge i_rst_n) begin
-    if (!i_rst_n) begin
-      o_rdata <= RESET_VALUE;
-      if (RESET_MEM) begin
-        for (int addr = 0; addr < DEPTH; addr++) begin
-          mem[addr] <= RESET_VALUE;
-        end
-      end
-    end else if (i_clear) begin
-      o_rdata <= RESET_VALUE;
-      if (RESET_MEM) begin
-        for (int addr = 0; addr < DEPTH; addr++) begin
-          mem[addr] <= RESET_VALUE;
-        end
-      end
-    end else begin
-      if (i_we) begin
-        mem[i_write_addr] <= i_wdata;
-      end
-      o_rdata <= mem[i_read_addr];
+  always_ff @(posedge i_clk) begin
+    if (i_we) begin
+      mem[i_write_addr] <= i_wdata;
     end
+    o_rdata <= mem[i_read_addr];
   end
 endmodule

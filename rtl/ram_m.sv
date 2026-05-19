@@ -42,7 +42,6 @@ module ram_m
       .DATA_W(M_WORD_W),
       .DEPTH(ROW_GROUP_DEPTH),
       .ADDR_W(ROW_GROUP_W),
-      .RAM_STYLE("block"),
       .INIT_TO_VALUE(1'b1),
 `ifdef BIKE_SIM_DEBUG
       .RESET_MEM(1'b1),

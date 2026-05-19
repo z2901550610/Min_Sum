@@ -8,7 +8,7 @@
 module decoder_top
   import bike_pkg::*;
 #(
-    parameter string RAM_I_HEX_PREFIX = "rtl/generated/ram_i",
+    parameter string RAM_I_HEX_PREFIX = "ram_i",
 `ifndef BIKE_TOY_PARAMS
     parameter string RAM_I_HEX_TAG    = "_l1"
 `else

@@ -43,7 +43,6 @@ module ram_t
       .DATA_W(MSG_W),
       .DEPTH(RAM_LANE_DEPTH),
       .ADDR_W(ENTRY_POS_W),
-      .RAM_STYLE("distributed"),
 `ifdef BIKE_SIM_DEBUG
       .RESET_MEM(1'b1),
 `else

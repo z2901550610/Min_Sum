@@ -24,7 +24,9 @@ module tb_decoder_top;
   logic                           saw_drain_state;
   localparam int unsigned TB_SUPPORTS[0:N0-1][0:W-1] = '{'{0, 1, 3}, '{0, 2, 5}};
 
-  decoder_top dut (
+  decoder_top #(
+      .RAM_I_HEX_PREFIX("rtl/generated/ram_i")
+  ) dut (
       .i_clk(clk),
       .i_rst_n(rst_n),
       .i_start(start),

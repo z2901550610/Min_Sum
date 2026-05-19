@@ -56,7 +56,6 @@ module ram_s
       .DATA_W(RAM_S_PACK_W),
       .DEPTH(RAM_S_WORD_DEPTH),
       .ADDR_W(RAM_S_WORD_ADDR_W),
-      .RAM_STYLE("block"),
 `ifdef BIKE_SIM_DEBUG
       .RESET_MEM(1'b1),
 `else

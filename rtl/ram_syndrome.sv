@@ -20,9 +20,8 @@ module ram_syndrome
   for (genvar lane_idx = 0; lane_idx < L; lane_idx++) begin : g_syndrome_lane
     ram_1r1w_sync_read #(
         .DATA_W(1),
-        .DEPTH(R),
-        .ADDR_W(ROW_IDX_W),
-        .RAM_STYLE("block")
+        .DEPTH (R),
+        .ADDR_W(ROW_IDX_W)
     ) u_mem (
         .i_clk(i_clk),
         .i_rst_n(1'b1),

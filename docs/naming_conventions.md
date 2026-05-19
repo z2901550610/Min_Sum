@@ -239,14 +239,14 @@ input  logic [ROW_IDX_W-1:0] i_read_row_idx[0:L-1],
 output logic                 o_rdata[0:L-1]
 ```
 
-带属性的 RAM 声明在属性和 `logic` 之间保留一个空格：
+RAM 声明使用普通 unpacked 数组，综合属性由工具自动推断或由综合脚本约束：
 
 ```systemverilog
-(* ram_style = "block" *) logic [MSG_W-1:0] mem[0:RAM_LANE_DEPTH-1];
+logic [MSG_W-1:0] mem[0:RAM_LANE_DEPTH-1];
 ```
 
 `make format-rtl` 使用 Verible 做 SystemVerilog 格式化，并运行项目声明 cleanup，
-保持 `input  logic`、属性声明空格和 unpacked 数组维度排版一致。
+保持 `input  logic` 和 unpacked 数组维度排版一致。
 
 ## 常见模块示例
 

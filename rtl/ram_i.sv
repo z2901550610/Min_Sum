@@ -107,23 +107,27 @@ module ram_i
     end
   end
 
+  always_ff @(posedge i_clk) begin
+    if (i_we) begin
+      entry_mem[entry_addr(~active_slot[i_write_h_block_idx], i_write_h_block_idx,
+                           i_write_entry_idx)] <= i_entry_wdata;
+    end
+    if (i_count_we) begin
+      count_mem[count_addr(~active_slot[i_write_h_block_idx], i_write_h_block_idx)] <=
+          i_count_wdata;
+    end
+    o_entry_rdata <= entry_mem[entry_addr(
+        active_slot[i_read_h_block_idx], i_read_h_block_idx, i_read_entry_idx
+    )];
+  end
+
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin
-      o_entry_rdata <= '0;
-    end else begin
-      if (i_we) begin
-        entry_mem[entry_addr(~active_slot[i_write_h_block_idx], i_write_h_block_idx,
-                             i_write_entry_idx)] <= i_entry_wdata;
+      for (int h_block_idx = 0; h_block_idx < N0; h_block_idx++) begin
+        active_slot[h_block_idx] <= 1'b0;
       end
-      if (i_count_we) begin
-        count_mem[count_addr(
-            ~active_slot[i_write_h_block_idx], i_write_h_block_idx
-        )] <= i_count_wdata;
-        active_slot[i_write_h_block_idx] <= ~active_slot[i_write_h_block_idx];
-      end
-      o_entry_rdata <= entry_mem[entry_addr(
-          active_slot[i_read_h_block_idx], i_read_h_block_idx, i_read_entry_idx
-      )];
+    end else if (i_count_we) begin
+      active_slot[i_write_h_block_idx] <= ~active_slot[i_write_h_block_idx];
     end
   end
 endmodule

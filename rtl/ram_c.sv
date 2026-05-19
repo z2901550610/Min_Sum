@@ -18,9 +18,8 @@ module ram_c
 
   ram_1r1w_sync_read #(
       .DATA_W(1),
-      .DEPTH(N),
-      .ADDR_W(COL_W),
-      .RAM_STYLE("block")
+      .DEPTH (N),
+      .ADDR_W(COL_W)
   ) u_mem (
       .i_clk(i_clk),
       .i_rst_n(1'b1),
