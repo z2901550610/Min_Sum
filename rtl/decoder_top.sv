@@ -243,7 +243,7 @@ module decoder_top
 
   assign next_iter_count_ext = {1'b0, o_iter_count} + {{ITER_W{1'b0}}, 1'b1};
   assign finish_decode = (next_iter_count_ext >= (ITER_W + 1)'(I_MAX));
-  assign c2v_col_h_block_idx = H_BLOCK_W'(int'(c2v_col_idx) / R);
+  assign c2v_col_h_block_idx = (c2v_col_idx >= COL_W'(R)) ? H_BLOCK_W'(1) : '0;
   assign decision_ram_access_col_idx = decision_ram_we ? decision_ram_col_idx : i_e_read_col_idx;
 
   always_comb begin
@@ -305,29 +305,47 @@ module decoder_top
   // active column.
   always_comb begin
     integer                 lane_idx;
+    logic   [  ROW_IDX_W:0] row_idx_sum;
     logic   [ROW_IDX_W-1:0] base_row_idx_global;
     logic   [ROW_IDX_W-1:0] c2v_col_idx_local;
     logic   [ROW_IDX_W-1:0] shifted_row_idx_global;
     logic   [I_ENTRY_W-1:0] active_entry;
 
     active_entry = '0;
+    row_idx_sum = '0;
     base_row_idx_global = '0;
-    c2v_col_idx_local = ROW_IDX_W'(int'(c2v_read_col_d1) % R);
+    c2v_col_idx_local =
+      (c2v_read_col_d1 >= COL_W'(R)) ? ROW_IDX_W'(c2v_read_col_d1 - COL_W'(R)) :
+      ROW_IDX_W'(c2v_read_col_d1);
     shifted_row_idx_global = '0;
 
     for (lane_idx = 0; lane_idx < L; lane_idx++) begin
       active_entry = ram_i_entry_rdata[c2v_sched_group_idx_d1[lane_idx]];
       c2v_group_valid[lane_idx] = c2v_read_d1 && c2v_sched_group_valid_d1[lane_idx];
       c2v_one_idx[lane_idx] = active_entry[I_ENTRY_ONE_IDX_LSB+:ONE_IDX_W];
-      base_row_idx_global = ROW_IDX_W'(
-        int'(active_entry[I_ENTRY_ROW_IDX_GROUP_LSB+:ROW_GROUP_W]) * L +
-        int'(c2v_sched_group_idx_d1[lane_idx])
-      );
-      shifted_row_idx_global = ROW_IDX_W'((int'(base_row_idx_global) + int'(c2v_col_idx_local)) % R);
-      c2v_group_idx[lane_idx] = GROUP_IDX_W'(int'(shifted_row_idx_global) % L);
-      c2v_row_idx_group[lane_idx] = ROW_GROUP_W'(int'(shifted_row_idx_global) / L);
+      if (L == 2) begin
+        base_row_idx_global = {
+          active_entry[I_ENTRY_ROW_IDX_GROUP_LSB+:ROW_GROUP_W], c2v_sched_group_idx_d1[lane_idx]
+        };
+      end else begin
+        base_row_idx_global = ROW_IDX_W'(
+          int'(active_entry[I_ENTRY_ROW_IDX_GROUP_LSB+:ROW_GROUP_W]) * L +
+          int'(c2v_sched_group_idx_d1[lane_idx])
+        );
+      end
+      row_idx_sum = {1'b0, base_row_idx_global} + {1'b0, c2v_col_idx_local};
+      shifted_row_idx_global =
+        (row_idx_sum >= (ROW_IDX_W + 1)'(R)) ? ROW_IDX_W'(row_idx_sum - (ROW_IDX_W + 1)'(R)) :
+        ROW_IDX_W'(row_idx_sum);
+      if (L == 2) begin
+        c2v_group_idx[lane_idx] = shifted_row_idx_global[0+:GROUP_IDX_W];
+        c2v_row_idx_group[lane_idx] = shifted_row_idx_global[GROUP_IDX_W+:ROW_GROUP_W];
+      end else begin
+        c2v_group_idx[lane_idx] = GROUP_IDX_W'(int'(shifted_row_idx_global) % L);
+        c2v_row_idx_group[lane_idx] = ROW_GROUP_W'(int'(shifted_row_idx_global) / L);
+      end
       c2v_row_idx_global[lane_idx] = shifted_row_idx_global;
-      c2v_shifted_entry[lane_idx] = {c2v_one_idx[lane_idx], c2v_row_idx_group[lane_idx]};
+      c2v_shifted_entry[lane_idx]  = {c2v_one_idx[lane_idx], c2v_row_idx_group[lane_idx]};
       if (!c2v_group_valid[lane_idx]) begin
         c2v_group_idx[lane_idx] = '0;
         c2v_one_idx[lane_idx] = '0;
