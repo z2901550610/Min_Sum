@@ -11,7 +11,6 @@ module ram_s
     parameter int RAM_S_WORD_ADDR_W   = S_WORD_ADDR_W
 ) (
     input  logic                         i_clk,
-    input  logic                         i_rst_n,
     input  logic                         i_we,
     input  logic [RAM_S_WORD_ADDR_W-1:0] i_read_word_addr,
 `ifdef BIKE_SIM_DEBUG
@@ -56,16 +55,9 @@ module ram_s
       .DATA_W(RAM_S_PACK_W),
       .DEPTH(RAM_S_WORD_DEPTH),
       .ADDR_W(RAM_S_WORD_ADDR_W),
-`ifdef BIKE_SIM_DEBUG
-      .RESET_MEM(1'b1),
-`else
-      .RESET_MEM(1'b0),
-`endif
       .RESET_VALUE('0)
   ) u_mem (
       .i_clk(i_clk),
-      .i_rst_n(i_rst_n),
-      .i_clear(1'b0),
       .i_we(i_we),
       .i_write_addr(i_write_word_addr),
       .i_wdata(i_wdata),

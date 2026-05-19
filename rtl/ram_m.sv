@@ -4,7 +4,6 @@ module ram_m
   import bike_pkg::*;
 (
     input  logic                   i_clk,
-    input  logic                   i_rst_n,
     input  logic                   i_we,
     input  logic [ROW_GROUP_W-1:0] i_read_row_idx_group,
     input  logic [ROW_GROUP_W-1:0] i_write_row_idx_group,
@@ -43,16 +42,9 @@ module ram_m
       .DEPTH(ROW_GROUP_DEPTH),
       .ADDR_W(ROW_GROUP_W),
       .INIT_TO_VALUE(1'b1),
-`ifdef BIKE_SIM_DEBUG
-      .RESET_MEM(1'b1),
-`else
-      .RESET_MEM(1'b0),
-`endif
       .RESET_VALUE({1'b0, COMP_C2V_INIT})
   ) u_mem (
       .i_clk(i_clk),
-      .i_rst_n(i_rst_n),
-      .i_clear(1'b0),
       .i_we(i_we),
       .i_write_addr(i_write_row_idx_group),
       .i_wdata({i_epoch, i_wdata}),

@@ -777,7 +777,6 @@ module decoder_top
 
     ram_m u_ram_m (
         .i_clk(i_clk),
-        .i_rst_n(i_rst_n),
         .i_we(m_we[ram_m_idx]),
         .i_read_row_idx_group(m_read_row_idx_group[ram_m_idx]),
         .i_write_row_idx_group(m_write_row_idx_group[ram_m_idx]),
@@ -801,7 +800,6 @@ module decoder_top
         .RAM_S_WORD_ADDR_W(S_WORD_ADDR_W)
     ) u_ram_s (
         .i_clk(i_clk),
-        .i_rst_n(i_rst_n),
         .i_we(s_word_we[ram_s_lane_idx]),
         .i_read_word_addr(s_read_word_addr[ram_s_lane_idx]),
         .i_write_word_addr(s_write_word_addr[ram_s_lane_idx]),

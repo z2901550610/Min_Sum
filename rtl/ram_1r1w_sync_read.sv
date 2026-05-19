@@ -6,12 +6,9 @@ module ram_1r1w_sync_read #(
     parameter int                 ADDR_W        = (DEPTH > 1) ? $clog2(DEPTH) : 1,
     parameter string              INIT_FILE     = "",
     parameter bit                 INIT_TO_VALUE = 1'b0,
-    parameter bit                 RESET_MEM     = 1'b0,
     parameter logic  [DATA_W-1:0] RESET_VALUE   = '0
 ) (
     input  logic              i_clk,
-    input  logic              i_rst_n,
-    input  logic              i_clear,
     input  logic              i_we,
     input  logic [ADDR_W-1:0] i_write_addr,
     input  logic [DATA_W-1:0] i_wdata,
@@ -25,14 +22,6 @@ module ram_1r1w_sync_read #(
 );
 
   logic [DATA_W-1:0] mem[0:DEPTH-1];
-
-  /* verilator lint_off UNUSEDPARAM */
-  localparam bit UNUSED_RESET_MEM = RESET_MEM;
-  /* verilator lint_on UNUSEDPARAM */
-  /* verilator lint_off UNUSEDSIGNAL */
-  logic unused_controls;
-  assign unused_controls = ^{i_rst_n, i_clear, UNUSED_RESET_MEM};
-  /* verilator lint_on UNUSEDSIGNAL */
 
 `ifdef BIKE_SIM_DEBUG
   always_comb begin

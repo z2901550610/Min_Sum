@@ -24,8 +24,6 @@ module ram_syndrome
         .ADDR_W(ROW_IDX_W)
     ) u_mem (
         .i_clk(i_clk),
-        .i_rst_n(1'b1),
-        .i_clear(1'b0),
         .i_we(i_we),
         .i_write_addr(i_write_row_idx),
         .i_wdata(i_wdata),

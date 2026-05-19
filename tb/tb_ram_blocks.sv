@@ -58,7 +58,6 @@ module tb_ram_blocks;
 
   ram_m u_ram_m (
       .i_clk(clk),
-      .i_rst_n(rst_n),
       .i_we(m_we),
       .i_read_row_idx_group(m_read_row_idx_group),
       .i_write_row_idx_group(m_write_row_idx_group),
@@ -76,7 +75,6 @@ module tb_ram_blocks;
       .RAM_S_WORD_ADDR_W(TB_S_WORD_ADDR_W)
   ) u_ram_s (
       .i_clk(clk),
-      .i_rst_n(rst_n),
       .i_we(s_we),
       .i_read_word_addr(s_read_word_addr),
       .i_write_word_addr(s_write_word_addr),
@@ -92,7 +90,6 @@ module tb_ram_blocks;
       .RAM_S_WORD_ADDR_W(TB_S_PACK1_WORD_ADDR_W)
   ) u_ram_s_pack2 (
       .i_clk(clk),
-      .i_rst_n(rst_n),
       .i_we(s_pack2_we),
       .i_read_word_addr(s_pack2_read_word_addr),
       .i_write_word_addr(s_pack2_write_word_addr),

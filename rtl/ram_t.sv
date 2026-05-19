@@ -43,16 +43,9 @@ module ram_t
       .DATA_W(MSG_W),
       .DEPTH(RAM_LANE_DEPTH),
       .ADDR_W(ENTRY_POS_W),
-`ifdef BIKE_SIM_DEBUG
-      .RESET_MEM(1'b1),
-`else
-      .RESET_MEM(1'b0),
-`endif
       .RESET_VALUE('0)
   ) u_mem (
       .i_clk(i_clk),
-      .i_rst_n(i_rst_n),
-      .i_clear(i_clear),
       .i_we(i_push),
       .i_write_addr(i_write_entry_idx),
       .i_wdata(i_wdata),
