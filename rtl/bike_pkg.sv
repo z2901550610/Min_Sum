@@ -23,10 +23,14 @@ package bike_pkg;
 `endif
 
   localparam int N = N0 * R;
-  localparam int L = 2;
+`ifndef BIKE_PARALLEL_L
+  localparam int L = 4;
+`else
+  localparam int L = `BIKE_PARALLEL_L;
+`endif
   localparam int D = 4;
   localparam int EDGE_SLOT_DEPTH = (W + L - 1) / L;
-  localparam int RAM_LANE_DEPTH = EDGE_SLOT_DEPTH + 1;
+  localparam int RAM_LANE_DEPTH = ((EDGE_SLOT_DEPTH + 1) < 3) ? 3 : (EDGE_SLOT_DEPTH + 1);
   localparam int ALPHA_FRAC_W = 6;  //alpha 用6位小数表示
   localparam int MAG_MAX = (1 << D) - 1;
   localparam int MSG_W = D + 1;
@@ -53,7 +57,7 @@ package bike_pkg;
   localparam int ENTRY_POS_W = (RAM_LANE_DEPTH > 1) ? $clog2(RAM_LANE_DEPTH) : 1;
   localparam int GROUP_COUNT_W = (RAM_LANE_DEPTH > 1) ? $clog2(RAM_LANE_DEPTH + 1) : 1;
   localparam int ITER_W = $clog2(I_MAX + 1);
-  localparam int S_PACK_W = 8;
+  localparam int S_PACK_W = (L <= 2) ? 8 : ((L <= 4) ? 4 : ((L <= 8) ? 2 : 1));
   localparam int S_WORDS_PER_COL = (RAM_LANE_DEPTH + S_PACK_W - 1) / S_PACK_W;
   localparam int S_WORD_DEPTH = N * S_WORDS_PER_COL;
   localparam int S_WORD_ADDR_W = (S_WORD_DEPTH > 1) ? $clog2(S_WORD_DEPTH) : 1;

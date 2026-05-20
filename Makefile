@@ -1,7 +1,8 @@
 VERILATOR ?= ./scripts/verilator_quiet.py
 REAL_VERILATOR ?= verilator
 VERILATOR_LOG_DIR ?= build/logs/verilator
-VERILATOR_FLAGS ?= --binary --sv -DBIKE_TOY_PARAMS -DBIKE_SIM_DEBUG -Wall -Wno-fatal -I./tb -I./rtl
+BIKE_PARALLEL_L ?= 4
+VERILATOR_FLAGS ?= --binary --sv -DBIKE_TOY_PARAMS -DBIKE_PARALLEL_L=$(BIKE_PARALLEL_L) -DBIKE_SIM_DEBUG -Wall -Wno-fatal -I./tb -I./rtl
 SIM ?= ./scripts/run_quiet.py
 VIVADO ?= vivado
 VIVADO_BUILD_DIR ?= build/vivado
@@ -14,7 +15,7 @@ export REAL_VERILATOR
 export VERILATOR_LOG_DIR
 
 VECTOR_SVH := tb/generated/bike_demo_vectors.svh
-RAM_I_HEX := rtl/generated/ram_i0_entries_test.hex rtl/generated/ram_i0_counts_test.hex rtl/generated/ram_i1_entries_test.hex rtl/generated/ram_i1_counts_test.hex rtl/generated/ram_i0_entries_l1.hex rtl/generated/ram_i0_counts_l1.hex rtl/generated/ram_i1_entries_l1.hex rtl/generated/ram_i1_counts_l1.hex
+RAM_I_HEX := rtl/generated/ram_i0_entries_test.hex rtl/generated/ram_i0_counts_test.hex rtl/generated/ram_i1_entries_test.hex rtl/generated/ram_i1_counts_test.hex rtl/generated/ram_i2_entries_test.hex rtl/generated/ram_i2_counts_test.hex rtl/generated/ram_i3_entries_test.hex rtl/generated/ram_i3_counts_test.hex rtl/generated/ram_i0_entries_l1.hex rtl/generated/ram_i0_counts_l1.hex rtl/generated/ram_i1_entries_l1.hex rtl/generated/ram_i1_counts_l1.hex rtl/generated/ram_i2_entries_l1.hex rtl/generated/ram_i2_counts_l1.hex rtl/generated/ram_i3_entries_l1.hex rtl/generated/ram_i3_counts_l1.hex
 RAM_I_HEX_STAMP := rtl/generated/.ram_i_hex.stamp
 RTL_PKG := rtl/bike_pkg.sv
 RTL_PRIMS := rtl/ram_1r1w_sync_read.sv rtl/ram_1r1w_async_read.sv rtl/sign_bit_pack.sv
@@ -24,13 +25,14 @@ MAINTAINED_SV := $(sort $(wildcard rtl/*.sv) $(wildcard tb/*.sv))
 BIKE_RANDOM_BASE_SEED ?= 1
 BIKE_RANDOM_TRIALS ?= 1
 BIKE_RANDOM_ERROR_COUNT ?= 1
+BIKE_RANDOM_PARALLEL_L ?= $(BIKE_PARALLEL_L)
 
-.PHONY: all sim test test-unit test-integration test-bike-random format-rtl check-format-rtl lint-rtl vivado-synth
+.PHONY: all sim test test-unit test-integration test-bike-random format-rtl check-format-rtl lint-rtl vivado-synth FORCE
 
 all: test
 
-$(RAM_I_HEX_STAMP): rtl/bike_pkg.sv scripts/gen_qc_first_columns.py scripts/ram_i_hex.py scripts/qc_matrix_data.py
-	@python3 scripts/gen_qc_first_columns.py --input rtl/bike_pkg.sv --output-dir rtl/generated/
+$(RAM_I_HEX_STAMP): FORCE rtl/bike_pkg.sv scripts/gen_qc_first_columns.py scripts/ram_i_hex.py scripts/qc_matrix_data.py
+	@python3 scripts/gen_qc_first_columns.py --input rtl/bike_pkg.sv --output-dir rtl/generated/ --parallel-l $(BIKE_PARALLEL_L)
 	@touch $@
 
 $(RAM_I_HEX): $(RAM_I_HEX_STAMP)
@@ -63,7 +65,7 @@ test-integration: $(VECTOR_SVH) $(RAM_I_HEX_STAMP)
 	@$(SIM) ./obj_dir/Vtb_decoder_top +verilator+quiet
 
 test-bike-random:
-	@python3 scripts/run_bike_random.py --base-seed $(BIKE_RANDOM_BASE_SEED) --trials $(BIKE_RANDOM_TRIALS) --error-count $(BIKE_RANDOM_ERROR_COUNT) --verilator $(VERILATOR)
+	@python3 scripts/run_bike_random.py --base-seed $(BIKE_RANDOM_BASE_SEED) --trials $(BIKE_RANDOM_TRIALS) --error-count $(BIKE_RANDOM_ERROR_COUNT) --parallel-l $(BIKE_RANDOM_PARALLEL_L) --verilator $(VERILATOR)
 
 format-rtl:
 	@$(VERIBLE_FORMAT) $(VERIBLE_FORMAT_FLAGS) --inplace $(MAINTAINED_SV)

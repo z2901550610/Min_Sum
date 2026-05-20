@@ -113,6 +113,7 @@ def emit_pkg(
     alpha_shift_0: int,
     alpha_shift_1: int,
     l: int,
+    s_pack_w: int,
     h_base: list[list[int]],
     lane_depth: int,
 ) -> None:
@@ -154,7 +155,7 @@ package bike_pkg;
   parameter int ENTRY_POS_W = (RAM_LANE_DEPTH > 1) ? $clog2(RAM_LANE_DEPTH) : 1;
   parameter int GROUP_COUNT_W = (RAM_LANE_DEPTH > 1) ? $clog2(RAM_LANE_DEPTH + 1) : 1;
   parameter int ITER_W = $clog2(I_MAX + 1);
-  parameter int S_PACK_W = 8;
+  parameter int S_PACK_W = {s_pack_w};
   parameter int S_WORDS_PER_COL = (RAM_LANE_DEPTH + S_PACK_W - 1) / S_PACK_W;
   parameter int S_WORD_DEPTH = N * S_WORDS_PER_COL;
   parameter int S_WORD_ADDR_W = (S_WORD_DEPTH > 1) ? $clog2(S_WORD_DEPTH) : 1;
@@ -213,7 +214,17 @@ endpackage
 
 
 def default_ram_lane_depth(w: int, l: int) -> int:
-    return (w + l - 1) // l + 1
+    return max((w + l - 1) // l + 1, 3)
+
+
+def default_s_pack_w(l: int) -> int:
+    if l <= 2:
+        return 8
+    if l <= 4:
+        return 4
+    if l <= 8:
+        return 2
+    return 1
 
 
 def emit_tb(
@@ -441,6 +452,7 @@ def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int
         if args.ram_lane_depth is not None
         else default_ram_lane_depth(args.w, args.parallel_l)
     )
+    s_pack_w = args.s_pack_w if args.s_pack_w is not None else default_s_pack_w(args.parallel_l)
     if lane_depth < required_lane_depth:
         raise ValueError(
             f"RAM lane depth {lane_depth} is smaller than required depth {required_lane_depth} "
@@ -458,6 +470,7 @@ def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int
         alpha_shift_0=args.alpha_shift_0,
         alpha_shift_1=args.alpha_shift_1,
         l=args.parallel_l,
+        s_pack_w=s_pack_w,
         h_base=h_base,
         lane_depth=lane_depth,
     )
@@ -518,12 +531,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--c-val", type=int, default=2)
     parser.add_argument("--alpha-shift-0", type=int, default=1)
     parser.add_argument("--alpha-shift-1", type=int, default=3)
-    parser.add_argument("--parallel-l", type=int, default=2)
+    parser.add_argument("--parallel-l", type=int, default=4)
+    parser.add_argument("--s-pack-w", type=int, default=None)
     parser.add_argument(
         "--ram-lane-depth",
         type=int,
         default=None,
-        help="Fixed RAM-I/S/T lane capacity. Defaults to ceil(w/L)+7.",
+        help="Fixed RAM-I/S/T lane capacity. Defaults to ceil(w/L)+1.",
     )
     return parser.parse_args()
 
@@ -535,6 +549,10 @@ def main() -> int:
         raise ValueError("--trials must be positive")
     if args.parallel_l < 1:
         raise ValueError("--parallel-l must be positive")
+    if args.s_pack_w is not None and (
+        args.s_pack_w < 1 or (args.s_pack_w & (args.s_pack_w - 1)) != 0
+    ):
+        raise ValueError("--s-pack-w must be a positive power of two")
     if args.ram_lane_depth is not None and args.ram_lane_depth < 1:
         raise ValueError("--ram-lane-depth must be positive")
 

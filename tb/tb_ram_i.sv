@@ -59,10 +59,10 @@ module tb_ram_i;
     #1;
 
     // After reset, $readmemh-initialised memory should retain its data.
-    // For test params, ram_i0 carries one_idx 0 and 2 from each h_block.
-    if (debug_counts[0] != GROUP_COUNT_W'(2))
+    // For test params, ram_i0 carries the one_idx values congruent to zero.
+    if (debug_counts[0] != GROUP_COUNT_W'(EDGE_SLOT_DEPTH))
       $fatal(1, "ram_i init count h_block 0 mismatch: %0d", debug_counts[0]);
-    if (debug_counts[1] != GROUP_COUNT_W'(2))
+    if (debug_counts[1] != GROUP_COUNT_W'(EDGE_SLOT_DEPTH))
       $fatal(1, "ram_i init count h_block 1 mismatch: %0d", debug_counts[1]);
 
     // Read back via functional port.
@@ -98,7 +98,7 @@ module tb_ram_i;
     rst_n = 1'b1;
     @(posedge clk);
     #1;
-    if (debug_counts[0] != GROUP_COUNT_W'(2))
+    if (debug_counts[0] != GROUP_COUNT_W'(EDGE_SLOT_DEPTH))
       $fatal(1, "ram_i memory should persist through reset");
 
     $display("tb_ram_i PASS");

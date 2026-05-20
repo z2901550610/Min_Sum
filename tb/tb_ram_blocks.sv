@@ -15,7 +15,7 @@ module tb_ram_blocks;
   logic                  m_repoch;
   logic [COMP_C2V_W-1:0] m_debug[0:R-1];
 
-  localparam int TB_S_PACK_W = 8;
+  localparam int TB_S_PACK_W = S_PACK_W;
   localparam int TB_S_WORDS_PER_COL = (RAM_LANE_DEPTH + TB_S_PACK_W - 1) / TB_S_PACK_W;
   localparam int TB_S_WORD_DEPTH = N * TB_S_WORDS_PER_COL;
   localparam int TB_S_WORD_ADDR_W = (TB_S_WORD_DEPTH > 1) ? $clog2(TB_S_WORD_DEPTH) : 1;

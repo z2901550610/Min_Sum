@@ -50,6 +50,7 @@ def main() -> None:
         default="rtl/generated",
         help="Output directory for hex files",
     )
+    parser.add_argument("--parallel-l", type=int, default=None)
     args = parser.parse_args()
 
     input_path = Path(args.input)
@@ -58,14 +59,20 @@ def main() -> None:
     source_text = input_path.read_text(encoding="utf-8")
     r_values = pair_values(extract_param_values(source_text, "R"))
     w_values = pair_values(extract_param_values(source_text, "W"))
-    l_values = pair_values(extract_param_values(source_text, "L"), default=2)
+    l_values = (
+        [args.parallel_l, args.parallel_l]
+        if args.parallel_l is not None
+        else pair_values(extract_param_values(source_text, "L"), default=2)
+    )
+    if min(l_values) < 1:
+        raise ValueError("--parallel-l must be positive")
     lane_depth_values_raw = extract_param_values(source_text, "RAM_LANE_DEPTH")
     if lane_depth_values_raw:
         lane_depth_values = pair_values(lane_depth_values_raw)
     else:
         lane_depth_values = [
-            (w_values[0] + l_values[0] - 1) // l_values[0] + 1,
-            (w_values[1] + l_values[1] - 1) // l_values[1] + 1,
+            max((w_values[0] + l_values[0] - 1) // l_values[0] + 1, 3),
+            max((w_values[1] + l_values[1] - 1) // l_values[1] + 1, 3),
         ]
 
     jobs = [

@@ -143,36 +143,52 @@ module tb_h_shift;
   endtask
 
   initial begin
-    group_idx_in[0] = '0;
-    group_idx_in[1] = GROUP_IDX_W'(1);
-    row_idx_group_in[0] = '0;
-    row_idx_group_in[1] = '0;
-    odd_group_idx_in[0] = '0;
-    odd_group_idx_in[1] = GROUP_IDX_W'(1);
-    odd_row_idx_group_in[0] = '0;
-    odd_row_idx_group_in[1] = '0;
+    for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
+      group_idx_in[lane_idx] = GROUP_IDX_W'(lane_idx);
+      row_idx_group_in[lane_idx] = '0;
+      odd_group_idx_in[lane_idx] = GROUP_IDX_W'(lane_idx);
+      odd_row_idx_group_in[lane_idx] = '0;
+    end
 
-    check_shift(3,  // global row 6 -> 7
-                GROUP_IDX_W'(1), ROW_GROUP_W'(3), 3,  // global row 7 -> 0
-                GROUP_IDX_W'(0), ROW_GROUP_W'(0));
-    check_shift(1,  // global row 2 -> 3
-                GROUP_IDX_W'(1), ROW_GROUP_W'(1), 2,  // global row 5 -> 6
-                GROUP_IDX_W'(0), ROW_GROUP_W'(3));
+    for (int row_idx_global = 0; row_idx_global < R; row_idx_global++) begin
+      int                     lane_idx;
+      logic [ROW_GROUP_W-1:0] row_idx_group_i;
+      int                     next_row_global;
 
-    for (int row_idx_group0 = 0; row_idx_group0 < ROW_SEG_SIZE; row_idx_group0++) begin
-      for (int row_idx_group1 = 0; row_idx_group1 < ROW_SEG_SIZE; row_idx_group1++) begin
-        if (row_global_from_group(
-                0, row_idx_group0
-            ) < R && row_global_from_group(
-                1, row_idx_group1
-            ) < R) begin
-          check_group_pair(row_idx_group0, row_idx_group1);
-        end
+      lane_idx = row_idx_global % L;
+      row_idx_group_i = ROW_GROUP_W'(row_idx_global / L);
+      next_row_global = (row_idx_global == (R - 1)) ? 0 : (row_idx_global + 1);
+      row_idx_group_in[lane_idx] = row_idx_group_i;
+      #1;
+      if (ram_i_target_idx_out[lane_idx] != GROUP_IDX_W'(next_row_global % L)) begin
+        $fatal(1, "h_shift target mismatch row=%0d lane=%0d got=%0d exp=%0d", row_idx_global,
+               lane_idx, ram_i_target_idx_out[lane_idx], next_row_global % L);
+      end
+      if (row_idx_group_out[lane_idx] != ROW_GROUP_W'(next_row_global / L)) begin
+        $fatal(1, "h_shift row_idx_group mismatch row=%0d lane=%0d got=%0d exp=%0d",
+               row_idx_global, lane_idx, row_idx_group_out[lane_idx], next_row_global / L);
       end
     end
 
-    check_odd_r_same_target(4, 0, 0, 1);  // row 8 -> 0 and row 1 -> 2.
-    check_odd_r_same_target(4, 0, 3, 4);  // row 8 -> 0 and row 7 -> 8.
+    for (int row_idx_global = 0; row_idx_global < ODD_R; row_idx_global++) begin
+      int                         lane_idx;
+      logic [ODD_ROW_GROUP_W-1:0] row_idx_group_i;
+      int                         next_row_global;
+
+      lane_idx = row_idx_global % L;
+      row_idx_group_i = ODD_ROW_GROUP_W'(row_idx_global / L);
+      next_row_global = (row_idx_global == (ODD_R - 1)) ? 0 : (row_idx_global + 1);
+      odd_row_idx_group_in[lane_idx] = row_idx_group_i;
+      #1;
+      if (odd_ram_i_target_idx_out[lane_idx] != GROUP_IDX_W'(next_row_global % L)) begin
+        $fatal(1, "odd-r h_shift target mismatch row=%0d lane=%0d got=%0d exp=%0d", row_idx_global,
+               lane_idx, odd_ram_i_target_idx_out[lane_idx], next_row_global % L);
+      end
+      if (odd_row_idx_group_out[lane_idx] != ODD_ROW_GROUP_W'(next_row_global / L)) begin
+        $fatal(1, "odd-r h_shift row_idx_group mismatch row=%0d lane=%0d got=%0d exp=%0d",
+               row_idx_global, lane_idx, odd_row_idx_group_out[lane_idx], next_row_global / L);
+      end
+    end
 
     $display("tb_h_shift PASS");
     $finish;
