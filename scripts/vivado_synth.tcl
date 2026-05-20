@@ -8,6 +8,7 @@ set threads [expr {[info exists ::env(VIVADO_THREADS)] ? $::env(VIVADO_THREADS) 
 set synth_directive [expr {[info exists ::env(VIVADO_SYNTH_DIRECTIVE)] ? $::env(VIVADO_SYNTH_DIRECTIVE) : "Default"}]
 set flatten_hierarchy [expr {[info exists ::env(VIVADO_FLATTEN_HIERARCHY)] ? $::env(VIVADO_FLATTEN_HIERARCHY) : "rebuilt"}]
 set xdc_file [expr {[info exists ::env(VIVADO_XDC)] ? $::env(VIVADO_XDC) : "constraints/decoder_top.xdc"}]
+set parallel_l [expr {[info exists ::env(BIKE_PARALLEL_L)] ? $::env(BIKE_PARALLEL_L) : "8"}]
 set top "decoder_top"
 
 file mkdir $build_dir
@@ -52,10 +53,10 @@ run_step "read_verilog" {
 }
 set_property include_dirs [list rtl] [current_fileset]
 
-foreach init_file [glob -nocomplain rtl/generated/*.hex] {
+foreach init_file [glob -nocomplain rtl/generated/l$parallel_l/*.hex] {
   add_files -fileset sources_1 $init_file
 }
-set ram_i_hex_prefix [file normalize rtl/generated/ram_i]
+set ram_i_hex_prefix [file normalize rtl/generated/l$parallel_l/ram_i]
 
 if {[file exists $xdc_file]} {
   run_step "read_xdc" {

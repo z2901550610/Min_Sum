@@ -20,8 +20,12 @@ module tb_ram_i;
   logic [    I_ENTRY_W-1:0] debug_list_entries[0:N0-1] [0:RAM_LANE_DEPTH-1];
   logic [GROUP_COUNT_W-1:0] debug_counts[0:N0-1];
 
+  localparam string TB_RAM_I0_HEX_STEM = (L == 2) ? "rtl/generated/l2/ram_i0" :
+                                         ((L == 4) ? "rtl/generated/l4/ram_i0" :
+                                          "rtl/generated/l8/ram_i0");
+
   ram_i #(
-      .INIT_HEX_STEM("rtl/generated/ram_i0")
+      .INIT_HEX_STEM(TB_RAM_I0_HEX_STEM)
   ) dut (
       .i_clk(clk),
       .i_rst_n(rst_n),

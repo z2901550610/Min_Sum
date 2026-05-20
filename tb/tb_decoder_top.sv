@@ -22,9 +22,12 @@ module tb_decoder_top;
   integer                         active_lane_count;
   logic                           saw_drain_state;
   localparam int unsigned TB_SUPPORTS[0:N0-1][0:W-1] = '{'{0, 2, 4}, '{0, 3, 4}};
+  localparam string TB_RAM_I_HEX_PREFIX = (L == 2) ? "rtl/generated/l2/ram_i" :
+                                          ((L == 4) ? "rtl/generated/l4/ram_i" :
+                                           "rtl/generated/l8/ram_i");
 
   decoder_top #(
-      .RAM_I_HEX_PREFIX("rtl/generated/ram_i")
+      .RAM_I_HEX_PREFIX(TB_RAM_I_HEX_PREFIX)
   ) dut (
       .i_clk(clk),
       .i_rst_n(rst_n),

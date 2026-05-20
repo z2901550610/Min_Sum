@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
-// RAM-I：一个实例只保存一个 group 的 H-block 列 metadata。
-// list 是该 group 内的 packed entries，entry = {one_idx, row_idx_group}。
+// RAM-I：一个实例保存一个 edge lane 的 H-block 列 metadata。
+// list 是该 lane 内的 packed entries，entry = {one_idx, row_idx_global}。
 // 上电时通过 $readmemh 从 hex 文件加载初始数据。
 module ram_i
   import bike_pkg::*;
@@ -51,7 +51,7 @@ module ram_i
       "%s%0d_counts%s.hex", INIT_HEX_PREFIX, BANK_IDX, INIT_HEX_TAG
   );
 
-  // 每个 h_block 保存 active/next 两个 group-local list；count 说明 list 前几项有效。
+  // 每个 h_block 保存 active/next 两个 lane-local list；count 说明 list 前几项有效。
   logic                     active_slot[             0:N0-1];
   logic [    I_ENTRY_W-1:0] entry_mem[    0:I_MEM_DEPTH-1];
   logic [GROUP_COUNT_W-1:0] count_mem[0:COUNT_MEM_DEPTH-1];

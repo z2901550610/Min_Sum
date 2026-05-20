@@ -13,11 +13,13 @@ VERIBLE_LINT_FLAGS ?= --rules_config .rules.verible_lint
 SV_DECL_FORMAT ?= python3 scripts/format_sv_decls.py
 export REAL_VERILATOR
 export VERILATOR_LOG_DIR
+export BIKE_PARALLEL_L
 
 VECTOR_SVH := tb/generated/bike_demo_vectors.svh
-RAM_I_BANKS := 0 1 2 3 4 5 6 7
-RAM_I_HEX := $(foreach b,$(RAM_I_BANKS),rtl/generated/ram_i$(b)_entries_test.hex rtl/generated/ram_i$(b)_counts_test.hex rtl/generated/ram_i$(b)_entries_l1.hex rtl/generated/ram_i$(b)_counts_l1.hex)
-RAM_I_HEX_STAMP := rtl/generated/.ram_i_hex.stamp
+RAM_I_HEX_DIR := rtl/generated/l$(BIKE_PARALLEL_L)
+RAM_I_BANKS := $(shell seq 0 $$(($(BIKE_PARALLEL_L)-1)))
+RAM_I_HEX := $(foreach b,$(RAM_I_BANKS),$(RAM_I_HEX_DIR)/ram_i$(b)_entries_test.hex $(RAM_I_HEX_DIR)/ram_i$(b)_counts_test.hex $(RAM_I_HEX_DIR)/ram_i$(b)_entries_l1.hex $(RAM_I_HEX_DIR)/ram_i$(b)_counts_l1.hex)
+RAM_I_HEX_STAMP := $(RAM_I_HEX_DIR)/.ram_i_hex.stamp
 RTL_PKG := rtl/bike_pkg.sv
 RTL_PRIMS := rtl/ram_1r1w_sync_read.sv rtl/ram_1r1w_async_read.sv rtl/sign_bit_pack.sv
 RTL_CORE := $(RTL_PRIMS) rtl/edge_message_pipe.sv rtl/decoder_top.sv rtl/ram_i.sv rtl/msg_signmag_to_tc.sv rtl/msg_tc_to_signmag_sat.sv rtl/decoder_ctrl.sv rtl/ram_c.sv rtl/ram_m.sv rtl/ram_s.sv rtl/ram_syndrome.sv rtl/ram_t.sv rtl/cnu_a.sv rtl/cnu_b.sv rtl/vnu.sv
@@ -33,11 +35,11 @@ BIKE_RANDOM_PARALLEL_L ?= $(BIKE_PARALLEL_L)
 all: test
 
 $(RAM_I_HEX_STAMP): FORCE rtl/bike_pkg.sv scripts/gen_qc_first_columns.py scripts/ram_i_hex.py scripts/qc_matrix_data.py
-	@python3 scripts/gen_qc_first_columns.py --input rtl/bike_pkg.sv --output-dir rtl/generated/ --parallel-l $(BIKE_PARALLEL_L)
+	@python3 scripts/gen_qc_first_columns.py --input rtl/bike_pkg.sv --output-dir $(RAM_I_HEX_DIR)/ --parallel-l $(BIKE_PARALLEL_L)
 	@touch $@
 
 $(RAM_I_HEX): $(RAM_I_HEX_STAMP)
-	@if [ ! -f "$@" ]; then python3 scripts/gen_qc_first_columns.py --input rtl/bike_pkg.sv --output-dir rtl/generated/; touch $(RAM_I_HEX_STAMP); fi
+	@if [ ! -f "$@" ]; then python3 scripts/gen_qc_first_columns.py --input rtl/bike_pkg.sv --output-dir $(RAM_I_HEX_DIR)/ --parallel-l $(BIKE_PARALLEL_L); touch $(RAM_I_HEX_STAMP); fi
 
 test: test-unit test-integration
 

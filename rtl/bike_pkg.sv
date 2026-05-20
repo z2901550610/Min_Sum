@@ -30,6 +30,8 @@ package bike_pkg;
 `endif
   localparam int D = 4;
   localparam int EDGE_SLOT_DEPTH = (W + L - 1) / L;
+  // Three edge slots cover the controller pipeline boundary for small toy
+  // matrices while L1 uses the edge-lane capacity.
   localparam int RAM_LANE_DEPTH = ((EDGE_SLOT_DEPTH + 1) < 3) ? 3 : (EDGE_SLOT_DEPTH + 1);
   localparam int ALPHA_FRAC_W = 6;  //alpha 用6位小数表示
   localparam int MAG_MAX = (1 << D) - 1;
@@ -44,10 +46,9 @@ package bike_pkg;
   // Canonical names aligned with h_shift.sv conventions.
   // "one_idx" = index of a "1" within a column (0 .. W-1).
   // "row_idx_global" = global row index (0 .. R-1).
-  // "lane_idx" = physical processing lane (0 .. L-1).
+  // "lane_idx" = physical processing lane selected by one_idx % L.
   // "row_idx_group" = row index within a virtual row bank.
   // "group_idx" = virtual row-bank index (0 .. L-1).
-  // "lane_idx" = edge-index lane; one_idx % L.
   // "group_count" = number of valid edge slots in a lane-local list.
   localparam int ONE_IDX_W = (W > 1) ? $clog2(W) : 1;
   localparam int ROW_IDX_W = (R > 1) ? $clog2(R) : 1;
@@ -57,6 +58,8 @@ package bike_pkg;
   localparam int ENTRY_POS_W = (RAM_LANE_DEPTH > 1) ? $clog2(RAM_LANE_DEPTH) : 1;
   localparam int GROUP_COUNT_W = (RAM_LANE_DEPTH > 1) ? $clog2(RAM_LANE_DEPTH + 1) : 1;
   localparam int ITER_W = $clog2(I_MAX + 1);
+  // RAM-S packing is selected per parallelism tier so each column uses a
+  // compact whole-number of sign words across lanes.
   localparam int S_PACK_W = (L <= 2) ? 8 : ((L <= 4) ? 4 : ((L <= 8) ? 2 : 1));
   localparam int S_WORDS_PER_COL = (RAM_LANE_DEPTH + S_PACK_W - 1) / S_PACK_W;
   localparam int S_WORD_DEPTH = N * S_WORDS_PER_COL;
