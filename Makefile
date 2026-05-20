@@ -1,7 +1,7 @@
 VERILATOR ?= ./scripts/verilator_quiet.py
 REAL_VERILATOR ?= verilator
 VERILATOR_LOG_DIR ?= build/logs/verilator
-BIKE_PARALLEL_L ?= 4
+BIKE_PARALLEL_L ?= 8
 VERILATOR_FLAGS ?= --binary --sv -DBIKE_TOY_PARAMS -DBIKE_PARALLEL_L=$(BIKE_PARALLEL_L) -DBIKE_SIM_DEBUG -Wall -Wno-fatal -I./tb -I./rtl
 SIM ?= ./scripts/run_quiet.py
 VIVADO ?= vivado
@@ -15,7 +15,8 @@ export REAL_VERILATOR
 export VERILATOR_LOG_DIR
 
 VECTOR_SVH := tb/generated/bike_demo_vectors.svh
-RAM_I_HEX := rtl/generated/ram_i0_entries_test.hex rtl/generated/ram_i0_counts_test.hex rtl/generated/ram_i1_entries_test.hex rtl/generated/ram_i1_counts_test.hex rtl/generated/ram_i2_entries_test.hex rtl/generated/ram_i2_counts_test.hex rtl/generated/ram_i3_entries_test.hex rtl/generated/ram_i3_counts_test.hex rtl/generated/ram_i0_entries_l1.hex rtl/generated/ram_i0_counts_l1.hex rtl/generated/ram_i1_entries_l1.hex rtl/generated/ram_i1_counts_l1.hex rtl/generated/ram_i2_entries_l1.hex rtl/generated/ram_i2_counts_l1.hex rtl/generated/ram_i3_entries_l1.hex rtl/generated/ram_i3_counts_l1.hex
+RAM_I_BANKS := 0 1 2 3 4 5 6 7
+RAM_I_HEX := $(foreach b,$(RAM_I_BANKS),rtl/generated/ram_i$(b)_entries_test.hex rtl/generated/ram_i$(b)_counts_test.hex rtl/generated/ram_i$(b)_entries_l1.hex rtl/generated/ram_i$(b)_counts_l1.hex)
 RAM_I_HEX_STAMP := rtl/generated/.ram_i_hex.stamp
 RTL_PKG := rtl/bike_pkg.sv
 RTL_PRIMS := rtl/ram_1r1w_sync_read.sv rtl/ram_1r1w_async_read.sv rtl/sign_bit_pack.sv

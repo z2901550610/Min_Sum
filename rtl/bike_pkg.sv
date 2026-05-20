@@ -24,7 +24,7 @@ package bike_pkg;
 
   localparam int N = N0 * R;
 `ifndef BIKE_PARALLEL_L
-  localparam int L = 4;
+  localparam int L = 8;
 `else
   localparam int L = `BIKE_PARALLEL_L;
 `endif

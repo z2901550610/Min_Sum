@@ -531,7 +531,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--c-val", type=int, default=2)
     parser.add_argument("--alpha-shift-0", type=int, default=1)
     parser.add_argument("--alpha-shift-1", type=int, default=3)
-    parser.add_argument("--parallel-l", type=int, default=4)
+    parser.add_argument("--parallel-l", type=int, default=8)
     parser.add_argument("--s-pack-w", type=int, default=None)
     parser.add_argument(
         "--ram-lane-depth",
