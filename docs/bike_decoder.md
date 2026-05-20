@@ -38,7 +38,7 @@
 row_sign_xor ^ edge_u_sign ^ syndrome[row]
 ```
 
-残差syndrome随 RAM C 中硬判决 bit 的变化增量更新。残差为零时解码成功，达到 `I_MAX` 次迭代后仍未清零则解码失败。
+RTL 完成 `I_MAX` 次迭代后输出错误估计。验证环境导出 `e_hat` 后计算 `i_syndrome ^ H*e_hat`，残差为零且 `e_hat` 等于测试目标错误向量时用例通过。
 
 ## 初始化
 
@@ -62,12 +62,12 @@ ram_i #(.INIT_HEX_STEM("rtl/generated/ram_i1")) u_ram_i1 (...);
 ## 模块划分
 
 - `decoder_ctrl` 负责解码控制、c2v/v2c 列上下文、RAM-M 乒乓 bank、列缓冲切换事件以及 done 状态管理。ITER 内部调度由固定 `SCHED_*` 状态表驱动，列 k 内部使用 `COL_K_STAGE_*` 表示 v2c 发射流水阶段。
-- `decoder_top` 是解码器核心数据通路和结构互连。它实例化各编号 RAM 块、`decoder_ctrl`、`h_shift`、CNU/VNU 单元和消息编解码适配器；顶层逻辑覆盖 RAM 端口选择、RAM-I 行组 entry 处理、数据锁存和残差syndrome增量维护。
+- `decoder_top` 是解码器核心数据通路和结构互连。它实例化各编号 RAM 块、`decoder_ctrl`、`h_shift`、CNU/VNU 单元和消息编解码适配器；顶层逻辑覆盖 RAM 端口选择、RAM-I 行组 entry 处理、数据锁存和错误估计导出。
 - `vnu` 以 2's-complement 格式消费 c2v 并生成未饱和的 2's-complement v2c。符号-幅值转换在 VNU 输入/输出边界的外部 `msg_codec` 适配器中完成；RAM-T 和 VNU 缩放数据通路保持在 2's-complement 域内。
 - `ram_i`、`ram_m`、`ram_s`、`ram_t`、`ram_c` 均为论文风格的 RAM 原语。每个 RTL 文件对应一个编号 RAM 块。
 - `decoder_top` 按论文命名显式实例化各 RAM 块：`I0/I1`、`M0/M1/M2/M3`、`S0/S1`、`T0/T1`、`C`。
-- RAM-M 每个 numbered block 保存一个 row group 的压缩 c2v 状态和 1 bit epoch，深度为 `ROW_GROUP_DEPTH = ceil(R/L)`。顶层只向 RAM-M 发送 `row_idx_group`，绝对行号只用于 syndrome bit 选择和残差syndrome增量维护。
-- RAM-I、RAM-S、RAM-T 的 lane 内 entry 深度统一为 `RAM_LANE_DEPTH`，表示首列元数据在各 lane 中的最大有效 entry 数。默认 BIKE-L1 形状参数下 `RAM_LANE_DEPTH=43`，`BIKE_TOY_PARAMS` 参数下 `RAM_LANE_DEPTH=2`。
+- RAM-M 每个 numbered block 保存一个 row group 的压缩 c2v 状态和 1 bit epoch，深度为 `ROW_GROUP_DEPTH = ceil(R/L)`。顶层只向 RAM-M 发送 `row_idx_group`，绝对行号用于 syndrome bit 选择和验证侧残差计算。
+- RAM-I、RAM-S、RAM-T 的 lane 内 entry 深度统一为 `RAM_LANE_DEPTH`，表示首列元数据在各 lane 中的最大有效 entry 数。默认 BIKE-L1 形状参数下 `RAM_LANE_DEPTH=43`，`BIKE_TOY_PARAMS` 参数下 `RAM_LANE_DEPTH=3`。
 - RAM-S 每个 lane 以 `S_PACK_W` bit word 保存 v2c sign bit，BIKE-L1 配置使用 8 bit 打包。顶层读写 shift buffer 在 entry bit 流和打包 word 之间转换；RAM-S 只提供 word 级读写。
 - RAM-T 每个 lane 以按 entry slot 寻址的缓冲保存列 k+1 生成的 c2v 和 valid sideband。列 k+1 每个 entry slot 都写入，空 lane 写入 invalid slot；v2c 发射阶段按同一个 entry slot 读取，valid sideband 控制 VNU 的外信息相减。`ITER_CHECK` 清空 RAM-T slot 状态。
 - RAM-C 保存 syndrome 输入译码器的错误估计 bit，是一份适配 syndrome 输入语义的 `N` bit 存储，并提供串行读口用于导出最终估计。
@@ -80,7 +80,7 @@ ram_i #(.INIT_HEX_STEM("rtl/generated/ram_i1")) u_ram_i1 (...);
 
 ## 状态机详解
 
-`decoder_ctrl` 使用 4 个宏状态加嵌套子状态的层次化 FSM，实现 Fig.8 式列重叠调度。RAM-I 的首列元数据通过 `$readmemh` 在仿真启动时从 hex 文件加载，无需状态机参与。
+`decoder_ctrl` 使用 WAIT、ITER、DONE 三个宏状态加嵌套调度状态，实现 Fig.8 式列重叠调度。第一次迭代的 c2v 压缩状态由 `FIRST_ITER_C2V_COMP` 提供，RAM-I 的首列元数据通过 `$readmemh` 在仿真启动时从 hex 文件加载。
 
 ### 状态转移总览
 
@@ -88,16 +88,7 @@ ram_i #(.INIT_HEX_STEM("rtl/generated/ram_i1")) u_ram_i1 (...);
 stateDiagram-v2
     [*] --> WAIT
 
-    WAIT --> INIT : i_start=1
-
-    state INIT {
-        [*] --> READ
-        READ --> CNU_A
-        CNU_A --> WRITE
-        WRITE --> READ : 递增 entry 或进入下一列
-    }
-
-    INIT --> ITER : 所有列初始化完成
+    WAIT --> ITER : i_start=1
 
     state ITER {
         [*] --> FILL_K
@@ -118,34 +109,16 @@ stateDiagram-v2
 
     ITER --> DONE : i_finish_decode=1
 
-    DONE --> INIT : i_start=1
+    DONE --> ITER : i_start=1
 ```
 
 ### 宏状态
 
 #### 1. CTRL_WAIT — 上电空闲
 
-`i_rst_n` 复位后的初始状态。解码器在此等待首次 `i_start` 信号。当 `i_start` 置位时，复位所有内部计数器、子状态、列索引和 entry 位置指针，跳转到 **CTRL_INIT**。后续解码完成后再收到 `i_start` 时，状态机从 **CTRL_DONE** 直接跳回 **CTRL_INIT**，不会再次经过 WAIT。WAIT 仅存在于复位路径，为硬件上电提供一个确定的起点。
+`i_rst_n` 复位后的初始状态。解码器在此等待首次 `i_start` 信号。当 `i_start` 置位时，复位所有内部计数器、子状态、列索引和 entry 位置指针，跳转到 **CTRL_ITER**。解码完成后再收到 `i_start` 时，状态机从 **CTRL_DONE** 直接跳回 **CTRL_ITER**。WAIT 仅存在于复位路径，为硬件上电提供一个确定的起点。
 
-#### 2. CTRL_INIT — 初始压缩 c2v 对构建
-
-RAM-I 的首列元数据在仿真启动时通过 `$readmemh` 从 hex 文件自动加载。hex 文件由 `gen_qc_first_columns.py` 预生成。
-
-INIT 为所有变量列构建初始压缩 c2v 对（第一次迭代的输入），内部有以下微步骤，按列遍历，每列内按 entry 位置步进：
-
-| 微步骤 | 信号 | 功能 |
-|---|---|---|
-| `INIT_STEP_READ` | `o_init_m_read` | 从 RAM-M 读取当前 entry 的压缩 c2v 状态 |
-| `INIT_STEP_CNU_A` | `o_init_cnu_a` | 使能 CNU_A 进行初始累加运算 |
-| `INIT_STEP_WRITE` | `o_init_m_write` | 将 CNU_A 结果写回 RAM-M / RAM-S |
-
-播种完成后，每个 entry 依次经过 READ → CNU_A → WRITE 三步。entry 步进规则：
-
-- 非最后 entry（`i_c2v_entry_pos_last = 0`）：递增 `o_c2v_entry_pos`，回到 `INIT_STEP_READ`。
-- 最后 entry 但非最后列：`o_c2v_entry_pos` 归零，`o_c2v_col_idx` 递增，回到 `INIT_STEP_READ`。
-- 最后 entry 且最后列（`o_c2v_col_idx == LAST_VAR`）：所有列初始化完成，进入 **CTRL_ITER** 的 `SCHED_FILL_K`，列索引归零。
-
-#### 3. CTRL_ITER — 迭代解码（核心）
+#### 2. CTRL_ITER — 迭代解码（核心）
 
 `CTRL_ITER` 实现 **Fig.8 列重叠调度**：列 k+1 侧重建并累加后一列的 LLR，列 k 侧对当前列进行 v2c 更新。两列重叠运行，c2v 始终领先 v2c 一列。
 
@@ -185,9 +158,9 @@ INIT 为所有变量列构建初始压缩 c2v 对（第一次迭代的输入）�
 - `i_finish_decode = 1`：跳转到 **CTRL_DONE**，输出 `o_done = 1`。
 - `i_finish_decode = 0`：交换 RAM-M pair（`o_ram_m_read_pair_sel` 翻转），复位所有子状态和列指针，进入 `SCHED_FILL_K` 开始下一轮迭代。
 
-#### 4. CTRL_DONE — 解码完成
+#### 3. CTRL_DONE — 解码完成
 
-输出 `o_done = 1`，保持 `o_iter_count`。等待新一轮 `i_start`，收到后回到 **CTRL_INIT** 开始新的解码。
+输出 `o_done = 1`，保持 `o_iter_count`。等待新一轮 `i_start`，收到后回到 **CTRL_ITER** 开始新的解码。
 
 ### ITER 内部流水线时空示意
 
@@ -212,16 +185,16 @@ CONS                   [V2C]            [V2C]        ... [V2C]
 
 ## 验证
 
-常规 RTL 回归使用小型 BIKE 演示参数：
+常规 RTL 回归使用小型 BIKE 演示参数。集成 testbench 导出 `e_hat`，并要求残差 `i_syndrome ^ H*e_hat` 为零且 `e_hat` 等于目标错误向量：
 
 ```sh
 make test
 ```
 
-随机 BIKE 形状用例由脚本生成，并通过顶层 testbench 执行：
+随机 BIKE 形状用例由脚本生成，并通过顶层 testbench 执行。生成用例打印 `residual_weight` 和 `exact`，残差非零或 `exact=0` 触发 `$fatal`：
 
 ```sh
 make test-bike-random BIKE_RANDOM_TRIALS=1
 ```
 
-本仓库实现的是面向 BIKE 输入的 min-sum 解码器，并非官方的 BIKE bit-flipping 解码器系列。
+本仓库实现面向 BIKE syndrome 输入的 min-sum 解码器。

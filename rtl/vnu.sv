@@ -118,7 +118,8 @@ module vnu #(
       accum_sum_next = accum_sum_reg + cycle_sum;
     end
 
-    scaled_sum = alpha_scale(final_sum_reg);
+    scaled_sum = alpha_scale((i_finalize && (i_col_start || i_col_end || accum_valid_any)) ?
+                             accum_sum_next : final_sum_reg);
     posterior_next = prior_msg_sign_extend + scaled_sum;
 
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin

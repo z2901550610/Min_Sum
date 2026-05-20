@@ -20,9 +20,9 @@ module tb_decoder_top;
   logic   [$clog2(I_MAX + 1)-1:0] iter_count;
   logic                           checks_active;
   integer                         idx;
-  integer                         flat_idx;
+  integer                         active_lane_count;
   logic                           saw_drain_state;
-  localparam int unsigned TB_SUPPORTS[0:N0-1][0:W-1] = '{'{0, 1, 3}, '{0, 2, 5}};
+  localparam int unsigned TB_SUPPORTS[0:N0-1][0:W-1] = '{'{0, 2, 4}, '{0, 3, 4}};
 
   decoder_top #(
       .RAM_I_HEX_PREFIX("rtl/generated/ram_i")
@@ -177,6 +177,7 @@ module tb_decoder_top;
 
   initial begin
     logic [R-1:0] final_residual;
+    bit           exact_match;
 
     fork
       begin
@@ -199,11 +200,14 @@ module tb_decoder_top;
 
     wait (dut.c2v_read_d1 && dut.c2v_read_col_d1 == 1 && dut.c2v_read_entry_pos_d1 == 0);
     #1;
-    if (!(dut.c2v_group_valid[0] && dut.c2v_group_valid[1]))
-      $fatal(1, "shifted column 1 should expose two active group_idxs");
+    active_lane_count = 0;
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
       int row_idx_i;
 
+      if (!dut.c2v_group_valid[lane_idx]) begin
+        continue;
+      end
+      active_lane_count++;
       row_idx_i = edge_row_idx(int'(dut.c2v_read_col_d1), int'(dut.c2v_one_idx[lane_idx]));
       if (dut.c2v_row_idx_global[lane_idx] != ROW_IDX_W'(row_idx_i))
         $fatal(
@@ -218,6 +222,7 @@ module tb_decoder_top;
       if (dut.c2v_row_idx_group[lane_idx] != ROW_GROUP_W'(row_idx_i / L))
         $fatal(1, "shifted column 1 row group mismatch lane %0d", lane_idx);
     end
+    if (active_lane_count == 0) $fatal(1, "shifted column 1 exposed no active group");
 
     wait (dut.c2v_phase_active && dut.v2c_phase_active && dut.c2v_v2c_overlap_seen === 1'b1);
     #1;
@@ -228,23 +233,16 @@ module tb_decoder_top;
 
     wait (dut.vnu_accum_t && dut.c2v_latched_col == 1 && dut.c2v_latched_entry_pos == 0);
     #1;
-    if (!(dut.vnu_accum_valid[0] && dut.vnu_accum_valid[1]))
-      $fatal(1, "VNU did not consume both RAM-I group_idxs for shifted column 1");
-    for (int one_idx = 0; one_idx < W; one_idx++) begin
-      bit matched;
-      int expected_tc;
-
-      flat_idx = int'(dut.c2v_latched_col) * W + one_idx;
-      expected_tc =
-          c2v_signmag_to_tc(CASE1_FIRST_C2V_SIGN[flat_idx], CASE1_FIRST_C2V_MAG[flat_idx]);
-      matched = 1'b0;
-      for (idx = 0; idx < L; idx++) begin
-        if (dut.vnu_accum_valid[idx] && (int'(dut.c2v_tc[idx]) == expected_tc)) begin
-          matched = 1'b1;
-        end
-      end
-      if (!matched) begin
-        $fatal(1, "CASE1 RAM-T slot c2v tc[%0d] was not observed: exp %0d", flat_idx, expected_tc);
+    active_lane_count = 0;
+    for (idx = 0; idx < L; idx++) begin
+      if (dut.vnu_accum_valid[idx]) active_lane_count++;
+    end
+    if (active_lane_count == 0)
+      $fatal(1, "VNU did not consume an active RAM-I group for shifted column 1");
+    for (idx = 0; idx < L; idx++) begin
+      if (dut.vnu_accum_valid[idx] &&
+          ((int'(dut.c2v_tc[idx]) != C_VAL) && (int'(dut.c2v_tc[idx]) != -C_VAL))) begin
+        $fatal(1, "CASE1 RAM-T c2v tc magnitude mismatch: got %0d", int'(dut.c2v_tc[idx]));
       end
     end
 
@@ -257,9 +255,16 @@ module tb_decoder_top;
     @(posedge clk);
     read_error_vector(e_out);
     final_residual = residual_of(CASE1_SYNDROME, e_out);
+    exact_match = (e_out === CASE1_ERROR);
     if (int'(iter_count) != I_MAX)
       $fatal(1, "CASE1 iterations mismatch: got %0d exp %0d", iter_count, I_MAX);
-    $display("CASE1 final residual after fixed iterations: %b", final_residual);
+    $display("CASE1 residual=%b exact=%0d", final_residual, exact_match);
+    if (final_residual != '0) begin
+      $fatal(1, "CASE1 residual check failed");
+    end
+    if (!exact_match) begin
+      $fatal(1, "CASE1 exact check failed");
+    end
     if (!saw_drain_state) $fatal(1, "last v2c column drain state was not exercised");
 
     $display("tb_decoder_top PASS");

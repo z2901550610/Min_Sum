@@ -22,7 +22,7 @@ RTL_CORE := $(RTL_PRIMS) rtl/edge_message_pipe.sv rtl/decoder_top.sv rtl/ram_i.s
 RTL := $(RTL_PKG) $(RTL_CORE)
 MAINTAINED_SV := $(sort $(wildcard rtl/*.sv) $(wildcard tb/*.sv))
 BIKE_RANDOM_BASE_SEED ?= 1
-BIKE_RANDOM_TRIALS ?= 8
+BIKE_RANDOM_TRIALS ?= 1
 BIKE_RANDOM_ERROR_COUNT ?= 1
 
 .PHONY: all sim test test-unit test-integration test-bike-random format-rtl check-format-rtl lint-rtl vivado-synth

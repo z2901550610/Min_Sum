@@ -221,11 +221,9 @@ def emit_tb(
     timeout_cycles: int,
     syndrome_hex: str,
     target_hex: str,
-    require_convergence: bool,
     ram_i_hex_prefix: str,
     h_base: list[list[int]],
 ) -> None:
-    require_convergence_sv = "1'b1" if require_convergence else "1'b0"
     path.write_text(
         f"""`timescale 1ns/1ps
 
@@ -234,7 +232,6 @@ module tb_bike_decoder_random;
 
   localparam int TEST_SEED = {seed};
   localparam int TIMEOUT_CYCLES = {timeout_cycles};
-  localparam bit REQUIRE_CONVERGENCE = {require_convergence_sv};
   localparam logic [R-1:0] INPUT_SYNDROME = {syndrome_hex};
   localparam logic [N-1:0] TARGET_ERROR = {target_hex};
   localparam int unsigned TEST_SUPPORTS [0:N0-1][0:W-1] = '{{
@@ -334,6 +331,7 @@ module tb_bike_decoder_random;
   initial begin
     int cycles;
     logic [R-1:0] residual;
+    bit exact_match;
 
     rst_n = 1'b0;
     start = 1'b0;
@@ -369,9 +367,7 @@ module tb_bike_decoder_random;
     end
 
     residual = residual_of(e_out);
-    if (REQUIRE_CONVERGENCE && (residual != '0)) begin
-      $fatal(1, "seed=%0d did not converge; residual_weight=%0d", TEST_SEED, weight_r(residual));
-    end
+    exact_match = (e_out === TARGET_ERROR);
 
     $display(
       "seed=%0d iter=%0d cycles=%0d target_weight=%0d output_weight=%0d residual_weight=%0d exact=%0d",
@@ -381,8 +377,16 @@ module tb_bike_decoder_random;
       weight_n(TARGET_ERROR),
       weight_n(e_out),
       weight_r(residual),
-      (e_out === TARGET_ERROR)
+      exact_match
     );
+    if (residual != '0) begin
+      $fatal(1, "seed=%0d residual check failed; residual_weight=%0d", TEST_SEED,
+             weight_r(residual));
+    end
+    if (!exact_match) begin
+      $fatal(1, "seed=%0d exact check failed; target_weight=%0d output_weight=%0d", TEST_SEED,
+             weight_n(TARGET_ERROR), weight_n(e_out));
+    end
     $finish;
   end
 endmodule
@@ -470,7 +474,6 @@ def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int
         timeout_cycles=args.timeout_cycles,
         syndrome_hex=bit_vector_hex(syndrome, args.r),
         target_hex=bit_vector_hex(error_bits, n),
-        require_convergence=args.require_convergence,
         ram_i_hex_prefix=str((sv_case_dir / "ram_i").as_posix()),
         h_base=h_base,
     )
@@ -510,21 +513,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--r", type=int, default=8)
     parser.add_argument("--w", type=int, default=3)
     parser.add_argument("--i-max", type=int, default=4)
-    parser.add_argument("--c-val", type=int, default=9)
-    parser.add_argument("--alpha-shift-0", type=int, default=4)
-    parser.add_argument("--alpha-shift-1", type=int, default=5)
+    parser.add_argument("--c-val", type=int, default=2)
+    parser.add_argument("--alpha-shift-0", type=int, default=1)
+    parser.add_argument("--alpha-shift-1", type=int, default=3)
     parser.add_argument("--parallel-l", type=int, default=2)
     parser.add_argument(
         "--ram-lane-depth",
         type=int,
         default=None,
         help="Fixed RAM-I/S/T lane capacity. Defaults to ceil(w/L)+7.",
-    )
-    parser.add_argument(
-        "--require-convergence",
-        dest="require_convergence",
-        action="store_true",
-        help="Treat non-convergence as a test failure.",
     )
     return parser.parse_args()
 

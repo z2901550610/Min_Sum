@@ -263,6 +263,7 @@ module tb_vnu;
   // 两拍完成一列，检查部分和、最终后验值、bit decision 和 v2c。
   task automatic run_case0;
     logic signed [VNU_TC_W-1:0] expected_partial_sum;
+    int                         expected_posterior;
     begin
       initial_llr = 9;
       drive_accum_pair(1'b1, 1'b0, msg_tc(1'b0, D'(15)), 1'b1, msg_tc(1'b0, D'(15)));
@@ -277,8 +278,16 @@ module tb_vnu;
 
       drive_accum_pair(1'b0, 1'b1, msg_tc(1'b1, D'(9)), 1'b0, '0);
       finalize_column();
-      if ($signed(dut.posterior_reg) != 11)
-        $fatal(1, "case0 posterior mismatch: got %0d exp 11", $signed(dut.posterior_reg));
+      expected_posterior = 9 + alpha_scale_ref(21);
+      if (int'($signed(dut.posterior_reg)) != expected_posterior)
+        $fatal(
+            1,
+            "case0 posterior mismatch: got %0d exp %0d",
+            $signed(
+                dut.posterior_reg
+            ),
+            expected_posterior
+        );
       if (bit_decision !== 0) $fatal(1, "case0 bit decision mismatch");
 
       idle_inputs();
@@ -287,15 +296,30 @@ module tb_vnu;
       prev_c2v_tc0 = msg_tc(1'b0, D'(15));
       prev_c2v_tc1 = msg_tc(1'b0, D'(15));
       #1;
-      if (v2c_tc_valid0 !== 1'b1 || $signed(v2c_tc0) != 10) $fatal(1, "case0 v2c0 mismatch");
-      if (v2c_tc_valid1 !== 1'b1 || $signed(v2c_tc1) != 10) $fatal(1, "case0 v2c1 mismatch");
+      if (v2c_tc_valid0 !== 1'b1 || int'($signed(
+              v2c_tc0
+          )) != expected_posterior - alpha_scale_ref(
+              15
+          ))
+        $fatal(1, "case0 v2c0 mismatch");
+      if (v2c_tc_valid1 !== 1'b1 || int'($signed(
+              v2c_tc1
+          )) != expected_posterior - alpha_scale_ref(
+              15
+          ))
+        $fatal(1, "case0 v2c1 mismatch");
 
       prev_c2v_tc_valid0 = 1'b1;
       prev_c2v_tc_valid1 = 1'b0;
       prev_c2v_tc0 = msg_tc(1'b1, D'(9));
       prev_c2v_tc1 = '0;
       #1;
-      if (v2c_tc_valid0 !== 1'b1 || $signed(v2c_tc0) != 12) $fatal(1, "case0 v2c2 mismatch");
+      if (v2c_tc_valid0 !== 1'b1 || int'($signed(
+              v2c_tc0
+          )) != expected_posterior - alpha_scale_ref(
+              -9
+          ))
+        $fatal(1, "case0 v2c2 mismatch");
       if (v2c_tc_valid1 !== 1'b0) $fatal(1, "case0 v2c1 should be invalid on odd edge");
       idle_inputs();
     end
@@ -303,14 +327,23 @@ module tb_vnu;
 
   // 负消息累加但仍保持正后验的情况，覆盖不同符号组合下的 v2c。
   task automatic run_case1;
+    int expected_posterior;
     begin
       initial_llr = MSG_W'(MAG_MAX);
       drive_accum_pair(1'b1, 1'b0, msg_tc(1'b1, D'(15)), 1'b1, msg_tc(1'b1, D'(15)));
       drive_accum_pair(1'b0, 1'b1, msg_tc(1'b1, D'(15)), 1'b0, '0);
       finalize_column();
-      if ($signed(dut.posterior_reg) != 11)
-        $fatal(1, "case1 posterior mismatch: got %0d exp 11", $signed(dut.posterior_reg));
-      if (bit_decision !== 0) $fatal(1, "case1 bit decision mismatch");
+      expected_posterior = MAG_MAX + alpha_scale_ref(-45);
+      if (int'($signed(dut.posterior_reg)) != expected_posterior)
+        $fatal(
+            1,
+            "case1 posterior mismatch: got %0d exp %0d",
+            $signed(
+                dut.posterior_reg
+            ),
+            expected_posterior
+        );
+      if (bit_decision !== dut.posterior_reg[VNU_TC_W-1]) $fatal(1, "case1 bit decision mismatch");
 
       idle_inputs();
       prev_c2v_tc_valid0 = 1'b1;
@@ -318,8 +351,10 @@ module tb_vnu;
       prev_c2v_tc0 = msg_tc(1'b1, D'(15));
       prev_c2v_tc1 = msg_tc(1'b1, D'(15));
       #1;
-      if ($signed(v2c_tc0) != 12) $fatal(1, "case1 v2c0 tc mismatch");
-      if ($signed(v2c_tc1) != 12) $fatal(1, "case1 v2c1 tc mismatch");
+      if (int'($signed(v2c_tc0)) != expected_posterior - alpha_scale_ref(-15))
+        $fatal(1, "case1 v2c0 tc mismatch");
+      if (int'($signed(v2c_tc1)) != expected_posterior - alpha_scale_ref(-15))
+        $fatal(1, "case1 v2c1 tc mismatch");
       idle_inputs();
     end
   endtask
@@ -327,13 +362,23 @@ module tb_vnu;
   // 关键调度用例：
   // 新一列开始累加时，同时发射上一列 v2c，v2c 必须使用旧 posterior。
   task automatic run_overlap_case;
+    int expected_posterior;
+    int next_expected_posterior;
     begin
       initial_llr = 9;
       drive_accum_pair(1'b1, 1'b0, msg_tc(1'b0, D'(15)), 1'b1, msg_tc(1'b0, D'(15)));
       drive_accum_pair(1'b0, 1'b1, msg_tc(1'b1, D'(9)), 1'b0, '0);
       finalize_column();
-      if ($signed(dut.posterior_reg) != 11)
-        $fatal(1, "overlap setup posterior mismatch: got %0d exp 11", $signed(dut.posterior_reg));
+      expected_posterior = 9 + alpha_scale_ref(21);
+      if (int'($signed(dut.posterior_reg)) != expected_posterior)
+        $fatal(
+            1,
+            "overlap setup posterior mismatch: got %0d exp %0d",
+            $signed(
+                dut.posterior_reg
+            ),
+            expected_posterior
+        );
 
       idle_inputs();
       col_start = 1'b1;
@@ -346,7 +391,11 @@ module tb_vnu;
       prev_c2v_tc0 = msg_tc(1'b0, D'(15));
       prev_c2v_tc_valid1 = 1'b0;
       #1;
-      if (v2c_tc_valid0 !== 1'b1 || $signed(v2c_tc0) != 10)
+      if (v2c_tc_valid0 !== 1'b1 || int'($signed(
+              v2c_tc0
+          )) != expected_posterior - alpha_scale_ref(
+              15
+          ))
         $fatal(1, "overlap v2c update used wrong posterior");
       @(posedge clk);
       #1;
@@ -356,8 +405,16 @@ module tb_vnu;
       @(posedge clk);
       #1;
       finalize_column();
-      if ($signed(dut.posterior_reg) != 12)
-        $fatal(1, "overlap delayed posterior mismatch: got %0d exp 12", $signed(dut.posterior_reg));
+      next_expected_posterior = 9 + alpha_scale_ref(30);
+      if (int'($signed(dut.posterior_reg)) != next_expected_posterior)
+        $fatal(
+            1,
+            "overlap delayed posterior mismatch: got %0d exp %0d",
+            $signed(
+                dut.posterior_reg
+            ),
+            next_expected_posterior
+        );
       idle_inputs();
     end
   endtask
@@ -365,6 +422,7 @@ module tb_vnu;
   // 边界用例 1：
   // 单拍同时 start+end 完成一列，覆盖“只有一个累加拍”的列调度。
   task automatic run_single_cycle_column_case;
+    int expected_posterior;
     begin
       idle_inputs();
       initial_llr = MSG_W'(MAG_MAX);
@@ -377,8 +435,10 @@ module tb_vnu;
       @(posedge clk);
       #1;
       finalize_column();
-      if ($signed(dut.posterior_reg) != 18) begin
-        $fatal(1, "single-cycle posterior mismatch: got %0d exp 18", $signed(dut.posterior_reg));
+      expected_posterior = MAG_MAX + alpha_scale_ref(30);
+      if (int'($signed(dut.posterior_reg)) != expected_posterior) begin
+        $fatal(1, "single-cycle posterior mismatch: got %0d exp %0d", $signed(dut.posterior_reg),
+               expected_posterior);
       end
       if (bit_decision !== 1'b0) begin
         $fatal(1, "single-cycle bit decision mismatch");
@@ -387,16 +447,44 @@ module tb_vnu;
     end
   endtask
 
+  task automatic run_same_cycle_finalize_case;
+    int expected_posterior;
+    begin
+      idle_inputs();
+      initial_llr = 9;
+      c2v_tc_valid0 = 1'b1;
+      c2v_tc0 = msg_tc(1'b1, D'(15));
+      c2v_tc_valid1 = 1'b1;
+      c2v_tc1 = msg_tc(1'b1, D'(15));
+      col_start = 1'b1;
+      col_end = 1'b1;
+      finalize = 1'b1;
+      expected_posterior = 9 + alpha_scale_ref(-30);
+      @(posedge clk);
+      #1;
+      if (int'($signed(dut.posterior_reg)) != expected_posterior) begin
+        $fatal(1, "same-cycle finalize posterior mismatch: got %0d exp %0d",
+               $signed(dut.posterior_reg), expected_posterior);
+      end
+      if (bit_decision !== dut.posterior_reg[VNU_TC_W-1]) begin
+        $fatal(1, "same-cycle finalize bit decision mismatch");
+      end
+      idle_inputs();
+    end
+  endtask
+
   // 边界用例 2：
   // 最小先验 + 最大负 c2v，检查负后验与 sign bit。
   task automatic run_negative_boundary_case;
+    int expected_posterior;
     begin
       initial_llr = -MSG_W'(MAG_MAX + 1);
       drive_accum_pair(1'b1, 1'b1, msg_tc(1'b1, D'(15)), 1'b1, msg_tc(1'b1, D'(15)));
       finalize_column();
-      if ($signed(dut.posterior_reg) != -19) begin
-        $fatal(1, "negative-boundary posterior mismatch: got %0d exp -19", $signed(
-                                                                               dut.posterior_reg));
+      expected_posterior = -(MAG_MAX + 1) + alpha_scale_ref(-30);
+      if (int'($signed(dut.posterior_reg)) != expected_posterior) begin
+        $fatal(1, "negative-boundary posterior mismatch: got %0d exp %0d",
+               $signed(dut.posterior_reg), expected_posterior);
       end
       if (bit_decision !== 1'b1) begin
         $fatal(1, "negative-boundary bit decision mismatch");
@@ -408,11 +496,13 @@ module tb_vnu;
       prev_c2v_tc_valid1 = 1'b1;
       prev_c2v_tc1 = '0;
       #1;
-      if ($signed(v2c_tc0) != -18) begin
-        $fatal(1, "negative-boundary v2c0 mismatch: got %0d exp -18", $signed(v2c_tc0));
+      if (int'($signed(v2c_tc0)) != expected_posterior - alpha_scale_ref(-15)) begin
+        $fatal(1, "negative-boundary v2c0 mismatch: got %0d exp %0d", $signed(v2c_tc0),
+               expected_posterior - alpha_scale_ref(-15));
       end
-      if ($signed(v2c_tc1) != -19) begin
-        $fatal(1, "negative-boundary v2c1 mismatch: got %0d exp -19", $signed(v2c_tc1));
+      if (int'($signed(v2c_tc1)) != expected_posterior) begin
+        $fatal(1, "negative-boundary v2c1 mismatch: got %0d exp %0d", $signed(v2c_tc1),
+               expected_posterior);
       end
       idle_inputs();
     end
@@ -452,6 +542,7 @@ module tb_vnu;
     // 验证另一组常规输入与边界场景。
     run_case1();
     run_single_cycle_column_case();
+    run_same_cycle_finalize_case();
     run_negative_boundary_case();
 
     $display("tb_vnu PASS");

@@ -17,9 +17,9 @@ package bike_pkg;
   localparam int R = 8;
   localparam int W = 3;
   localparam int I_MAX = 4;
-  localparam int C_VAL = 9;
-  localparam int ALPHA_SHIFT_0 = 4;
-  localparam int ALPHA_SHIFT_1 = 5;
+  localparam int C_VAL = 2;
+  localparam int ALPHA_SHIFT_0 = 1;
+  localparam int ALPHA_SHIFT_1 = 3;
 `endif
 
   localparam int N = N0 * R;
@@ -28,7 +28,7 @@ package bike_pkg;
 `ifndef BIKE_TOY_PARAMS
   localparam int RAM_LANE_DEPTH = 43;
 `else
-  localparam int RAM_LANE_DEPTH = 2;
+  localparam int RAM_LANE_DEPTH = 3;
 `endif
   localparam int ALPHA_FRAC_W = 6;  //alpha 用6位小数表示
   localparam int MAG_MAX = (1 << D) - 1;
