@@ -25,11 +25,8 @@ package bike_pkg;
   localparam int N = N0 * R;
   localparam int L = 2;
   localparam int D = 4;
-`ifndef BIKE_TOY_PARAMS
-  localparam int RAM_LANE_DEPTH = 43;
-`else
-  localparam int RAM_LANE_DEPTH = 3;
-`endif
+  localparam int EDGE_SLOT_DEPTH = (W + L - 1) / L;
+  localparam int RAM_LANE_DEPTH = EDGE_SLOT_DEPTH + 1;
   localparam int ALPHA_FRAC_W = 6;  //alpha 用6位小数表示
   localparam int MAG_MAX = (1 << D) - 1;
   localparam int MSG_W = D + 1;
@@ -46,7 +43,8 @@ package bike_pkg;
   // "lane_idx" = physical processing lane (0 .. L-1).
   // "row_idx_group" = row index within a virtual row bank.
   // "group_idx" = virtual row-bank index (0 .. L-1).
-  // "group_count" = number of valid entries in a group's list.
+  // "lane_idx" = edge-index lane; one_idx % L.
+  // "group_count" = number of valid edge slots in a lane-local list.
   localparam int ONE_IDX_W = (W > 1) ? $clog2(W) : 1;
   localparam int ROW_IDX_W = (R > 1) ? $clog2(R) : 1;
   localparam int LANE_IDX_W = (L > 1) ? $clog2(L) : 1;
@@ -82,8 +80,9 @@ package bike_pkg;
   localparam logic [COMP_C2V_W-1:0] COMP_C2V_INIT = {1'b0, COL_W'(0), D'(MAG_MAX), D'(MAG_MAX)};
   localparam logic [COMP_C2V_W-1:0] FIRST_ITER_C2V_COMP = {1'b0, COL_W'(0), D'(C_VAL), D'(C_VAL)};
 
-  localparam int I_ENTRY_ROW_IDX_GROUP_LSB = 0;
-  localparam int I_ENTRY_ONE_IDX_LSB = I_ENTRY_ROW_IDX_GROUP_LSB + ROW_GROUP_W;
+  localparam int I_ENTRY_ROW_IDX_GLOBAL_LSB = 0;
+  localparam int I_ENTRY_ROW_IDX_GROUP_LSB = I_ENTRY_ROW_IDX_GLOBAL_LSB;
+  localparam int I_ENTRY_ONE_IDX_LSB = I_ENTRY_ROW_IDX_GLOBAL_LSB + ROW_IDX_W;
   localparam int I_ENTRY_W = I_ENTRY_ONE_IDX_LSB + ONE_IDX_W;
   /* verilator lint_on UNUSEDPARAM */
 endpackage

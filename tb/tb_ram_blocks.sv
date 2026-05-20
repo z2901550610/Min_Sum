@@ -3,17 +3,17 @@
 module tb_ram_blocks;
   import bike_pkg::*;
 
-  logic                   clk;
-  logic                   rst_n;
+  logic                  clk;
+  logic                  rst_n;
 
-  logic                   m_we;
-  logic [ROW_GROUP_W-1:0] m_read_row_idx_group;
-  logic [ROW_GROUP_W-1:0] m_write_row_idx_group;
-  logic                   m_epoch;
-  logic [ COMP_C2V_W-1:0] m_wdata;
-  logic [ COMP_C2V_W-1:0] m_rdata;
-  logic                   m_repoch;
-  logic [ COMP_C2V_W-1:0] m_debug[0:ROW_GROUP_DEPTH-1];
+  logic                  m_we;
+  logic [ ROW_IDX_W-1:0] m_read_row_idx_global;
+  logic [ ROW_IDX_W-1:0] m_write_row_idx_global;
+  logic                  m_epoch;
+  logic [COMP_C2V_W-1:0] m_wdata;
+  logic [COMP_C2V_W-1:0] m_rdata;
+  logic                  m_repoch;
+  logic [COMP_C2V_W-1:0] m_debug[0:R-1];
 
   localparam int TB_S_PACK_W = 8;
   localparam int TB_S_WORDS_PER_COL = (RAM_LANE_DEPTH + TB_S_PACK_W - 1) / TB_S_PACK_W;
@@ -59,8 +59,8 @@ module tb_ram_blocks;
   ram_m u_ram_m (
       .i_clk(clk),
       .i_we(m_we),
-      .i_read_row_idx_group(m_read_row_idx_group),
-      .i_write_row_idx_group(m_write_row_idx_group),
+      .i_read_row_idx_global(m_read_row_idx_global),
+      .i_write_row_idx_global(m_write_row_idx_global),
       .i_epoch(m_epoch),
       .i_wdata(m_wdata),
       .o_rdata(m_rdata),
@@ -169,8 +169,8 @@ module tb_ram_blocks;
   initial begin
     rst_n = 1'b0;
     m_we = 1'b0;
-    m_read_row_idx_group = '0;
-    m_write_row_idx_group = '0;
+    m_read_row_idx_global = '0;
+    m_write_row_idx_global = '0;
     m_epoch = 1'b0;
     m_wdata = '0;
     s_we = 1'b0;
@@ -198,8 +198,8 @@ module tb_ram_blocks;
     if (s_pack2_debug[0][0] != 1'b0) $fatal(1, "packed ram_s reset mismatch");
     if (t_debug[0] != '0) $fatal(1, "ram_t reset mismatch");
 
-    m_read_row_idx_group = ROW_GROUP_W'(2 % ROW_GROUP_DEPTH);
-    m_write_row_idx_group = ROW_GROUP_W'(2 % ROW_GROUP_DEPTH);
+    m_read_row_idx_global = ROW_IDX_W'(2 % R);
+    m_write_row_idx_global = ROW_IDX_W'(2 % R);
     m_epoch = 1'b1;
     m_wdata = COMP_C2V_INIT ^ COMP_C2V_W'(7);
     m_we = 1'b1;

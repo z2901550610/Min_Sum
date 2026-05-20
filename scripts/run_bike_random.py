@@ -95,8 +95,8 @@ def render_group_entry_param(
                 if item is None:
                     entry_text.append("'0")
                 else:
-                    one_idx, row_idx_group = item
-                    entry_text.append(f"{{ONE_IDX_W'({one_idx}), ROW_GROUP_W'({row_idx_group})}}")
+                    one_idx, row_idx_global = item
+                    entry_text.append(f"{{ONE_IDX_W'({one_idx}), ROW_IDX_W'({row_idx_global})}}")
             lines.append("      '{" + ", ".join(entry_text) + "}" + group_suffix)
         lines.append("    }" + h_block_suffix)
     lines.append("  };")
@@ -130,6 +130,7 @@ package bike_pkg;
   parameter int C_VAL = {c_val};
   parameter int ALPHA_SHIFT_0 = {alpha_shift_0};
   parameter int ALPHA_SHIFT_1 = {alpha_shift_1};
+  parameter int EDGE_SLOT_DEPTH = (W + L - 1) / L;
   parameter int RAM_LANE_DEPTH = {lane_depth};
 
   parameter int N = N0 * R;
@@ -190,8 +191,9 @@ package bike_pkg;
     D'(C_VAL)
   }};
 
-  localparam int I_ENTRY_ROW_IDX_GROUP_LSB = 0;
-  localparam int I_ENTRY_ONE_IDX_LSB = I_ENTRY_ROW_IDX_GROUP_LSB + ROW_GROUP_W;
+  localparam int I_ENTRY_ROW_IDX_GLOBAL_LSB = 0;
+  localparam int I_ENTRY_ROW_IDX_GROUP_LSB = I_ENTRY_ROW_IDX_GLOBAL_LSB;
+  localparam int I_ENTRY_ONE_IDX_LSB = I_ENTRY_ROW_IDX_GLOBAL_LSB + ROW_IDX_W;
   localparam int I_ENTRY_W = I_ENTRY_ONE_IDX_LSB + ONE_IDX_W;
 {render_group_count_param(group_counts)}
 {render_group_entry_param(group_entries, lane_depth)}
@@ -211,7 +213,7 @@ endpackage
 
 
 def default_ram_lane_depth(w: int, l: int) -> int:
-    return (w + l - 1) // l + 7
+    return (w + l - 1) // l + 1
 
 
 def emit_tb(

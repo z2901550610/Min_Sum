@@ -18,10 +18,9 @@ def first_column_tables(
             [None for _ in range(len(bank_support))] for _ in range(group_count)
         ]
         for one_idx, row_idx_global in enumerate(bank_support):
-            group_idx = row_idx_global % group_count
-            row_idx_group = row_idx_global // group_count
+            group_idx = one_idx % group_count
             entry_idx = group_counts[group_idx]
-            group_entries[group_idx][entry_idx] = (one_idx, row_idx_group)
+            group_entries[group_idx][entry_idx] = (one_idx, row_idx_global)
             group_counts[group_idx] += 1
         group_count_table.append(group_counts)
         group_entry_table.append(group_entries)
@@ -77,7 +76,7 @@ def generate_hex_files(
     memory_depth: int | None = None,
 ) -> None:
     group_counts, group_entries = first_column_tables(banks, group_count)
-    row_idx_w = clog2_sv((r_value + group_count - 1) // group_count)
+    row_idx_w = clog2_sv(r_value)
     bank_depth = lane_depth_from_counts(group_counts)
     lane_depth = bank_depth if memory_depth is None else memory_depth
     if lane_depth < bank_depth:

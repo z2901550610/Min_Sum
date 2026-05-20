@@ -28,6 +28,10 @@ module tb_decoder_ctrl;
   logic                   v2c_emit_to_cnu_a;
   logic                   cnu_a_writeback;
   logic                   iter_check;
+  logic                   merge_read;
+  logic                   merge_write;
+  logic                   merge_done;
+  logic [  ROW_IDX_W-1:0] merge_row_idx;
   logic                   col_k_meta_advance;
   logic                   c2v_pipe_valid;
   logic                   v2c_pipe_valid;
@@ -67,6 +71,10 @@ module tb_decoder_ctrl;
       .o_v2c_emit_to_cnu_a(v2c_emit_to_cnu_a),
       .o_cnu_a_writeback(cnu_a_writeback),
       .o_iter_check(iter_check),
+      .o_merge_read(merge_read),
+      .o_merge_write(merge_write),
+      .o_merge_done(merge_done),
+      .o_merge_row_idx(merge_row_idx),
       .o_col_k_meta_advance(col_k_meta_advance),
       .o_c2v_pipe_valid(c2v_pipe_valid),
       .o_v2c_pipe_valid(v2c_pipe_valid),
@@ -104,6 +112,12 @@ module tb_decoder_ctrl;
       if (iter_check && (c2v_read || v2c_read || c2v_write_t || cnu_a_writeback)) begin
         $fatal(1, "data-path issue pulse active during iter_check");
       end
+      if (merge_write && !iter_check) begin
+        $fatal(1, "merge write without iter_check");
+      end
+      if (merge_done && !iter_check) begin
+        $fatal(1, "merge done without iter_check");
+      end
       if (c2v_pipe_valid != (c2v_read || c2v_write_t || dut.col_kp1_c2v_valid_d1)) begin
         $fatal(1, "c2v pipe valid summary mismatch");
       end
@@ -140,6 +154,9 @@ module tb_decoder_ctrl;
     wait (col_k_meta_advance === 1'b1);
     wait (state == 4'd6);
     wait (iter_check === 1'b1);
+    wait (merge_read === 1'b1 && merge_row_idx == '0);
+    wait (merge_write === 1'b1);
+    wait (merge_done === 1'b1);
     wait (ram_m_read_pair_sel === 1'b1);
     wait (done === 1'b1);
     @(posedge clk);

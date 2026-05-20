@@ -59,7 +59,14 @@ def main() -> None:
     r_values = pair_values(extract_param_values(source_text, "R"))
     w_values = pair_values(extract_param_values(source_text, "W"))
     l_values = pair_values(extract_param_values(source_text, "L"), default=2)
-    lane_depth_values = pair_values(extract_param_values(source_text, "RAM_LANE_DEPTH"))
+    lane_depth_values_raw = extract_param_values(source_text, "RAM_LANE_DEPTH")
+    if lane_depth_values_raw:
+        lane_depth_values = pair_values(lane_depth_values_raw)
+    else:
+        lane_depth_values = [
+            (w_values[0] + l_values[0] - 1) // l_values[0] + 1,
+            (w_values[1] + l_values[1] - 1) // l_values[1] + 1,
+        ]
 
     jobs = [
         ("l1", DEFAULT_SUPPORTS["l1"], r_values[0], w_values[0], l_values[0], lane_depth_values[0]),

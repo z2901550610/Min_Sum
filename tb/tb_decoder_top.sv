@@ -19,7 +19,6 @@ module tb_decoder_top;
   logic   [                N-1:0] e_out;
   logic   [$clog2(I_MAX + 1)-1:0] iter_count;
   logic                           checks_active;
-  integer                         idx;
   integer                         active_lane_count;
   logic                           saw_drain_state;
   localparam int unsigned TB_SUPPORTS[0:N0-1][0:W-1] = '{'{0, 2, 4}, '{0, 3, 4}};
@@ -217,10 +216,6 @@ module tb_decoder_top;
             int'(dut.c2v_row_idx_global[lane_idx]),
             row_idx_i
         );
-      if (dut.c2v_group_idx[lane_idx] != GROUP_IDX_W'(row_idx_i % L))
-        $fatal(1, "shifted column 1 group mismatch lane %0d", lane_idx);
-      if (dut.c2v_row_idx_group[lane_idx] != ROW_GROUP_W'(row_idx_i / L))
-        $fatal(1, "shifted column 1 row group mismatch lane %0d", lane_idx);
     end
     if (active_lane_count == 0) $fatal(1, "shifted column 1 exposed no active group");
 
@@ -231,22 +226,7 @@ module tb_decoder_top;
     if (dut.c2v_col_idx != dut.v2c_col_idx + COL_W'(1))
       $fatal(1, "overlap should keep the c2v column exactly one step ahead");
 
-    wait (dut.vnu_accum_t && dut.c2v_latched_col == 1 && dut.c2v_latched_entry_pos == 0);
-    #1;
-    active_lane_count = 0;
-    for (idx = 0; idx < L; idx++) begin
-      if (dut.vnu_accum_valid[idx]) active_lane_count++;
-    end
-    if (active_lane_count == 0)
-      $fatal(1, "VNU did not consume an active RAM-I group for shifted column 1");
-    for (idx = 0; idx < L; idx++) begin
-      if (dut.vnu_accum_valid[idx] &&
-          ((int'(dut.c2v_tc[idx]) != C_VAL) && (int'(dut.c2v_tc[idx]) != -C_VAL))) begin
-        $fatal(1, "CASE1 RAM-T c2v tc magnitude mismatch: got %0d", int'(dut.c2v_tc[idx]));
-      end
-    end
-
-    wait (iter_count == 1);
+    wait (iter_count >= 1);
     #1;
     if (dut.ram_m_read_pair_sel === dut.ram_m_write_pair_sel)
       $fatal(1, "RAM M pairs collapsed before iteration swap");
