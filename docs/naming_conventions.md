@@ -6,24 +6,23 @@
 混在一起。
 
 本项目实现的是 BIKE/MDPC 风格的 min-sum decoder。校验矩阵 H 由若干 circulant
-block 组成；每个变量列有 `W` 条边；为了并行处理，校验行被划分成 `L` 个
-group。很多模块只处理其中一个 group，因此端口名必须清楚区分：
-这个信号是在选择 group，还是在当前 group 内选择一个位置。
+block 组成；每个变量列有 `W` 条边；数据通路使用 `L` 条并行 lane。很多模块
+只处理其中一个 lane/group，因此端口名必须清楚区分：这个信号是在选择
+lane/group，还是在当前 lane/group 内选择一个位置。
 
 ## 核心术语
 
 | 名称 | 范围/形状 | 含义 |
 | --- | --- | --- |
-| `group_idx` | `0..L-1` | 校验行的并行分组编号。只有跨 group 的数组或真正选择 group 的信号才使用这个词。 |
+| `group_idx` | `0..L-1` | 并行 group/lane 编号。只有跨 group 的数组或真正选择 group 的信号才使用这个词。 |
 | `h_block_idx` | `0..N0-1` | H 的 circulant block 编号，即 H0/H1/... 的 block 选择。 |
 | `col_idx` | `0..N-1` | 全局变量节点编号。 |
-| `check_row` | `0..R-1` | 全局校验行编号。 |
-| `row_idx_group` | `0..floor((R-1)/L)` | 当前 group 内的紧凑局部行号。当前 RTL 中等于 `floor(row_idx_global / L)`。 |
-| `row_idx_global` | `0..R-1` | 绝对校验行号。需要从 `group_idx` 和 `row_idx_group` 重建。 |
-| `one_idx` | `0..W-1` | 一个变量列内某个"1"的位置编号（即该列第几条边），用于访问 RAM-S/T/U 的边维度。 |
-| `list` | `[0:W-1]` | 一组 packed entries，通常表示当前 group-local metadata 列表。 |
+| `row_idx_group` | `0..floor((R-1)/L)` | row-group 坐标下的紧凑局部行号。 |
+| `row_idx_global` | `0..R-1` | 绝对校验行号。顶层 RAM-M、syndrome 和列 metadata 使用该坐标。 |
+| `one_idx` | `0..W-1` | 一个变量列内某个"1"的位置编号（即该列第几条边），用于访问 RAM-S/T 的边维度。 |
+| `list` | `[0:W-1]` | 一组 packed entries，通常表示当前 lane-local metadata 列表。 |
 | `entry_pos` | `0..W-1` | `list` 内的游标位置，是相对索引，不是行号。用于遍历列表中各 entry 的步进游标。 |
-| `entry` | packed value | 单个 metadata 项。当前 RAM-I entry 格式是 `{one_idx, row_idx_group}`。 |
+| `entry` | packed value | 单个 metadata 项。RAM-I entry 格式是 `{one_idx, row_idx_global}`。 |
 | `count` | `0..W` | 一个 list 中有效 entry 的数量。只有 `entry_pos < count` 的项有效。 |
 
 ### `count` 与写指针的区分
@@ -47,14 +46,14 @@ group。很多模块只处理其中一个 group，因此端口名必须清楚区
 但层级含义应保持一致。
 
 ```text
-per-group metadata storage
+per-lane metadata storage
 
 list_entries
   [h_block_idx]              // 0..N0-1，选择 H block
     [entry_pos]              // 0..W-1，选择当前 list 内的位置
-      entry = {one_idx, row_idx_group}
+      entry = {one_idx, row_idx_global}
                |               |
-               |               +-- 当前 group 内的局部行号
+               |               +-- 绝对校验行号
                +------------------ 变量列内的边编号，0..W-1
 
 list_count
@@ -64,18 +63,18 @@ list_count
 一个 list 示例：
 
 ```text
-当前逻辑属于 group 0，h_block_idx = 0
+当前逻辑属于 lane 0，h_block_idx = 0
 
 entry_pos   list_entries[0][entry_pos]           是否有效
 ---------   ------------------------------      --------
-0           {one_idx=0, row_idx_group=1}  entry_pos < count，有效
-1           {one_idx=2, row_idx_group=3}  entry_pos < count，有效
-2           {one_idx=0, row_idx_group=0}  entry_pos >= count，无效
+0           {one_idx=0, row_idx_global=142}   entry_pos < count，有效
+1           {one_idx=8, row_idx_global=1371}  entry_pos < count，有效
+2           {one_idx=0, row_idx_global=0}     entry_pos >= count，无效
 
 list_count[0] = 2
 ```
 
-当前 RTL 使用奇偶分组。`row_idx_group` 转成绝对行号时，由上层按奇偶规则重建：
+row-group 坐标转成绝对行号时使用下面的关系：
 
 ```text
 group 0: row_idx_global = 2 * row_idx_group
@@ -84,10 +83,10 @@ group 1: row_idx_global = 2 * row_idx_group + 1
 
 通式（L 分组）：`row_idx_global = L * row_idx_group + group_idx`
 
-如果模块内部已经固定属于一个 group，例如顶层实例化了两个相同 RAM 分别服务
-group 0 和 group 1，那么模块端口不应再用 `group_idx` 暗示它在选择
-group。端口可以直接叫 `entry_pos`、`list_entries`、`count`，由实例名或上层数组
-表达它属于哪个 group。
+如果模块内部已经固定属于一个 group/lane，例如顶层实例化了多个相同 RAM 分别服务
+不同 lane，那么模块端口不应再用 `group_idx` 暗示它在选择 group/lane。端口可以
+直接叫 `entry_pos`、`list_entries`、`count`，由实例名或上层数组表达它属于哪个
+group/lane。
 
 ## 索引命名
 
@@ -95,7 +94,7 @@ group。端口可以直接叫 `entry_pos`、`list_entries`、`count`，由实例
 | --- | --- | --- |
 | `_idx` | 离散编号或数组索引。优先用于逻辑对象编号。 | `col_idx`, `h_block_idx`, `group_idx` |
 | `_pos` | 遍历 list 的游标位置，会递增步进。 | `c2v_entry_pos`, `v2c_entry_pos` |
-| `_addr` | 真实 RAM 地址端口。只有信号直接接到存储器地址时使用。 | `check_row_addr` |
+| `_addr` | 真实 RAM 地址端口。只有信号直接接到存储器地址时使用。 | `syndrome_addr` |
 | `_global` | 全局行号，与 group-local 行号 `row_idx_group` 形成对比。仅在行号中使用。 | `row_idx_global` |
 | `_idx_group` | 在当前 group 内的局部索引。 | `row_idx_group` |
 
@@ -170,6 +169,9 @@ row_idx_global:
   用于跨 group 比较、生成 syndrome、或和参考数据对齐
 ```
 
+算法描述中的校验行在 RTL 边界使用 `row_idx_global` 命名；每个 group 内的紧凑坐标使用
+`row_idx_group` 命名。
+
 不要把局部行号命名成 `row_idx` 或 `row`，除非所在上下文已经非常明确，且不会跨
 group 使用。跨边界传递时优先写全：
 
@@ -187,8 +189,7 @@ RAM-M 使用双 pair 乒乓结构，相关命名约定：
 | `ram_m_read_pair_sel` | 当前迭代读取的 RAM-M pair 编号（0 或 1） |
 | `ram_m_write_pair_sel` | 当前迭代写入的 RAM-M pair 编号（= ~ram_m_read_pair_sel） |
 | `m_pair_epoch` | 每个 pair 的"世代"标记位，写入时翻转，用于区分新旧数据 |
-| `m_row_valid` | 某行是否已被当前 pair 写入过有效数据 |
-| `m_row_epoch` | 某行的 epoch 值，与 `m_pair_epoch` 比较判断数据是否属于当前迭代 |
+| `m_repoch` | RAM-M 读出 word 携带的 epoch 值，与 `m_pair_epoch` 比较判断数据是否属于当前迭代 |
 
 ## 列交叠缓冲命名
 
@@ -196,10 +197,11 @@ c2v/v2c 列交叠调度中，列元数据在两侧之间传递，相关命名约
 
 | 名称模式 | 含义 |
 | --- | --- |
-| `capture_*_active_cycle` | 在当前调度周期将 c2v 侧列元数据捕获为 v2c 活跃列 |
-| `capture_*_next` | 将 c2v 侧当前列元数据缓冲为 v2c "下一列"（消费者尚在处理当前列） |
-| `promote_*_next` | 将缓冲的"下一列"元数据提升为 v2c 活跃列 |
-| `*_buffer_*` | 快照/缓冲数据，隔离生产者和消费者的读写冲突 |
+| `active_meta_slot` | v2c 侧读取的列 metadata slot |
+| `next_meta_slot` | c2v 侧填充的列 metadata slot |
+| `col_meta_lane_valid` | 每个 slot、lane、entry 位置的有效位 |
+| `col_meta_lane_entries` | 每个 slot、lane、entry 位置的 packed metadata |
+| `col_k_meta_advance` | active/fill slot 轮换事件 |
 
 ## H-shift 命名
 
@@ -252,9 +254,9 @@ logic [MSG_W-1:0] mem[0:RAM_LANE_DEPTH-1];
 
 | 模块/区域 | 推荐命名 | 说明 |
 | --- | --- | --- |
-| RAM-I metadata | `entry_pos`, `entry_wdata`, `list_entries`, `count` | 一个实例属于一个 group；端口名不重复 group。 |
-| RAM-S/T/U edge 维 | `one_idx` | 访问变量列内第几条边；RAM-S 使用 read/write 地址后缀区分读写端，RAM-T 使用 push/pop 流式接口。 |
-| RAM-M 行地址 | `check_row_addr` 或 `row_idx_group` | 如果 RAM-M 是 per-group 存储，地址应是组内局部行。 |
+| RAM-I metadata | `entry_pos`, `entry_wdata`, `list_entries`, `count` | 一个实例属于一个 lane；端口名不重复 group/lane。 |
+| RAM-S/T edge 维 | `one_idx` | 访问变量列内第几条边；RAM-S 使用 read/write 地址后缀区分读写端，RAM-T 使用 push/pop 流式接口。 |
+| RAM-M 行地址 | `row_idx_global` | RAM-M bank 使用全局校验行地址。 |
 | C2V/V2C 跨 group 数组 | `*_group_valid[0:L-1]` | 数组维度确实是 group。 |
 | H block 选择 | `h_block_idx` | 统一使用 `h_block`，不使用 `hblk`。 |
 | 游标位置 | `entry_pos` | 遍历 list 的步进游标。 |

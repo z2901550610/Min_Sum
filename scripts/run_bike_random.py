@@ -23,6 +23,7 @@ RTL_CORE = [
     "rtl/msg_signmag_to_tc.sv",
     "rtl/msg_tc_to_signmag_sat.sv",
     "rtl/decoder_ctrl.sv",
+    "rtl/ram_i_idx_loader.sv",
     "rtl/ram_c.sv",
     "rtl/ram_m.sv",
     "rtl/ram_s.sv",
@@ -214,7 +215,7 @@ endpackage
 
 
 def default_ram_lane_depth(w: int, l: int) -> int:
-    return max((w + l - 1) // l + 1, 3)
+    return max((w + l - 1) // l, 3)
 
 
 def default_s_pack_w(l: int) -> int:
@@ -225,6 +226,10 @@ def default_s_pack_w(l: int) -> int:
     if l <= 8:
         return 2
     return 1
+
+
+def is_power_of_two(value: int) -> bool:
+    return value > 0 and (value & (value - 1)) == 0
 
 
 def emit_tb(
@@ -259,6 +264,16 @@ module tb_bike_decoder_random;
   logic syndrome_we;
   logic [ROW_IDX_W-1:0] syndrome_addr;
   logic syndrome_wdata;
+  logic h_load_start;
+  logic h_load_valid;
+  logic [ROW_IDX_W-1:0] h_load_row_idx_global[0:L-1];
+  /* verilator lint_off UNUSEDSIGNAL */
+  logic h_load_ready;
+  logic h_load_busy;
+  logic h_load_done;
+  logic [H_BLOCK_W-1:0] h_load_request_h_block_idx;
+  logic [ENTRY_POS_W-1:0] h_load_request_entry_pos;
+  /* verilator lint_on UNUSEDSIGNAL */
   logic [COL_W-1:0] e_read_col_idx;
   logic e_rdata;
   logic [N-1:0] e_out;
@@ -274,7 +289,15 @@ module tb_bike_decoder_random;
     .i_syndrome_we(syndrome_we),
     .i_syndrome_addr(syndrome_addr),
     .i_syndrome_wdata(syndrome_wdata),
+    .i_h_load_start(h_load_start),
+    .i_h_load_valid(h_load_valid),
+    .i_h_load_row_idx_global(h_load_row_idx_global),
     .i_e_read_col_idx(e_read_col_idx),
+    .o_h_load_ready(h_load_ready),
+    .o_h_load_busy(h_load_busy),
+    .o_h_load_done(h_load_done),
+    .o_h_load_request_h_block_idx(h_load_request_h_block_idx),
+    .o_h_load_request_entry_pos(h_load_request_entry_pos),
     .o_done(done),
     .o_e_rdata(e_rdata),
     .o_iter_count(iter_count)
@@ -348,10 +371,15 @@ module tb_bike_decoder_random;
 
     rst_n = 1'b0;
     start = 1'b0;
+    h_load_start = 1'b0;
+    h_load_valid = 1'b0;
     syndrome_we = 1'b0;
     syndrome_addr = '0;
     syndrome_wdata = 1'b0;
     e_read_col_idx = '0;
+    for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
+      h_load_row_idx_global[lane_idx] = '0;
+    end
     repeat (2) @(posedge clk);
     rst_n = 1'b1;
     @(posedge clk);
@@ -549,6 +577,8 @@ def main() -> int:
         raise ValueError("--trials must be positive")
     if args.parallel_l < 1:
         raise ValueError("--parallel-l must be positive")
+    if not is_power_of_two(args.parallel_l):
+        raise ValueError("--parallel-l must be a power of two")
     if args.s_pack_w is not None and (
         args.s_pack_w < 1 or (args.s_pack_w & (args.s_pack_w - 1)) != 0
     ):

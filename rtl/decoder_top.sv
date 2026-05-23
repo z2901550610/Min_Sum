@@ -15,17 +15,33 @@ module decoder_top
     parameter string RAM_I_HEX_TAG    = "_test"
 `endif
 ) (
-    input  logic                 i_clk,
-    input  logic                 i_rst_n,
-    input  logic                 i_start,
-    input  logic                 i_syndrome_we,
-    input  logic [ROW_IDX_W-1:0] i_syndrome_addr,
-    input  logic                 i_syndrome_wdata,
-    input  logic [    COL_W-1:0] i_e_read_col_idx,
-    output logic                 o_done,
-    output logic                 o_e_rdata,
-    output logic [   ITER_W-1:0] o_iter_count
+    input  logic                   i_clk,
+    input  logic                   i_rst_n,
+    input  logic                   i_start,
+    input  logic                   i_syndrome_we,
+    input  logic [  ROW_IDX_W-1:0] i_syndrome_addr,
+    input  logic                   i_syndrome_wdata,
+    input  logic                   i_h_load_start,
+    input  logic                   i_h_load_valid,
+    input  logic [  ROW_IDX_W-1:0] i_h_load_row_idx_global[0:L-1],
+    input  logic [      COL_W-1:0] i_e_read_col_idx,
+    output logic                   o_h_load_ready,
+    output logic                   o_h_load_busy,
+    output logic                   o_h_load_done,
+    output logic [  H_BLOCK_W-1:0] o_h_load_request_h_block_idx,
+    output logic [ENTRY_POS_W-1:0] o_h_load_request_entry_pos,
+    output logic                   o_done,
+    output logic                   o_e_rdata,
+    output logic [     ITER_W-1:0] o_iter_count
 );
+
+`ifndef SYNTHESIS
+  initial begin
+    if ((L <= 0) || ((L & (L - 1)) != 0)) begin
+      $fatal(1, "decoder_top requires L to be a power of two");
+    end
+  end
+`endif
 
   /* verilator lint_off UNUSEDSIGNAL */
   // Debug/control visibility exported to the testbench. The real scheduling
@@ -48,6 +64,12 @@ module decoder_top
   /* verilator lint_on UNUSEDSIGNAL */
   logic [    I_ENTRY_W-1:0] ram_i_entry_rdata[0:L-1];
   logic [GROUP_COUNT_W-1:0] ram_i_count[0:L-1];
+  logic                     ram_i_load_lane_we[0:L-1];
+  logic                     ram_i_load_count_we[0:L-1];
+  logic [    H_BLOCK_W-1:0] ram_i_load_write_h_block_idx;
+  logic [  ENTRY_POS_W-1:0] ram_i_load_write_entry_idx;
+  logic [    I_ENTRY_W-1:0] ram_i_load_entry_wdata[0:L-1];
+  logic [GROUP_COUNT_W-1:0] ram_i_load_count_wdata[0:L-1];
 
   logic                     ram_m_read_pair_sel;
   logic                     ram_m_write_pair_sel;
@@ -759,6 +781,25 @@ module decoder_top
       .o_iter_count(o_iter_count)
   );
 
+  ram_i_idx_loader u_ram_i_idx_loader (
+      .i_clk(i_clk),
+      .i_rst_n(i_rst_n),
+      .i_start(i_h_load_start),
+      .i_valid(i_h_load_valid),
+      .i_row_idx_global(i_h_load_row_idx_global),
+      .o_ready(o_h_load_ready),
+      .o_busy(o_h_load_busy),
+      .o_done(o_h_load_done),
+      .o_request_h_block_idx(o_h_load_request_h_block_idx),
+      .o_request_entry_pos(o_h_load_request_entry_pos),
+      .o_lane_we(ram_i_load_lane_we),
+      .o_write_h_block_idx(ram_i_load_write_h_block_idx),
+      .o_write_entry_idx(ram_i_load_write_entry_idx),
+      .o_entry_wdata(ram_i_load_entry_wdata),
+      .o_count_we(ram_i_load_count_we),
+      .o_count_wdata(ram_i_load_count_wdata)
+  );
+
   /* verilator lint_off PINCONNECTEMPTY */
   for (genvar ram_i_bank_idx = 0; ram_i_bank_idx < L; ram_i_bank_idx++) begin : g_ram_i
     ram_i #(
@@ -769,14 +810,14 @@ module decoder_top
     ) u_ram_i (
         .i_clk(i_clk),
         .i_rst_n(i_rst_n),
-        .i_we(1'b0),
+        .i_we(ram_i_load_lane_we[ram_i_bank_idx]),
         .i_read_h_block_idx(c2v_col_h_block_idx),
-        .i_write_h_block_idx('0),
+        .i_write_h_block_idx(ram_i_load_write_h_block_idx),
         .i_read_entry_idx(ram_i_read_entry_addr[ram_i_bank_idx]),
-        .i_write_entry_idx('0),
-        .i_entry_wdata('0),
-        .i_count_we(1'b0),
-        .i_count_wdata('0),
+        .i_write_entry_idx(ram_i_load_write_entry_idx),
+        .i_entry_wdata(ram_i_load_entry_wdata[ram_i_bank_idx]),
+        .i_count_we(ram_i_load_count_we[ram_i_bank_idx]),
+        .i_count_wdata(ram_i_load_count_wdata[ram_i_bank_idx]),
         .o_entry_rdata(ram_i_entry_rdata[ram_i_bank_idx]),
 `ifdef BIKE_SIM_DEBUG
         .o_count(ram_i_count[ram_i_bank_idx]),

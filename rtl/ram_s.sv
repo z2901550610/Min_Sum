@@ -27,9 +27,17 @@ module ram_s
 
 `ifdef BIKE_SIM_DEBUG
   logic [RAM_S_PACK_W-1:0] debug_words[0:RAM_S_WORD_DEPTH-1];
+  localparam int RAM_S_PACK_SHIFT = (RAM_S_PACK_W > 1) ? $clog2(RAM_S_PACK_W) : 0;
+
   function automatic int debug_word_addr(input int col_idx, input int entry_idx);
     begin
-      debug_word_addr = col_idx * RAM_S_WORDS_PER_COL + (entry_idx / RAM_S_PACK_W);
+      debug_word_addr = col_idx * RAM_S_WORDS_PER_COL + (entry_idx >> RAM_S_PACK_SHIFT);
+    end
+  endfunction
+
+  function automatic int debug_bit_idx(input int entry_idx);
+    begin
+      debug_bit_idx = (RAM_S_PACK_W == 1) ? 0 : (entry_idx & (RAM_S_PACK_W - 1));
     end
   endfunction
 
@@ -37,7 +45,7 @@ module ram_s
     for (int col_idx = 0; col_idx < N; col_idx++) begin
       for (int entry_idx = 0; entry_idx < RAM_LANE_DEPTH; entry_idx++) begin
         o_debug_mem[col_idx][entry_idx] =
-            debug_words[debug_word_addr(col_idx, entry_idx)][entry_idx%RAM_S_PACK_W];
+            debug_words[debug_word_addr(col_idx, entry_idx)][debug_bit_idx(entry_idx)];
       end
     end
   end

@@ -42,6 +42,10 @@ def validate_supports(name: str, supports: list[list[int]], r_value: int, w_valu
                 raise ValueError(f"{name}[{block_idx}] row {row_idx} is outside 0..{r_value - 1}")
 
 
+def is_power_of_two(value: int) -> bool:
+    return value > 0 and (value & (value - 1)) == 0
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", default="rtl/bike_pkg.sv", help="Source bike_pkg.sv path")
@@ -66,13 +70,15 @@ def main() -> None:
     )
     if min(l_values) < 1:
         raise ValueError("--parallel-l must be positive")
+    if not all(is_power_of_two(l_value) for l_value in l_values):
+        raise ValueError("--parallel-l must be a power of two")
     lane_depth_values_raw = extract_param_values(source_text, "RAM_LANE_DEPTH")
     if lane_depth_values_raw:
         lane_depth_values = pair_values(lane_depth_values_raw)
     else:
         lane_depth_values = [
-            max((w_values[0] + l_values[0] - 1) // l_values[0] + 1, 3),
-            max((w_values[1] + l_values[1] - 1) // l_values[1] + 1, 3),
+            max((w_values[0] + l_values[0] - 1) // l_values[0], 3),
+            max((w_values[1] + l_values[1] - 1) // l_values[1], 3),
         ]
 
     jobs = [

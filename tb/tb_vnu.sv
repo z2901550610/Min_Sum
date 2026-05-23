@@ -75,6 +75,12 @@ module tb_vnu;
     end
   endfunction
 
+  function automatic logic signed [MSG_W-1:0] scaled_msg_tc(input  logic signed [MSG_W-1:0] value);
+    begin
+      scaled_msg_tc = MSG_W'(alpha_scale_ref(int'($signed(value))));
+    end
+  endfunction
+
   always_comb begin
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
       c2v_tc_valid[lane_idx] = 1'b0;
@@ -293,32 +299,32 @@ module tb_vnu;
       idle_inputs();
       prev_c2v_tc_valid0 = 1'b1;
       prev_c2v_tc_valid1 = 1'b1;
-      prev_c2v_tc0 = msg_tc(1'b0, D'(15));
-      prev_c2v_tc1 = msg_tc(1'b0, D'(15));
+      prev_c2v_tc0 = scaled_msg_tc(msg_tc(1'b0, D'(15)));
+      prev_c2v_tc1 = scaled_msg_tc(msg_tc(1'b0, D'(15)));
       #1;
       if (v2c_tc_valid0 !== 1'b1 || int'($signed(
               v2c_tc0
-          )) != expected_posterior - alpha_scale_ref(
-              15
-          ))
+          )) != expected_posterior - int'($signed(
+              prev_c2v_tc0
+          )))
         $fatal(1, "case0 v2c0 mismatch");
       if (v2c_tc_valid1 !== 1'b1 || int'($signed(
               v2c_tc1
-          )) != expected_posterior - alpha_scale_ref(
-              15
-          ))
+          )) != expected_posterior - int'($signed(
+              prev_c2v_tc1
+          )))
         $fatal(1, "case0 v2c1 mismatch");
 
       prev_c2v_tc_valid0 = 1'b1;
       prev_c2v_tc_valid1 = 1'b0;
-      prev_c2v_tc0 = msg_tc(1'b1, D'(9));
+      prev_c2v_tc0 = scaled_msg_tc(msg_tc(1'b1, D'(9)));
       prev_c2v_tc1 = '0;
       #1;
       if (v2c_tc_valid0 !== 1'b1 || int'($signed(
               v2c_tc0
-          )) != expected_posterior - alpha_scale_ref(
-              -9
-          ))
+          )) != expected_posterior - int'($signed(
+              prev_c2v_tc0
+          )))
         $fatal(1, "case0 v2c2 mismatch");
       if (v2c_tc_valid1 !== 1'b0) $fatal(1, "case0 v2c1 should be invalid on odd edge");
       idle_inputs();
@@ -348,12 +354,12 @@ module tb_vnu;
       idle_inputs();
       prev_c2v_tc_valid0 = 1'b1;
       prev_c2v_tc_valid1 = 1'b1;
-      prev_c2v_tc0 = msg_tc(1'b1, D'(15));
-      prev_c2v_tc1 = msg_tc(1'b1, D'(15));
+      prev_c2v_tc0 = scaled_msg_tc(msg_tc(1'b1, D'(15)));
+      prev_c2v_tc1 = scaled_msg_tc(msg_tc(1'b1, D'(15)));
       #1;
-      if (int'($signed(v2c_tc0)) != expected_posterior - alpha_scale_ref(-15))
+      if (int'($signed(v2c_tc0)) != expected_posterior - int'($signed(prev_c2v_tc0)))
         $fatal(1, "case1 v2c0 tc mismatch");
-      if (int'($signed(v2c_tc1)) != expected_posterior - alpha_scale_ref(-15))
+      if (int'($signed(v2c_tc1)) != expected_posterior - int'($signed(prev_c2v_tc1)))
         $fatal(1, "case1 v2c1 tc mismatch");
       idle_inputs();
     end
@@ -388,14 +394,14 @@ module tb_vnu;
       c2v_tc_valid1 = 1'b1;
       c2v_tc1 = msg_tc(1'b0, D'(15));
       prev_c2v_tc_valid0 = 1'b1;
-      prev_c2v_tc0 = msg_tc(1'b0, D'(15));
+      prev_c2v_tc0 = scaled_msg_tc(msg_tc(1'b0, D'(15)));
       prev_c2v_tc_valid1 = 1'b0;
       #1;
       if (v2c_tc_valid0 !== 1'b1 || int'($signed(
               v2c_tc0
-          )) != expected_posterior - alpha_scale_ref(
-              15
-          ))
+          )) != expected_posterior - int'($signed(
+              prev_c2v_tc0
+          )))
         $fatal(1, "overlap v2c update used wrong posterior");
       @(posedge clk);
       #1;
@@ -492,13 +498,13 @@ module tb_vnu;
 
       idle_inputs();
       prev_c2v_tc_valid0 = 1'b1;
-      prev_c2v_tc0 = msg_tc(1'b1, D'(15));
+      prev_c2v_tc0 = scaled_msg_tc(msg_tc(1'b1, D'(15)));
       prev_c2v_tc_valid1 = 1'b1;
       prev_c2v_tc1 = '0;
       #1;
-      if (int'($signed(v2c_tc0)) != expected_posterior - alpha_scale_ref(-15)) begin
+      if (int'($signed(v2c_tc0)) != expected_posterior - int'($signed(prev_c2v_tc0))) begin
         $fatal(1, "negative-boundary v2c0 mismatch: got %0d exp %0d", $signed(v2c_tc0),
-               expected_posterior - alpha_scale_ref(-15));
+               expected_posterior - int'($signed(prev_c2v_tc0)));
       end
       if (int'($signed(v2c_tc1)) != expected_posterior) begin
         $fatal(1, "negative-boundary v2c1 mismatch: got %0d exp %0d", $signed(v2c_tc1),

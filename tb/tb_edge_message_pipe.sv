@@ -107,6 +107,24 @@ module tb_edge_message_pipe;
     end
   endfunction
 
+  function automatic int alpha_scale_ref(input int value);
+    int abs_value;
+    int scaled_abs;
+    begin
+      abs_value  = (value < 0) ? -value : value;
+      scaled_abs = 0;
+      if ((ALPHA_SHIFT_0 > 0) && (ALPHA_SHIFT_0 <= ALPHA_FRAC_W)) begin
+        scaled_abs += abs_value << (ALPHA_FRAC_W - ALPHA_SHIFT_0);
+      end
+      if ((ALPHA_SHIFT_1 > 0) && (ALPHA_SHIFT_1 <= ALPHA_FRAC_W)) begin
+        scaled_abs += abs_value << (ALPHA_FRAC_W - ALPHA_SHIFT_1);
+      end
+      scaled_abs += 1 << (ALPHA_FRAC_W - 1);
+      scaled_abs = scaled_abs >> ALPHA_FRAC_W;
+      alpha_scale_ref = (value < 0) ? -scaled_abs : scaled_abs;
+    end
+  endfunction
+
   task automatic drive_idle;
     begin
       start = 1'b0;
@@ -174,7 +192,7 @@ module tb_edge_message_pipe;
     if (!(t_push[0] && t_push[1])) $fatal(1, "RAM-T push should be asserted for all lanes");
     if (!(t_valid[0] && !t_valid[1])) $fatal(1, "RAM-T valid sideband mismatch");
     if (t_write_entry_idx != ENTRY_POS_W'(1)) $fatal(1, "RAM-T write entry mismatch");
-    if (t_wdata[0] != MSG_W'(5)) $fatal(1, "RAM-T write data mismatch");
+    if (int'($signed(t_wdata[0])) != alpha_scale_ref(5)) $fatal(1, "RAM-T write data mismatch");
     if (!(vnu_col_end && !vnu_col_start)) $fatal(1, "VNU column end pulse mismatch");
     if (!(vnu_accum_valid[0] && !vnu_accum_valid[1])) $fatal(1, "VNU accum valid mismatch");
 

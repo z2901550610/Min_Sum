@@ -29,10 +29,12 @@ package bike_pkg;
   localparam int L = `BIKE_PARALLEL_L;
 `endif
   localparam int D = 4;
+  // L is constrained to a power of two so lane-local one_idx generation uses
+  // shifts and low-bit concatenation.
   localparam int EDGE_SLOT_DEPTH = (W + L - 1) / L;
   // Three edge slots cover the controller pipeline boundary for small toy
   // matrices while L1 uses the edge-lane capacity.
-  localparam int RAM_LANE_DEPTH = ((EDGE_SLOT_DEPTH + 1) < 3) ? 3 : (EDGE_SLOT_DEPTH + 1);
+  localparam int RAM_LANE_DEPTH = (EDGE_SLOT_DEPTH < 3) ? 3 : EDGE_SLOT_DEPTH;
   localparam int ALPHA_FRAC_W = 6;  //alpha 用6位小数表示
   localparam int MAG_MAX = (1 << D) - 1;
   localparam int MSG_W = D + 1;
@@ -46,7 +48,7 @@ package bike_pkg;
   // Canonical names aligned with h_shift.sv conventions.
   // "one_idx" = index of a "1" within a column (0 .. W-1).
   // "row_idx_global" = global row index (0 .. R-1).
-  // "lane_idx" = physical processing lane selected by one_idx % L.
+  // "lane_idx" = physical processing lane selected from one_idx and L.
   // "row_idx_group" = row index within a virtual row bank.
   // "group_idx" = virtual row-bank index (0 .. L-1).
   // "group_count" = number of valid edge slots in a lane-local list.

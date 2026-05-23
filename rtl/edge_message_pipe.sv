@@ -57,17 +57,65 @@ module edge_message_pipe
   logic                   s_wdata[0:L-1];
   logic                   s_read_word_load_pending[0:L-1];
 
+  localparam int T_SCALE_W = MSG_W + ALPHA_FRAC_W;
+  localparam int S_PACK_SHIFT = (S_PACK_W > 1) ? $clog2(S_PACK_W) : 0;
+
+  function automatic logic signed [MSG_W-1:0] alpha_scale_msg(
+      input  logic signed [MSG_W-1:0] tc_value);
+    logic signed [   T_SCALE_W-1:0] scale_ext;
+    logic signed [   T_SCALE_W-1:0] scaled_full;
+    logic signed [       MSG_W-1:0] floor_tc;
+    logic signed [       MSG_W-1:0] trunc_tc;
+    logic        [ALPHA_FRAC_W-1:0] frac_bits;
+    logic        [  ALPHA_FRAC_W:0] neg_frac_mag;
+    logic                           frac_nonzero;
+    logic                           round_bit;
+
+    begin
+      scale_ext   = T_SCALE_W'($signed(tc_value));
+      scaled_full = '0;
+      if ((ALPHA_SHIFT_0 > 0) && (ALPHA_SHIFT_0 <= ALPHA_FRAC_W)) begin
+        scaled_full = scaled_full + (scale_ext <<< (ALPHA_FRAC_W - ALPHA_SHIFT_0));
+      end
+      if ((ALPHA_SHIFT_1 > 0) && (ALPHA_SHIFT_1 <= ALPHA_FRAC_W)) begin
+        scaled_full = scaled_full + (scale_ext <<< (ALPHA_FRAC_W - ALPHA_SHIFT_1));
+      end
+
+      floor_tc = scaled_full[T_SCALE_W-1:ALPHA_FRAC_W];
+      frac_bits = scaled_full[ALPHA_FRAC_W-1:0];
+      frac_nonzero = |frac_bits;
+
+      if (scaled_full[T_SCALE_W-1]) begin
+        trunc_tc = frac_nonzero ? (floor_tc + 1'b1) : floor_tc;
+        neg_frac_mag = frac_nonzero ? ({1'b1, {ALPHA_FRAC_W{1'b0}}} - {1'b0, frac_bits}) : '0;
+        round_bit = neg_frac_mag[ALPHA_FRAC_W-1];
+        alpha_scale_msg = round_bit ? (trunc_tc - 1'b1) : trunc_tc;
+      end else begin
+        trunc_tc = floor_tc;
+        round_bit = frac_bits[ALPHA_FRAC_W-1];
+        alpha_scale_msg = round_bit ? (trunc_tc + 1'b1) : trunc_tc;
+      end
+    end
+  endfunction
+
   function automatic logic [S_WORD_ADDR_W-1:0] s_word_addr(input  logic [COL_W-1:0] col_idx,
                                                            input  logic [ENTRY_POS_W-1:0] entry_idx);
     begin
-      s_word_addr = S_WORD_ADDR_W'(int'(col_idx) * S_WORDS_PER_COL + int'(entry_idx) / S_PACK_W);
+      s_word_addr = S_WORD_ADDR_W'(
+        int'(col_idx) * S_WORDS_PER_COL + (int'(entry_idx) >> S_PACK_SHIFT)
+      );
     end
   endfunction
 
   function automatic logic [S_PACK_IDX_W-1:0] s_word_bit_idx(
       input  logic [ENTRY_POS_W-1:0] entry_idx);
     begin
-      s_word_bit_idx = S_PACK_IDX_W'(int'(entry_idx) % S_PACK_W);
+      if (S_PACK_W == 1) begin
+        s_word_bit_idx = '0;
+      end else begin
+        s_word_bit_idx = S_PACK_IDX_W'(int'(entry_idx) -
+                                       ((int'(entry_idx) >> S_PACK_SHIFT) << S_PACK_SHIFT));
+      end
     end
   endfunction
 
@@ -137,7 +185,7 @@ module edge_message_pipe
         o_t_push[lane_idx] = 1'b1;
         if (i_c2v_latched_group_valid[lane_idx]) begin
           o_t_valid[lane_idx] = 1'b1;
-          o_t_wdata[lane_idx] = i_c2v_tc[lane_idx];
+          o_t_wdata[lane_idx] = alpha_scale_msg(i_c2v_tc[lane_idx]);
         end
       end
     end

@@ -16,13 +16,14 @@ export VERILATOR_LOG_DIR
 export BIKE_PARALLEL_L
 
 VECTOR_SVH := tb/generated/bike_demo_vectors.svh
+TOY_CASE_SVH := tb/generated/bike_toy_case.svh
 RAM_I_HEX_DIR := rtl/generated/l$(BIKE_PARALLEL_L)
 RAM_I_BANKS := $(shell seq 0 $$(($(BIKE_PARALLEL_L)-1)))
 RAM_I_HEX := $(foreach b,$(RAM_I_BANKS),$(RAM_I_HEX_DIR)/ram_i$(b)_entries_test.hex $(RAM_I_HEX_DIR)/ram_i$(b)_counts_test.hex $(RAM_I_HEX_DIR)/ram_i$(b)_entries_l1.hex $(RAM_I_HEX_DIR)/ram_i$(b)_counts_l1.hex)
 RAM_I_HEX_STAMP := $(RAM_I_HEX_DIR)/.ram_i_hex.stamp
 RTL_PKG := rtl/bike_pkg.sv
 RTL_PRIMS := rtl/ram_1r1w_sync_read.sv rtl/ram_1r1w_async_read.sv rtl/sign_bit_pack.sv
-RTL_CORE := $(RTL_PRIMS) rtl/edge_message_pipe.sv rtl/decoder_top.sv rtl/ram_i.sv rtl/msg_signmag_to_tc.sv rtl/msg_tc_to_signmag_sat.sv rtl/decoder_ctrl.sv rtl/ram_c.sv rtl/ram_m.sv rtl/ram_s.sv rtl/ram_syndrome.sv rtl/ram_t.sv rtl/cnu_a.sv rtl/cnu_b.sv rtl/vnu.sv
+RTL_CORE := $(RTL_PRIMS) rtl/edge_message_pipe.sv rtl/ram_i_idx_loader.sv rtl/decoder_top.sv rtl/ram_i.sv rtl/msg_signmag_to_tc.sv rtl/msg_tc_to_signmag_sat.sv rtl/decoder_ctrl.sv rtl/ram_c.sv rtl/ram_m.sv rtl/ram_s.sv rtl/ram_syndrome.sv rtl/ram_t.sv rtl/cnu_a.sv rtl/cnu_b.sv rtl/vnu.sv
 RTL := $(RTL_PKG) $(RTL_CORE)
 MAINTAINED_SV := $(sort $(wildcard rtl/*.sv) $(wildcard tb/*.sv))
 BIKE_RANDOM_BASE_SEED ?= 1
@@ -33,6 +34,9 @@ BIKE_RANDOM_PARALLEL_L ?= $(BIKE_PARALLEL_L)
 .PHONY: all sim test test-unit test-integration test-bike-random format-rtl check-format-rtl lint-rtl vivado-synth FORCE
 
 all: test
+
+$(TOY_CASE_SVH): FORCE scripts/gen_toy_case_fixture.py scripts/run_bike_random.py scripts/qc_matrix_data.py
+	@python3 scripts/gen_toy_case_fixture.py --output $@
 
 $(RAM_I_HEX_STAMP): FORCE rtl/bike_pkg.sv scripts/gen_qc_first_columns.py scripts/ram_i_hex.py scripts/qc_matrix_data.py
 	@python3 scripts/gen_qc_first_columns.py --input rtl/bike_pkg.sv --output-dir $(RAM_I_HEX_DIR)/ --parallel-l $(BIKE_PARALLEL_L)
@@ -48,6 +52,8 @@ test-unit: $(VECTOR_SVH) $(RAM_I_HEX_STAMP)
 	@$(SIM) ./obj_dir/Vtb_msg_codec +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_i rtl/bike_pkg.sv rtl/ram_1r1w_sync_read.sv rtl/ram_1r1w_async_read.sv rtl/ram_i.sv tb/tb_ram_i.sv
 	@$(SIM) ./obj_dir/Vtb_ram_i +verilator+quiet
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_i_idx_loader rtl/bike_pkg.sv rtl/ram_i_idx_loader.sv tb/tb_ram_i_idx_loader.sv
+	@$(SIM) ./obj_dir/Vtb_ram_i_idx_loader +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_blocks rtl/bike_pkg.sv rtl/ram_1r1w_sync_read.sv rtl/ram_c.sv rtl/ram_m.sv rtl/ram_s.sv rtl/ram_t.sv tb/tb_ram_blocks.sv
 	@$(SIM) ./obj_dir/Vtb_ram_blocks +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_h_shift rtl/bike_pkg.sv rtl/h_shift.sv tb/tb_h_shift.sv
@@ -63,7 +69,7 @@ test-unit: $(VECTOR_SVH) $(RAM_I_HEX_STAMP)
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_vnu rtl/bike_pkg.sv rtl/vnu.sv tb/tb_vnu.sv
 	@$(SIM) ./obj_dir/Vtb_vnu +verilator+quiet
 
-test-integration: $(VECTOR_SVH) $(RAM_I_HEX_STAMP)
+test-integration: $(TOY_CASE_SVH) $(RAM_I_HEX_STAMP)
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_decoder_top $(RTL) tb/tb_decoder_top.sv
 	@$(SIM) ./obj_dir/Vtb_decoder_top +verilator+quiet
 

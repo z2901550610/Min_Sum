@@ -29,6 +29,8 @@ module vnu #(
 );
 
   localparam int SCALE_W = VNU_TC_W + ALPHA_FRAC_W;
+  localparam int SUM_TREE_LEVELS = (L > 1) ? $clog2(L) : 1;
+  localparam int SUM_TREE_WIDTH = 1 << SUM_TREE_LEVELS;
 
   logic signed [VNU_TC_W-1:0] cycle_sum;  // 当前拍收到的 c2v 和
   logic signed [VNU_TC_W-1:0] accum_sum_reg;  // 列内先前累加保存的 c2v 和
@@ -39,6 +41,7 @@ module vnu #(
   logic signed [VNU_TC_W-1:0] posterior_next;  // 本拍组合计算得到的后验值
   logic signed [VNU_TC_W-1:0] prior_msg_sign_extend;  // 符号位扩展的先验 LLR
   logic accum_valid_any;  // 本拍是否至少收到一个有效 c2v
+  logic signed [VNU_TC_W-1:0] cycle_sum_tree[0:SUM_TREE_LEVELS][0:SUM_TREE_WIDTH-1];
 
   // 按 alpha 系数缩放二进制补码值，并四舍五入到整数。
   function automatic logic signed [VNU_TC_W-1:0] alpha_scale(
@@ -81,17 +84,14 @@ module vnu #(
 
   always_comb begin
     logic signed [VNU_TC_W-1:0] c2v_ext;
-    logic signed [VNU_TC_W-1:0] c2v_t_ext;
-    logic signed [VNU_TC_W-1:0] scaled_c2v_t;
+    logic signed [VNU_TC_W-1:0] scaled_c2v_t_ext;
     logic signed [VNU_TC_W-1:0] next_u;
 
-    cycle_sum = '0;
     accum_valid_any = 1'b0;
     accum_sum_next = accum_sum_reg;
     scaled_sum = '0;
     c2v_ext = '0;
-    c2v_t_ext = '0;
-    scaled_c2v_t = '0;
+    scaled_c2v_t_ext = '0;
     next_u = '0;
     posterior_next = '0;
 
@@ -105,12 +105,29 @@ module vnu #(
 
       c2v_ext = VNU_TC_W'($signed(i_c2v[lane_idx]));
       if (i_c2v_valid[lane_idx]) begin
-        cycle_sum = cycle_sum + c2v_ext;
         accum_valid_any = 1'b1;
+        cycle_sum_tree[0][lane_idx] = c2v_ext;
         o_c2v_t_valid[lane_idx] = 1'b1;
         o_c2v_t[lane_idx] = i_c2v[lane_idx];
+      end else begin
+        cycle_sum_tree[0][lane_idx] = '0;
       end
     end
+    for (int lane_idx = L; lane_idx < SUM_TREE_WIDTH; lane_idx++) begin
+      cycle_sum_tree[0][lane_idx] = '0;
+    end
+
+    for (int level_idx = 0; level_idx < SUM_TREE_LEVELS; level_idx++) begin
+      for (int node_idx = 0; node_idx < SUM_TREE_WIDTH; node_idx++) begin
+        if (node_idx < (SUM_TREE_WIDTH >> (level_idx + 1))) begin
+          cycle_sum_tree[level_idx+1][node_idx] =
+            cycle_sum_tree[level_idx][node_idx<<1] + cycle_sum_tree[level_idx][node_idx<<1|1];
+        end else begin
+          cycle_sum_tree[level_idx+1][node_idx] = '0;
+        end
+      end
+    end
+    cycle_sum = cycle_sum_tree[SUM_TREE_LEVELS][0];
 
     if (i_col_start) begin
       accum_sum_next = cycle_sum;
@@ -123,9 +140,8 @@ module vnu #(
     posterior_next = prior_msg_sign_extend + scaled_sum;
 
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-      c2v_t_ext = VNU_TC_W'($signed(i_c2v_t[lane_idx]));
-      scaled_c2v_t = alpha_scale(c2v_t_ext);
-      next_u = posterior_reg - scaled_c2v_t;
+      scaled_c2v_t_ext = VNU_TC_W'($signed(i_c2v_t[lane_idx]));
+      next_u = posterior_reg - scaled_c2v_t_ext;
       if (i_c2v_t_valid[lane_idx]) begin
         o_v2c_valid[lane_idx] = 1'b1;
         o_v2c[lane_idx] = next_u;

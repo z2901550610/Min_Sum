@@ -4,7 +4,7 @@ module tb_decoder_top;
   import bike_pkg::*;
 
   /* verilator lint_off UNUSEDPARAM */
-  `include "tb/generated/bike_demo_vectors.svh"
+  `include "tb/generated/bike_toy_case.svh"
   /* verilator lint_on UNUSEDPARAM */
 
   logic                           clk;
@@ -13,7 +13,17 @@ module tb_decoder_top;
   logic                           syndrome_we;
   logic   [        ROW_IDX_W-1:0] syndrome_addr;
   logic                           syndrome_wdata;
+  logic                           h_load_start;
+  logic                           h_load_valid;
+  logic   [        ROW_IDX_W-1:0] h_load_row_idx_global[0:L-1];
   logic                           done;
+  /* verilator lint_off UNUSEDSIGNAL */
+  logic                           h_load_ready;
+  logic                           h_load_busy;
+  logic                           h_load_done;
+  logic   [        H_BLOCK_W-1:0] h_load_request_h_block_idx;
+  logic   [      ENTRY_POS_W-1:0] h_load_request_entry_pos;
+  /* verilator lint_on UNUSEDSIGNAL */
   logic   [            COL_W-1:0] e_read_col_idx;
   logic                           e_rdata;
   logic   [                N-1:0] e_out;
@@ -21,7 +31,6 @@ module tb_decoder_top;
   logic                           checks_active;
   integer                         active_lane_count;
   logic                           saw_drain_state;
-  localparam int unsigned TB_SUPPORTS[0:N0-1][0:W-1] = '{'{0, 2, 4}, '{0, 3, 4}};
   localparam string TB_RAM_I_HEX_PREFIX = (L == 2) ? "rtl/generated/l2/ram_i" :
                                           ((L == 4) ? "rtl/generated/l4/ram_i" :
                                            "rtl/generated/l8/ram_i");
@@ -35,7 +44,15 @@ module tb_decoder_top;
       .i_syndrome_we(syndrome_we),
       .i_syndrome_addr(syndrome_addr),
       .i_syndrome_wdata(syndrome_wdata),
+      .i_h_load_start(h_load_start),
+      .i_h_load_valid(h_load_valid),
+      .i_h_load_row_idx_global(h_load_row_idx_global),
       .i_e_read_col_idx(e_read_col_idx),
+      .o_h_load_ready(h_load_ready),
+      .o_h_load_busy(h_load_busy),
+      .o_h_load_done(h_load_done),
+      .o_h_load_request_h_block_idx(h_load_request_h_block_idx),
+      .o_h_load_request_entry_pos(h_load_request_entry_pos),
       .o_done(done),
       .o_e_rdata(e_rdata),
       .o_iter_count(iter_count)
@@ -50,10 +67,15 @@ module tb_decoder_top;
       checks_active = 1'b0;
       saw_drain_state = 1'b0;
       start = 1'b0;
+      h_load_start = 1'b0;
+      h_load_valid = 1'b0;
       syndrome_we = 1'b0;
       syndrome_addr = '0;
       syndrome_wdata = 1'b0;
       e_read_col_idx = '0;
+      for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
+        h_load_row_idx_global[lane_idx] = '0;
+      end
       repeat (2) @(posedge clk);
       rst_n = 1'b1;
       @(posedge clk);
@@ -72,6 +94,32 @@ module tb_decoder_top;
       syndrome_we = 1'b0;
       syndrome_addr = '0;
       syndrome_wdata = 1'b0;
+      @(posedge clk);
+    end
+  endtask
+
+  task automatic load_h_matrix;
+    logic [H_BLOCK_W-1:0] h_block_idx;
+    int                   entry_pos;
+    int                   one_idx;
+    begin
+      h_load_start = 1'b1;
+      @(posedge clk);
+      h_load_start = 1'b0;
+      #1;
+      while (!h_load_done) begin
+        h_block_idx = h_load_request_h_block_idx;
+        entry_pos   = int'(h_load_request_entry_pos);
+        for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
+          one_idx = entry_pos * L + lane_idx;
+          h_load_row_idx_global[lane_idx] =
+              (one_idx < W) ? ROW_IDX_W'(TOY_CASE_SUPPORTS[int'(h_block_idx)][one_idx]) : '0;
+        end
+        h_load_valid = 1'b1;
+        @(posedge clk);
+        #1;
+      end
+      h_load_valid = 1'b0;
       @(posedge clk);
     end
   endtask
@@ -114,7 +162,7 @@ module tb_decoder_top;
     begin
       h_block_local = col_idx_i / R;
       col_local = col_idx_i % R;
-      edge_row_idx = (TB_SUPPORTS[h_block_local][one_idx_i] + col_local) % R;
+      edge_row_idx = (TOY_CASE_SUPPORTS[h_block_local][one_idx_i] + col_local) % R;
     end
   endfunction
 
@@ -139,7 +187,7 @@ module tb_decoder_top;
           h_block_idx = var_idx / R;
           col_idx_i   = var_idx % R;
           for (edge_idx = 0; edge_idx < W; edge_idx++) begin
-            row_idx_i = (TB_SUPPORTS[h_block_idx][edge_idx] + col_idx_i) % R;
+            row_idx_i = (TOY_CASE_SUPPORTS[h_block_idx][edge_idx] + col_idx_i) % R;
             residual[row_idx_i] = residual[row_idx_i] ^ 1'b1;
           end
         end
@@ -193,7 +241,12 @@ module tb_decoder_top;
     join_none
 
     apply_reset();
-    start_case(CASE1_SYNDROME);
+    if (C_VAL != TOY_CASE_C_VAL || ALPHA_SHIFT_0 != TOY_CASE_ALPHA_SHIFT_0 ||
+        ALPHA_SHIFT_1 != TOY_CASE_ALPHA_SHIFT_1) begin
+      $fatal(1, "toy fixture parameter mismatch");
+    end
+    load_h_matrix();
+    start_case(TOY_CASE_SYNDROME);
 
     wait (dut.c2v_phase_active && !dut.v2c_phase_active && dut.c2v_col_idx == 0 && dut.active_entry_pos == 0);
     #1;
@@ -237,16 +290,16 @@ module tb_decoder_top;
     wait (done === 1'b1);
     @(posedge clk);
     read_error_vector(e_out);
-    final_residual = residual_of(CASE1_SYNDROME, e_out);
-    exact_match = (e_out === CASE1_ERROR);
+    final_residual = residual_of(TOY_CASE_SYNDROME, e_out);
+    exact_match = (e_out === TOY_CASE_ERROR);
     if (int'(iter_count) != I_MAX)
-      $fatal(1, "CASE1 iterations mismatch: got %0d exp %0d", iter_count, I_MAX);
-    $display("CASE1 residual=%b exact=%0d", final_residual, exact_match);
+      $fatal(1, "toy case iterations mismatch: got %0d exp %0d", iter_count, I_MAX);
+    $display("toy case residual=%b exact=%0d", final_residual, exact_match);
     if (final_residual != '0) begin
-      $fatal(1, "CASE1 residual check failed");
+      $fatal(1, "toy case residual check failed");
     end
     if (!exact_match) begin
-      $fatal(1, "CASE1 exact check failed");
+      $fatal(1, "toy case exact check failed");
     end
     if (!saw_drain_state) $fatal(1, "last v2c column drain state was not exercised");
 
