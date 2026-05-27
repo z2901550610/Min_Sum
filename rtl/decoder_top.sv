@@ -307,7 +307,7 @@ module decoder_top
 
   assign next_iter_count_ext = {1'b0, o_iter_count} + {{ITER_W{1'b0}}, 1'b1};
   assign finish_decode = (next_iter_count_ext >= (ITER_W + 1)'(I_MAX));
-  assign c2v_col_h_block_idx = (c2v_col_idx >= COL_W'(R)) ? H_BLOCK_W'(1) : '0;
+  assign c2v_col_h_block_idx = H_BLOCK_W'(int'(c2v_col_idx) / R);
   assign decision_ram_access_col_idx = decision_ram_we ? decision_ram_col_idx : i_e_read_col_idx;
 
   always_comb begin
@@ -359,9 +359,7 @@ module decoder_top
     active_entry = '0;
     row_idx_sum = '0;
     base_row_idx_global = '0;
-    c2v_col_idx_local =
-      (c2v_read_col_d1 >= COL_W'(R)) ? ROW_IDX_W'(c2v_read_col_d1 - COL_W'(R)) :
-      ROW_IDX_W'(c2v_read_col_d1);
+    c2v_col_idx_local = ROW_IDX_W'(int'(c2v_read_col_d1) % R);
     shifted_row_idx_global = '0;
 
     for (lane_idx = 0; lane_idx < L; lane_idx++) begin

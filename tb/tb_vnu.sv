@@ -178,6 +178,8 @@ module tb_vnu;
       @(posedge clk);
       #1;
       finalize = 1'b0;
+      @(posedge clk);
+      #1;
     end
   endtask
 
@@ -466,6 +468,9 @@ module tb_vnu;
       col_end = 1'b1;
       finalize = 1'b1;
       expected_posterior = 9 + alpha_scale_ref(-30);
+      @(posedge clk);
+      #1;
+      finalize = 1'b0;
       @(posedge clk);
       #1;
       if (int'($signed(dut.posterior_reg)) != expected_posterior) begin

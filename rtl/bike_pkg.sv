@@ -4,18 +4,40 @@ package bike_pkg;
 
   /* verilator lint_off UNUSEDPARAM */
 
-  localparam int N0 = 2;
-
 `ifndef BIKE_TOY_PARAMS
+`ifdef BIKE_128_PARAMS
+  localparam int N0 = 3;
+  localparam int R = 8117;
+  localparam int W = 27;
+  localparam int T = 201;
+  localparam int I_MAX = 7;
+  localparam int C_VAL = 5;
+  localparam int ALPHA_SHIFT_0 = 3;
+  localparam int ALPHA_SHIFT_1 = 4;
+`elsif BIKE_160_PARAMS
+  localparam int N0 = 3;
+  localparam int R = 12739;
+  localparam int W = 35;
+  localparam int T = 263;
+  localparam int I_MAX = 7;
+  localparam int C_VAL = 5;
+  localparam int ALPHA_SHIFT_0 = 3;
+  localparam int ALPHA_SHIFT_1 = 4;
+`else
+  localparam int N0 = 2;
   localparam int R = 11677;
   localparam int W = 71;
+  localparam int T = 201;
   localparam int I_MAX = 7;
   localparam int C_VAL = 7;
   localparam int ALPHA_SHIFT_0 = 4;
   localparam int ALPHA_SHIFT_1 = 0;
+`endif
 `else
+  localparam int N0 = 2;
   localparam int R = 8;
   localparam int W = 3;
+  localparam int T = 1;
   localparam int I_MAX = 4;
   localparam int C_VAL = 2;
   localparam int ALPHA_SHIFT_0 = 1;

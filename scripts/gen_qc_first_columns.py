@@ -42,6 +42,21 @@ def validate_supports(name: str, supports: list[list[int]], r_value: int, w_valu
                 raise ValueError(f"{name}[{block_idx}] row {row_idx} is outside 0..{r_value - 1}")
 
 
+def select_w_value(values: list[int], supports: list[list[int]]) -> int:
+    support_width = len(supports[0])
+    if support_width in values:
+        return support_width
+    return values[0]
+
+
+def select_r_value(values: list[int], supports: list[list[int]]) -> int:
+    max_row_idx = max(max(support) for support in supports)
+    candidates = [value for value in values if value > max_row_idx]
+    if candidates:
+        return min(candidates)
+    return values[0]
+
+
 def is_power_of_two(value: int) -> bool:
     return value > 0 and (value & (value - 1)) == 0
 
@@ -61,8 +76,12 @@ def main() -> None:
     output_dir = Path(args.output_dir)
 
     source_text = input_path.read_text(encoding="utf-8")
-    r_values = pair_values(extract_param_values(source_text, "R"))
-    w_values = pair_values(extract_param_values(source_text, "W"))
+    r_values = extract_param_values(source_text, "R")
+    w_values = extract_param_values(source_text, "W")
+    l1_r_value = select_r_value(r_values, DEFAULT_SUPPORTS["l1"])
+    l1_w_value = select_w_value(w_values, DEFAULT_SUPPORTS["l1"])
+    test_r_value = select_r_value(r_values, DEFAULT_SUPPORTS["test"])
+    test_w_value = select_w_value(w_values, DEFAULT_SUPPORTS["test"])
     l_values = (
         [args.parallel_l, args.parallel_l]
         if args.parallel_l is not None
@@ -77,13 +96,13 @@ def main() -> None:
         lane_depth_values = pair_values(lane_depth_values_raw)
     else:
         lane_depth_values = [
-            max((w_values[0] + l_values[0] - 1) // l_values[0], 3),
-            max((w_values[1] + l_values[1] - 1) // l_values[1], 3),
+            max((l1_w_value + l_values[0] - 1) // l_values[0], 3),
+            max((test_w_value + l_values[1] - 1) // l_values[1], 3),
         ]
 
     jobs = [
-        ("l1", DEFAULT_SUPPORTS["l1"], r_values[0], w_values[0], l_values[0], lane_depth_values[0]),
-        ("test", DEFAULT_SUPPORTS["test"], r_values[1], w_values[1], l_values[1], lane_depth_values[1]),
+        ("l1", DEFAULT_SUPPORTS["l1"], l1_r_value, l1_w_value, l_values[0], lane_depth_values[0]),
+        ("test", DEFAULT_SUPPORTS["test"], test_r_value, test_w_value, l_values[1], lane_depth_values[1]),
     ]
 
     for tag, supports, r_value, w_value, l_value, lane_depth in jobs:

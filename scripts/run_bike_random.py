@@ -35,6 +35,39 @@ RTL_CORE = [
     "rtl/decoder_top.sv",
 ]
 
+PARAM_SETS = {
+    "toy": {
+        "n0": 2,
+        "r": 8,
+        "w": 3,
+        "error_count": 1,
+        "i_max": 4,
+        "c_val": 2,
+        "alpha_shift_0": 1,
+        "alpha_shift_1": 3,
+    },
+    "bike128": {
+        "n0": 3,
+        "r": 8117,
+        "w": 27,
+        "error_count": 201,
+        "i_max": 7,
+        "c_val": 5,
+        "alpha_shift_0": 3,
+        "alpha_shift_1": 4,
+    },
+    "bike160": {
+        "n0": 3,
+        "r": 12739,
+        "w": 35,
+        "error_count": 263,
+        "i_max": 7,
+        "c_val": 5,
+        "alpha_shift_0": 3,
+        "alpha_shift_1": 4,
+    },
+}
+
 
 def bit_vector_hex(bits: list[int], width: int) -> str:
     value = 0
@@ -107,6 +140,7 @@ def render_group_entry_param(
 def emit_pkg(
     path: Path,
     *,
+    n0: int,
     r: int,
     w: int,
     i_max: int,
@@ -114,6 +148,7 @@ def emit_pkg(
     alpha_shift_0: int,
     alpha_shift_1: int,
     l: int,
+    t: int,
     s_pack_w: int,
     h_base: list[list[int]],
     lane_depth: int,
@@ -125,9 +160,10 @@ package bike_pkg;
 
   /* verilator lint_off UNUSEDPARAM */
 
-  parameter int N0 = 2;
+  parameter int N0 = {n0};
   parameter int R = {r};
   parameter int W = {w};
+  parameter int T = {t};
   parameter int I_MAX = {i_max};
   parameter int C_VAL = {c_val};
   parameter int ALPHA_SHIFT_0 = {alpha_shift_0};
@@ -242,6 +278,7 @@ def emit_tb(
     ram_i_hex_prefix: str,
     h_base: list[list[int]],
 ) -> None:
+    supports = ",\n    ".join(sv_array(support) for support in h_base)
     path.write_text(
         f"""`timescale 1ns/1ps
 
@@ -253,8 +290,7 @@ module tb_bike_decoder_random;
   localparam logic [R-1:0] INPUT_SYNDROME = {syndrome_hex};
   localparam logic [N-1:0] TARGET_ERROR = {target_hex};
   localparam int unsigned TEST_SUPPORTS [0:N0-1][0:W-1] = '{{
-    {sv_array(h_base[0])},
-    {sv_array(h_base[1])}
+    {supports}
   }};
 
   logic clk;
@@ -461,13 +497,13 @@ def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int
     obj_dir = out_dir / "obj_dir"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    n = args.r * 2
+    n = args.r * args.n0
     if args.error_count < 0 or args.error_count > n:
         raise ValueError(f"--error-count must be between 0 and {n}")
     if args.w < 1 or args.w > args.r:
         raise ValueError("--w must be between 1 and --r")
 
-    h_base = [sample_support(rng, args.r, args.w), sample_support(rng, args.r, args.w)]
+    h_base = [sample_support(rng, args.r, args.w) for _ in range(args.n0)]
     error_positions = sorted(rng.sample(range(n), args.error_count))
     error_bits = [0 for _ in range(n)]
     for pos in error_positions:
@@ -491,6 +527,7 @@ def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int
     tb_path = out_dir / "tb_bike_decoder_random.sv"
     emit_pkg(
         pkg_path,
+        n0=args.n0,
         r=args.r,
         w=args.w,
         i_max=args.i_max,
@@ -498,6 +535,7 @@ def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int
         alpha_shift_0=args.alpha_shift_0,
         alpha_shift_1=args.alpha_shift_1,
         l=args.parallel_l,
+        t=args.error_count,
         s_pack_w=s_pack_w,
         h_base=h_base,
         lane_depth=lane_depth,
@@ -549,16 +587,23 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--base-seed", type=int, default=1)
     parser.add_argument("--trials", type=int, default=8)
-    parser.add_argument("--error-count", type=int, default=1)
+    parser.add_argument(
+        "--param-set",
+        choices=sorted(PARAM_SETS),
+        default=None,
+        help="Named decoder parameter set. Explicit command-line values override the preset.",
+    )
+    parser.add_argument("--error-count", type=int, default=None)
     parser.add_argument("--timeout-cycles", type=int, default=200000)
     parser.add_argument("--out-dir", default="tb/generated/bike_random")
     parser.add_argument("--verilator", default="verilator")
-    parser.add_argument("--r", type=int, default=8)
-    parser.add_argument("--w", type=int, default=3)
-    parser.add_argument("--i-max", type=int, default=4)
-    parser.add_argument("--c-val", type=int, default=2)
-    parser.add_argument("--alpha-shift-0", type=int, default=1)
-    parser.add_argument("--alpha-shift-1", type=int, default=3)
+    parser.add_argument("--n0", type=int, default=None)
+    parser.add_argument("--r", type=int, default=None)
+    parser.add_argument("--w", type=int, default=None)
+    parser.add_argument("--i-max", type=int, default=None)
+    parser.add_argument("--c-val", type=int, default=None)
+    parser.add_argument("--alpha-shift-0", type=int, default=None)
+    parser.add_argument("--alpha-shift-1", type=int, default=None)
     parser.add_argument("--parallel-l", type=int, default=8)
     parser.add_argument("--s-pack-w", type=int, default=None)
     parser.add_argument(
@@ -572,11 +617,18 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    defaults = PARAM_SETS[args.param_set or "toy"]
+    for key, value in defaults.items():
+        attr = key.replace("-", "_")
+        if getattr(args, attr) is None:
+            setattr(args, attr, value)
     repo_root = Path(__file__).resolve().parents[1]
     if args.trials < 1:
         raise ValueError("--trials must be positive")
     if args.parallel_l < 1:
         raise ValueError("--parallel-l must be positive")
+    if args.n0 < 1:
+        raise ValueError("--n0 must be positive")
     if not is_power_of_two(args.parallel_l):
         raise ValueError("--parallel-l must be a power of two")
     if args.s_pack_w is not None and (
