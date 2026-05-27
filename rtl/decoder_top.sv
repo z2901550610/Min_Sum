@@ -172,7 +172,7 @@ module decoder_top
   logic [  ENTRY_POS_W-1:0] t_write_entry_idx;
   logic [  ENTRY_POS_W-1:0] t_read_entry_idx;
   logic [        MSG_W-1:0] t_wdata[0:L-1];
-  logic                     t_rvalid[0:L-1];
+  logic                     t_metadata_rvalid[0:L-1];
   /* verilator lint_off UNUSEDSIGNAL */
   logic [        MSG_W-1:0] t_rdata[0:L-1];
   /* verilator lint_on UNUSEDSIGNAL */
@@ -588,6 +588,7 @@ module decoder_top
     logic                      port_pair;
 
     for (lane_idx = 0; lane_idx < L; lane_idx++) begin
+      t_metadata_rvalid[lane_idx] = v2c_read_group_valid_d1[lane_idx];
       port_pair = v2c_read_ram_m_pair_sel_d1;
       port_idx = M_BANK_IDX_W'(m_index(port_pair, LANE_IDX_W'(lane_idx)));
       cnu_a_comp_in[lane_idx] = m_write_comp_or_init(port_idx);
@@ -678,7 +679,7 @@ module decoder_top
       .i_cnu_a_sign(cnu_a_sign),
       .i_c2v_tc(c2v_tc),
       .i_s_word_rdata(s_word_rdata),
-      .i_t_rvalid(t_rvalid),
+      .i_t_rvalid(t_metadata_rvalid),
       .i_t_rdata(t_rdata),
       .o_s_rdata(s_rdata),
       .o_s_word_we(s_word_we),
@@ -879,7 +880,9 @@ module decoder_top
   end
 
   for (genvar ram_t_lane_idx = 0; ram_t_lane_idx < L; ram_t_lane_idx++) begin : g_ram_t
-    ram_t u_ram_t (
+    ram_t #(
+        .TRACK_VALID(1'b0)
+    ) u_ram_t (
         .i_clk(i_clk),
         .i_rst_n(i_rst_n),
         .i_clear(iter_check),
@@ -891,11 +894,11 @@ module decoder_top
         .i_wdata(t_wdata[ram_t_lane_idx]),
         .o_rdata(t_rdata[ram_t_lane_idx]),
 `ifdef BIKE_SIM_DEBUG
-        .o_valid(t_rvalid[ram_t_lane_idx]),
+        .o_valid(),
         .o_item_count(ram_t_debug_item_count[ram_t_lane_idx]),
         .o_debug_mem()
 `else
-        .o_valid(t_rvalid[ram_t_lane_idx])
+        .o_valid()
 `endif
     );
   end

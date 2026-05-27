@@ -42,7 +42,6 @@ module vnu #(
   logic signed [VNU_TC_W-1:0] posterior_active;  // 本拍用于判决和外信息生成的后验值
   logic signed [VNU_TC_W-1:0] prior_msg_sign_extend;  // 符号位扩展的先验 LLR
   logic accum_valid_any;  // 本拍是否至少收到一个有效 c2v
-  logic finalize_d1;
   logic signed [VNU_TC_W-1:0] cycle_sum_tree[0:SUM_TREE_LEVELS][0:SUM_TREE_WIDTH-1];
 
   // 按 alpha 系数缩放二进制补码值，并四舍五入到整数。
@@ -141,9 +140,6 @@ module vnu #(
     scaled_sum = alpha_scale((i_finalize && (i_col_start || i_col_end || accum_valid_any)) ?
                              accum_sum_next : final_sum_reg);
     posterior_next = prior_msg_sign_extend + scaled_sum;
-    if (finalize_d1) begin
-      posterior_active = posterior_next;
-    end
 
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
       scaled_c2v_t_ext = VNU_TC_W'($signed(i_c2v_t[lane_idx]));
@@ -162,14 +158,12 @@ module vnu #(
       accum_sum_reg <= '0;
       final_sum_reg <= '0;
       posterior_reg <= '0;
-      finalize_d1   <= 1'b0;
     end else begin
-      finalize_d1 <= i_finalize;
       if (i_col_end) begin
         final_sum_reg <= accum_sum_next;
       end
-      if (finalize_d1) begin
-        posterior_reg <= posterior_active;
+      if (i_finalize) begin
+        posterior_reg <= posterior_next;
       end
       if ((i_col_start || accum_valid_any) && !i_col_end) begin
         accum_sum_reg <= accum_sum_next;

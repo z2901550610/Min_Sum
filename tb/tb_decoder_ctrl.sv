@@ -106,8 +106,8 @@ module tb_decoder_ctrl;
       if (vnu_accum_t != c2v_write_t) begin
         $fatal(1, "VNU accumulation pulse should match c2v write pulse");
       end
-      if (vnu_finalize && (c2v_read || v2c_read || decision_write)) begin
-        $fatal(1, "data-path issue pulse active during VNU finalize");
+      if (vnu_finalize != (c2v_write_t && dut.col_kp1_last_d2)) begin
+        $fatal(1, "VNU finalize should align with the last c2v write");
       end
       if (iter_check && (c2v_read || v2c_read || c2v_write_t || cnu_a_writeback)) begin
         $fatal(1, "data-path issue pulse active during iter_check");

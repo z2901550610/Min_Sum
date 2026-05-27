@@ -2,7 +2,9 @@
 // RAM T — streams cached c2v messages for one processing group.
 module ram_t
   import bike_pkg::*;
-(
+#(
+    parameter bit TRACK_VALID = 1'b1
+) (
     input  logic                     i_clk,
     input  logic                     i_rst_n,
     input  logic                     i_clear,
@@ -25,7 +27,6 @@ module ram_t
 `endif
 );
 
-  logic valid_mem[0:RAM_LANE_DEPTH-1];
 `ifdef BIKE_SIM_DEBUG
   logic [        MSG_W-1:0] debug_words[0:RAM_LANE_DEPTH-1];
   logic [GROUP_COUNT_W-1:0] valid_count;
@@ -58,50 +59,56 @@ module ram_t
 `endif
   );
 
-`ifdef BIKE_SIM_DEBUG
-  always_ff @(posedge i_clk or negedge i_rst_n) begin
-    if (!i_rst_n || i_clear) begin
-      o_valid <= 1'b0;
-      for (int entry_pos = 0; entry_pos < RAM_LANE_DEPTH; entry_pos++) begin
-        valid_mem[entry_pos] <= 1'b0;
+  generate
+    if (TRACK_VALID) begin : g_track_valid
+      logic valid_mem[0:RAM_LANE_DEPTH-1];
+
+      always_ff @(posedge i_clk or negedge i_rst_n) begin
+        if (!i_rst_n || i_clear) begin
+          o_valid <= 1'b0;
+          for (int entry_pos = 0; entry_pos < RAM_LANE_DEPTH; entry_pos++) begin
+            valid_mem[entry_pos] <= 1'b0;
+          end
+        end else begin
+          if (i_pop) begin
+            valid_mem[i_read_entry_idx] <= 1'b0;
+          end
+          if (i_push) begin
+            valid_mem[i_write_entry_idx] <= i_valid;
+          end
+          o_valid <= valid_mem[i_read_entry_idx];
+        end
       end
-    end else begin
-      if (i_pop) begin
-        valid_mem[i_read_entry_idx] <= 1'b0;
-      end
-      if (i_push) begin
-        valid_mem[i_write_entry_idx] <= i_valid;
-      end
-      o_valid <= valid_mem[i_read_entry_idx];
-    end
-  end
-`else
-  always_ff @(posedge i_clk or negedge i_rst_n) begin
-    if (!i_rst_n || i_clear) begin
-      o_valid <= 1'b0;
-      for (int entry_pos = 0; entry_pos < RAM_LANE_DEPTH; entry_pos++) begin
-        valid_mem[entry_pos] <= 1'b0;
-      end
-    end else begin
-      if (i_pop) begin
-        valid_mem[i_read_entry_idx] <= 1'b0;
-      end
-      if (i_push) begin
-        valid_mem[i_write_entry_idx] <= i_valid;
-      end
-      o_valid <= valid_mem[i_read_entry_idx];
-    end
-  end
-`endif
 
 `ifdef BIKE_SIM_DEBUG
-  always_comb begin
-    valid_count = '0;
-    for (int entry_pos = 0; entry_pos < RAM_LANE_DEPTH; entry_pos++) begin
-      if (valid_mem[entry_pos]) begin
-        valid_count = valid_count + GROUP_COUNT_W'(1);
+      always_comb begin
+        valid_count = '0;
+        for (int entry_pos = 0; entry_pos < RAM_LANE_DEPTH; entry_pos++) begin
+          if (valid_mem[entry_pos]) begin
+            valid_count = valid_count + GROUP_COUNT_W'(1);
+          end
+        end
       end
-    end
-  end
 `endif
+    end else begin : g_no_track_valid
+      /* verilator lint_off UNUSEDSIGNAL */
+      logic unused_valid;
+      assign unused_valid = i_valid;
+      /* verilator lint_on UNUSEDSIGNAL */
+
+      always_ff @(posedge i_clk or negedge i_rst_n) begin
+        if (!i_rst_n || i_clear) begin
+          o_valid <= 1'b0;
+        end else begin
+          o_valid <= i_pop;
+        end
+      end
+
+`ifdef BIKE_SIM_DEBUG
+      always_comb begin
+        valid_count = '0;
+      end
+`endif
+    end
+  endgenerate
 endmodule

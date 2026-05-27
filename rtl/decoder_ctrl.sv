@@ -58,8 +58,6 @@ module decoder_ctrl
   logic [            2:0] ctrl_state_next;
   logic                   iter_check_pending;
   logic                   iter_check_pending_next;
-  logic                   vnu_finalize_pending;
-  logic                   vnu_finalize_pending_next;
   logic                   merge_active;
   logic                   merge_active_next;
   logic                   merge_read_d1;
@@ -133,12 +131,10 @@ module decoder_ctrl
     (sched_state == SCHED_DRAIN_K);
 
   assign col_kp1_c2v_issue_fire =
-    (ctrl_state == CTRL_ITER) && schedule_has_col_kp1 && !iter_check_pending &&
-    !vnu_finalize_pending;
+    (ctrl_state == CTRL_ITER) && schedule_has_col_kp1 && !iter_check_pending;
 
   assign col_k_v2c_issue_fire =
     (ctrl_state == CTRL_ITER) && schedule_has_col_k && !iter_check_pending &&
-    !vnu_finalize_pending &&
     ((col_k_stage == COL_K_STAGE_FIRST) ||
      (col_k_stage == COL_K_STAGE_ISSUE));
   assign col_k_last_issue_fire = col_k_v2c_issue_fire && i_v2c_entry_pos_last;
@@ -148,10 +144,9 @@ module decoder_ctrl
   assign o_c2v_write_t = (ctrl_state == CTRL_ITER) && col_kp1_c2v_valid_d2 && !iter_check_pending;
 
   assign o_vnu_accum_t = o_c2v_write_t;
-  assign o_vnu_finalize = (ctrl_state == CTRL_ITER) && vnu_finalize_pending && !iter_check_pending;
+  assign o_vnu_finalize = col_kp1_done_fire;
   assign o_decision_write =
     (ctrl_state == CTRL_ITER) && schedule_has_col_k && !iter_check_pending &&
-    !vnu_finalize_pending &&
     (col_k_stage == COL_K_STAGE_FIRST);
   assign o_v2c_emit_to_cnu_a = (ctrl_state == CTRL_ITER) && col_k_v2c_valid_d1 && !iter_check_pending;
   assign o_cnu_a_writeback = (ctrl_state == CTRL_ITER) && col_k_v2c_valid_d2 && !iter_check_pending;
@@ -213,7 +208,6 @@ module decoder_ctrl
   always_comb begin
     ctrl_state_next = ctrl_state;
     iter_check_pending_next = iter_check_pending;
-    vnu_finalize_pending_next = 1'b0;
     merge_active_next = merge_active;
     merge_read_d1_next = 1'b0;
     merge_row_count_next = merge_row_count;
@@ -246,7 +240,6 @@ module decoder_ctrl
         if (i_start) begin
           ctrl_state_next = CTRL_ITER;
           iter_check_pending_next = 1'b0;
-          vnu_finalize_pending_next = 1'b0;
           merge_active_next = 1'b0;
           merge_read_d1_next = 1'b0;
           merge_row_count_next = '0;
@@ -277,7 +270,6 @@ module decoder_ctrl
       CTRL_ITER: begin
         done_next = 1'b0;
         if (iter_check_pending) begin
-          vnu_finalize_pending_next = 1'b0;
           col_kp1_c2v_valid_d1_next = 1'b0;
           col_kp1_c2v_valid_d2_next = 1'b0;
           col_kp1_last_d1_next = 1'b0;
@@ -323,11 +315,6 @@ module decoder_ctrl
             merge_row_count_next = '0;
           end
         end else begin
-          vnu_finalize_pending_next = vnu_finalize_pending;
-          if (vnu_finalize_pending) begin
-            vnu_finalize_pending_next = 1'b0;
-          end
-
           col_kp1_c2v_valid_d1_next = col_kp1_c2v_issue_fire;
           col_kp1_c2v_valid_d2_next = col_kp1_c2v_valid_d1;
           col_kp1_last_d1_next = col_kp1_c2v_issue_fire && i_c2v_entry_pos_last;
@@ -350,7 +337,6 @@ module decoder_ctrl
           end
 
           if (col_kp1_done_fire) begin
-            vnu_finalize_pending_next = 1'b1;
             if (sched_state == SCHED_K_KP1) begin
               sched_state_next   = SCHED_KP1_READY;
               c2v_entry_pos_next = '0;
@@ -420,7 +406,6 @@ module decoder_ctrl
         if (i_start) begin
           ctrl_state_next = CTRL_ITER;
           iter_check_pending_next = 1'b0;
-          vnu_finalize_pending_next = 1'b0;
           merge_active_next = 1'b0;
           merge_read_d1_next = 1'b0;
           merge_row_count_next = '0;
@@ -460,7 +445,6 @@ module decoder_ctrl
     if (!i_rst_n) begin
       ctrl_state <= CTRL_WAIT;
       iter_check_pending <= 1'b0;
-      vnu_finalize_pending <= 1'b0;
       merge_active <= 1'b0;
       merge_read_d1 <= 1'b0;
       merge_row_count <= '0;
@@ -489,7 +473,6 @@ module decoder_ctrl
     end else begin
       ctrl_state <= ctrl_state_next;
       iter_check_pending <= iter_check_pending_next;
-      vnu_finalize_pending <= vnu_finalize_pending_next;
       merge_active <= merge_active_next;
       merge_read_d1 <= merge_read_d1_next;
       merge_row_count <= merge_row_count_next;
