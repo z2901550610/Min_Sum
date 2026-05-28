@@ -71,7 +71,7 @@ module tb_ram_i_idx_loader;
           $fatal(1, "lane_we lane=%0d got=%0b exp=%0b", lane_idx, lane_we[lane_idx], one_idx < W);
         end
         if (one_idx < W) begin
-          if (entry_wdata[lane_idx] != {ONE_IDX_W'(one_idx), row_idx_global[lane_idx]}) begin
+          if (entry_wdata[lane_idx] != row_idx_global[lane_idx]) begin
             $fatal(1, "entry_wdata lane=%0d mismatch", lane_idx);
           end
         end

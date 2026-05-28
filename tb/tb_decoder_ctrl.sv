@@ -89,7 +89,7 @@ module tb_decoder_ctrl;
   always_comb begin
     c2v_entry_pos_last = (int'(c2v_entry_pos) + 1) >= RAM_LANE_DEPTH;
     v2c_entry_pos_last = (int'(v2c_entry_pos) + 1) >= RAM_LANE_DEPTH;
-    finish_decode = iter_check && (iter_count == ITER_W'(I_MAX - 1));
+    finish_decode = iter_count == ITER_W'(I_MAX - 1);
   end
 
   always @(posedge clk) begin
@@ -109,14 +109,18 @@ module tb_decoder_ctrl;
       if (vnu_finalize != (c2v_write_t && dut.col_kp1_last_d2)) begin
         $fatal(1, "VNU finalize should align with the last c2v write");
       end
-      if (iter_check && (c2v_read || v2c_read || c2v_write_t || cnu_a_writeback)) begin
+      if (iter_check && (c2v_read || v2c_read || c2v_write_t ||
+                         (cnu_a_writeback && !dut.iter_boundary_fire))) begin
         $fatal(1, "data-path issue pulse active during iter_check");
       end
-      if (merge_write && !iter_check) begin
-        $fatal(1, "merge write without iter_check");
+      if (merge_read || merge_write) begin
+        $fatal(1, "row-bank schedule should not issue merge reads or writes");
+      end
+      if (merge_row_idx != '0) begin
+        $fatal(1, "row-bank schedule should keep merge_row_idx at zero");
       end
       if (merge_done && !iter_check) begin
-        $fatal(1, "merge done without iter_check");
+        $fatal(1, "iteration swap without iter_check");
       end
       if (c2v_pipe_valid != (c2v_read || c2v_write_t || dut.col_kp1_c2v_valid_d1)) begin
         $fatal(1, "c2v pipe valid summary mismatch");
@@ -154,8 +158,6 @@ module tb_decoder_ctrl;
     wait (col_k_meta_advance === 1'b1);
     wait (state == 4'd6);
     wait (iter_check === 1'b1);
-    wait (merge_read === 1'b1 && merge_row_idx == '0);
-    wait (merge_write === 1'b1);
     wait (merge_done === 1'b1);
     wait (ram_m_read_pair_sel === 1'b1);
     wait (done === 1'b1);

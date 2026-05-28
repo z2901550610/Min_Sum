@@ -12,6 +12,8 @@ from pathlib import Path
 from ram_i_hex import first_column_tables as build_first_column_tables
 from ram_i_hex import generate_hex_files
 from ram_i_hex import lane_depth_from_counts
+from ram_i_hex import row_bank_schedule_depth
+from ram_i_hex import select_row_bank_count
 
 
 RTL_CORE = [
@@ -26,6 +28,7 @@ RTL_CORE = [
     "rtl/ram_i_idx_loader.sv",
     "rtl/ram_c.sv",
     "rtl/ram_m.sv",
+    "rtl/ram_m_bank_array.sv",
     "rtl/ram_s.sv",
     "rtl/ram_syndrome.sv",
     "rtl/ram_t.sv",
@@ -129,8 +132,8 @@ def render_group_entry_param(
                 if item is None:
                     entry_text.append("'0")
                 else:
-                    one_idx, row_idx_global = item
-                    entry_text.append(f"{{ONE_IDX_W'({one_idx}), ROW_IDX_W'({row_idx_global})}}")
+                    _one_idx, row_idx_global = item
+                    entry_text.append(f"ROW_IDX_W'({row_idx_global})")
             lines.append("      '{" + ", ".join(entry_text) + "}" + group_suffix)
         lines.append("    }" + h_block_suffix)
     lines.append("  };")
@@ -152,6 +155,7 @@ def emit_pkg(
     s_pack_w: int,
     h_base: list[list[int]],
     lane_depth: int,
+    row_bank_count: int,
 ) -> None:
     group_counts, group_entries = build_first_column_tables(h_base, group_count=l)
     path.write_text(
@@ -197,7 +201,11 @@ package bike_pkg;
   parameter int S_WORD_DEPTH = N * S_WORDS_PER_COL;
   parameter int S_WORD_ADDR_W = (S_WORD_DEPTH > 1) ? $clog2(S_WORD_DEPTH) : 1;
   parameter int S_PACK_IDX_W = (S_PACK_W > 1) ? $clog2(S_PACK_W) : 1;
-  parameter int M_BANKS = 2 * L;
+  parameter int M_ROW_BANKS = {row_bank_count};
+  parameter int M_ROW_BANK_IDX_W = (M_ROW_BANKS > 1) ? $clog2(M_ROW_BANKS) : 1;
+  parameter int M_ROW_BANK_DEPTH = (R + M_ROW_BANKS - 1) / M_ROW_BANKS;
+  parameter int M_ROW_BANK_ADDR_W = (M_ROW_BANK_DEPTH > 1) ? $clog2(M_ROW_BANK_DEPTH) : 1;
+  parameter int M_BANKS = 2 * M_ROW_BANKS;
   parameter int M_BANK_IDX_W = (M_BANKS > 1) ? $clog2(M_BANKS) : 1;
 
   localparam int DEC_STATE_W = 4;
@@ -231,8 +239,7 @@ package bike_pkg;
 
   localparam int I_ENTRY_ROW_IDX_GLOBAL_LSB = 0;
   localparam int I_ENTRY_ROW_IDX_GROUP_LSB = I_ENTRY_ROW_IDX_GLOBAL_LSB;
-  localparam int I_ENTRY_ONE_IDX_LSB = I_ENTRY_ROW_IDX_GLOBAL_LSB + ROW_IDX_W;
-  localparam int I_ENTRY_W = I_ENTRY_ONE_IDX_LSB + ONE_IDX_W;
+  localparam int I_ENTRY_W = ROW_IDX_W;
 {render_group_count_param(group_counts)}
 {render_group_entry_param(group_entries, lane_depth)}
   localparam logic [GROUP_COUNT_W-1:0] QC_FIRST_COL_LANE_COUNT [0:N0-1][0:L-1] =
@@ -435,7 +442,9 @@ module tb_bike_decoder_random;
       $fatal(1, "seed=%0d timeout after %0d cycles", TEST_SEED, cycles);
     end
 
-    e_out = '0;
+    for (int clear_idx = 0; clear_idx < N; clear_idx++) begin
+      e_out[clear_idx] = 1'b0;
+    end
     for (int col_idx = 0; col_idx < N; col_idx++) begin
       e_read_col_idx = COL_W'(col_idx);
       @(posedge clk);
@@ -510,11 +519,27 @@ def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int
         error_bits[pos] = 1
     syndrome = calc_syndrome(h_base, error_bits, args.r, args.w)
     group_counts, _ = build_first_column_tables(h_base, group_count=args.parallel_l)
-    required_lane_depth = lane_depth_from_counts(group_counts, issue_width=args.parallel_l)
+    target_lane_depth = default_ram_lane_depth(args.w, args.parallel_l)
+    source_lane_depth = lane_depth_from_counts(group_counts)
+    row_bank_count = (
+        args.ram_m_row_banks
+        if args.ram_m_row_banks is not None
+        else select_row_bank_count(h_base, args.r, args.parallel_l, target_lane_depth)
+    )
+    row_bank_depth = row_bank_schedule_depth(
+        h_base,
+        args.r,
+        row_bank_count,
+        args.parallel_l,
+    )
+    required_lane_depth = max(
+        source_lane_depth,
+        row_bank_depth,
+    )
     lane_depth = (
         args.ram_lane_depth
         if args.ram_lane_depth is not None
-        else default_ram_lane_depth(args.w, args.parallel_l)
+        else max(required_lane_depth, target_lane_depth)
     )
     s_pack_w = args.s_pack_w if args.s_pack_w is not None else default_s_pack_w(args.parallel_l)
     if lane_depth < required_lane_depth:
@@ -539,6 +564,7 @@ def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int
         s_pack_w=s_pack_w,
         h_base=h_base,
         lane_depth=lane_depth,
+        row_bank_count=row_bank_count,
     )
     generate_hex_files(
         h_base,
@@ -610,7 +636,13 @@ def parse_args() -> argparse.Namespace:
         "--ram-lane-depth",
         type=int,
         default=None,
-        help="Fixed RAM-I/S/T lane capacity. Defaults to ceil(w/L)+1.",
+        help="Fixed RAM-I/S/T lane capacity. Defaults to the speed-safe schedule depth.",
+    )
+    parser.add_argument(
+        "--ram-m-row-banks",
+        type=int,
+        default=None,
+        help="Fixed row-bank count for RAM-M. Defaults to the first speed-safe power of two.",
     )
     return parser.parse_args()
 
@@ -637,6 +669,8 @@ def main() -> int:
         raise ValueError("--s-pack-w must be a positive power of two")
     if args.ram_lane_depth is not None and args.ram_lane_depth < 1:
         raise ValueError("--ram-lane-depth must be positive")
+    if args.ram_m_row_banks is not None and args.ram_m_row_banks < 1:
+        raise ValueError("--ram-m-row-banks must be positive")
 
     for case_idx in range(args.trials):
         seed = args.base_seed + case_idx

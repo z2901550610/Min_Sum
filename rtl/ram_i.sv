@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
-// RAM-I：一个实例保存一个 edge lane 的 H-block 列 metadata。
-// list 是该 lane 内的 packed entries，entry = {one_idx, row_idx_global}。
+// RAM-I：一个实例保存一个 first-column support group 的 H-block 行索引。
+// list 是该 support group 内的 row_idx_global entries。
 // 上电时通过 $readmemh 从 hex 文件加载初始数据。
 module ram_i
   import bike_pkg::*;
@@ -27,11 +27,15 @@ module ram_i
 `ifdef BIKE_SIM_DEBUG
     output logic [    I_ENTRY_W-1:0] o_entry_rdata,
     output logic [GROUP_COUNT_W-1:0] o_count,
+    output logic [    I_ENTRY_W-1:0] o_list_entries[0:N0-1][0:RAM_LANE_DEPTH-1],
+    output logic [GROUP_COUNT_W-1:0] o_list_counts[0:N0-1],
     output logic [    I_ENTRY_W-1:0] o_debug_list_entries[0:N0-1][0:RAM_LANE_DEPTH-1],
     output logic [GROUP_COUNT_W-1:0] o_debug_counts[0:N0-1]
 `else
     output logic [    I_ENTRY_W-1:0] o_entry_rdata,
-    output logic [GROUP_COUNT_W-1:0] o_count
+    output logic [GROUP_COUNT_W-1:0] o_count,
+    output logic [    I_ENTRY_W-1:0] o_list_entries[0:N0-1][0:RAM_LANE_DEPTH-1],
+    output logic [GROUP_COUNT_W-1:0] o_list_counts[0:N0-1]
 `endif
 );
 
@@ -76,15 +80,24 @@ module ram_i
 `ifdef BIKE_SIM_DEBUG
   always_comb begin
     for (int h_block_idx = 0; h_block_idx < N0; h_block_idx++) begin
-      o_debug_counts[h_block_idx] =
-          count_mem[count_addr(active_slot[h_block_idx], H_BLOCK_W'(h_block_idx))];
+      o_debug_counts[h_block_idx] = o_list_counts[h_block_idx];
       for (int entry_idx = 0; entry_idx < RAM_LANE_DEPTH; entry_idx++) begin
-        o_debug_list_entries[h_block_idx][entry_idx] = entry_mem[
-            entry_addr(active_slot[h_block_idx], H_BLOCK_W'(h_block_idx), ENTRY_POS_W'(entry_idx))];
+        o_debug_list_entries[h_block_idx][entry_idx] = o_list_entries[h_block_idx][entry_idx];
       end
     end
   end
 `endif
+
+  always_comb begin
+    for (int h_block_idx = 0; h_block_idx < N0; h_block_idx++) begin
+      o_list_counts[h_block_idx] =
+          count_mem[count_addr(active_slot[h_block_idx], H_BLOCK_W'(h_block_idx))];
+      for (int entry_idx = 0; entry_idx < RAM_LANE_DEPTH; entry_idx++) begin
+        o_list_entries[h_block_idx][entry_idx] = entry_mem[
+            entry_addr(active_slot[h_block_idx], H_BLOCK_W'(h_block_idx), ENTRY_POS_W'(entry_idx))];
+      end
+    end
+  end
 
   assign o_count = count_mem[count_addr(active_slot[i_read_h_block_idx], i_read_h_block_idx)];
 

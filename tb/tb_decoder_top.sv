@@ -257,20 +257,26 @@ module tb_decoder_top;
     #1;
     active_lane_count = 0;
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-      int row_idx_i;
+      logic [ROW_IDX_W-1:0] row_idx_i;
+      bit                   row_match;
 
       if (!dut.c2v_group_valid[lane_idx]) begin
         continue;
       end
       active_lane_count++;
-      row_idx_i = edge_row_idx(int'(dut.c2v_read_col_d1), int'(dut.c2v_one_idx[lane_idx]));
-      if (dut.c2v_row_idx_global[lane_idx] != ROW_IDX_W'(row_idx_i))
+      row_match = 1'b0;
+      for (int one_idx = 0; one_idx < W; one_idx++) begin
+        row_idx_i = ROW_IDX_W'(edge_row_idx(int'(dut.c2v_read_col_d1), one_idx));
+        if (dut.c2v_row_idx_global[lane_idx] == row_idx_i) begin
+          row_match = 1'b1;
+        end
+      end
+      if (!row_match)
         $fatal(
             1,
-            "shifted column 1 row mismatch lane %0d: got %0d exp %0d",
+            "shifted column 1 row mismatch lane %0d: got %0d",
             lane_idx,
-            int'(dut.c2v_row_idx_global[lane_idx]),
-            row_idx_i
+            int'(dut.c2v_row_idx_global[lane_idx])
         );
     end
     if (active_lane_count == 0) $fatal(1, "shifted column 1 exposed no active group");

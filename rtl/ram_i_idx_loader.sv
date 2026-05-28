@@ -56,7 +56,7 @@ module ram_i_idx_loader
       one_idx = (int'(o_request_entry_pos) << LANE_IDX_W) + lane_idx;
       lane_valid = accepted && (one_idx < W);
       o_lane_we[lane_idx] = lane_valid;
-      o_entry_wdata[lane_idx] = {ONE_IDX_W'(one_idx), i_row_idx_global[lane_idx]};
+      o_entry_wdata[lane_idx] = i_row_idx_global[lane_idx];
       o_count_we[lane_idx] = accepted && block_last_entry;
       o_count_wdata[lane_idx] =
         GROUP_COUNT_W'(((W + L - 1 - lane_idx) > 0) ? ((W + L - 1 - lane_idx) >> LANE_IDX_W) : 0);

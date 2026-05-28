@@ -140,6 +140,9 @@ module vnu #(
     scaled_sum = alpha_scale((i_finalize && (i_col_start || i_col_end || accum_valid_any)) ?
                              accum_sum_next : final_sum_reg);
     posterior_next = prior_msg_sign_extend + scaled_sum;
+    if (i_finalize) begin
+      posterior_active = posterior_next;
+    end
 
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
       scaled_c2v_t_ext = VNU_TC_W'($signed(i_c2v_t[lane_idx]));

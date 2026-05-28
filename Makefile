@@ -2,7 +2,9 @@ VERILATOR ?= ./scripts/verilator_quiet.py
 REAL_VERILATOR ?= verilator
 VERILATOR_LOG_DIR ?= build/logs/verilator
 BIKE_PARALLEL_L ?= 8
-VERILATOR_FLAGS ?= --binary --sv -DBIKE_TOY_PARAMS -DBIKE_PARALLEL_L=$(BIKE_PARALLEL_L) -DBIKE_SIM_DEBUG -Wall -Wno-fatal -I./tb -I./rtl
+BIKE_PARAM_TAG ?= test
+RAM_M_ROW_BANKS ?= $(shell python3 scripts/select_row_bank_count.py --input rtl/bike_pkg.sv --parallel-l $(BIKE_PARALLEL_L) --tag $(BIKE_PARAM_TAG))
+VERILATOR_FLAGS ?= --binary --sv -DBIKE_TOY_PARAMS -DBIKE_PARALLEL_L=$(BIKE_PARALLEL_L) -DBIKE_RAM_M_ROW_BANKS=$(RAM_M_ROW_BANKS) -DBIKE_SIM_DEBUG -Wall -Wno-fatal -I./tb -I./rtl
 SIM ?= ./scripts/run_quiet.py
 VIVADO ?= vivado
 VIVADO_BUILD_DIR ?= build/vivado
@@ -23,7 +25,7 @@ RAM_I_HEX := $(foreach b,$(RAM_I_BANKS),$(RAM_I_HEX_DIR)/ram_i$(b)_entries_test.
 RAM_I_HEX_STAMP := $(RAM_I_HEX_DIR)/.ram_i_hex.stamp
 RTL_PKG := rtl/bike_pkg.sv
 RTL_PRIMS := rtl/ram_1r1w_sync_read.sv rtl/ram_1r1w_async_read.sv rtl/sign_bit_pack.sv
-RTL_CORE := $(RTL_PRIMS) rtl/edge_message_pipe.sv rtl/ram_i_idx_loader.sv rtl/decoder_top.sv rtl/ram_i.sv rtl/msg_signmag_to_tc.sv rtl/msg_tc_to_signmag_sat.sv rtl/decoder_ctrl.sv rtl/ram_c.sv rtl/ram_m.sv rtl/ram_s.sv rtl/ram_syndrome.sv rtl/ram_t.sv rtl/cnu_a.sv rtl/cnu_b.sv rtl/vnu.sv
+RTL_CORE := $(RTL_PRIMS) rtl/edge_message_pipe.sv rtl/ram_i_idx_loader.sv rtl/decoder_top.sv rtl/ram_i.sv rtl/msg_signmag_to_tc.sv rtl/msg_tc_to_signmag_sat.sv rtl/decoder_ctrl.sv rtl/ram_c.sv rtl/ram_m.sv rtl/ram_m_bank_array.sv rtl/ram_s.sv rtl/ram_syndrome.sv rtl/ram_t.sv rtl/cnu_a.sv rtl/cnu_b.sv rtl/vnu.sv
 RTL := $(RTL_PKG) $(RTL_CORE)
 MAINTAINED_SV := $(sort $(wildcard rtl/*.sv) $(wildcard tb/*.sv))
 BIKE_RANDOM_BASE_SEED ?= 1
@@ -38,7 +40,7 @@ all: test
 $(TOY_CASE_SVH): FORCE scripts/gen_toy_case_fixture.py scripts/run_bike_random.py scripts/qc_matrix_data.py
 	@python3 scripts/gen_toy_case_fixture.py --output $@
 
-$(RAM_I_HEX_STAMP): FORCE rtl/bike_pkg.sv scripts/gen_qc_first_columns.py scripts/ram_i_hex.py scripts/qc_matrix_data.py
+$(RAM_I_HEX_STAMP): FORCE rtl/bike_pkg.sv scripts/gen_qc_first_columns.py scripts/ram_i_hex.py scripts/qc_matrix_data.py scripts/select_row_bank_count.py
 	@python3 scripts/gen_qc_first_columns.py --input rtl/bike_pkg.sv --output-dir $(RAM_I_HEX_DIR)/ --parallel-l $(BIKE_PARALLEL_L)
 	@touch $@
 

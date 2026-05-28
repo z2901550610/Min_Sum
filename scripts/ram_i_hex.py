@@ -51,14 +51,71 @@ def lane_depth_from_counts(group_counts: list[list[int]], issue_width: int | Non
     return max(bank_depth, slot_depth)
 
 
+def row_bank_schedule_depth(
+    banks: list[list[int]],
+    r_value: int,
+    row_bank_count: int,
+    issue_width: int,
+) -> int:
+    depth = 0
+    for bank_support in banks:
+        for col_idx in range(r_value):
+            edge_banks: list[int] = []
+            for source_group_idx in range(issue_width):
+                for one_idx, row_idx_global in enumerate(bank_support):
+                    if (one_idx % issue_width) != source_group_idx:
+                        continue
+                    shifted_row = row_idx_global + col_idx
+                    if shifted_row >= r_value:
+                        shifted_row -= r_value
+                    edge_banks.append(shifted_row % row_bank_count)
+
+            issued = [False for _ in edge_banks]
+            slot_depth = 0
+            while not all(issued):
+                used_banks: set[int] = set()
+                issued_this_slot = 0
+                for edge_idx, edge_bank in enumerate(edge_banks):
+                    if issued[edge_idx]:
+                        continue
+                    if edge_bank in used_banks:
+                        continue
+                    if issued_this_slot >= issue_width:
+                        break
+                    used_banks.add(edge_bank)
+                    issued[edge_idx] = True
+                    issued_this_slot += 1
+                slot_depth += 1
+            depth = max(depth, slot_depth)
+    return depth
+
+
+def select_row_bank_count(
+    banks: list[list[int]],
+    r_value: int,
+    issue_width: int,
+    target_depth: int,
+) -> int:
+    row_bank_count = 1
+    while row_bank_count < r_value:
+        if row_bank_schedule_depth(banks, r_value, row_bank_count, issue_width) <= target_depth:
+            return row_bank_count
+        row_bank_count *= 2
+    return r_value
+
+
+def shifted_row_bank_depth(banks: list[list[int]], r_value: int, lane_count: int) -> int:
+    return row_bank_schedule_depth(banks, r_value, lane_count, lane_count)
+
+
 def clog2_sv(value: int) -> int:
     if value <= 1:
         return 1
     return (value - 1).bit_length()
 
 
-def packed_entry(one_idx: int, row_idx_group: int, row_idx_w: int) -> int:
-    return (one_idx << row_idx_w) | row_idx_group
+def packed_entry(_one_idx: int, row_idx_group: int, _row_idx_w: int) -> int:
+    return row_idx_group
 
 
 def write_hex_file(path: Path, values: list[int]) -> None:

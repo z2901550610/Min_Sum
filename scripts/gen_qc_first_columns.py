@@ -9,6 +9,8 @@ from pathlib import Path
 
 from qc_matrix_data import DEFAULT_SUPPORTS
 from ram_i_hex import generate_hex_files
+from ram_i_hex import row_bank_schedule_depth
+from ram_i_hex import select_row_bank_count
 
 
 def extract_param_values(text: str, name: str) -> list[int]:
@@ -95,9 +97,37 @@ def main() -> None:
     if lane_depth_values_raw:
         lane_depth_values = pair_values(lane_depth_values_raw)
     else:
-        lane_depth_values = [
+        l1_row_bank_count = select_row_bank_count(
+            DEFAULT_SUPPORTS["l1"],
+            l1_r_value,
+            l_values[0],
             max((l1_w_value + l_values[0] - 1) // l_values[0], 3),
+        )
+        test_row_bank_count = select_row_bank_count(
+            DEFAULT_SUPPORTS["test"],
+            test_r_value,
+            l_values[1],
             max((test_w_value + l_values[1] - 1) // l_values[1], 3),
+        )
+        lane_depth_values = [
+            max(
+                row_bank_schedule_depth(
+                    DEFAULT_SUPPORTS["l1"],
+                    l1_r_value,
+                    l1_row_bank_count,
+                    l_values[0],
+                ),
+                3,
+            ),
+            max(
+                row_bank_schedule_depth(
+                    DEFAULT_SUPPORTS["test"],
+                    test_r_value,
+                    test_row_bank_count,
+                    l_values[1],
+                ),
+                3,
+            ),
         ]
 
     jobs = [

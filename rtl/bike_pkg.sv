@@ -54,8 +54,6 @@ package bike_pkg;
   // L is constrained to a power of two so lane-local one_idx generation uses
   // shifts and low-bit concatenation.
   localparam int EDGE_SLOT_DEPTH = (W + L - 1) / L;
-  // Three edge slots cover the controller pipeline boundary for small toy
-  // matrices while L1 uses the edge-lane capacity.
   localparam int RAM_LANE_DEPTH = (EDGE_SLOT_DEPTH < 3) ? 3 : EDGE_SLOT_DEPTH;
   localparam int ALPHA_FRAC_W = 6;  //alpha 用6位小数表示
   localparam int MAG_MAX = (1 << D) - 1;
@@ -89,7 +87,21 @@ package bike_pkg;
   localparam int S_WORD_DEPTH = N * S_WORDS_PER_COL;
   localparam int S_WORD_ADDR_W = (S_WORD_DEPTH > 1) ? $clog2(S_WORD_DEPTH) : 1;
   localparam int S_PACK_IDX_W = (S_PACK_W > 1) ? $clog2(S_PACK_W) : 1;
-  localparam int M_BANKS = 2 * L;
+  localparam int DEFAULT_M_ROW_BANKS =
+    (L <= 1) ? 1 :
+    ((N0 == 2 && R == 8 && W == 3) ? 1 :
+    ((N0 == 2 && R == 11677 && W == 71) ?
+     ((L <= 2) ? 16 : ((L <= 4) ? 32 : ((L <= 8) ? 256 : ((L <= 16) ? 64 : 512)))) :
+     ((L <= 2) ? 16 : 512)));
+`ifndef BIKE_RAM_M_ROW_BANKS
+  localparam int M_ROW_BANKS = (DEFAULT_M_ROW_BANKS > R) ? R : DEFAULT_M_ROW_BANKS;
+`else
+  localparam int M_ROW_BANKS = (`BIKE_RAM_M_ROW_BANKS > R) ? R : `BIKE_RAM_M_ROW_BANKS;
+`endif
+  localparam int M_ROW_BANK_IDX_W = (M_ROW_BANKS > 1) ? $clog2(M_ROW_BANKS) : 1;
+  localparam int M_ROW_BANK_DEPTH = (R + M_ROW_BANKS - 1) / M_ROW_BANKS;
+  localparam int M_ROW_BANK_ADDR_W = (M_ROW_BANK_DEPTH > 1) ? $clog2(M_ROW_BANK_DEPTH) : 1;
+  localparam int M_BANKS = 2 * M_ROW_BANKS;
   localparam int M_BANK_IDX_W = (M_BANKS > 1) ? $clog2(M_BANKS) : 1;
 
   localparam int DEC_STATE_W = 4;
@@ -113,7 +125,6 @@ package bike_pkg;
 
   localparam int I_ENTRY_ROW_IDX_GLOBAL_LSB = 0;
   localparam int I_ENTRY_ROW_IDX_GROUP_LSB = I_ENTRY_ROW_IDX_GLOBAL_LSB;
-  localparam int I_ENTRY_ONE_IDX_LSB = I_ENTRY_ROW_IDX_GLOBAL_LSB + ROW_IDX_W;
-  localparam int I_ENTRY_W = I_ENTRY_ONE_IDX_LSB + ONE_IDX_W;
+  localparam int I_ENTRY_W = ROW_IDX_W;
   /* verilator lint_on UNUSEDPARAM */
 endpackage

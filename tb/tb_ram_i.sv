@@ -16,6 +16,8 @@ module tb_ram_i;
   logic [    I_ENTRY_W-1:0] entry_rdata;
   /* verilator lint_off UNUSEDSIGNAL */
   logic [GROUP_COUNT_W-1:0] count;
+  logic [    I_ENTRY_W-1:0] list_entries[0:N0-1][0:RAM_LANE_DEPTH-1];
+  logic [GROUP_COUNT_W-1:0] list_counts[0:N0-1];
   /* verilator lint_on UNUSEDSIGNAL */
   logic [    I_ENTRY_W-1:0] debug_list_entries[0:N0-1] [0:RAM_LANE_DEPTH-1];
   logic [GROUP_COUNT_W-1:0] debug_counts[0:N0-1];
@@ -39,6 +41,8 @@ module tb_ram_i;
       .i_count_wdata(count_wdata),
       .o_entry_rdata(entry_rdata),
       .o_count(count),
+      .o_list_entries(list_entries),
+      .o_list_counts(list_counts),
       .o_debug_list_entries(debug_list_entries),
       .o_debug_counts(debug_counts)
   );
@@ -63,7 +67,6 @@ module tb_ram_i;
     #1;
 
     // After reset, $readmemh-initialised memory should retain its data.
-    // For test params, ram_i0 carries the one_idx values congruent to zero.
     if (debug_counts[0] != GROUP_COUNT_W'(EDGE_SLOT_DEPTH))
       $fatal(1, "ram_i init count h_block 0 mismatch: %0d", debug_counts[0]);
     if (debug_counts[1] != GROUP_COUNT_W'(EDGE_SLOT_DEPTH))
@@ -82,7 +85,7 @@ module tb_ram_i;
     write_h_block_idx = '0;
     read_entry_idx = ENTRY_POS_W'(1);
     write_entry_idx = ENTRY_POS_W'(1);
-    entry_wdata = {ONE_IDX_W'(1), ROW_IDX_W'(2)};
+    entry_wdata = ROW_IDX_W'(2);
     count_wdata = GROUP_COUNT_W'(1);
     we = 1'b1;
     count_we = 1'b1;
@@ -94,7 +97,7 @@ module tb_ram_i;
 
     @(posedge clk);
     #1;
-    if (entry_rdata != {ONE_IDX_W'(1), ROW_IDX_W'(2)}) $fatal(1, "ram_i single-port read mismatch");
+    if (entry_rdata != ROW_IDX_W'(2)) $fatal(1, "ram_i single-port read mismatch");
 
     // Reset clears read data register only, not the memory.
     rst_n = 1'b0;
