@@ -19,10 +19,11 @@ lane/group，还是在当前 lane/group 内选择一个位置。
 | `col_idx` | `0..N-1` | 全局变量节点编号。 |
 | `row_idx_group` | `0..floor((R-1)/L)` | row-group 坐标下的紧凑局部行号。 |
 | `row_idx_global` | `0..R-1` | 绝对校验行号。顶层 RAM-M、syndrome 和列 metadata 使用该坐标。 |
-| `one_idx` | `0..W-1` | 一个变量列内某个"1"的位置编号（即该列第几条边），用于访问 RAM-S/T 的边维度。 |
+| `one_idx` | `0..W-1` | 一个变量列内某个"1"的位置编号（即该列第几条边），用于选择 RAM-S sign 向量和访问 RAM-T 的边维度。 |
+| `edge_id` | `0..N0*W-1` | 校验行内边编号，由 `h_block_idx * W + one_idx` 生成，用于 RAM-M 压缩状态中的最小值来源标识。 |
 | `list` | `[0:W-1]` | 一组 packed entries，通常表示当前 lane-local metadata 列表。 |
 | `entry_pos` | `0..W-1` | `list` 内的游标位置，是相对索引，不是行号。用于遍历列表中各 entry 的步进游标。 |
-| `entry` | packed value | 单个 metadata 项。RAM-I entry 格式是 `{one_idx, row_idx_global}`。 |
+| `entry` | packed value | 单个 metadata 项。RAM-I entry 保存 `row_idx_global`。 |
 | `count` | `0..W` | 一个 list 中有效 entry 的数量。只有 `entry_pos < count` 的项有效。 |
 
 ### `count` 与写指针的区分
@@ -51,10 +52,11 @@ per-lane metadata storage
 list_entries
   [h_block_idx]              // 0..N0-1，选择 H block
     [entry_pos]              // 0..W-1，选择当前 list 内的位置
-      entry = {one_idx, row_idx_global}
-               |               |
-               |               +-- 绝对校验行号
-               +------------------ 变量列内的边编号，0..W-1
+      entry = row_idx_global
+               |
+               +-- 绝对校验行号
+
+one_idx = entry_pos * L + lane_idx
 
 list_count
   [h_block_idx]              // 当前 list 中有效 entry 数，范围 0..W
@@ -67,9 +69,9 @@ list_count
 
 entry_pos   list_entries[0][entry_pos]           是否有效
 ---------   ------------------------------      --------
-0           {one_idx=0, row_idx_global=142}   entry_pos < count，有效
-1           {one_idx=8, row_idx_global=1371}  entry_pos < count，有效
-2           {one_idx=0, row_idx_global=0}     entry_pos >= count，无效
+0           row_idx_global=142   entry_pos < count，有效，one_idx 由 entry_pos 和 lane 编号生成
+1           row_idx_global=1371  entry_pos < count，有效，one_idx 由 entry_pos 和 lane 编号生成
+2           row_idx_global=0     entry_pos >= count，无效
 
 list_count[0] = 2
 ```
@@ -255,7 +257,7 @@ logic [MSG_W-1:0] mem[0:RAM_LANE_DEPTH-1];
 | 模块/区域 | 推荐命名 | 说明 |
 | --- | --- | --- |
 | RAM-I metadata | `entry_pos`, `entry_wdata`, `list_entries`, `count` | 一个实例属于一个 lane；端口名不重复 group/lane。 |
-| RAM-S/T edge 维 | `one_idx` | 访问变量列内第几条边；RAM-S 使用 read/write 地址后缀区分读写端，RAM-T 使用 push/pop 流式接口。 |
+| RAM-S/T edge 维 | `one_idx` | 访问变量列内第几条边；RAM-S 使用列 sign 向量和 `one_idx` 选择 bit，RAM-T 使用 push/pop 流式接口。 |
 | RAM-M 行地址 | `row_idx_global` | RAM-M bank 使用全局校验行地址。 |
 | C2V/V2C 跨 group 数组 | `*_group_valid[0:L-1]` | 数组维度确实是 group。 |
 | H block 选择 | `h_block_idx` | 统一使用 `h_block`，不使用 `hblk`。 |

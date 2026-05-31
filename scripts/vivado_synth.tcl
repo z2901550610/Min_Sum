@@ -31,7 +31,6 @@ proc run_step {name command} {
 set rtl_files [list \
   rtl/bike_pkg.sv \
   rtl/ram_1r1w_sync_read.sv \
-  rtl/sign_bit_pack.sv \
   rtl/decoder_top.sv \
   rtl/edge_message_pipe.sv \
   rtl/ram_i.sv \

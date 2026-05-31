@@ -72,7 +72,13 @@ def main() -> None:
         help="Output directory for hex files",
     )
     parser.add_argument("--parallel-l", type=int, default=None)
+    parser.add_argument("--ram-lane-min-depth", type=int, default=3)
+    parser.add_argument("--ram-lane-depth", type=int, default=None)
     args = parser.parse_args()
+    if args.ram_lane_min_depth < 3:
+        raise ValueError("--ram-lane-min-depth must be at least 3")
+    if args.ram_lane_depth is not None and args.ram_lane_depth < 3:
+        raise ValueError("--ram-lane-depth must be at least 3")
 
     input_path = Path(args.input)
     output_dir = Path(args.output_dir)
@@ -94,20 +100,28 @@ def main() -> None:
     if not all(is_power_of_two(l_value) for l_value in l_values):
         raise ValueError("--parallel-l must be a power of two")
     lane_depth_values_raw = extract_param_values(source_text, "RAM_LANE_DEPTH")
-    if lane_depth_values_raw:
+    if args.ram_lane_depth is not None:
+        lane_depth_values = [args.ram_lane_depth, args.ram_lane_depth]
+    elif lane_depth_values_raw:
         lane_depth_values = pair_values(lane_depth_values_raw)
     else:
+        l1_target_depth = max(
+            (l1_w_value + l_values[0] - 1) // l_values[0], args.ram_lane_min_depth
+        )
+        test_target_depth = max(
+            (test_w_value + l_values[1] - 1) // l_values[1], args.ram_lane_min_depth
+        )
         l1_row_bank_count = select_row_bank_count(
             DEFAULT_SUPPORTS["l1"],
             l1_r_value,
             l_values[0],
-            max((l1_w_value + l_values[0] - 1) // l_values[0], 3),
+            l1_target_depth,
         )
         test_row_bank_count = select_row_bank_count(
             DEFAULT_SUPPORTS["test"],
             test_r_value,
             l_values[1],
-            max((test_w_value + l_values[1] - 1) // l_values[1], 3),
+            test_target_depth,
         )
         lane_depth_values = [
             max(
@@ -117,7 +131,7 @@ def main() -> None:
                     l1_row_bank_count,
                     l_values[0],
                 ),
-                3,
+                l1_target_depth,
             ),
             max(
                 row_bank_schedule_depth(
@@ -126,7 +140,7 @@ def main() -> None:
                     test_row_bank_count,
                     l_values[1],
                 ),
-                3,
+                test_target_depth,
             ),
         ]
 

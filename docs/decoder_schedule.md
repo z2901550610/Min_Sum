@@ -8,12 +8,12 @@
 - `DEC_ITER_C2V_PRIME` 只发射 c2v 侧工作，用列 0 建立 RAM-T 数据和 active/fill metadata。
 - `DEC_ITER_OVERLAP` 同时运行 c2v 与 v2c，c2v 侧处理列 `k+1`，v2c 侧处理列 `k`。
 - `DEC_ITER_V2C_DRAIN` 在最后一列 c2v 填充后只保留 v2c 侧发射和写回。
-- `DEC_ITER_CHECK` 在一轮列调度完成后执行迭代收尾。达到 `I_MAX` 时进入完成状态；继续迭代时执行 RAM-M 行合并，然后切换读写 pair 并启动下一轮。
+- `DEC_ITER_CHECK` 在一轮列调度完成后执行迭代收尾。达到 `I_MAX` 时进入完成状态；继续迭代时切换 RAM-M 读写 pair 并启动下一轮。
 - `DEC_DONE` 输出 `o_done = 1`，等待新的 `i_start`。
 
 内部调度使用 `SCHED_FILL_K`、`SCHED_K_KP1`、`SCHED_KP1_READY`、`SCHED_DRAIN_K`。列 k 的 v2c 发射阶段使用 `COL_K_STAGE_FIRST` 和 `COL_K_STAGE_ISSUE`。c2v 侧有两级 valid 延迟，v2c/CNU_A 侧也有两级 valid 延迟；控制脉冲围绕这些 fixed-latency pipeline 生成。
 
-第一次迭代的 CNU_B 输入压缩状态由 `FIRST_ITER_C2V_COMP` 提供。后续迭代从 RAM-M 读 pair 读取上一轮合并后的压缩 c2v 状态，写 pair 接收 CNU_A 更新。
+第一次迭代的 CNU_B 输入压缩状态由 `FIRST_ITER_C2V_COMP` 提供。后续迭代从 RAM-M 读 pair 读取上一轮压缩 c2v 状态，写 pair 接收 CNU_A 更新。
 
 ## 状态机图
 
@@ -34,8 +34,7 @@ stateDiagram-v2
     DEC_ITER_V2C_DRAIN --> DEC_ITER_V2C_DRAIN : 排空最后一列v2c\n等待CNU_A写回
     DEC_ITER_V2C_DRAIN --> DEC_ITER_CHECK : 最后一列最后写回完成
 
-    DEC_ITER_CHECK --> DEC_ITER_CHECK : i_finish_decode=0\nmerge_read/merge_write遍历R行
-    DEC_ITER_CHECK --> DEC_ITER_C2V_PRIME : merge_done\n切换RAM-M pair\n下一轮列0
+    DEC_ITER_CHECK --> DEC_ITER_C2V_PRIME : i_finish_decode=0\n切换RAM-M pair\n下一轮列0
     DEC_ITER_CHECK --> DEC_DONE : i_finish_decode=1
 
     DEC_DONE --> DEC_ITER_C2V_PRIME : i_start
@@ -52,7 +51,7 @@ stateDiagram-v2
 - `c2v_col_idx = 0`，`v2c_col_idx = 0`
 - `c2v_entry_pos = 0`，`v2c_entry_pos = 0`
 - `ram_m_read_pair_sel = 0`，`ram_m_write_pair_sel = 1`
-- 流水 valid、列尾标记、`iter_check_pending`、`merge_active`、`o_done` 和 `o_iter_count` 清零
+- 流水 valid、列尾标记、`iter_check_pending`、`o_done` 和 `o_iter_count` 清零
 
 ### DEC_ITER_C2V_PRIME
 
@@ -110,12 +109,11 @@ c2v 每拍处理一个 lane-local entry slot：
 
 当 `i_finish_decode = 0`：
 
-1. 第一拍启动 `merge_active`。
-2. `merge_read` 遍历 `merge_row_idx = 0 .. R-1`，从 RAM-M write pair 的所有 lane bank 读取同一全局行。
-3. `merge_write` 在下一拍把这些 lane 的压缩 c2v 状态用 `merge_comp_pair` 合并，并写回 write pair 的每个 lane bank。
-4. `merge_done` 有效后，`o_iter_count` 加 1，`ram_m_read_pair_sel` 切到写 pair，列指针和 entry 指针清零，`sched_state` 回到 `SCHED_FILL_K`。
+1. `o_iter_count` 加 1。
+2. `ram_m_read_pair_sel` 切到写 pair。
+3. 列指针和 entry 指针清零，`sched_state` 回到 `SCHED_FILL_K`。
 
-RAM-M pair 切换后，下一轮 c2v 从合并后的 pair 读取压缩状态，CNU_A 写回另一个 pair。`merge_done` 还会翻转被释放 pair 的 epoch，使该 pair 后续 stale row 读为 `COMP_C2V_INIT`。
+RAM-M pair 切换后，下一轮 c2v 从写 pair 读取压缩状态，CNU_A 写回另一个 pair。被释放 pair 的 epoch 翻转后，该 pair 后续 stale row 读为 `COMP_C2V_INIT`。
 
 ### DEC_DONE
 
@@ -125,7 +123,7 @@ RAM-M pair 切换后，下一轮 c2v 从合并后的 pair 读取压缩状态，C
 
 ### 1. 输入准备
 
-外部通过 `i_syndrome_we/i_syndrome_addr/i_syndrome_wdata` 写入 syndrome RAM。RAM-I 保存每个 circulant block 首列的 `{one_idx, row_idx_global}` 元数据，可以来自 `$readmemh` 初始镜像，也可以通过 `ram_i_idx_loader` 运行时加载。
+外部通过 `i_syndrome_we/i_syndrome_addr/i_syndrome_wdata` 写入 syndrome RAM。RAM-I 保存每个 circulant block 首列的 `row_idx_global` 元数据，可以来自 `$readmemh` 初始镜像，也可以通过 `ram_i_idx_loader` 运行时加载。`one_idx` 由 entry 位置和 RAM-I bank 编号重建。
 
 ### 2. 列地址展开
 
@@ -133,7 +131,7 @@ c2v 侧按 `c2v_col_idx` 计算 `h_block_idx = c2v_col_idx / R` 和 `col_idx_loc
 
 ### 3. c2v 重建与 VNU 累加
 
-c2v 侧用行地址读取 RAM-M read pair 中的压缩 c2v 状态，并读取 RAM-S 保存的 v2c sign。第一次迭代使用 `FIRST_ITER_C2V_COMP` 作为 CNU_B 输入。CNU_B 根据压缩状态、边 sign、syndrome bit 和列号重建 c2v 消息：
+c2v 侧用行地址读取 RAM-M read pair 中的压缩 c2v 状态，并从 RAM-S 的列 sign 向量中选择 v2c sign。第一次迭代使用 `FIRST_ITER_C2V_COMP` 作为 CNU_B 输入。CNU_B 根据压缩状态、边 sign、syndrome bit 和 `edge_id` 重建 c2v 消息：
 
 ```text
 c2v_sign = row_sign_xor ^ edge_u_sign ^ syndrome[row]
@@ -143,7 +141,7 @@ c2v_sign = row_sign_xor ^ edge_u_sign ^ syndrome[row]
 
 ### 4. v2c 更新与 CNU_A 写回
 
-v2c 侧按 active metadata 读取列 k 的行地址，从 RAM-T 取回该边上一阶段保存的 c2v，并从 RAM-M write pair 读取正在累积的压缩状态。VNU 输出的 v2c 转为符号幅值后送入 CNU_A。CNU_A 更新该行的 `min1/min2/min_id/sign_xor` 压缩状态，并输出 edge sign。控制器在两拍后发出 `o_cnu_a_writeback`，把压缩状态写 RAM-M write pair，把 sign 写 RAM-S。
+v2c 侧按 active metadata 读取列 k 的行地址，从 RAM-T 取回该边上一阶段保存的 c2v，并从 RAM-M write pair 读取正在累积的压缩状态。VNU 输出的 v2c 转为符号幅值后送入 CNU_A。CNU_A 更新该行的 `min1/min2/min_id/sign_xor` 压缩状态，并输出 edge sign。控制器在两拍后发出 `o_cnu_a_writeback`，把压缩状态写 RAM-M write pair，并把 edge sign 写入列 sign 向量。列尾时 sign 向量写入 RAM-S。
 
 列的第一个 v2c entry 同拍写 RAM-C 硬判决。解码完成后，外部通过 `i_e_read_col_idx/o_e_rdata` 读出错误估计。
 
@@ -153,7 +151,7 @@ metadata 使用两个 slot：c2v 写 fill slot，v2c 读 active slot。每当下
 
 ### 6. 迭代收尾与下一轮
 
-最后一列 v2c 写回完成后进入 `DEC_ITER_CHECK`。达到最大迭代次数时输出完成。继续迭代时，控制器把 RAM-M write pair 中每个全局行的 L 个 lane 压缩状态合并成一个行级压缩状态，并复制回该 pair 的各 lane bank。合并完成后读写 pair 对调，下一轮从列 0 开始。
+最后一列 v2c 写回完成后进入 `DEC_ITER_CHECK`。达到最大迭代次数时输出完成。继续迭代时，读写 pair 对调，下一轮从列 0 开始。
 
 ## ITER 内部流水线时空示意
 
@@ -173,7 +171,7 @@ B   = CNU_A writeback
 
 ## 资源与性能特征
 
-- **控制寄存器**：3 位 `ctrl_state`、2 位 `sched_state`、2 位 `col_k_stage`、两侧两级 valid/last pipeline、列/entry 指针、merge 行计数器和迭代计数器。
-- **RAM-M 组织**：`ram_m_read_pair_sel` 提供 c2v 读取源，`ram_m_write_pair_sel = ~ram_m_read_pair_sel` 接收 CNU_A 写回；行合并阶段独占 RAM-M 端口。
+- **控制寄存器**：3 位 `ctrl_state`、2 位 `sched_state`、2 位 `col_k_stage`、两侧两级 valid/last pipeline、列/entry 指针和迭代计数器。
+- **RAM-M 组织**：`ram_m_read_pair_sel` 提供 c2v 读取源，`ram_m_write_pair_sel = ~ram_m_read_pair_sel` 接收 CNU_A 写回；迭代收尾窗口切换读写 pair。
 - **流水线吞吐**：稳定重叠阶段每拍可同时发射一个 c2v entry slot 和一个 v2c entry slot。
-- **迭代开销**：每轮列调度结束后，继续迭代需要遍历 `R` 个全局行执行 RAM-M merge。
+- **迭代开销**：每轮列调度结束后，继续迭代使用固定收尾窗口切换 RAM-M pair。

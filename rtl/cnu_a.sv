@@ -7,7 +7,7 @@ module cnu_a
     input  logic                  i_rst_n,
     input  logic                  i_en,        // Enables this cycle's compressed-c2v update.
     input  logic [     MSG_W-1:0] i_v2c_msg,   // Incoming v2c/u sign-magnitude message.
-    input  logic [     COL_W-1:0] i_col_idx,   // Which variable column j sent i_v2c_msg.
+    input  logic [ EDGE_ID_W-1:0] i_edge_id,   // Row-local edge identity for this v2c message.
     input  logic [COMP_C2V_W-1:0] i_comp_c2v,  // Current compressed-c2v state.
     output logic [COMP_C2V_W-1:0] o_comp_c2v,  // Next compressed-c2v state.
     output logic                  o_sign,      // sign(i_v2c_msg), stored in RAM S for CNU_B.
@@ -35,7 +35,7 @@ module cnu_a
     if (v2c_mag <= c2v_min1_mag) begin
       comp_c2v_next[COMP_C2V_MIN2_LSB+:D] = c2v_min1_mag;
       comp_c2v_next[COMP_C2V_MIN1_LSB+:D] = v2c_mag;
-      comp_c2v_next[COMP_C2V_MIN_ID_LSB+:COL_W] = i_col_idx;
+      comp_c2v_next[COMP_C2V_MIN_ID_LSB+:EDGE_ID_W] = i_edge_id;
     end else if (v2c_mag < c2v_min2_mag) begin
       comp_c2v_next[COMP_C2V_MIN2_LSB+:D] = v2c_mag;
     end

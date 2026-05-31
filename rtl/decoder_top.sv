@@ -40,6 +40,9 @@ module decoder_top
     if ((L <= 0) || ((L & (L - 1)) != 0)) begin
       $fatal(1, "decoder_top requires L to be a power of two");
     end
+    if (RAM_LANE_DEPTH < 3) begin
+      $fatal(1, "decoder_top requires RAM_LANE_DEPTH >= 3");
+    end
   end
 `endif
 
@@ -99,6 +102,8 @@ module decoder_top
   logic [GROUP_COUNT_W-1:0] col_meta_slot_count[  0:1];
   logic                     col_meta_lane_valid[  0:1][ 0:L-1][0:RAM_LANE_DEPTH-1];
   logic [    ROW_IDX_W-1:0] col_meta_lane_entries[  0:1][ 0:L-1][0:RAM_LANE_DEPTH-1];
+  logic [    ONE_IDX_W-1:0] col_meta_lane_one_idx[  0:1][ 0:L-1][0:RAM_LANE_DEPTH-1];
+  logic [    EDGE_ID_W-1:0] col_meta_lane_edge_id[  0:1][ 0:L-1][0:RAM_LANE_DEPTH-1];
   logic [  ENTRY_POS_W-1:0] ram_i_read_entry_addr[0:L-1];
   logic                     c2v_read_d1;
   logic [        COL_W-1:0] c2v_read_col_d1;
@@ -112,17 +117,23 @@ module decoder_top
   // Per-edge decoded metadata used to address RAM-M/S/T.
   logic                     c2v_group_valid[0:L-1];
   logic [    ROW_IDX_W-1:0] c2v_row_idx_global[0:L-1];
+  logic [    ONE_IDX_W-1:0] c2v_one_idx[0:L-1];
+  logic [    EDGE_ID_W-1:0] c2v_edge_id[0:L-1];
   logic                     v2c_group_valid[0:L-1];
   logic [    ROW_IDX_W-1:0] v2c_row_idx_global[0:L-1];
+  logic [    ONE_IDX_W-1:0] v2c_one_idx[0:L-1];
+  logic [    EDGE_ID_W-1:0] v2c_edge_id[0:L-1];
 
   logic                     c2v_latched_group_valid[0:L-1];
+  logic [    ONE_IDX_W-1:0] c2v_latched_one_idx[0:L-1];
+  logic [    EDGE_ID_W-1:0] c2v_latched_edge_id[0:L-1];
   logic [  ENTRY_POS_W-1:0] c2v_latched_entry_pos;
   logic                     c2v_latched_entry_pos_last;
-  logic [        COL_W-1:0] c2v_latched_col;
   logic                     c2v_latched_ram_m_pair_sel;
 
   logic                     v2c_m_latched_group_valid[0:L-1];
   logic [    ROW_IDX_W-1:0] v2c_m_latched_row_idx_global[0:L-1];
+  logic [    ONE_IDX_W-1:0] v2c_m_latched_one_idx[0:L-1];
   logic [  ENTRY_POS_W-1:0] v2c_m_latched_entry_pos;
   logic [        COL_W-1:0] v2c_m_latched_col;
   logic                     v2c_m_latched_ram_m_pair_sel;
@@ -131,6 +142,8 @@ module decoder_top
   logic                     v2c_read_ram_m_pair_sel_d1;
   logic                     v2c_read_group_valid_d1[0:L-1];
   logic [    ROW_IDX_W-1:0] v2c_read_row_idx_global_d1[0:L-1];
+  logic [    ONE_IDX_W-1:0] v2c_read_one_idx_d1[0:L-1];
+  logic [    EDGE_ID_W-1:0] v2c_read_edge_id_d1[0:L-1];
   logic                     c2v_sched_issued[0:W-1];
   logic                     c2v_sched_issued_next[0:W-1];
 
@@ -155,11 +168,11 @@ module decoder_top
   logic                     m_pair_epoch[  0:1];
 
   logic                     s_rdata[0:L-1];
-  logic                     s_word_we[0:L-1];
-  logic [S_WORD_ADDR_W-1:0] s_read_word_addr[0:L-1];
-  logic [S_WORD_ADDR_W-1:0] s_write_word_addr[0:L-1];
-  logic [     S_PACK_W-1:0] s_word_wdata[0:L-1];
-  logic [     S_PACK_W-1:0] s_word_rdata[0:L-1];
+  logic                     s_col_we;
+  logic [S_WORD_ADDR_W-1:0] s_read_col_idx;
+  logic [S_WORD_ADDR_W-1:0] s_write_col_idx;
+  logic [     S_WORD_W-1:0] s_col_wdata;
+  logic [     S_WORD_W-1:0] s_col_rdata;
 
   logic                     t_push[0:L-1];
   logic                     t_pop[0:L-1];
@@ -184,9 +197,9 @@ module decoder_top
   logic        [ ROW_IDX_W-1:0] syndrome_read_row_idx[0:L-1];
   logic                         syndrome_rdata[0:L-1];
 
-  logic        [     COL_W-1:0] cnu_a_col_idx;
   logic                         cnu_a_en[0:L-1];
   logic        [     MSG_W-1:0] cnu_a_v2c_msg[0:L-1];
+  logic        [ EDGE_ID_W-1:0] cnu_a_edge_id[0:L-1];
   logic        [COMP_C2V_W-1:0] cnu_a_comp_in[0:L-1];
   logic        [COMP_C2V_W-1:0] cnu_a_comp_out[0:L-1];
   logic                         cnu_a_sign[0:L-1];
@@ -294,6 +307,8 @@ module decoder_top
     logic   [       ROW_IDX_W-1:0] base_row_idx_global;
     logic   [       ROW_IDX_W-1:0] c2v_col_idx_local;
     logic   [       ROW_IDX_W-1:0] edge_row_idx_global[0:W-1];
+    logic   [       ONE_IDX_W-1:0] edge_one_idx[0:W-1];
+    logic   [       EDGE_ID_W-1:0] edge_id[0:W-1];
     logic   [M_ROW_BANK_IDX_W-1:0] edge_bank_idx[0:W-1];
     logic   [M_ROW_BANK_IDX_W-1:0] slot_bank_idx[0:L-1];
     logic   [       I_ENTRY_W-1:0] active_entry;
@@ -315,6 +330,8 @@ module decoder_top
       slot_bank_idx[lane_idx] = '0;
       c2v_group_valid[lane_idx] = 1'b0;
       c2v_row_idx_global[lane_idx] = '0;
+      c2v_one_idx[lane_idx] = '0;
+      c2v_edge_id[lane_idx] = '0;
     end
 
     for (edge_idx = 0; edge_idx < W; edge_idx++) begin
@@ -323,6 +340,8 @@ module decoder_top
         (c2v_read_entry_pos_d1 == '0) ? 1'b0 : c2v_sched_issued[edge_idx];
       c2v_sched_issued_next[edge_idx] = edge_issued_base[edge_idx];
       edge_row_idx_global[edge_idx] = '0;
+      edge_one_idx[edge_idx] = '0;
+      edge_id[edge_idx] = '0;
       edge_bank_idx[edge_idx] = '0;
     end
 
@@ -341,6 +360,10 @@ module decoder_top
             edge_row_idx_global[edge_count] =
               (row_idx_sum >= (ROW_IDX_W + 1)'(R)) ? ROW_IDX_W'(row_idx_sum - (ROW_IDX_W + 1)'(R)) :
               ROW_IDX_W'(row_idx_sum);
+            edge_one_idx[edge_count] = ONE_IDX_W'(source_entry_idx * L + source_lane_idx);
+            edge_id[edge_count] =
+              EDGE_ID_W'(int'(c2v_read_h_block_idx) * W + source_entry_idx * L +
+                         source_lane_idx);
             edge_bank_idx[edge_count] = row_bank(edge_row_idx_global[edge_count]);
             edge_count = edge_count + 1;
           end
@@ -362,6 +385,8 @@ module decoder_top
           !bank_conflict) begin
         c2v_group_valid[issue_lane_idx] = 1'b1;
         c2v_row_idx_global[issue_lane_idx] = edge_row_idx_global[edge_idx];
+        c2v_one_idx[issue_lane_idx] = edge_one_idx[edge_idx];
+        c2v_edge_id[issue_lane_idx] = edge_id[edge_idx];
         slot_bank_idx[issue_lane_idx] = edge_bank_idx[edge_idx];
         c2v_sched_issued_next[edge_idx] = 1'b1;
         issue_lane_idx = issue_lane_idx + 1;
@@ -380,8 +405,12 @@ module decoder_top
         (int'(v2c_entry_pos) < int'(col_meta_slot_count[active_meta_slot])) &&
         col_meta_lane_valid[active_meta_slot][lane_idx][v2c_entry_pos];
       v2c_row_idx_global[lane_idx] = col_meta_lane_entries[active_meta_slot][lane_idx][v2c_entry_pos];
+      v2c_one_idx[lane_idx] = col_meta_lane_one_idx[active_meta_slot][lane_idx][v2c_entry_pos];
+      v2c_edge_id[lane_idx] = col_meta_lane_edge_id[active_meta_slot][lane_idx][v2c_entry_pos];
       if (!v2c_group_valid[lane_idx]) begin
         v2c_row_idx_global[lane_idx] = '0;
+        v2c_one_idx[lane_idx] = '0;
+        v2c_edge_id[lane_idx] = '0;
       end
     end
   end
@@ -475,17 +504,25 @@ module decoder_top
       for (lane_idx = 0; lane_idx < L; lane_idx++) begin
         v2c_read_group_valid_d1[lane_idx] <= 1'b0;
         v2c_read_row_idx_global_d1[lane_idx] <= '0;
+        v2c_read_one_idx_d1[lane_idx] <= '0;
+        v2c_read_edge_id_d1[lane_idx] <= '0;
         c2v_latched_group_valid[lane_idx] <= 1'b0;
+        c2v_latched_one_idx[lane_idx] <= '0;
+        c2v_latched_edge_id[lane_idx] <= '0;
         v2c_m_latched_group_valid[lane_idx] <= 1'b0;
         v2c_m_latched_row_idx_global[lane_idx] <= '0;
+        v2c_m_latched_one_idx[lane_idx] <= '0;
         for (idx = 0; idx < RAM_LANE_DEPTH; idx++) begin
           col_meta_lane_valid[0][lane_idx][idx]   <= 1'b0;
           col_meta_lane_valid[1][lane_idx][idx]   <= 1'b0;
           col_meta_lane_entries[0][lane_idx][idx] <= '0;
           col_meta_lane_entries[1][lane_idx][idx] <= '0;
+          col_meta_lane_one_idx[0][lane_idx][idx] <= '0;
+          col_meta_lane_one_idx[1][lane_idx][idx] <= '0;
+          col_meta_lane_edge_id[0][lane_idx][idx] <= '0;
+          col_meta_lane_edge_id[1][lane_idx][idx] <= '0;
         end
       end
-      c2v_latched_col <= '0;
       c2v_latched_entry_pos <= '0;
       c2v_latched_entry_pos_last <= 1'b0;
       c2v_latched_ram_m_pair_sel <= 1'b0;
@@ -509,6 +546,8 @@ module decoder_top
         for (lane_idx = 0; lane_idx < L; lane_idx++) begin
           v2c_read_group_valid_d1[lane_idx] <= v2c_group_valid[lane_idx];
           v2c_read_row_idx_global_d1[lane_idx] <= v2c_row_idx_global[lane_idx];
+          v2c_read_one_idx_d1[lane_idx] <= v2c_one_idx[lane_idx];
+          v2c_read_edge_id_d1[lane_idx] <= v2c_edge_id[lane_idx];
         end
       end
 
@@ -518,12 +557,17 @@ module decoder_top
         end
         for (lane_idx = 0; lane_idx < L; lane_idx++) begin
           c2v_latched_group_valid[lane_idx] <= c2v_group_valid[lane_idx];
+          c2v_latched_one_idx[lane_idx] <= c2v_one_idx[lane_idx];
+          c2v_latched_edge_id[lane_idx] <= c2v_edge_id[lane_idx];
           col_meta_lane_valid[c2v_read_meta_slot_d1][lane_idx][c2v_read_entry_pos_d1] <=
             c2v_group_valid[lane_idx];
           col_meta_lane_entries[c2v_read_meta_slot_d1][lane_idx][c2v_read_entry_pos_d1] <=
             c2v_row_idx_global[lane_idx];
+          col_meta_lane_one_idx[c2v_read_meta_slot_d1][lane_idx][c2v_read_entry_pos_d1] <=
+            c2v_one_idx[lane_idx];
+          col_meta_lane_edge_id[c2v_read_meta_slot_d1][lane_idx][c2v_read_entry_pos_d1] <=
+            c2v_edge_id[lane_idx];
         end
-        c2v_latched_col <= c2v_read_col_d1;
         c2v_latched_entry_pos <= c2v_read_entry_pos_d1;
         c2v_latched_entry_pos_last <= c2v_read_entry_pos_last_d1;
         c2v_latched_ram_m_pair_sel <= c2v_read_ram_m_pair_sel_d1;
@@ -542,6 +586,7 @@ module decoder_top
         for (lane_idx = 0; lane_idx < L; lane_idx++) begin
           v2c_m_latched_group_valid[lane_idx] <= v2c_read_group_valid_d1[lane_idx];
           v2c_m_latched_row_idx_global[lane_idx] <= v2c_read_row_idx_global_d1[lane_idx];
+          v2c_m_latched_one_idx[lane_idx] <= v2c_read_one_idx_d1[lane_idx];
         end
         v2c_m_latched_entry_pos <= v2c_read_entry_pos_d1;
         v2c_m_latched_col <= v2c_read_col_d1;
@@ -573,8 +618,6 @@ module decoder_top
   end
 `endif
 
-  assign cnu_a_col_idx = v2c_read_col_d1;
-
   always_comb begin
     integer lane_idx;
     logic   port_pair;
@@ -585,6 +628,7 @@ module decoder_top
       cnu_a_comp_in[lane_idx] = m_write_comp_or_init(port_pair, LANE_IDX_W'(lane_idx));
       cnu_a_en[lane_idx] = v2c_emit_to_cnu_a && v2c_read_group_valid_d1[lane_idx];
       cnu_a_v2c_msg[lane_idx] = vnu_v2c_msg[lane_idx];
+      cnu_a_edge_id[lane_idx] = v2c_read_edge_id_d1[lane_idx];
     end
   end
 
@@ -605,7 +649,7 @@ module decoder_top
         .i_rst_n(i_rst_n),
         .i_en(cnu_a_en[lane_idx]),
         .i_v2c_msg(cnu_a_v2c_msg[lane_idx]),
-        .i_col_idx(cnu_a_col_idx),
+        .i_edge_id(cnu_a_edge_id[lane_idx]),
         .i_comp_c2v(cnu_a_comp_in[lane_idx]),
         .o_comp_c2v(cnu_a_comp_out[lane_idx]),
         .o_sign(cnu_a_sign[lane_idx]),
@@ -618,6 +662,7 @@ module decoder_top
       .i_we(i_syndrome_we),
       .i_write_row_idx(i_syndrome_addr),
       .i_wdata(i_syndrome_wdata),
+      .i_read_valid(c2v_group_valid),
       .i_read_row_idx(syndrome_read_row_idx),
       .o_rdata(syndrome_rdata)
   );
@@ -627,7 +672,7 @@ module decoder_top
         .i_comp_c2v(cnu_b_comp_in[lane_idx]),
         .i_v2c_sign((o_iter_count == '0) ? 1'b0 : s_rdata[lane_idx]),
         .i_syndrome_bit(syndrome_rdata[lane_idx]),
-        .i_col_idx(c2v_latched_col),
+        .i_edge_id(c2v_latched_edge_id[lane_idx]),
         .o_c2v_msg(c2v_msg[lane_idx])
     );
 
@@ -646,36 +691,36 @@ module decoder_top
       .i_clk(i_clk),
       .i_rst_n(i_rst_n),
       .i_start(i_start),
-      .i_c2v_read_d1(c2v_read_d1),
       .i_c2v_write_t(c2v_write_t),
       .i_v2c_emit_to_cnu_a(v2c_emit_to_cnu_a),
       .i_vnu_accum_t(vnu_accum_t),
       .i_cnu_a_writeback(cnu_a_writeback),
       .i_c2v_col_idx(c2v_col_idx),
       .i_c2v_read_col_d1(c2v_read_col_d1),
+      .i_c2v_read_d1(c2v_read_d1),
       .i_v2c_read(v2c_read),
-      .i_c2v_entry_pos(c2v_entry_pos),
-      .i_c2v_read_entry_pos_d1(c2v_read_entry_pos_d1),
       .i_v2c_entry_pos(v2c_entry_pos),
       .i_v2c_read_entry_pos_d1(v2c_read_entry_pos_d1),
       .i_c2v_latched_entry_pos(c2v_latched_entry_pos),
       .i_c2v_latched_entry_pos_last(c2v_latched_entry_pos_last),
+      .i_c2v_latched_one_idx(c2v_latched_one_idx),
       .i_v2c_m_latched_col(v2c_m_latched_col),
       .i_v2c_m_latched_entry_pos(v2c_m_latched_entry_pos),
+      .i_v2c_m_latched_one_idx(v2c_m_latched_one_idx),
       .i_v2c_m_latched_group_valid(v2c_m_latched_group_valid),
       .i_c2v_latched_group_valid(c2v_latched_group_valid),
       .i_col_meta_slot_count(col_meta_slot_count[active_meta_slot]),
       .i_cnu_a_valid(cnu_a_valid),
       .i_cnu_a_sign(cnu_a_sign),
       .i_c2v_tc(c2v_tc),
-      .i_s_word_rdata(s_word_rdata),
+      .i_s_col_rdata(s_col_rdata),
       .i_t_rvalid(t_metadata_rvalid),
       .i_t_rdata(t_rdata),
       .o_s_rdata(s_rdata),
-      .o_s_word_we(s_word_we),
-      .o_s_read_word_addr(s_read_word_addr),
-      .o_s_write_word_addr(s_write_word_addr),
-      .o_s_word_wdata(s_word_wdata),
+      .o_s_col_we(s_col_we),
+      .o_s_read_col_idx(s_read_col_idx),
+      .o_s_write_col_idx(s_write_col_idx),
+      .o_s_col_wdata(s_col_wdata),
       .o_t_push(t_push),
       .o_t_pop(t_pop),
       .o_t_valid(t_valid),
@@ -846,26 +891,19 @@ module decoder_top
     );
   end
 
-  for (genvar ram_s_lane_idx = 0; ram_s_lane_idx < L; ram_s_lane_idx++) begin : g_ram_s
-    ram_s #(
-        .RAM_S_PACK_W(S_PACK_W),
-        .RAM_S_WORDS_PER_COL(S_WORDS_PER_COL),
-        .RAM_S_WORD_DEPTH(S_WORD_DEPTH),
-        .RAM_S_WORD_ADDR_W(S_WORD_ADDR_W)
-    ) u_ram_s (
-        .i_clk(i_clk),
-        .i_we(s_word_we[ram_s_lane_idx]),
-        .i_read_word_addr(s_read_word_addr[ram_s_lane_idx]),
-        .i_write_word_addr(s_write_word_addr[ram_s_lane_idx]),
-        .i_wdata(s_word_wdata[ram_s_lane_idx]),
+  ram_s u_ram_s (
+      .i_clk(i_clk),
+      .i_we(s_col_we),
+      .i_read_col_idx(s_read_col_idx),
+      .i_write_col_idx(s_write_col_idx),
+      .i_wdata(s_col_wdata),
 `ifdef BIKE_SIM_DEBUG
-        .o_rdata(s_word_rdata[ram_s_lane_idx]),
-        .o_debug_mem()
+      .o_rdata(s_col_rdata),
+      .o_debug_mem()
 `else
-        .o_rdata(s_word_rdata[ram_s_lane_idx])
+      .o_rdata(s_col_rdata)
 `endif
-    );
-  end
+  );
 
   for (genvar ram_t_lane_idx = 0; ram_t_lane_idx < L; ram_t_lane_idx++) begin : g_ram_t
     ram_t #(

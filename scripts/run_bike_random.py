@@ -19,7 +19,6 @@ from ram_i_hex import select_row_bank_count
 RTL_CORE = [
     "rtl/ram_1r1w_sync_read.sv",
     "rtl/ram_1r1w_async_read.sv",
-    "rtl/sign_bit_pack.sv",
     "rtl/edge_message_pipe.sv",
     "rtl/ram_i.sv",
     "rtl/msg_signmag_to_tc.sv",
@@ -68,6 +67,36 @@ PARAM_SETS = {
         "c_val": 5,
         "alpha_shift_0": 3,
         "alpha_shift_1": 4,
+    },
+    "bike256": {
+        "n0": 3,
+        "r": 29501,
+        "w": 55,
+        "error_count": 429,
+        "i_max": 7,
+        "c_val": 5,
+        "alpha_shift_0": 3,
+        "alpha_shift_1": 4,
+    },
+    "bike384": {
+        "n0": 3,
+        "r": 73421,
+        "w": 83,
+        "error_count": 659,
+        "i_max": 7,
+        "c_val": 5,
+        "alpha_shift_0": 3,
+        "alpha_shift_1": 6,
+    },
+    "bike512": {
+        "n0": 3,
+        "r": 156011,
+        "w": 111,
+        "error_count": 877,
+        "i_max": 7,
+        "c_val": 5,
+        "alpha_shift_0": 3,
+        "alpha_shift_1": 6,
     },
 }
 
@@ -152,7 +181,6 @@ def emit_pkg(
     alpha_shift_1: int,
     l: int,
     t: int,
-    s_pack_w: int,
     h_base: list[list[int]],
     lane_depth: int,
     row_bank_count: int,
@@ -187,8 +215,10 @@ package bike_pkg;
   parameter int COL_W = (N > 1) ? $clog2(N) : 1;
   parameter int H_BLOCK_W = (N0 > 1) ? $clog2(N0) : 1;
   parameter int H_NUM = 1;
+  parameter int ROW_EDGE_COUNT = N0 * W;
 
   parameter int ONE_IDX_W = (W > 1) ? $clog2(W) : 1;
+  parameter int EDGE_ID_W = (ROW_EDGE_COUNT > 1) ? $clog2(ROW_EDGE_COUNT) : 1;
   parameter int ROW_IDX_W = (R > 1) ? $clog2(R) : 1;
   parameter int LANE_IDX_W = (L > 1) ? $clog2(L) : 1;
   parameter int GROUP_IDX_W = (L > 1) ? $clog2(L) : 1;
@@ -196,11 +226,9 @@ package bike_pkg;
   parameter int ENTRY_POS_W = (RAM_LANE_DEPTH > 1) ? $clog2(RAM_LANE_DEPTH) : 1;
   parameter int GROUP_COUNT_W = (RAM_LANE_DEPTH > 1) ? $clog2(RAM_LANE_DEPTH + 1) : 1;
   parameter int ITER_W = $clog2(I_MAX + 1);
-  parameter int S_PACK_W = {s_pack_w};
-  parameter int S_WORDS_PER_COL = (RAM_LANE_DEPTH + S_PACK_W - 1) / S_PACK_W;
-  parameter int S_WORD_DEPTH = N * S_WORDS_PER_COL;
-  parameter int S_WORD_ADDR_W = (S_WORD_DEPTH > 1) ? $clog2(S_WORD_DEPTH) : 1;
-  parameter int S_PACK_IDX_W = (S_PACK_W > 1) ? $clog2(S_PACK_W) : 1;
+  parameter int S_WORD_W = W;
+  parameter int S_WORD_DEPTH = N;
+  parameter int S_WORD_ADDR_W = COL_W;
   parameter int M_ROW_BANKS = {row_bank_count};
   parameter int M_ROW_BANK_IDX_W = (M_ROW_BANKS > 1) ? $clog2(M_ROW_BANKS) : 1;
   parameter int M_ROW_BANK_DEPTH = (R + M_ROW_BANKS - 1) / M_ROW_BANKS;
@@ -222,17 +250,17 @@ package bike_pkg;
   localparam int COMP_C2V_MIN1_LSB = 0;
   localparam int COMP_C2V_MIN2_LSB = COMP_C2V_MIN1_LSB + D;
   localparam int COMP_C2V_MIN_ID_LSB = COMP_C2V_MIN2_LSB + D;
-  localparam int COMP_C2V_SIGN_XOR_BIT = COMP_C2V_MIN_ID_LSB + COL_W;
+  localparam int COMP_C2V_SIGN_XOR_BIT = COMP_C2V_MIN_ID_LSB + EDGE_ID_W;
   localparam int COMP_C2V_W = COMP_C2V_SIGN_XOR_BIT + 1;
   localparam logic [COMP_C2V_W-1:0] COMP_C2V_INIT = {{
     1'b0,
-    COL_W'(0),
+    EDGE_ID_W'(0),
     D'(MAG_MAX),
     D'(MAG_MAX)
   }};
   localparam logic [COMP_C2V_W-1:0] FIRST_ITER_C2V_COMP = {{
     1'b0,
-    COL_W'(0),
+    EDGE_ID_W'(0),
     D'(C_VAL),
     D'(C_VAL)
   }};
@@ -257,18 +285,8 @@ endpackage
     )
 
 
-def default_ram_lane_depth(w: int, l: int) -> int:
-    return max((w + l - 1) // l, 3)
-
-
-def default_s_pack_w(l: int) -> int:
-    if l <= 2:
-        return 8
-    if l <= 4:
-        return 4
-    if l <= 8:
-        return 2
-    return 1
+def default_ram_lane_depth(w: int, l: int, min_depth: int) -> int:
+    return max((w + l - 1) // l, min_depth)
 
 
 def is_power_of_two(value: int) -> bool:
@@ -519,7 +537,7 @@ def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int
         error_bits[pos] = 1
     syndrome = calc_syndrome(h_base, error_bits, args.r, args.w)
     group_counts, _ = build_first_column_tables(h_base, group_count=args.parallel_l)
-    target_lane_depth = default_ram_lane_depth(args.w, args.parallel_l)
+    target_lane_depth = default_ram_lane_depth(args.w, args.parallel_l, args.ram_lane_min_depth)
     source_lane_depth = lane_depth_from_counts(group_counts)
     row_bank_count = (
         args.ram_m_row_banks
@@ -541,7 +559,6 @@ def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int
         if args.ram_lane_depth is not None
         else max(required_lane_depth, target_lane_depth)
     )
-    s_pack_w = args.s_pack_w if args.s_pack_w is not None else default_s_pack_w(args.parallel_l)
     if lane_depth < required_lane_depth:
         raise ValueError(
             f"RAM lane depth {lane_depth} is smaller than required depth {required_lane_depth} "
@@ -561,7 +578,6 @@ def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int
         alpha_shift_1=args.alpha_shift_1,
         l=args.parallel_l,
         t=args.error_count,
-        s_pack_w=s_pack_w,
         h_base=h_base,
         lane_depth=lane_depth,
         row_bank_count=row_bank_count,
@@ -631,7 +647,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--alpha-shift-0", type=int, default=None)
     parser.add_argument("--alpha-shift-1", type=int, default=None)
     parser.add_argument("--parallel-l", type=int, default=8)
-    parser.add_argument("--s-pack-w", type=int, default=None)
+    parser.add_argument("--ram-lane-min-depth", type=int, default=3)
     parser.add_argument(
         "--ram-lane-depth",
         type=int,
@@ -663,12 +679,12 @@ def main() -> int:
         raise ValueError("--n0 must be positive")
     if not is_power_of_two(args.parallel_l):
         raise ValueError("--parallel-l must be a power of two")
-    if args.s_pack_w is not None and (
-        args.s_pack_w < 1 or (args.s_pack_w & (args.s_pack_w - 1)) != 0
-    ):
-        raise ValueError("--s-pack-w must be a positive power of two")
     if args.ram_lane_depth is not None and args.ram_lane_depth < 1:
         raise ValueError("--ram-lane-depth must be positive")
+    if args.ram_lane_depth is not None and args.ram_lane_depth < 3:
+        raise ValueError("--ram-lane-depth must be at least 3")
+    if args.ram_lane_min_depth < 3:
+        raise ValueError("--ram-lane-min-depth must be at least 3")
     if args.ram_m_row_banks is not None and args.ram_m_row_banks < 1:
         raise ValueError("--ram-m-row-banks must be positive")
 

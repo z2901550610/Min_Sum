@@ -25,6 +25,12 @@ module sign_bit_pack #(
   assign o_read_bit   = i_load_read_word ? i_read_word[0] : read_shift[0];
   assign o_write_word = write_word_next;
 
+  function automatic logic [PACK_W-1:0] shifted_read_word(input  logic [PACK_W-1:0] value);
+    begin
+      shifted_read_word = value >> 1;
+    end
+  endfunction
+
   always_comb begin
     write_word_next = write_shift;
     if (i_write_en) begin
@@ -38,9 +44,9 @@ module sign_bit_pack #(
       write_shift <= '0;
     end else begin
       if (i_load_read_word) begin
-        read_shift <= {{1{1'b0}}, i_read_word[PACK_W-1:1]};
+        read_shift <= shifted_read_word(i_read_word);
       end else if (i_read_shift) begin
-        read_shift <= {{1{1'b0}}, read_shift[PACK_W-1:1]};
+        read_shift <= shifted_read_word(read_shift);
       end
 
       if (i_write_en) begin
