@@ -44,7 +44,8 @@ module ram_t
       .DATA_W(MSG_W),
       .DEPTH(RAM_LANE_DEPTH),
       .ADDR_W(ENTRY_POS_W),
-      .RESET_VALUE('0)
+      .RESET_VALUE('0),
+      .RAM_STYLE("distributed")
   ) u_mem (
       .i_clk(i_clk),
       .i_we(i_push),

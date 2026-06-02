@@ -42,7 +42,8 @@ module ram_m
       .DEPTH(R),
       .ADDR_W(ROW_IDX_W),
       .INIT_TO_VALUE(1'b1),
-      .RESET_VALUE({1'b0, COMP_C2V_INIT})
+      .RESET_VALUE({1'b0, COMP_C2V_INIT}),
+      .RAM_STYLE("block")
   ) u_mem (
       .i_clk(i_clk),
       .i_we(i_we),

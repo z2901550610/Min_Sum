@@ -86,15 +86,12 @@ def main() -> None:
     source_text = input_path.read_text(encoding="utf-8")
     r_values = extract_param_values(source_text, "R")
     w_values = extract_param_values(source_text, "W")
-    l1_r_value = select_r_value(r_values, DEFAULT_SUPPORTS["l1"])
-    l1_w_value = select_w_value(w_values, DEFAULT_SUPPORTS["l1"])
-    test_r_value = select_r_value(r_values, DEFAULT_SUPPORTS["test"])
-    test_w_value = select_w_value(w_values, DEFAULT_SUPPORTS["test"])
-    l_values = (
-        [args.parallel_l, args.parallel_l]
-        if args.parallel_l is not None
-        else pair_values(extract_param_values(source_text, "L"), default=2)
+    support_items = sorted(DEFAULT_SUPPORTS.items())
+    l_values = [args.parallel_l] * len(support_items) if args.parallel_l is not None else pair_values(
+        extract_param_values(source_text, "L"), default=2
     )
+    if len(l_values) < len(support_items):
+        l_values = l_values + [l_values[-1]] * (len(support_items) - len(l_values))
     if min(l_values) < 1:
         raise ValueError("--parallel-l must be positive")
     if not all(is_power_of_two(l_value) for l_value in l_values):
@@ -105,49 +102,21 @@ def main() -> None:
     elif lane_depth_values_raw:
         lane_depth_values = pair_values(lane_depth_values_raw)
     else:
-        l1_target_depth = max(
-            (l1_w_value + l_values[0] - 1) // l_values[0], args.ram_lane_min_depth
-        )
-        test_target_depth = max(
-            (test_w_value + l_values[1] - 1) // l_values[1], args.ram_lane_min_depth
-        )
-        l1_row_bank_count = select_row_bank_count(
-            DEFAULT_SUPPORTS["l1"],
-            l1_r_value,
-            l_values[0],
-            l1_target_depth,
-        )
-        test_row_bank_count = select_row_bank_count(
-            DEFAULT_SUPPORTS["test"],
-            test_r_value,
-            l_values[1],
-            test_target_depth,
-        )
-        lane_depth_values = [
-            max(
-                row_bank_schedule_depth(
-                    DEFAULT_SUPPORTS["l1"],
-                    l1_r_value,
-                    l1_row_bank_count,
-                    l_values[0],
-                ),
-                l1_target_depth,
-            ),
-            max(
-                row_bank_schedule_depth(
-                    DEFAULT_SUPPORTS["test"],
-                    test_r_value,
-                    test_row_bank_count,
-                    l_values[1],
-                ),
-                test_target_depth,
-            ),
-        ]
+        lane_depth_values = []
+        for (tag, supports), l_value in zip(support_items, l_values):
+            r_value = select_r_value(r_values, supports)
+            w_value = select_w_value(w_values, supports)
+            target_depth = max((w_value + l_value - 1) // l_value, args.ram_lane_min_depth)
+            row_bank_count = select_row_bank_count(supports, r_value, l_value, target_depth)
+            lane_depth_values.append(
+                max(row_bank_schedule_depth(supports, r_value, row_bank_count, l_value), target_depth)
+            )
 
-    jobs = [
-        ("l1", DEFAULT_SUPPORTS["l1"], l1_r_value, l1_w_value, l_values[0], lane_depth_values[0]),
-        ("test", DEFAULT_SUPPORTS["test"], test_r_value, test_w_value, l_values[1], lane_depth_values[1]),
-    ]
+    jobs = []
+    for (tag, supports), l_value, lane_depth in zip(support_items, l_values, lane_depth_values):
+        r_value = select_r_value(r_values, supports)
+        w_value = select_w_value(w_values, supports)
+        jobs.append((tag, supports, r_value, w_value, l_value, lane_depth))
 
     for tag, supports, r_value, w_value, l_value, lane_depth in jobs:
         validate_supports(tag, supports, r_value, w_value)

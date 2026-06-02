@@ -4,6 +4,10 @@ VERILATOR_LOG_DIR ?= build/logs/verilator
 BIKE_PARALLEL_L ?= 8
 BIKE_PARAM_TAG ?= test
 BIKE_RAM_LANE_MIN_DEPTH ?= 3
+BIKE_SYNTH_PARAM ?= BIKE_128_PARAMS
+BIKE_SYNTH_PARALLEL_L ?= 16
+BIKE_SYNTH_RAM_LANE_DEPTH ?= 3
+BIKE_SYNTH_RAM_M_ROW_BANKS ?= 256
 RAM_LANE_DEPTH_ARG := $(if $(BIKE_RAM_LANE_DEPTH),--ram-lane-depth $(BIKE_RAM_LANE_DEPTH),--ram-lane-min-depth $(BIKE_RAM_LANE_MIN_DEPTH))
 RAM_LANE_DEPTH_DEFINE := $(if $(BIKE_RAM_LANE_DEPTH),-DBIKE_RAM_LANE_DEPTH=$(BIKE_RAM_LANE_DEPTH),-DBIKE_RAM_LANE_MIN_DEPTH=$(BIKE_RAM_LANE_MIN_DEPTH))
 RAM_M_ROW_BANKS ?= $(shell python3 scripts/select_row_bank_count.py --input rtl/bike_pkg.sv --parallel-l $(BIKE_PARALLEL_L) --tag $(BIKE_PARAM_TAG) $(RAM_LANE_DEPTH_ARG))
@@ -24,7 +28,7 @@ VECTOR_SVH := tb/generated/bike_demo_vectors.svh
 TOY_CASE_SVH := tb/generated/bike_toy_case.svh
 RAM_I_HEX_DIR := rtl/generated/l$(BIKE_PARALLEL_L)
 RAM_I_BANKS := $(shell seq 0 $$(($(BIKE_PARALLEL_L)-1)))
-RAM_I_HEX := $(foreach b,$(RAM_I_BANKS),$(RAM_I_HEX_DIR)/ram_i$(b)_entries_test.hex $(RAM_I_HEX_DIR)/ram_i$(b)_counts_test.hex $(RAM_I_HEX_DIR)/ram_i$(b)_entries_l1.hex $(RAM_I_HEX_DIR)/ram_i$(b)_counts_l1.hex)
+RAM_I_HEX := $(foreach b,$(RAM_I_BANKS),$(RAM_I_HEX_DIR)/ram_i$(b)_entries_test.hex $(RAM_I_HEX_DIR)/ram_i$(b)_counts_test.hex)
 RAM_I_HEX_STAMP := $(RAM_I_HEX_DIR)/.ram_i_hex.stamp
 RTL_PKG := rtl/bike_pkg.sv
 RTL_PRIMS := rtl/ram_1r1w_sync_read.sv rtl/ram_1r1w_async_read.sv
@@ -94,6 +98,6 @@ lint-rtl:
 
 vivado-synth: $(RAM_I_HEX_STAMP)
 	@mkdir -p $(VIVADO_BUILD_DIR)
-	@$(VIVADO) -mode batch -source scripts/vivado_synth.tcl -tclargs $(VIVADO_BUILD_DIR)
+	@BIKE_PARAM_DEFINE=$(BIKE_SYNTH_PARAM) BIKE_PARALLEL_L=$(BIKE_SYNTH_PARALLEL_L) BIKE_RAM_LANE_DEPTH=$(BIKE_SYNTH_RAM_LANE_DEPTH) BIKE_RAM_M_ROW_BANKS=$(BIKE_SYNTH_RAM_M_ROW_BANKS) BIKE_RAM_I_INIT_ENABLE=0 $(VIVADO) -mode batch -source scripts/vivado_synth.tcl -tclargs $(VIVADO_BUILD_DIR)
 
 sim: test

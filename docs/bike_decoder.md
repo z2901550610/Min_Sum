@@ -25,7 +25,7 @@
 
 `rtl/bike_pkg.sv` 是解码器核心的参数包，包含尺寸、位宽、RAM 几何和消息格式常量。
 
-- 默认构建：BIKE-L1 形状参数（`N0=2`, `R=11677`, `W=71`, `T=201`, `C_VAL=7`, `alpha=0.0625`），使用脚本侧的确定性首列支撑集
+- 默认正式构建：BIKE-128 参数（`N0=3`, `R=8117`, `W=27`, `T=201`, `C_VAL=5`, `alpha=0.1875`）
 - `BIKE_TOY_PARAMS` 构建：小型 BIKE 演示参数（`R=8`, `W=3`），用于快速 RTL 测试
 - `BIKE_128_PARAMS` 构建：`N0=3`, `R=8117`, `W=27`, `T=201`, `C_VAL=5`, `alpha=0.1875`
 - `BIKE_160_PARAMS` 构建：`N0=3`, `R=12739`, `W=35`, `T=263`, `C_VAL=5`, `alpha=0.1875`
@@ -35,6 +35,7 @@
 - `BIKE_PARALLEL_L` 可选择并行 lane 数；默认 `L=8`
 - `BIKE_RAM_LANE_MIN_DEPTH` 设置 RAM-I 和 RAM-T 的 lane depth 下限；默认值为 3
 - `BIKE_RAM_LANE_DEPTH` 可显式指定 RAM-I 和 RAM-T 的 lane depth；控制流水要求取值至少为 3
+- `BIKE_RAM_M_ROW_BANKS` 可显式指定 RAM-M 和 syndrome RAM 的 row-bank 数
 
 其中 `W` 是每个 circulant block 的列权重，总行重为 `N0 * W`。RAM-I 和 RAM-T 的 lane 内 entry 深度统一为 `RAM_LANE_DEPTH`。RAM-S 每个变量列保存一个 `W` bit v2c sign 向量。
 
@@ -76,3 +77,7 @@ make test-bike-random BIKE_RANDOM_TRIALS=1
 ```
 
 验证细节和日志位置见 [decoder_verification.md](decoder_verification.md)。
+
+## 综合入口
+
+128 参数综合入口使用 `make vivado-synth`。默认综合配置为 `BIKE_128_PARAMS`、`BIKE_SYNTH_PARALLEL_L=16`、`BIKE_SYNTH_RAM_LANE_DEPTH=3`、`BIKE_SYNTH_RAM_M_ROW_BANKS=256`，并关闭 RAM-I 初始镜像读取。外部通过 RAM-I 加载接口写入 first-column support set。

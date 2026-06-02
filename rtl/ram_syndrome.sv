@@ -94,8 +94,9 @@ module ram_syndrome
   for (genvar bank_idx_i = 0; bank_idx_i < M_ROW_BANKS; bank_idx_i++) begin : g_syndrome_bank
     ram_1r1w_sync_read #(
         .DATA_W(1),
-        .DEPTH (M_ROW_BANK_DEPTH),
-        .ADDR_W(M_ROW_BANK_ADDR_W)
+        .DEPTH(M_ROW_BANK_DEPTH),
+        .ADDR_W(M_ROW_BANK_ADDR_W),
+        .RAM_STYLE("block")
     ) u_mem (
         .i_clk(i_clk),
         .i_we(bank_we[bank_idx_i]),

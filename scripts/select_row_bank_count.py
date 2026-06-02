@@ -17,7 +17,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", default="rtl/bike_pkg.sv")
     parser.add_argument("--parallel-l", type=int, required=True)
-    parser.add_argument("--tag", choices=sorted(DEFAULT_SUPPORTS), default="l1")
+    parser.add_argument("--tag", choices=sorted(DEFAULT_SUPPORTS), default="test")
     parser.add_argument("--ram-lane-min-depth", type=int, default=3)
     parser.add_argument("--ram-lane-depth", type=int, default=None)
     args = parser.parse_args()

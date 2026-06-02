@@ -9,6 +9,11 @@ set synth_directive [expr {[info exists ::env(VIVADO_SYNTH_DIRECTIVE)] ? $::env(
 set flatten_hierarchy [expr {[info exists ::env(VIVADO_FLATTEN_HIERARCHY)] ? $::env(VIVADO_FLATTEN_HIERARCHY) : "rebuilt"}]
 set xdc_file [expr {[info exists ::env(VIVADO_XDC)] ? $::env(VIVADO_XDC) : "constraints/decoder_top.xdc"}]
 set parallel_l [expr {[info exists ::env(BIKE_PARALLEL_L)] ? $::env(BIKE_PARALLEL_L) : "8"}]
+set param_define [expr {[info exists ::env(BIKE_PARAM_DEFINE)] ? $::env(BIKE_PARAM_DEFINE) : "BIKE_128_PARAMS"}]
+set ram_lane_depth [expr {[info exists ::env(BIKE_RAM_LANE_DEPTH)] ? $::env(BIKE_RAM_LANE_DEPTH) : ""}]
+set ram_lane_min_depth [expr {[info exists ::env(BIKE_RAM_LANE_MIN_DEPTH)] ? $::env(BIKE_RAM_LANE_MIN_DEPTH) : ""}]
+set ram_m_row_banks [expr {[info exists ::env(BIKE_RAM_M_ROW_BANKS)] ? $::env(BIKE_RAM_M_ROW_BANKS) : ""}]
+set ram_i_init_enable [expr {[info exists ::env(BIKE_RAM_I_INIT_ENABLE)] ? $::env(BIKE_RAM_I_INIT_ENABLE) : "0"}]
 set top "decoder_top"
 
 file mkdir $build_dir
@@ -48,7 +53,17 @@ set rtl_files [list \
 ]
 
 run_step "read_verilog" {
-  read_verilog -sv $rtl_files
+  set define_args [list $param_define "BIKE_PARALLEL_L=$parallel_l"]
+  if {$ram_lane_depth ne ""} {
+    lappend define_args "BIKE_RAM_LANE_DEPTH=$ram_lane_depth"
+  } elseif {$ram_lane_min_depth ne ""} {
+    lappend define_args "BIKE_RAM_LANE_MIN_DEPTH=$ram_lane_min_depth"
+  }
+  if {$ram_m_row_banks ne ""} {
+    lappend define_args "BIKE_RAM_M_ROW_BANKS=$ram_m_row_banks"
+  }
+  puts "Vivado defines: $define_args"
+  read_verilog -sv -define $define_args $rtl_files
 }
 set_property include_dirs [list rtl] [current_fileset]
 
@@ -70,6 +85,7 @@ run_step "synth_design" {
     -top $top \
     -part $part \
     -generic "RAM_I_HEX_PREFIX=$ram_i_hex_prefix" \
+    -generic "RAM_I_INIT_ENABLE=$ram_i_init_enable" \
     -directive $synth_directive \
     -flatten_hierarchy $flatten_hierarchy
 }

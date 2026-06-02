@@ -51,14 +51,14 @@ package bike_pkg;
   localparam int ALPHA_SHIFT_0 = 3;
   localparam int ALPHA_SHIFT_1 = 6;
 `else
-  localparam int N0 = 2;
-  localparam int R = 11677;
-  localparam int W = 71;
+  localparam int N0 = 3;
+  localparam int R = 8117;
+  localparam int W = 27;
   localparam int T = 201;
   localparam int I_MAX = 7;
-  localparam int C_VAL = 7;
-  localparam int ALPHA_SHIFT_0 = 4;
-  localparam int ALPHA_SHIFT_1 = 0;
+  localparam int C_VAL = 5;
+  localparam int ALPHA_SHIFT_0 = 3;
+  localparam int ALPHA_SHIFT_1 = 4;
 `endif
 `else
   localparam int N0 = 2;
@@ -126,8 +126,8 @@ package bike_pkg;
   localparam int DEFAULT_M_ROW_BANKS =
     (L <= 1) ? 1 :
     ((N0 == 2 && R == 8 && W == 3) ? 1 :
-    ((N0 == 2 && R == 11677 && W == 71) ?
-     ((L <= 2) ? 16 : ((L <= 4) ? 32 : ((L <= 8) ? 256 : ((L <= 16) ? 64 : 512)))) :
+    ((N0 == 3 && R == 8117 && W == 27) ?
+     ((L <= 2) ? 16 : ((L <= 4) ? 32 : ((L <= 8) ? 128 : ((L <= 16) ? 256 : 512)))) :
      ((L <= 2) ? 16 : 512)));
 `ifndef BIKE_RAM_M_ROW_BANKS
   localparam int M_ROW_BANKS = (DEFAULT_M_ROW_BANKS > R) ? R : DEFAULT_M_ROW_BANKS;

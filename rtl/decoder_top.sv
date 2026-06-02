@@ -8,12 +8,13 @@
 module decoder_top
   import bike_pkg::*;
 #(
-    parameter string RAM_I_HEX_PREFIX = "ram_i",
+    parameter string RAM_I_HEX_PREFIX  = "ram_i",
 `ifndef BIKE_TOY_PARAMS
-    parameter string RAM_I_HEX_TAG    = "_l1"
+    parameter string RAM_I_HEX_TAG     = "_bike128",
 `else
-    parameter string RAM_I_HEX_TAG    = "_test"
+    parameter string RAM_I_HEX_TAG     = "_test",
 `endif
+    parameter bit    RAM_I_INIT_ENABLE = 1'b1
 ) (
     input  logic                   i_clk,
     input  logic                   i_rst_n,
@@ -840,7 +841,8 @@ module decoder_top
         .INIT_HEX_STEM(""),
         .INIT_HEX_PREFIX(RAM_I_HEX_PREFIX),
         .BANK_IDX(ram_i_bank_idx),
-        .INIT_HEX_TAG(RAM_I_HEX_TAG)
+        .INIT_HEX_TAG(RAM_I_HEX_TAG),
+        .INIT_HEX_ENABLE(RAM_I_INIT_ENABLE)
     ) u_ram_i (
         .i_clk(i_clk),
         .i_rst_n(i_rst_n),

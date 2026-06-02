@@ -11,7 +11,7 @@
 
 - `decoder_top` 按 lane 显式实例化 RAM-I 和 RAM-T，并实例化 `2*L` 个 RAM-M bank 组成读写 pair。RAM-S 是按变量列寻址的 sign-vector RAM。
 - RAM-M 每个 numbered block 保存全局校验行地址空间中的压缩 c2v 状态和 1 bit epoch，深度为 `R`。压缩状态中的 `min_id` 使用行内 `edge_id = h_block_idx * W + one_idx`。顶层向 RAM-M、syndrome RAM 和验证侧传递 `row_idx_global`。
-- RAM-I 和 RAM-T 的 lane 内 entry 深度统一为 `RAM_LANE_DEPTH`，表示首列元数据在各 lane 中的最大有效 entry 数。默认 BIKE-L1 形状参数下 `RAM_LANE_DEPTH=9`，`BIKE_TOY_PARAMS` 参数下 `RAM_LANE_DEPTH=3`。
+- RAM-I 和 RAM-T 的 lane 内 entry 深度统一为 `RAM_LANE_DEPTH`，表示首列元数据在各 lane 中的最大有效 entry 数。BIKE-128/L16 综合配置使用 `RAM_LANE_DEPTH=3`，`BIKE_TOY_PARAMS` 参数下使用 `RAM_LANE_DEPTH=3`。
 - RAM-S 每个变量列保存一个 `W` bit v2c sign 向量。c2v 侧按列读取向量并用 `one_idx` 选择 edge sign；v2c 侧在一列的 CNU_A 写回过程中累积 sign 向量，并在列尾写回 RAM-S。
 - RAM-T 每个 lane 以按 entry slot 寻址的缓冲保存列 k+1 生成的 c2v 和 valid sideband。列 k+1 每个 entry slot 都写入，空 lane 写入 invalid slot；v2c 发射阶段按同一个 entry slot 读取，valid sideband 控制 VNU 的外信息相减。`ITER_CHECK` 清空 RAM-T slot 状态。
 - RAM-C 保存 syndrome 输入译码器的错误估计 bit，是一份适配 syndrome 输入语义的 `N` bit 存储，并提供串行读口用于导出最终估计。
@@ -33,7 +33,7 @@ RAM-I entry 保存 `row_idx_global`。解码期间，c2v 侧按 `h_block_idx` �
 ram_i #(
     .INIT_HEX_PREFIX("rtl/generated/l8/ram_i"),
     .BANK_IDX(0),
-    .INIT_HEX_TAG("_l1")
+    .INIT_HEX_TAG("_test")
 ) u_ram_i (...);
 ```
 
@@ -41,7 +41,7 @@ ram_i #(
 
 `decoder_top` 通过 `ram_i_idx_loader` 提供硬件加载路径，接口接收每个 circulant block 的首列非零行号流。输入顺序定义 `one_idx`，加载器用计数器产生 `one_idx`，并把每个行号写入对应 RAM-I lane。参数 `L` 约束为 2 的幂。
 
-加载方式是 L-wide 分发：每个周期接收同一 `entry_pos` 下最多 `L` 个行号，lane `l` 对应 `one_idx = entry_pos * L + l`。当 `one_idx < W` 时写入该 lane 的 RAM-I entry；当 `one_idx >= W` 时该 lane 不写 entry。每个 H block 的加载周期数固定为 `RAM_LANE_DEPTH`，两个 H block 的加载周期数固定为 `N0 * RAM_LANE_DEPTH`。默认 BIKE-L1 参数下，每个 block 9 个周期，两个 block 18 个周期。
+加载方式是 L-wide 分发：每个周期接收同一 `entry_pos` 下最多 `L` 个行号，lane `l` 对应 `one_idx = entry_pos * L + l`。当 `one_idx < W` 时写入该 lane 的 RAM-I entry；当 `one_idx >= W` 时该 lane 不写 entry。每个 H block 的加载周期数固定为 `RAM_LANE_DEPTH`，完整加载周期数固定为 `N0 * RAM_LANE_DEPTH`。BIKE-128/L16 综合配置下每个 block 3 个周期，完整加载 9 个周期。
 
 该加载器的派生信号如下：
 

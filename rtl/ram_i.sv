@@ -9,10 +9,11 @@ module ram_i
     parameter string INIT_HEX_PREFIX = "rtl/generated/ram_i",
     parameter int    BANK_IDX        = 0,
 `ifndef BIKE_TOY_PARAMS
-    parameter string INIT_HEX_TAG    = "_l1"
+    parameter string INIT_HEX_TAG    = "_bike128",
 `else
-    parameter string INIT_HEX_TAG    = "_test"
+    parameter string INIT_HEX_TAG    = "_test",
 `endif
+    parameter bit    INIT_HEX_ENABLE = 1'b1
 ) (
     input  logic                     i_clk,
     input  logic                     i_rst_n,
@@ -44,16 +45,18 @@ module ram_i
   localparam int I_MEM_ADDR_W = (I_MEM_DEPTH > 1) ? $clog2(I_MEM_DEPTH) : 1;
   localparam int COUNT_MEM_DEPTH = 2 * N0;
   localparam int COUNT_MEM_ADDR_W = (COUNT_MEM_DEPTH > 1) ? $clog2(COUNT_MEM_DEPTH) : 1;
-  localparam string ENTRY_INIT_FILE = (INIT_HEX_STEM != "") ? {
+  localparam string ENTRY_INIT_PATH = (INIT_HEX_STEM != "") ? {
     INIT_HEX_STEM, "_entries", INIT_HEX_TAG, ".hex"
   } : $sformatf(
       "%s%0d_entries%s.hex", INIT_HEX_PREFIX, BANK_IDX, INIT_HEX_TAG
   );
-  localparam string COUNT_INIT_FILE = (INIT_HEX_STEM != "") ? {
+  localparam string COUNT_INIT_PATH = (INIT_HEX_STEM != "") ? {
     INIT_HEX_STEM, "_counts", INIT_HEX_TAG, ".hex"
   } : $sformatf(
       "%s%0d_counts%s.hex", INIT_HEX_PREFIX, BANK_IDX, INIT_HEX_TAG
   );
+  localparam string ENTRY_INIT_FILE = INIT_HEX_ENABLE ? ENTRY_INIT_PATH : "";
+  localparam string COUNT_INIT_FILE = INIT_HEX_ENABLE ? COUNT_INIT_PATH : "";
 
   // 每个 h_block 保存 active/next 两个 lane-local list；count 说明 list 前几项有效。
   logic                     active_slot[             0:N0-1];
