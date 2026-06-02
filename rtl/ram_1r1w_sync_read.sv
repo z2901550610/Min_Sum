@@ -6,10 +6,7 @@ module ram_1r1w_sync_read #(
     parameter int                 ADDR_W        = (DEPTH > 1) ? $clog2(DEPTH) : 1,
     parameter string              INIT_FILE     = "",
     parameter bit                 INIT_TO_VALUE = 1'b0,
-    parameter logic  [DATA_W-1:0] RESET_VALUE   = '0,
-    /* verilator lint_off UNUSEDPARAM */
-    parameter string              RAM_STYLE     = "auto"
-    /* verilator lint_on UNUSEDPARAM */
+    parameter logic  [DATA_W-1:0] RESET_VALUE   = '0
 ) (
     input  logic              i_clk,
     input  logic              i_we,
@@ -24,7 +21,7 @@ module ram_1r1w_sync_read #(
 `endif
 );
 
-  (* ram_style = RAM_STYLE *) logic [DATA_W-1:0] mem[0:DEPTH-1];
+  logic [DATA_W-1:0] mem[0:DEPTH-1];
 
 `ifdef BIKE_SIM_DEBUG
   always_comb begin

@@ -32,8 +32,7 @@ module ram_s
       .DATA_W(S_WORD_W),
       .DEPTH(S_WORD_DEPTH),
       .ADDR_W(S_WORD_ADDR_W),
-      .RESET_VALUE('0),
-      .RAM_STYLE("block")
+      .RESET_VALUE('0)
   ) u_mem (
       .i_clk(i_clk),
       .i_we(i_we),

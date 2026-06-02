@@ -2,11 +2,7 @@
 // Row-banked RAM-M pair with L independent issue ports.
 module ram_m_bank_array
   import bike_pkg::*;
-#(
-    /* verilator lint_off UNUSEDPARAM */
-    parameter string RAM_STYLE = "block"
-    /* verilator lint_on UNUSEDPARAM */
-) (
+(
     input  logic                  i_clk,
     input  logic                  i_read_valid[0:L-1],
     input  logic [ ROW_IDX_W-1:0] i_read_row_idx_global[0:L-1],
@@ -21,7 +17,7 @@ module ram_m_bank_array
   localparam int M_WORD_EPOCH_BIT = COMP_C2V_W;
   localparam int M_WORD_W = COMP_C2V_W + 1;
 
-  (* ram_style = RAM_STYLE *) logic [         M_WORD_W-1:0] mem[0:M_ROW_BANKS-1][0:M_ROW_BANK_DEPTH-1];
+  (* ram_style = "block" *) logic [         M_WORD_W-1:0] mem[0:M_ROW_BANKS-1][0:M_ROW_BANK_DEPTH-1];
   logic [         M_WORD_W-1:0] rword[          0:L-1];
   logic [ M_ROW_BANK_IDX_W-1:0] read_bank[          0:L-1];
   logic [ M_ROW_BANK_IDX_W-1:0] write_bank[          0:L-1];
