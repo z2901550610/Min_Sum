@@ -34,7 +34,7 @@ package bike_pkg;
   localparam int ALPHA_SHIFT_1 = 4;
 `elsif BIKE_384_PARAMS
   localparam int N0 = 3;
-  localparam int R = 73421;
+  localparam int R = 59069;
   localparam int W = 83;
   localparam int T = 659;
   localparam int I_MAX = 7;
@@ -139,6 +139,12 @@ package bike_pkg;
   localparam int M_ROW_BANK_ADDR_W = (M_ROW_BANK_DEPTH > 1) ? $clog2(M_ROW_BANK_DEPTH) : 1;
   localparam int M_BANKS = 2 * M_ROW_BANKS;
   localparam int M_BANK_IDX_W = (M_BANKS > 1) ? $clog2(M_BANKS) : 1;
+  localparam int SCHED_CLASS_COUNT = W + 1;
+  localparam int SCHED_CLASS_W = (SCHED_CLASS_COUNT > 1) ? $clog2(SCHED_CLASS_COUNT) : 1;
+  localparam int SCHED_LANE_ENTRY_W = 1 + ROW_IDX_W + ONE_IDX_W + EDGE_ID_W;
+  localparam int SCHED_WORD_W = L * SCHED_LANE_ENTRY_W;
+  localparam int SCHED_DEPTH = N0 * SCHED_CLASS_COUNT * RAM_LANE_DEPTH;
+  localparam int SCHED_ADDR_W = (SCHED_DEPTH > 1) ? $clog2(SCHED_DEPTH) : 1;
 
   localparam int DEC_STATE_W = 4;
   localparam logic [DEC_STATE_W-1:0] DEC_WAIT_START = 4'd0;

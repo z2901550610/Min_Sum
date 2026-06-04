@@ -28,11 +28,15 @@ module ram_syndrome
   logic [ M_ROW_BANK_IDX_W-1:0] write_bank;
   logic [M_ROW_BANK_ADDR_W-1:0] write_addr;
 
+  localparam bit M_ROW_BANKS_POW2 = ((M_ROW_BANKS & (M_ROW_BANKS - 1)) == 0);
+
   function automatic logic [M_ROW_BANK_IDX_W-1:0] bank_idx(
       input  logic [ROW_IDX_W-1:0] row_idx_global);
     begin
       if (M_ROW_BANKS == 1) begin
         bank_idx = '0;
+      end else if (M_ROW_BANKS_POW2) begin
+        bank_idx = row_idx_global[M_ROW_BANK_IDX_W-1:0];
       end else begin
         bank_idx = M_ROW_BANK_IDX_W'(int'(row_idx_global) % M_ROW_BANKS);
       end
@@ -42,7 +46,13 @@ module ram_syndrome
   function automatic logic [M_ROW_BANK_ADDR_W-1:0] bank_addr(
       input  logic [ROW_IDX_W-1:0] row_idx_global);
     begin
-      bank_addr = M_ROW_BANK_ADDR_W'(int'(row_idx_global) / M_ROW_BANKS);
+      if (M_ROW_BANKS == 1) begin
+        bank_addr = M_ROW_BANK_ADDR_W'(row_idx_global);
+      end else if (M_ROW_BANKS_POW2) begin
+        bank_addr = M_ROW_BANK_ADDR_W'(row_idx_global >> M_ROW_BANK_IDX_W);
+      end else begin
+        bank_addr = M_ROW_BANK_ADDR_W'(int'(row_idx_global) / M_ROW_BANKS);
+      end
     end
   endfunction
 

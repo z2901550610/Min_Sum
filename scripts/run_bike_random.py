@@ -20,6 +20,7 @@ RTL_CORE = [
     "rtl/ram_1r1w_sync_read.sv",
     "rtl/ram_1r1w_async_read.sv",
     "rtl/edge_message_pipe.sv",
+    "rtl/c2v_schedule_table.sv",
     "rtl/ram_i.sv",
     "rtl/msg_signmag_to_tc.sv",
     "rtl/msg_tc_to_signmag_sat.sv",
@@ -235,6 +236,12 @@ package bike_pkg;
   parameter int M_ROW_BANK_ADDR_W = (M_ROW_BANK_DEPTH > 1) ? $clog2(M_ROW_BANK_DEPTH) : 1;
   parameter int M_BANKS = 2 * M_ROW_BANKS;
   parameter int M_BANK_IDX_W = (M_BANKS > 1) ? $clog2(M_BANKS) : 1;
+  parameter int SCHED_CLASS_COUNT = W + 1;
+  parameter int SCHED_CLASS_W = (SCHED_CLASS_COUNT > 1) ? $clog2(SCHED_CLASS_COUNT) : 1;
+  parameter int SCHED_LANE_ENTRY_W = 1 + ROW_IDX_W + ONE_IDX_W + EDGE_ID_W;
+  parameter int SCHED_WORD_W = L * SCHED_LANE_ENTRY_W;
+  parameter int SCHED_DEPTH = N0 * SCHED_CLASS_COUNT * RAM_LANE_DEPTH;
+  parameter int SCHED_ADDR_W = (SCHED_DEPTH > 1) ? $clog2(SCHED_DEPTH) : 1;
 
   localparam int DEC_STATE_W = 4;
   localparam logic [DEC_STATE_W-1:0] DEC_WAIT_START       = 4'd0;
@@ -382,6 +389,32 @@ module tb_bike_decoder_random;
     end
   endtask
 
+  task automatic load_h_matrix;
+    logic [H_BLOCK_W-1:0] h_block_idx;
+    int entry_pos;
+    int one_idx;
+    begin
+      h_load_start = 1'b1;
+      @(posedge clk);
+      h_load_start = 1'b0;
+      #1;
+      while (!h_load_done) begin
+        h_block_idx = h_load_request_h_block_idx;
+        entry_pos = int'(h_load_request_entry_pos);
+        for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
+          one_idx = entry_pos * L + lane_idx;
+          h_load_row_idx_global[lane_idx] =
+            (one_idx < W) ? ROW_IDX_W'(TEST_SUPPORTS[int'(h_block_idx)][one_idx]) : '0;
+        end
+        h_load_valid = 1'b1;
+        @(posedge clk);
+        #1;
+      end
+      h_load_valid = 1'b0;
+      @(posedge clk);
+    end
+  endtask
+
   function automatic logic [R-1:0] residual_of(input logic [N-1:0] candidate);
     logic [R-1:0] residual;
     int var_idx;
@@ -445,6 +478,7 @@ module tb_bike_decoder_random;
     rst_n = 1'b1;
     @(posedge clk);
 
+    load_h_matrix();
     load_syndrome(INPUT_SYNDROME);
 
     start = 1'b1;

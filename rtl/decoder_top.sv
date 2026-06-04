@@ -66,17 +66,30 @@ module decoder_top
   logic [GROUP_COUNT_W-1:0] ram_i_debug_count[0:N0-1][0:L-1];
 `endif
   /* verilator lint_on UNUSEDSIGNAL */
+  /* verilator lint_off UNUSEDSIGNAL */
   logic [    I_ENTRY_W-1:0] ram_i_list_entries[0:L-1][0:N0-1][0:RAM_LANE_DEPTH-1];
   logic [GROUP_COUNT_W-1:0] ram_i_list_counts[0:L-1][0:N0-1];
+  /* verilator lint_on UNUSEDSIGNAL */
+  logic                     ram_i_loader_ready;
+  logic                     ram_i_loader_busy;
+  logic                     ram_i_loader_done;
   logic                     ram_i_load_lane_we[0:L-1];
   logic                     ram_i_load_count_we[0:L-1];
   logic [    H_BLOCK_W-1:0] ram_i_load_write_h_block_idx;
   logic [  ENTRY_POS_W-1:0] ram_i_load_write_entry_idx;
   logic [    I_ENTRY_W-1:0] ram_i_load_entry_wdata[0:L-1];
   logic [GROUP_COUNT_W-1:0] ram_i_load_count_wdata[0:L-1];
+  logic                     sched_build_busy;
+  logic                     sched_build_done;
+  logic                     sched_ready;
+  logic                     sched_lane_valid[0:L-1];
+  logic [    ROW_IDX_W-1:0] sched_lane_base_row[0:L-1];
+  logic [    ONE_IDX_W-1:0] sched_lane_one_idx[0:L-1];
+  logic [    EDGE_ID_W-1:0] sched_lane_edge_id[0:L-1];
 
   logic                     ram_m_read_pair_sel;
   logic                     ram_m_write_pair_sel;
+  logic                     decode_start;
 
   logic                     c2v_read;
   logic                     v2c_read;
@@ -145,8 +158,6 @@ module decoder_top
   logic [    ROW_IDX_W-1:0] v2c_read_row_idx_global_d1[0:L-1];
   logic [    ONE_IDX_W-1:0] v2c_read_one_idx_d1[0:L-1];
   logic [    EDGE_ID_W-1:0] v2c_read_edge_id_d1[0:L-1];
-  logic                     c2v_sched_issued[0:W-1];
-  logic                     c2v_sched_issued_next[0:W-1];
 
   logic                     finish_decode;
   logic                     decision_ram_old_bit;
@@ -219,13 +230,47 @@ module decoder_top
   logic signed [  VNU_TC_W-1:0] vnu_v2c_tc[0:L-1];
   logic        [     MSG_W-1:0] vnu_v2c_msg[0:L-1];
 
-  function automatic logic [M_ROW_BANK_IDX_W-1:0] row_bank(
-      input  logic [ROW_IDX_W-1:0] row_idx_global);
+  assign o_h_load_ready = ram_i_loader_ready;
+  assign o_h_load_busy  = ram_i_loader_busy || sched_build_busy;
+  assign o_h_load_done  = sched_build_done;
+  assign decode_start   = i_start && sched_ready;
+
+  function automatic logic [H_BLOCK_W-1:0] col_h_block(input  logic [COL_W-1:0] col_idx);
     begin
-      if (M_ROW_BANKS == 1) begin
-        row_bank = '0;
+      if (N0 == 1) begin
+        col_h_block = '0;
+      end else if (N0 == 2) begin
+        col_h_block = (int'(col_idx) >= R) ? H_BLOCK_W'(1) : '0;
+      end else if (N0 == 3) begin
+        if (int'(col_idx) >= (2 * R)) begin
+          col_h_block = H_BLOCK_W'(2);
+        end else if (int'(col_idx) >= R) begin
+          col_h_block = H_BLOCK_W'(1);
+        end else begin
+          col_h_block = '0;
+        end
       end else begin
-        row_bank = M_ROW_BANK_IDX_W'(int'(row_idx_global) % M_ROW_BANKS);
+        col_h_block = H_BLOCK_W'(int'(col_idx) / R);
+      end
+    end
+  endfunction
+
+  function automatic logic [ROW_IDX_W-1:0] col_local_row(input  logic [COL_W-1:0] col_idx);
+    begin
+      if (N0 == 1) begin
+        col_local_row = ROW_IDX_W'(col_idx);
+      end else if (N0 == 2) begin
+        col_local_row = (int'(col_idx) >= R) ? ROW_IDX_W'(int'(col_idx) - R) : ROW_IDX_W'(col_idx);
+      end else if (N0 == 3) begin
+        if (int'(col_idx) >= (2 * R)) begin
+          col_local_row = ROW_IDX_W'(int'(col_idx) - (2 * R));
+        end else if (int'(col_idx) >= R) begin
+          col_local_row = ROW_IDX_W'(int'(col_idx) - R);
+        end else begin
+          col_local_row = ROW_IDX_W'(col_idx);
+        end
+      end else begin
+        col_local_row = ROW_IDX_W'(int'(col_idx) % R);
       end
     end
   endfunction
@@ -254,7 +299,7 @@ module decoder_top
 
   assign next_iter_count_ext = {1'b0, o_iter_count} + {{ITER_W{1'b0}}, 1'b1};
   assign finish_decode = (next_iter_count_ext >= (ITER_W + 1)'(I_MAX));
-  assign c2v_col_h_block_idx = H_BLOCK_W'(int'(c2v_col_idx) / R);
+  assign c2v_col_h_block_idx = col_h_block(c2v_col_idx);
   assign decision_ram_access_col_idx = decision_ram_we ? decision_ram_col_idx : i_e_read_col_idx;
 
   always_comb begin
@@ -291,113 +336,27 @@ module decoder_top
     v2c_entry_pos_last = ((int'(v2c_entry_pos) + 1) >= RAM_LANE_DEPTH);
   end
 
-  logic c2v_schedule_complete;
-
-  // Decode first-column RAM-I entries into row-bank issue lanes. The scheduler
-  // keeps a per-column issued mask, so each cycle selects only the next slot.
+  // Decode C2V schedule-table entries into row addresses for the active column.
   always_comb begin
-    integer                        edge_count;
-    integer                        edge_idx;
-    integer                        issue_lane_idx;
-    integer                        lane_idx;
-    integer                        prev_lane_idx;
-    integer                        source_entry_idx;
-    integer                        source_lane_idx;
-    logic   [         ROW_IDX_W:0] row_idx_sum;
-    logic   [       H_BLOCK_W-1:0] c2v_read_h_block_idx;
-    logic   [       ROW_IDX_W-1:0] base_row_idx_global;
-    logic   [       ROW_IDX_W-1:0] c2v_col_idx_local;
-    logic   [       ROW_IDX_W-1:0] edge_row_idx_global[0:W-1];
-    logic   [       ONE_IDX_W-1:0] edge_one_idx[0:W-1];
-    logic   [       EDGE_ID_W-1:0] edge_id[0:W-1];
-    logic   [M_ROW_BANK_IDX_W-1:0] edge_bank_idx[0:W-1];
-    logic   [M_ROW_BANK_IDX_W-1:0] slot_bank_idx[0:L-1];
-    logic   [       I_ENTRY_W-1:0] active_entry;
-    logic                          bank_conflict;
-    logic                          edge_issued_base[0:W-1];
-    logic                          edge_valid[0:W-1];
-    logic                          source_valid;
+    integer                 lane_idx;
+    logic   [  ROW_IDX_W:0] row_idx_sum;
+    logic   [ROW_IDX_W-1:0] c2v_col_idx_local;
 
     row_idx_sum = '0;
-    base_row_idx_global = '0;
-    c2v_col_idx_local = ROW_IDX_W'(int'(c2v_read_col_d1) % R);
-    c2v_read_h_block_idx = H_BLOCK_W'(int'(c2v_read_col_d1) / R);
-    active_entry = '0;
-    source_valid = 1'b0;
-    edge_count = 0;
-    c2v_schedule_complete = 1'b1;
+    c2v_col_idx_local = col_local_row(c2v_read_col_d1);
 
     for (lane_idx = 0; lane_idx < L; lane_idx++) begin
-      slot_bank_idx[lane_idx] = '0;
-      c2v_group_valid[lane_idx] = 1'b0;
-      c2v_row_idx_global[lane_idx] = '0;
-      c2v_one_idx[lane_idx] = '0;
-      c2v_edge_id[lane_idx] = '0;
-    end
-
-    for (edge_idx = 0; edge_idx < W; edge_idx++) begin
-      edge_valid[edge_idx] = 1'b0;
-      edge_issued_base[edge_idx] =
-        (c2v_read_entry_pos_d1 == '0) ? 1'b0 : c2v_sched_issued[edge_idx];
-      c2v_sched_issued_next[edge_idx] = edge_issued_base[edge_idx];
-      edge_row_idx_global[edge_idx] = '0;
-      edge_one_idx[edge_idx] = '0;
-      edge_id[edge_idx] = '0;
-      edge_bank_idx[edge_idx] = '0;
-    end
-
-    for (source_lane_idx = 0; source_lane_idx < L; source_lane_idx++) begin
-      for (source_entry_idx = 0; source_entry_idx < RAM_LANE_DEPTH; source_entry_idx++) begin
-        source_valid =
-          c2v_read_d1 &&
-          (source_entry_idx < int'(ram_i_list_counts[source_lane_idx][c2v_read_h_block_idx]));
-        active_entry = ram_i_list_entries[source_lane_idx][c2v_read_h_block_idx][source_entry_idx];
-        base_row_idx_global = active_entry[I_ENTRY_ROW_IDX_GLOBAL_LSB+:ROW_IDX_W];
-        row_idx_sum = {1'b0, base_row_idx_global} + {1'b0, c2v_col_idx_local};
-
-        if (source_valid) begin
-          if (edge_count < W) begin
-            edge_valid[edge_count] = 1'b1;
-            edge_row_idx_global[edge_count] =
-              (row_idx_sum >= (ROW_IDX_W + 1)'(R)) ? ROW_IDX_W'(row_idx_sum - (ROW_IDX_W + 1)'(R)) :
-              ROW_IDX_W'(row_idx_sum);
-            edge_one_idx[edge_count] = ONE_IDX_W'(source_entry_idx * L + source_lane_idx);
-            edge_id[edge_count] =
-              EDGE_ID_W'(int'(c2v_read_h_block_idx) * W + source_entry_idx * L +
-                         source_lane_idx);
-            edge_bank_idx[edge_count] = row_bank(edge_row_idx_global[edge_count]);
-            edge_count = edge_count + 1;
-          end
-        end
-      end
-    end
-
-    issue_lane_idx = 0;
-    for (edge_idx = 0; edge_idx < W; edge_idx++) begin
-      bank_conflict = 1'b0;
-      for (prev_lane_idx = 0; prev_lane_idx < L; prev_lane_idx++) begin
-        if ((prev_lane_idx < issue_lane_idx) &&
-            (slot_bank_idx[prev_lane_idx] == edge_bank_idx[edge_idx])) begin
-          bank_conflict = 1'b1;
-        end
-      end
-
-      if (edge_valid[edge_idx] && !edge_issued_base[edge_idx] && (issue_lane_idx < L) &&
-          !bank_conflict) begin
-        c2v_group_valid[issue_lane_idx] = 1'b1;
-        c2v_row_idx_global[issue_lane_idx] = edge_row_idx_global[edge_idx];
-        c2v_one_idx[issue_lane_idx] = edge_one_idx[edge_idx];
-        c2v_edge_id[issue_lane_idx] = edge_id[edge_idx];
-        slot_bank_idx[issue_lane_idx] = edge_bank_idx[edge_idx];
-        c2v_sched_issued_next[edge_idx] = 1'b1;
-        issue_lane_idx = issue_lane_idx + 1;
-      end
-    end
-
-    for (edge_idx = 0; edge_idx < W; edge_idx++) begin
-      if (c2v_read_entry_pos_last_d1 && edge_valid[edge_idx] &&
-          !c2v_sched_issued_next[edge_idx]) begin
-        c2v_schedule_complete = 1'b0;
+      c2v_group_valid[lane_idx] = c2v_read_d1 && sched_lane_valid[lane_idx];
+      c2v_one_idx[lane_idx] = sched_lane_one_idx[lane_idx];
+      c2v_edge_id[lane_idx] = sched_lane_edge_id[lane_idx];
+      row_idx_sum = {1'b0, sched_lane_base_row[lane_idx]} + {1'b0, c2v_col_idx_local};
+      c2v_row_idx_global[lane_idx] =
+        (row_idx_sum >= (ROW_IDX_W + 1)'(R)) ? ROW_IDX_W'(row_idx_sum - (ROW_IDX_W + 1)'(R)) :
+        ROW_IDX_W'(row_idx_sum);
+      if (!c2v_group_valid[lane_idx]) begin
+        c2v_row_idx_global[lane_idx] = '0;
+        c2v_one_idx[lane_idx] = '0;
+        c2v_edge_id[lane_idx] = '0;
       end
     end
 
@@ -481,7 +440,6 @@ module decoder_top
   // next metadata slot, and keeps the RAM-M pair selection alongside the edge.
   // v2c captures the RAM-M writeback address one cycle before CNU_A returns.
   always_ff @(posedge i_clk or negedge i_rst_n) begin
-    integer edge_idx;
     integer idx;
     integer lane_idx;
 
@@ -499,9 +457,6 @@ module decoder_top
       v2c_read_ram_m_pair_sel_d1 <= 1'b0;
       col_meta_slot_count[0] <= '0;
       col_meta_slot_count[1] <= '0;
-      for (edge_idx = 0; edge_idx < W; edge_idx++) begin
-        c2v_sched_issued[edge_idx] <= 1'b0;
-      end
       for (lane_idx = 0; lane_idx < L; lane_idx++) begin
         v2c_read_group_valid_d1[lane_idx] <= 1'b0;
         v2c_read_row_idx_global_d1[lane_idx] <= '0;
@@ -553,9 +508,6 @@ module decoder_top
       end
 
       if (c2v_read_d1) begin
-        for (edge_idx = 0; edge_idx < W; edge_idx++) begin
-          c2v_sched_issued[edge_idx] <= c2v_sched_issued_next[edge_idx];
-        end
         for (lane_idx = 0; lane_idx < L; lane_idx++) begin
           c2v_latched_group_valid[lane_idx] <= c2v_group_valid[lane_idx];
           c2v_latched_one_idx[lane_idx] <= c2v_one_idx[lane_idx];
@@ -602,7 +554,7 @@ module decoder_top
       m_pair_epoch[0] <= 1'b0;
       m_pair_epoch[1] <= 1'b0;
     end else begin
-      if (i_start) begin
+      if (decode_start) begin
         m_pair_epoch[1] <= ~m_pair_epoch[1];
       end
       if (merge_done) begin
@@ -610,14 +562,6 @@ module decoder_top
       end
     end
   end
-
-`ifndef SYNTHESIS
-  always_ff @(posedge i_clk) begin
-    if (c2v_read_d1 && !c2v_schedule_complete) begin
-      $fatal(1, "decoder_top row-bank schedule overflow");
-    end
-  end
-`endif
 
   always_comb begin
     integer lane_idx;
@@ -691,7 +635,7 @@ module decoder_top
   edge_message_pipe u_edge_message_pipe (
       .i_clk(i_clk),
       .i_rst_n(i_rst_n),
-      .i_start(i_start),
+      .i_start(decode_start),
       .i_c2v_write_t(c2v_write_t),
       .i_v2c_emit_to_cnu_a(v2c_emit_to_cnu_a),
       .i_vnu_accum_t(vnu_accum_t),
@@ -781,7 +725,7 @@ module decoder_top
   decoder_ctrl u_decoder_ctrl (
       .i_clk(i_clk),
       .i_rst_n(i_rst_n),
-      .i_start(i_start),
+      .i_start(decode_start),
       .i_finish_decode(finish_decode),
       .i_c2v_entry_pos_last(c2v_entry_pos_last),
       .i_v2c_entry_pos_last(v2c_entry_pos_last),
@@ -819,12 +763,12 @@ module decoder_top
   ram_i_idx_loader u_ram_i_idx_loader (
       .i_clk(i_clk),
       .i_rst_n(i_rst_n),
-      .i_start(i_h_load_start),
+      .i_start(i_h_load_start && !sched_build_busy),
       .i_valid(i_h_load_valid),
       .i_row_idx_global(i_h_load_row_idx_global),
-      .o_ready(o_h_load_ready),
-      .o_busy(o_h_load_busy),
-      .o_done(o_h_load_done),
+      .o_ready(ram_i_loader_ready),
+      .o_busy(ram_i_loader_busy),
+      .o_done(ram_i_loader_done),
       .o_request_h_block_idx(o_h_load_request_h_block_idx),
       .o_request_entry_pos(o_h_load_request_entry_pos),
       .o_lane_we(ram_i_load_lane_we),
@@ -833,6 +777,27 @@ module decoder_top
       .o_entry_wdata(ram_i_load_entry_wdata),
       .o_count_we(ram_i_load_count_we),
       .o_count_wdata(ram_i_load_count_wdata)
+  );
+
+  c2v_schedule_table u_c2v_schedule_table (
+      .i_clk(i_clk),
+      .i_rst_n(i_rst_n),
+      .i_load_lane_we(ram_i_load_lane_we),
+      .i_load_h_block_idx(ram_i_load_write_h_block_idx),
+      .i_load_entry_idx(ram_i_load_write_entry_idx),
+      .i_load_entry_wdata(ram_i_load_entry_wdata),
+      .i_build_start(ram_i_loader_done),
+      .o_build_busy(sched_build_busy),
+      .o_build_done(sched_build_done),
+      .o_ready(sched_ready),
+      .i_read_en(c2v_read),
+      .i_read_h_block_idx(col_h_block(c2v_col_idx)),
+      .i_read_col_local(col_local_row(c2v_col_idx)),
+      .i_read_entry_pos(c2v_entry_pos),
+      .o_lane_valid(sched_lane_valid),
+      .o_lane_base_row(sched_lane_base_row),
+      .o_lane_one_idx(sched_lane_one_idx),
+      .o_lane_edge_id(sched_lane_edge_id)
   );
 
   /* verilator lint_off PINCONNECTEMPTY */

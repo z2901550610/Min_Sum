@@ -38,12 +38,14 @@ set rtl_files [list \
   rtl/ram_1r1w_sync_read.sv \
   rtl/decoder_top.sv \
   rtl/edge_message_pipe.sv \
+  rtl/c2v_schedule_table.sv \
   rtl/ram_i.sv \
   rtl/msg_signmag_to_tc.sv \
   rtl/msg_tc_to_signmag_sat.sv \
   rtl/decoder_ctrl.sv \
   rtl/ram_c.sv \
   rtl/ram_m.sv \
+  rtl/ram_m_bank_array.sv \
   rtl/ram_s.sv \
   rtl/ram_syndrome.sv \
   rtl/ram_t.sv \

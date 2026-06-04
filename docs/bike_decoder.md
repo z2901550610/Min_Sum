@@ -18,6 +18,7 @@
 
 - [decoder_architecture.md](decoder_architecture.md)：模块划分、RAM 组织、RAM-I 加载路径和访存组织
 - [decoder_schedule.md](decoder_schedule.md)：`decoder_ctrl` 状态机和 Fig.8 式列重叠调度
+- [support_major_decoder_design.md](support_major_decoder_design.md)：support-major tile min-sum 架构、固定周期扫描和存储组织
 - [decoder_verification.md](decoder_verification.md)：常用回归、随机用例和残差检查语义
 - [naming_conventions.md](naming_conventions.md)：RTL 命名规范、索引术语和声明排版规则
 
