@@ -9,32 +9,10 @@ import shlex
 import subprocess
 from pathlib import Path
 
-from ram_i_hex import first_column_tables as build_first_column_tables
-from ram_i_hex import generate_hex_files
-from ram_i_hex import lane_depth_from_counts
-from ram_i_hex import row_bank_schedule_depth
-from ram_i_hex import select_row_bank_count
-
-
 RTL_CORE = [
-    "rtl/ram_1r1w_sync_read.sv",
-    "rtl/ram_1r1w_async_read.sv",
-    "rtl/edge_message_pipe.sv",
-    "rtl/c2v_schedule_table.sv",
-    "rtl/ram_i.sv",
-    "rtl/msg_signmag_to_tc.sv",
-    "rtl/msg_tc_to_signmag_sat.sv",
-    "rtl/decoder_ctrl.sv",
-    "rtl/ram_i_idx_loader.sv",
-    "rtl/ram_c.sv",
-    "rtl/ram_m.sv",
-    "rtl/ram_m_bank_array.sv",
-    "rtl/ram_s.sv",
-    "rtl/ram_syndrome.sv",
-    "rtl/ram_t.sv",
-    "rtl/cnu_a.sv",
-    "rtl/cnu_b.sv",
-    "rtl/vnu.sv",
+    "rtl/support_mem.sv",
+    "rtl/support_row_col_gen.sv",
+    "rtl/support_major_ctrl.sv",
     "rtl/decoder_top.sv",
 ]
 
@@ -46,6 +24,7 @@ PARAM_SETS = {
         "error_count": 1,
         "i_max": 4,
         "c_val": 2,
+        "msg_bits": 5,
         "alpha_shift_0": 1,
         "alpha_shift_1": 3,
     },
@@ -56,6 +35,7 @@ PARAM_SETS = {
         "error_count": 201,
         "i_max": 7,
         "c_val": 5,
+        "msg_bits": 5,
         "alpha_shift_0": 3,
         "alpha_shift_1": 4,
     },
@@ -66,6 +46,7 @@ PARAM_SETS = {
         "error_count": 263,
         "i_max": 7,
         "c_val": 5,
+        "msg_bits": 5,
         "alpha_shift_0": 3,
         "alpha_shift_1": 4,
     },
@@ -76,16 +57,18 @@ PARAM_SETS = {
         "error_count": 429,
         "i_max": 7,
         "c_val": 5,
+        "msg_bits": 5,
         "alpha_shift_0": 3,
         "alpha_shift_1": 4,
     },
     "bike384": {
         "n0": 3,
-        "r": 73421,
+        "r": 59069,
         "w": 83,
         "error_count": 659,
         "i_max": 7,
         "c_val": 5,
+        "msg_bits": 5,
         "alpha_shift_0": 3,
         "alpha_shift_1": 6,
     },
@@ -96,6 +79,7 @@ PARAM_SETS = {
         "error_count": 877,
         "i_max": 7,
         "c_val": 5,
+        "msg_bits": 5,
         "alpha_shift_0": 3,
         "alpha_shift_1": 6,
     },
@@ -132,42 +116,13 @@ def sv_array(values: list[int]) -> str:
     return "'{" + ", ".join(str(value) for value in values) + "}"
 
 
-def render_group_count_param(group_counts: list[list[int]]) -> str:
-    lines = ["  localparam logic [GROUP_COUNT_W-1:0] QC_FIRST_COL_GROUP_COUNT [0:N0-1][0:L-1] = '{"]
-    for h_block_idx, h_block_group_counts in enumerate(group_counts):
-        suffix = "," if h_block_idx != len(group_counts) - 1 else ""
-        lines.append(
-            "    '{"
-            + ", ".join(f"GROUP_COUNT_W'({count})" for count in h_block_group_counts)
-            + "}"
-            + suffix
-        )
-    lines.append("  };")
-    return "\n".join(lines)
-
-
-def render_group_entry_param(
-    group_entries: list[list[list[tuple[int, int] | None]]],
-    lane_depth: int,
-) -> str:
-    lines = ["  localparam logic [I_ENTRY_W-1:0] QC_FIRST_COL_GROUP_ENTRY [0:N0-1][0:L-1][0:RAM_LANE_DEPTH-1] = '{"]
-    for h_block_idx, h_block_group_entries in enumerate(group_entries):
-        h_block_suffix = "," if h_block_idx != len(group_entries) - 1 else ""
-        lines.append("    '{")
-        for group_idx, group_entry_list in enumerate(h_block_group_entries):
-            group_suffix = "," if group_idx != len(h_block_group_entries) - 1 else ""
-            entry_text = []
-            for entry_idx in range(lane_depth):
-                item = group_entry_list[entry_idx] if entry_idx < len(group_entry_list) else None
-                if item is None:
-                    entry_text.append("'0")
-                else:
-                    _one_idx, row_idx_global = item
-                    entry_text.append(f"ROW_IDX_W'({row_idx_global})")
-            lines.append("      '{" + ", ".join(entry_text) + "}" + group_suffix)
-        lines.append("    }" + h_block_suffix)
-    lines.append("  };")
-    return "\n".join(lines)
+def sv_int_array(values: list[int]) -> str:
+    if not values:
+        return "'{0}"
+    chunks = []
+    for idx in range(0, len(values), 32):
+        chunks.append("    " + ", ".join(str(value) for value in values[idx : idx + 32]))
+    return "'{\n" + ",\n".join(chunks) + "\n  }"
 
 
 def emit_pkg(
@@ -178,15 +133,13 @@ def emit_pkg(
     w: int,
     i_max: int,
     c_val: int,
+    msg_bits: int,
     alpha_shift_0: int,
     alpha_shift_1: int,
     l: int,
+    c_tile: int,
     t: int,
-    h_base: list[list[int]],
-    lane_depth: int,
-    row_bank_count: int,
 ) -> None:
-    group_counts, group_entries = build_first_column_tables(h_base, group_count=l)
     path.write_text(
         f"""`timescale 1ns/1ps
 package bike_pkg;
@@ -199,49 +152,39 @@ package bike_pkg;
   parameter int T = {t};
   parameter int I_MAX = {i_max};
   parameter int C_VAL = {c_val};
+  parameter int MSG_BITS_CONFIG = {msg_bits};
   parameter int ALPHA_SHIFT_0 = {alpha_shift_0};
   parameter int ALPHA_SHIFT_1 = {alpha_shift_1};
-  parameter int EDGE_SLOT_DEPTH = (W + L - 1) / L;
-  parameter int RAM_LANE_DEPTH = {lane_depth};
 
   parameter int N = N0 * R;
   parameter int L = {l};
-  parameter int D = 4;
+  parameter int D = (MSG_BITS_CONFIG > 1) ? (MSG_BITS_CONFIG - 1) : 1;
   parameter int ALPHA_FRAC_W = 6;
   parameter int MAG_MAX = (1 << D) - 1;
   parameter int MSG_W = D + 1;
   parameter int ROW_SEG_SIZE = (R + L - 1) / L;
-  parameter int ROW_GROUP_DEPTH = ROW_SEG_SIZE;
   parameter int VNU_TC_W = MSG_W + ((W > 1) ? $clog2(W + 1) : 1);
+  parameter int C_TILE_CONFIG = {c_tile};
+  parameter int C_TILE = (C_TILE_CONFIG > R) ? R : C_TILE_CONFIG;
+  parameter int Q_BASE = (C_TILE + L - 1) / L;
+  parameter int Q_TILE = Q_BASE + 1;
+  parameter int TILE_COUNT = (R + C_TILE - 1) / C_TILE;
+  parameter int TILES_TOTAL = N0 * TILE_COUNT;
+  parameter int TILE_ID_W = (TILES_TOTAL > 1) ? $clog2(TILES_TOTAL) : 1;
+  parameter int TILE_IDX_W = (TILE_COUNT > 1) ? $clog2(TILE_COUNT) : 1;
+  parameter int TILE_OFF_W = (C_TILE > 1) ? $clog2(C_TILE) : 1;
+  parameter int Q_SEQ_W = (Q_TILE > 1) ? $clog2(Q_TILE) : 1;
+  parameter int ROW_BANK_AW = (ROW_SEG_SIZE > 1) ? $clog2(ROW_SEG_SIZE) : 1;
+  parameter int ACC_W = VNU_TC_W;
   parameter int COL_W = (N > 1) ? $clog2(N) : 1;
   parameter int H_BLOCK_W = (N0 > 1) ? $clog2(N0) : 1;
-  parameter int H_NUM = 1;
   parameter int ROW_EDGE_COUNT = N0 * W;
 
   parameter int ONE_IDX_W = (W > 1) ? $clog2(W) : 1;
   parameter int EDGE_ID_W = (ROW_EDGE_COUNT > 1) ? $clog2(ROW_EDGE_COUNT) : 1;
   parameter int ROW_IDX_W = (R > 1) ? $clog2(R) : 1;
   parameter int LANE_IDX_W = (L > 1) ? $clog2(L) : 1;
-  parameter int GROUP_IDX_W = (L > 1) ? $clog2(L) : 1;
-  parameter int ROW_GROUP_W = (ROW_GROUP_DEPTH > 1) ? $clog2(ROW_GROUP_DEPTH) : 1;
-  parameter int ENTRY_POS_W = (RAM_LANE_DEPTH > 1) ? $clog2(RAM_LANE_DEPTH) : 1;
-  parameter int GROUP_COUNT_W = (RAM_LANE_DEPTH > 1) ? $clog2(RAM_LANE_DEPTH + 1) : 1;
   parameter int ITER_W = $clog2(I_MAX + 1);
-  parameter int S_WORD_W = W;
-  parameter int S_WORD_DEPTH = N;
-  parameter int S_WORD_ADDR_W = COL_W;
-  parameter int M_ROW_BANKS = {row_bank_count};
-  parameter int M_ROW_BANK_IDX_W = (M_ROW_BANKS > 1) ? $clog2(M_ROW_BANKS) : 1;
-  parameter int M_ROW_BANK_DEPTH = (R + M_ROW_BANKS - 1) / M_ROW_BANKS;
-  parameter int M_ROW_BANK_ADDR_W = (M_ROW_BANK_DEPTH > 1) ? $clog2(M_ROW_BANK_DEPTH) : 1;
-  parameter int M_BANKS = 2 * M_ROW_BANKS;
-  parameter int M_BANK_IDX_W = (M_BANKS > 1) ? $clog2(M_BANKS) : 1;
-  parameter int SCHED_CLASS_COUNT = W + 1;
-  parameter int SCHED_CLASS_W = (SCHED_CLASS_COUNT > 1) ? $clog2(SCHED_CLASS_COUNT) : 1;
-  parameter int SCHED_LANE_ENTRY_W = 1 + ROW_IDX_W + ONE_IDX_W + EDGE_ID_W;
-  parameter int SCHED_WORD_W = L * SCHED_LANE_ENTRY_W;
-  parameter int SCHED_DEPTH = N0 * SCHED_CLASS_COUNT * RAM_LANE_DEPTH;
-  parameter int SCHED_ADDR_W = (SCHED_DEPTH > 1) ? $clog2(SCHED_DEPTH) : 1;
 
   localparam int DEC_STATE_W = 4;
   localparam logic [DEC_STATE_W-1:0] DEC_WAIT_START       = 4'd0;
@@ -272,28 +215,11 @@ package bike_pkg;
     D'(C_VAL)
   }};
 
-  localparam int I_ENTRY_ROW_IDX_GLOBAL_LSB = 0;
-  localparam int I_ENTRY_ROW_IDX_GROUP_LSB = I_ENTRY_ROW_IDX_GLOBAL_LSB;
-  localparam int I_ENTRY_W = ROW_IDX_W;
-{render_group_count_param(group_counts)}
-{render_group_entry_param(group_entries, lane_depth)}
-  localparam logic [GROUP_COUNT_W-1:0] QC_FIRST_COL_LANE_COUNT [0:N0-1][0:L-1] =
-    QC_FIRST_COL_GROUP_COUNT;
-  localparam logic [I_ENTRY_W-1:0] QC_FIRST_COL_LANE_ENTRY [0:N0-1][0:L-1][0:RAM_LANE_DEPTH-1] =
-    QC_FIRST_COL_GROUP_ENTRY;
-  localparam logic [GROUP_COUNT_W-1:0] QC_FIRST_COL_ROW_GROUP_COUNT [0:N0-1][0:L-1] =
-    QC_FIRST_COL_GROUP_COUNT;
-  localparam logic [I_ENTRY_W-1:0] QC_FIRST_COL_ROW_GROUP_ENTRY [0:N0-1][0:L-1][0:RAM_LANE_DEPTH-1] =
-    QC_FIRST_COL_GROUP_ENTRY;
   /* verilator lint_on UNUSEDPARAM */
 endpackage
 """,
         encoding="utf-8",
     )
-
-
-def default_ram_lane_depth(w: int, l: int, min_depth: int) -> int:
-    return max((w + l - 1) // l, min_depth)
 
 
 def is_power_of_two(value: int) -> bool:
@@ -305,12 +231,13 @@ def emit_tb(
     *,
     seed: int,
     timeout_cycles: int,
-    syndrome_hex: str,
-    target_hex: str,
-    ram_i_hex_prefix: str,
+    syndrome_positions: list[int],
+    error_positions: list[int],
     h_base: list[list[int]],
 ) -> None:
     supports = ",\n    ".join(sv_array(support) for support in h_base)
+    syndrome_array_depth = max(1, len(syndrome_positions))
+    error_array_depth = max(1, len(error_positions))
     path.write_text(
         f"""`timescale 1ns/1ps
 
@@ -319,8 +246,10 @@ module tb_bike_decoder_random;
 
   localparam int TEST_SEED = {seed};
   localparam int TIMEOUT_CYCLES = {timeout_cycles};
-  localparam logic [R-1:0] INPUT_SYNDROME = {syndrome_hex};
-  localparam logic [N-1:0] TARGET_ERROR = {target_hex};
+  localparam int SYNDROME_WEIGHT = {len(syndrome_positions)};
+  localparam int ERROR_WEIGHT = {len(error_positions)};
+  localparam int unsigned SYNDROME_POS [0:{syndrome_array_depth - 1}] = {sv_int_array(syndrome_positions)};
+  localparam int unsigned ERROR_POS [0:{error_array_depth - 1}] = {sv_int_array(error_positions)};
   localparam int unsigned TEST_SUPPORTS [0:N0-1][0:W-1] = '{{
     {supports}
   }};
@@ -332,40 +261,31 @@ module tb_bike_decoder_random;
   logic syndrome_we;
   logic [ROW_IDX_W-1:0] syndrome_addr;
   logic syndrome_wdata;
-  logic h_load_start;
-  logic h_load_valid;
-  logic [ROW_IDX_W-1:0] h_load_row_idx_global[0:L-1];
-  /* verilator lint_off UNUSEDSIGNAL */
-  logic h_load_ready;
-  logic h_load_busy;
-  logic h_load_done;
-  logic [H_BLOCK_W-1:0] h_load_request_h_block_idx;
-  logic [ENTRY_POS_W-1:0] h_load_request_entry_pos;
-  /* verilator lint_on UNUSEDSIGNAL */
+  logic support_we;
+  logic [H_BLOCK_W-1:0] support_h_block_idx;
+  logic [ONE_IDX_W-1:0] support_one_idx;
+  logic [ROW_IDX_W-1:0] support_row;
+  logic support_loaded;
+  logic support_error;
   logic [COL_W-1:0] e_read_col_idx;
   logic e_rdata;
   logic [N-1:0] e_out;
   logic [ITER_W-1:0] iter_count;
 
-  decoder_top #(
-    .RAM_I_HEX_PREFIX("{ram_i_hex_prefix}"),
-    .RAM_I_HEX_TAG("")
-  ) dut (
+  decoder_top dut (
     .i_clk(clk),
     .i_rst_n(rst_n),
     .i_start(start),
     .i_syndrome_we(syndrome_we),
     .i_syndrome_addr(syndrome_addr),
     .i_syndrome_wdata(syndrome_wdata),
-    .i_h_load_start(h_load_start),
-    .i_h_load_valid(h_load_valid),
-    .i_h_load_row_idx_global(h_load_row_idx_global),
+    .i_support_we(support_we),
+    .i_support_h_block_idx(support_h_block_idx),
+    .i_support_one_idx(support_one_idx),
+    .i_support_row(support_row),
     .i_e_read_col_idx(e_read_col_idx),
-    .o_h_load_ready(h_load_ready),
-    .o_h_load_busy(h_load_busy),
-    .o_h_load_done(h_load_done),
-    .o_h_load_request_h_block_idx(h_load_request_h_block_idx),
-    .o_h_load_request_entry_pos(h_load_request_entry_pos),
+    .o_support_loaded(support_loaded),
+    .o_support_error(support_error),
     .o_done(done),
     .o_e_rdata(e_rdata),
     .o_iter_count(iter_count)
@@ -374,12 +294,45 @@ module tb_bike_decoder_random;
   initial clk = 1'b0;
   always #5 clk = ~clk;
 
-  task automatic load_syndrome(input logic [R-1:0] syndrome);
+  function automatic logic syndrome_bit_at(input int row_idx);
+    begin
+      syndrome_bit_at = 1'b0;
+      for (int idx = 0; idx < SYNDROME_WEIGHT; idx++) begin
+        if (SYNDROME_POS[idx] == row_idx) begin
+          syndrome_bit_at = 1'b1;
+        end
+      end
+    end
+  endfunction
+
+  function automatic logic target_bit_at(input int col_idx);
+    begin
+      target_bit_at = 1'b0;
+      for (int idx = 0; idx < ERROR_WEIGHT; idx++) begin
+        if (ERROR_POS[idx] == col_idx) begin
+          target_bit_at = 1'b1;
+        end
+      end
+    end
+  endfunction
+
+  function automatic logic candidate_matches_target(input logic [N-1:0] candidate);
+    begin
+      candidate_matches_target = 1'b1;
+      for (int col_idx = 0; col_idx < N; col_idx++) begin
+        if (candidate[col_idx] != target_bit_at(col_idx)) begin
+          candidate_matches_target = 1'b0;
+        end
+      end
+    end
+  endfunction
+
+  task automatic load_syndrome;
     begin
       for (int row_idx = 0; row_idx < R; row_idx++) begin
         syndrome_we = 1'b1;
         syndrome_addr = ROW_IDX_W'(row_idx);
-        syndrome_wdata = syndrome[row_idx];
+        syndrome_wdata = syndrome_bit_at(row_idx);
         @(posedge clk);
       end
       syndrome_we = 1'b0;
@@ -390,28 +343,21 @@ module tb_bike_decoder_random;
   endtask
 
   task automatic load_h_matrix;
-    logic [H_BLOCK_W-1:0] h_block_idx;
-    int entry_pos;
-    int one_idx;
     begin
-      h_load_start = 1'b1;
-      @(posedge clk);
-      h_load_start = 1'b0;
-      #1;
-      while (!h_load_done) begin
-        h_block_idx = h_load_request_h_block_idx;
-        entry_pos = int'(h_load_request_entry_pos);
-        for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-          one_idx = entry_pos * L + lane_idx;
-          h_load_row_idx_global[lane_idx] =
-            (one_idx < W) ? ROW_IDX_W'(TEST_SUPPORTS[int'(h_block_idx)][one_idx]) : '0;
+      for (int h_block_idx = 0; h_block_idx < N0; h_block_idx++) begin
+        for (int one_idx = 0; one_idx < W; one_idx++) begin
+          support_we = 1'b1;
+          support_h_block_idx = H_BLOCK_W'(h_block_idx);
+          support_one_idx = ONE_IDX_W'(one_idx);
+          support_row = ROW_IDX_W'(TEST_SUPPORTS[h_block_idx][one_idx]);
+          @(posedge clk);
         end
-        h_load_valid = 1'b1;
-        @(posedge clk);
-        #1;
       end
-      h_load_valid = 1'b0;
+      support_we = 1'b0;
       @(posedge clk);
+      if (!support_loaded || support_error) begin
+        $fatal(1, "support load failed loaded=%0b error=%0b", support_loaded, support_error);
+      end
     end
   endtask
 
@@ -423,7 +369,10 @@ module tb_bike_decoder_random;
     int edge_idx;
     logic [ROW_IDX_W-1:0] row_idx;
     begin
-      residual = INPUT_SYNDROME;
+      residual = '0;
+      for (int idx = 0; idx < SYNDROME_WEIGHT; idx++) begin
+        residual[SYNDROME_POS[idx]] = 1'b1;
+      end
       for (var_idx = 0; var_idx < N; var_idx++) begin
         if (candidate[var_idx]) begin
           h_block_idx = H_BLOCK_W'(var_idx / R);
@@ -465,21 +414,20 @@ module tb_bike_decoder_random;
 
     rst_n = 1'b0;
     start = 1'b0;
-    h_load_start = 1'b0;
-    h_load_valid = 1'b0;
+    support_we = 1'b0;
+    support_h_block_idx = '0;
+    support_one_idx = '0;
+    support_row = '0;
     syndrome_we = 1'b0;
     syndrome_addr = '0;
     syndrome_wdata = 1'b0;
     e_read_col_idx = '0;
-    for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-      h_load_row_idx_global[lane_idx] = '0;
-    end
     repeat (2) @(posedge clk);
     rst_n = 1'b1;
     @(posedge clk);
 
     load_h_matrix();
-    load_syndrome(INPUT_SYNDROME);
+    load_syndrome();
 
     start = 1'b1;
     @(posedge clk);
@@ -505,14 +453,14 @@ module tb_bike_decoder_random;
     end
 
     residual = residual_of(e_out);
-    exact_match = (e_out === TARGET_ERROR);
+    exact_match = candidate_matches_target(e_out);
 
     $display(
       "seed=%0d iter=%0d cycles=%0d target_weight=%0d output_weight=%0d residual_weight=%0d exact=%0d",
       TEST_SEED,
       iter_count,
       cycles,
-      weight_n(TARGET_ERROR),
+      ERROR_WEIGHT,
       weight_n(e_out),
       weight_r(residual),
       exact_match
@@ -523,7 +471,7 @@ module tb_bike_decoder_random;
     end
     if (!exact_match) begin
       $fatal(1, "seed=%0d exact check failed; target_weight=%0d output_weight=%0d", TEST_SEED,
-             weight_n(TARGET_ERROR), weight_n(e_out));
+             ERROR_WEIGHT, weight_n(e_out));
     end
     $finish;
   end
@@ -570,34 +518,6 @@ def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int
     for pos in error_positions:
         error_bits[pos] = 1
     syndrome = calc_syndrome(h_base, error_bits, args.r, args.w)
-    group_counts, _ = build_first_column_tables(h_base, group_count=args.parallel_l)
-    target_lane_depth = default_ram_lane_depth(args.w, args.parallel_l, args.ram_lane_min_depth)
-    source_lane_depth = lane_depth_from_counts(group_counts)
-    row_bank_count = (
-        args.ram_m_row_banks
-        if args.ram_m_row_banks is not None
-        else select_row_bank_count(h_base, args.r, args.parallel_l, target_lane_depth)
-    )
-    row_bank_depth = row_bank_schedule_depth(
-        h_base,
-        args.r,
-        row_bank_count,
-        args.parallel_l,
-    )
-    required_lane_depth = max(
-        source_lane_depth,
-        row_bank_depth,
-    )
-    lane_depth = (
-        args.ram_lane_depth
-        if args.ram_lane_depth is not None
-        else max(required_lane_depth, target_lane_depth)
-    )
-    if lane_depth < required_lane_depth:
-        raise ValueError(
-            f"RAM lane depth {lane_depth} is smaller than required depth {required_lane_depth} "
-            f"for seed {seed}"
-        )
 
     pkg_path = out_dir / "bike_pkg.sv"
     tb_path = out_dir / "tb_bike_decoder_random.sv"
@@ -608,30 +528,19 @@ def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int
         w=args.w,
         i_max=args.i_max,
         c_val=args.c_val,
+        msg_bits=args.msg_bits,
         alpha_shift_0=args.alpha_shift_0,
         alpha_shift_1=args.alpha_shift_1,
         l=args.parallel_l,
+        c_tile=args.c_tile,
         t=args.error_count,
-        h_base=h_base,
-        lane_depth=lane_depth,
-        row_bank_count=row_bank_count,
-    )
-    generate_hex_files(
-        h_base,
-        args.r,
-        args.w,
-        "",
-        out_dir,
-        group_count=args.parallel_l,
-        memory_depth=lane_depth,
     )
     emit_tb(
         tb_path,
         seed=seed,
         timeout_cycles=args.timeout_cycles,
-        syndrome_hex=bit_vector_hex(syndrome, args.r),
-        target_hex=bit_vector_hex(error_bits, n),
-        ram_i_hex_prefix=str((sv_case_dir / "ram_i").as_posix()),
+        syndrome_positions=[idx for idx, bit in enumerate(syndrome) if bit],
+        error_positions=error_positions,
         h_base=h_base,
     )
 
@@ -678,22 +587,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--w", type=int, default=None)
     parser.add_argument("--i-max", type=int, default=None)
     parser.add_argument("--c-val", type=int, default=None)
+    parser.add_argument("--msg-bits", type=int, default=None)
     parser.add_argument("--alpha-shift-0", type=int, default=None)
     parser.add_argument("--alpha-shift-1", type=int, default=None)
     parser.add_argument("--parallel-l", type=int, default=8)
-    parser.add_argument("--ram-lane-min-depth", type=int, default=3)
-    parser.add_argument(
-        "--ram-lane-depth",
-        type=int,
-        default=None,
-        help="Fixed RAM-I/S/T lane capacity. Defaults to the speed-safe schedule depth.",
-    )
-    parser.add_argument(
-        "--ram-m-row-banks",
-        type=int,
-        default=None,
-        help="Fixed row-bank count for RAM-M. Defaults to the first speed-safe power of two.",
-    )
+    parser.add_argument("--c-tile", type=int, default=256)
     return parser.parse_args()
 
 
@@ -713,14 +611,14 @@ def main() -> int:
         raise ValueError("--n0 must be positive")
     if not is_power_of_two(args.parallel_l):
         raise ValueError("--parallel-l must be a power of two")
-    if args.ram_lane_depth is not None and args.ram_lane_depth < 1:
-        raise ValueError("--ram-lane-depth must be positive")
-    if args.ram_lane_depth is not None and args.ram_lane_depth < 3:
-        raise ValueError("--ram-lane-depth must be at least 3")
-    if args.ram_lane_min_depth < 3:
-        raise ValueError("--ram-lane-min-depth must be at least 3")
-    if args.ram_m_row_banks is not None and args.ram_m_row_banks < 1:
-        raise ValueError("--ram-m-row-banks must be positive")
+    if args.c_tile < 1:
+        raise ValueError("--c-tile must be positive")
+    if args.c_tile % args.parallel_l != 0:
+        raise ValueError("--c-tile must be a multiple of --parallel-l")
+    if args.msg_bits < 2:
+        raise ValueError("--msg-bits must be at least 2")
+    if args.c_val < 0 or args.c_val > ((1 << (args.msg_bits - 1)) - 1):
+        raise ValueError("--c-val must fit in the configured sign-magnitude message magnitude")
 
     for case_idx in range(args.trials):
         seed = args.base_seed + case_idx

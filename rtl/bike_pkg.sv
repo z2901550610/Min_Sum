@@ -77,74 +77,44 @@ package bike_pkg;
 `else
   localparam int L = `BIKE_PARALLEL_L;
 `endif
-  localparam int D = 4;
-  // L is constrained to a power of two so lane-local one_idx generation uses
-  // shifts and low-bit concatenation.
-  localparam int EDGE_SLOT_DEPTH = (W + L - 1) / L;
-`ifndef BIKE_RAM_LANE_MIN_DEPTH
-  localparam int RAM_LANE_MIN_DEPTH = 3;
+`ifndef BIKE_MSG_BITS
+  localparam int MSG_BITS_CONFIG = 5;
 `else
-  localparam int RAM_LANE_MIN_DEPTH = `BIKE_RAM_LANE_MIN_DEPTH;
+  localparam int MSG_BITS_CONFIG = `BIKE_MSG_BITS;
 `endif
-`ifndef BIKE_RAM_LANE_DEPTH
-  localparam int RAM_LANE_DEPTH =
-    (EDGE_SLOT_DEPTH < RAM_LANE_MIN_DEPTH) ? RAM_LANE_MIN_DEPTH : EDGE_SLOT_DEPTH;
-`else
-  localparam int RAM_LANE_DEPTH = `BIKE_RAM_LANE_DEPTH;
-`endif
-  localparam int ALPHA_FRAC_W = 6;  //alpha 用6位小数表示
+  localparam int D = (MSG_BITS_CONFIG > 1) ? (MSG_BITS_CONFIG - 1) : 1;
+  // L is constrained to a power of two so lane-local tile windows map cleanly
+  // to row banks.
+  localparam int ALPHA_FRAC_W = 6;
   localparam int MAG_MAX = (1 << D) - 1;
   localparam int MSG_W = D + 1;
   localparam int ROW_SEG_SIZE = (R + L - 1) / L;
-  localparam int ROW_GROUP_DEPTH = ROW_SEG_SIZE;
   localparam int VNU_TC_W = MSG_W + ((W > 1) ? $clog2(W + 1) : 1);
+`ifndef BIKE_C_TILE
+  localparam int C_TILE_CONFIG = 256;
+`else
+  localparam int C_TILE_CONFIG = `BIKE_C_TILE;
+`endif
+  localparam int C_TILE = (C_TILE_CONFIG > R) ? R : C_TILE_CONFIG;
+  localparam int Q_BASE = (C_TILE + L - 1) / L;
+  localparam int Q_TILE = Q_BASE + 1;
+  localparam int TILE_COUNT = (R + C_TILE - 1) / C_TILE;
+  localparam int TILES_TOTAL = N0 * TILE_COUNT;
+  localparam int TILE_ID_W = (TILES_TOTAL > 1) ? $clog2(TILES_TOTAL) : 1;
+  localparam int TILE_IDX_W = (TILE_COUNT > 1) ? $clog2(TILE_COUNT) : 1;
+  localparam int TILE_OFF_W = (C_TILE > 1) ? $clog2(C_TILE) : 1;
+  localparam int Q_SEQ_W = (Q_TILE > 1) ? $clog2(Q_TILE) : 1;
+  localparam int ROW_BANK_AW = (ROW_SEG_SIZE > 1) ? $clog2(ROW_SEG_SIZE) : 1;
+  localparam int ACC_W = VNU_TC_W;
   localparam int COL_W = (N > 1) ? $clog2(N) : 1;
   localparam int H_BLOCK_W = (N0 > 1) ? $clog2(N0) : 1;
-  localparam int H_NUM = 1;
   localparam int ROW_EDGE_COUNT = N0 * W;
 
-  // Canonical names aligned with h_shift.sv conventions.
-  // "one_idx" = index of a "1" within a column (0 .. W-1).
-  // "edge_id" = row-local edge identity h_block_idx * W + one_idx.
-  // "row_idx_global" = global row index (0 .. R-1).
-  // "lane_idx" = physical processing lane selected from one_idx and L.
-  // "row_idx_group" = row index within a virtual row bank.
-  // "group_idx" = virtual row-bank index (0 .. L-1).
-  // "group_count" = number of valid edge slots in a lane-local list.
   localparam int ONE_IDX_W = (W > 1) ? $clog2(W) : 1;
   localparam int EDGE_ID_W = (ROW_EDGE_COUNT > 1) ? $clog2(ROW_EDGE_COUNT) : 1;
   localparam int ROW_IDX_W = (R > 1) ? $clog2(R) : 1;
   localparam int LANE_IDX_W = (L > 1) ? $clog2(L) : 1;
-  localparam int GROUP_IDX_W = (L > 1) ? $clog2(L) : 1;
-  localparam int ROW_GROUP_W = (ROW_GROUP_DEPTH > 1) ? $clog2(ROW_GROUP_DEPTH) : 1;
-  localparam int ENTRY_POS_W = (RAM_LANE_DEPTH > 1) ? $clog2(RAM_LANE_DEPTH) : 1;
-  localparam int GROUP_COUNT_W = (RAM_LANE_DEPTH > 1) ? $clog2(RAM_LANE_DEPTH + 1) : 1;
   localparam int ITER_W = $clog2(I_MAX + 1);
-  localparam int S_WORD_W = W;
-  localparam int S_WORD_DEPTH = N;
-  localparam int S_WORD_ADDR_W = COL_W;
-  localparam int DEFAULT_M_ROW_BANKS =
-    (L <= 1) ? 1 :
-    ((N0 == 2 && R == 8 && W == 3) ? 1 :
-    ((N0 == 3 && R == 8117 && W == 27) ?
-     ((L <= 2) ? 16 : ((L <= 4) ? 32 : ((L <= 8) ? 128 : ((L <= 16) ? 256 : 512)))) :
-     ((L <= 2) ? 16 : 512)));
-`ifndef BIKE_RAM_M_ROW_BANKS
-  localparam int M_ROW_BANKS = (DEFAULT_M_ROW_BANKS > R) ? R : DEFAULT_M_ROW_BANKS;
-`else
-  localparam int M_ROW_BANKS = (`BIKE_RAM_M_ROW_BANKS > R) ? R : `BIKE_RAM_M_ROW_BANKS;
-`endif
-  localparam int M_ROW_BANK_IDX_W = (M_ROW_BANKS > 1) ? $clog2(M_ROW_BANKS) : 1;
-  localparam int M_ROW_BANK_DEPTH = (R + M_ROW_BANKS - 1) / M_ROW_BANKS;
-  localparam int M_ROW_BANK_ADDR_W = (M_ROW_BANK_DEPTH > 1) ? $clog2(M_ROW_BANK_DEPTH) : 1;
-  localparam int M_BANKS = 2 * M_ROW_BANKS;
-  localparam int M_BANK_IDX_W = (M_BANKS > 1) ? $clog2(M_BANKS) : 1;
-  localparam int SCHED_CLASS_COUNT = W + 1;
-  localparam int SCHED_CLASS_W = (SCHED_CLASS_COUNT > 1) ? $clog2(SCHED_CLASS_COUNT) : 1;
-  localparam int SCHED_LANE_ENTRY_W = 1 + ROW_IDX_W + ONE_IDX_W + EDGE_ID_W;
-  localparam int SCHED_WORD_W = L * SCHED_LANE_ENTRY_W;
-  localparam int SCHED_DEPTH = N0 * SCHED_CLASS_COUNT * RAM_LANE_DEPTH;
-  localparam int SCHED_ADDR_W = (SCHED_DEPTH > 1) ? $clog2(SCHED_DEPTH) : 1;
 
   localparam int DEC_STATE_W = 4;
   localparam logic [DEC_STATE_W-1:0] DEC_WAIT_START = 4'd0;
@@ -167,8 +137,5 @@ package bike_pkg;
     1'b0, EDGE_ID_W'(0), D'(C_VAL), D'(C_VAL)
   };
 
-  localparam int I_ENTRY_ROW_IDX_GLOBAL_LSB = 0;
-  localparam int I_ENTRY_ROW_IDX_GROUP_LSB = I_ENTRY_ROW_IDX_GLOBAL_LSB;
-  localparam int I_ENTRY_W = ROW_IDX_W;
   /* verilator lint_on UNUSEDPARAM */
 endpackage

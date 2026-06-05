@@ -1,4 +1,4 @@
-"""Static first-column supports used to generate RAM-I initialization files."""
+"""Static first-column supports used by generated decoder fixtures."""
 
 from __future__ import annotations
 

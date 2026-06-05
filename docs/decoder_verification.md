@@ -1,55 +1,93 @@
 # 解码器验证
 
-## 常规回归
-
-常规 RTL 回归使用小型 BIKE 演示参数。集成 testbench 导出 `e_hat`，并要求残差 `i_syndrome ^ H*e_hat` 为零且 `e_hat` 等于目标错误向量：
-
-```sh
-make test
-```
-
-单位测试入口：
+## 回归入口
 
 ```sh
 make test-unit
-```
-
-顶层集成测试入口：
-
-```sh
 make test-integration
-```
-
-## 随机 BIKE 用例
-
-随机 BIKE 形状用例由 `scripts/run_bike_random.py` 生成，并通过顶层 testbench 执行。生成用例打印 `residual_weight` 和 `exact`，残差非零或 `exact=0` 触发 `$fatal`：
-
-```sh
+make test
 make test-bike-random BIKE_RANDOM_TRIALS=1
 ```
 
-## 检查语义
+`make test-unit` 覆盖：
 
-验证环境按如下流程判断通过：
+- message codec
+- support-major 控制器
+- support row/col 生成器
+- support 存储
+- CNU_A/CNU_B 参考小模块
 
-1. 写入输入 syndrome。
-2. 启动 RAM-I 首列元数据加载或使用 RAM-I 初始镜像。
-3. 启动解码并等待 `o_done`。
-4. 通过 `i_e_read_col_idx/o_e_rdata` 串行导出 `e_hat`。
-5. 计算 `i_syndrome ^ H*e_hat`。
-6. 要求 residual 全零。
-7. 要求 `e_hat` 等于测试目标错误向量。
+`make test-integration` 使用 toy 参数运行完整 `decoder_top`。
 
-集成 testbench 和随机 testbench 都执行 residual 检查和 exact-match 检查。
+## 随机 BIKE 用例
 
-## 日志位置
+随机用例由 `scripts/run_bike_random.py` 生成：
 
-默认 `VERILATOR` 使用 `./scripts/verilator_quiet.py`，终端输出保持精简。
+```sh
+python3 scripts/run_bike_random.py \
+  --param-set bike128 \
+  --trials 1 \
+  --base-seed 1 \
+  --parallel-l 8 \
+  --c-tile 256 \
+  --timeout-cycles 900000 \
+  --verilator ./scripts/verilator_quiet.py
+```
 
-- Verilator 编译日志保存在 `build/logs/verilator/`
-- 仿真运行日志保存在 `build/logs/run/`
-- 需要查看原始 Verilator 输出时使用 `VERILATOR_QUIET=0 make ...`
+脚本为每个 seed 生成：
 
-## 生成文件
+- 外部 `bike_pkg.sv`
+- support fixture
+- syndrome position list
+- target error position list
+- self-checking SystemVerilog testbench
 
-RAM-I 初始化 hex 和随机用例 testbench 位于 generated 目录。许多测试依赖这些文件，调试失败时优先检查生成脚本输入、参数集和日志，不直接删除 generated 文件。
+## 检查项
+
+完整顶层测试执行：
+
+1. 写入全部 support 项。
+2. 检查 `o_support_loaded` 和 `o_support_error`。
+3. 写入 syndrome。
+4. 拉高 `i_start` 一个周期。
+5. 等待固定轮数完成。
+6. 读出 `e_hat`。
+7. 计算 `residual = syndrome ^ H * e_hat`。
+8. 检查 residual 为 0。
+9. 检查 `e_hat` 与目标错误向量一致。
+
+集成 toy testbench 额外检查：
+
+- C2V/V2C tile overlap 被观察到
+- guard dummy 周期被观察到
+- `o_iter_count == I_MAX`
+- 主循环周期数等于 `I_MAX * (TILES_TOTAL + 1) * W * Q_TILE`
+
+## 日志
+
+Verilator 编译日志：
+
+```text
+build/logs/verilator/
+```
+
+运行日志：
+
+```text
+build/logs/run/
+```
+
+默认命令使用 quiet wrapper 输出关键行。需要查看完整 Verilator 输出时：
+
+```sh
+VERILATOR_QUIET=0 make test
+```
+
+## 格式和 lint
+
+```sh
+make format-rtl
+make check-format-rtl && make lint-rtl
+```
+
+维护态 RTL/TB 文件通过 `MAINTAINED_SV` 自动发现。生成目录不参与格式化。

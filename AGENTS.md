@@ -4,7 +4,7 @@
 
 - SystemVerilog RTL for a BIKE/MDPC-style min-sum decoder.
 - RTL lives in `rtl/`; testbenches live in `tb/`; helper scripts live in `scripts/`.
-- Generated files are under `rtl/generated/` and `tb/generated/`.
+- Generated simulation fixtures are under `tb/generated/`.
 
 ## Design Goals
 
@@ -43,5 +43,5 @@
 - Prefer Makefile targets over hand-written Verilator commands.
 - Use `make format-rtl` for RTL/TB formatting. Declarations align direction/`logic`/packed width/name; unpacked dimensions stay tight to the name, e.g. `foo[0:L-1]`.
 - Keep terminal output compact; inspect saved logs only when a failure needs detail.
-- Do not delete generated files casually; many tests depend on generated SV headers.
+- Do not delete generated files casually; generated SV headers are used by tests.
 - 文档和代码注释中只描述当前状态，不写与旧版本的对比（避免"不再"、"目前已改为"、"no longer"、"now"、"instead of"、"rather than"等表述）。设计文档应描述成品架构，而非修改记录。
