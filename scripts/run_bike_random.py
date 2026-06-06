@@ -18,6 +18,7 @@ RTL_CORE = [
     "rtl/tile_accum_ram.sv",
     "rtl/c2v_cache_ram.sv",
     "rtl/vnu_update.sv",
+    "rtl/decision_ram.sv",
     "rtl/decoder_top.sv",
 ]
 

@@ -68,13 +68,18 @@ module check_state_ram
             (v2c_bank_re && (epoch_mem[v2c_bank_raddr] == i_v2c_epoch)) ? mem[v2c_bank_raddr] :
                                                                           COMP_C2V_INIT;
 
+        always_ff @(posedge i_clk) begin
+          if (v2c_bank_we) begin
+            mem[v2c_bank_waddr] <= v2c_bank_wdata;
+          end
+        end
+
         always_ff @(posedge i_clk or negedge i_rst_n) begin
           if (!i_rst_n) begin
             for (int row_addr = 0; row_addr < ROW_SEG_SIZE; row_addr++) begin
               epoch_mem[row_addr] <= 1'b0;
             end
           end else if (v2c_bank_we) begin
-            mem[v2c_bank_waddr] <= v2c_bank_wdata;
             epoch_mem[v2c_bank_waddr] <= i_v2c_epoch;
           end
         end

@@ -74,7 +74,6 @@ module decoder_top
   logic        [ TILE_OFF_W-1:0] v2c_tile_offset[0:L-1];
 
   logic                          syndrome_mem[0:R-1];
-  logic                          decision_mem[0:N-1];
   logic                          comp_read_pair_sel;
   logic                          comp_write_pair_sel;
   logic                          pair_epoch[  0:1];
@@ -92,6 +91,8 @@ module decoder_top
   logic signed [      ACC_W-1:0] v2c_posterior_next[0:L-1];
   logic        [      MSG_W-1:0] v2c_msg_next[0:L-1];
   logic        [ COMP_C2V_W-1:0] v2c_comp_next[0:L-1];
+  logic                          decision_we[0:L-1];
+  logic                          decision_wdata[0:L-1];
   logic                          ctrl_done;
 
   function automatic logic signed [MSG_W-1:0] signmag_to_tc(input  logic [MSG_W-1:0] msg);
@@ -153,7 +154,6 @@ module decoder_top
   endfunction
 
   assign decode_start = i_start && o_h_loaded && !o_h_error;
-  assign o_e_rdata = decision_mem[int'(i_e_read_col_idx)];
   assign o_done = ctrl_done;
 
   always_comb begin
@@ -168,6 +168,8 @@ module decoder_top
       c2v_raw_next[lane_idx] = '0;
       v2c_comp_next[lane_idx] = COMP_C2V_INIT;
       v2c_sign_wdata[lane_idx] = v2c_msg_next[lane_idx][MSG_SIGN_BIT];
+      decision_we[lane_idx] = v2c_valid[lane_idx] && final_iter && (active_one_idx == '0);
+      decision_wdata[lane_idx] = v2c_posterior_next[lane_idx][ACC_W-1];
       c2v_comp_in = COMP_C2V_INIT;
       c2v_msg = '0;
       c2v_tc = '0;
@@ -339,6 +341,15 @@ module decoder_top
       .o_v2c_msg(v2c_msg_next)
   );
 
+  decision_ram u_decision_ram (
+      .i_clk(i_clk),
+      .i_we(decision_we),
+      .i_write_col_idx(v2c_col_idx),
+      .i_wdata(decision_wdata),
+      .i_read_col_idx(i_e_read_col_idx),
+      .o_rdata(o_e_rdata)
+  );
+
 `ifndef SYNTHESIS
   always_ff @(posedge i_clk) begin
     for (int lhs = 0; lhs < L; lhs++) begin
@@ -372,16 +383,6 @@ module decoder_top
         comp_read_pair_sel <= 1'b0;
         comp_write_pair_sel <= 1'b1;
         pair_epoch[1] <= ~pair_epoch[1];
-      end
-
-      if (v2c_phase_active) begin
-        for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-          if (v2c_valid[lane_idx]) begin
-            if (final_iter && (active_one_idx == '0)) begin
-              decision_mem[int'(v2c_col_idx[lane_idx])] <= v2c_posterior_next[lane_idx][ACC_W-1];
-            end
-          end
-        end
       end
 
       if (iter_last_cycle && !final_iter) begin
