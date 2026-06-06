@@ -31,6 +31,7 @@ proc run_step {name command} {
 
 set rtl_files [list \
   rtl/bike_pkg.sv \
+  rtl/reset_sync.sv \
   rtl/h_matrix_mem.sv \
   rtl/edge_addr_gen.sv \
   rtl/tile_scheduler.sv \
@@ -68,6 +69,8 @@ run_step "synth_design" {
 
 report_utilization -hierarchical -file [file join $build_dir utilization_hier.rpt]
 report_utilization -file [file join $build_dir utilization.rpt]
+report_methodology -file [file join $build_dir methodology.rpt]
+report_cdc -file [file join $build_dir cdc.rpt]
 report_timing_summary -file [file join $build_dir timing_summary.rpt]
 report_messages -file [file join $build_dir messages.rpt]
 write_checkpoint -force [file join $build_dir post_synth.dcp]

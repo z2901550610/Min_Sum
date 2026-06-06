@@ -49,16 +49,28 @@ module edge_addr_gen
     end
 
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-      int offset;
-      int col_local;
-      int row_raw;
-      int row_idx;
-      bit lane_valid;
+      o_valid[lane_idx] = 1'b0;
+      o_row_idx[lane_idx] = '0;
+      o_col_idx[lane_idx] = '0;
+      o_edge_id[lane_idx] = '0;
+      o_row_bank[lane_idx] = '0;
+      o_row_addr[lane_idx] = '0;
+      o_tile_offset[lane_idx] = '0;
+    end
+
+    for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
+      int                    offset;
+      int                    col_local;
+      int                    row_raw;
+      int                    row_idx;
+      logic [LANE_IDX_W-1:0] out_bank;
+      bit                    lane_valid;
 
       offset = q_idx * L + lane_idx;
       col_local = tile_base + offset;
       row_raw = col_local + int'(i_base_row);
       row_idx = (row_raw >= R) ? (row_raw - R) : row_raw;
+      out_bank = LANE_IDX_W'(row_idx % L);
       lane_valid = i_phase_valid && (int'(i_q_seq) < Q_TILE) && (q_idx < Q_BASE) &&
                    (offset < tile_cols);
 
@@ -70,13 +82,15 @@ module edge_addr_gen
         lane_valid = 1'b0;
       end
 
-      o_valid[lane_idx] = lane_valid;
-      o_row_idx[lane_idx] = lane_valid ? ROW_IDX_W'(row_idx) : '0;
-      o_col_idx[lane_idx] = lane_valid ? COL_W'(int'(i_h_block_idx) * R + col_local) : '0;
-      o_edge_id[lane_idx] = lane_valid ? i_edge_id : '0;
-      o_row_bank[lane_idx] = lane_valid ? LANE_IDX_W'(row_idx % L) : '0;
-      o_row_addr[lane_idx] = lane_valid ? ROW_BANK_AW'(row_idx / L) : '0;
-      o_tile_offset[lane_idx] = lane_valid ? TILE_OFF_W'(offset) : '0;
+      if (lane_valid) begin
+        o_valid[out_bank] = 1'b1;
+        o_row_idx[out_bank] = ROW_IDX_W'(row_idx);
+        o_col_idx[out_bank] = COL_W'(int'(i_h_block_idx) * R + col_local);
+        o_edge_id[out_bank] = i_edge_id;
+        o_row_bank[out_bank] = out_bank;
+        o_row_addr[out_bank] = ROW_BANK_AW'(row_idx / L);
+        o_tile_offset[out_bank] = TILE_OFF_W'(offset);
+      end
     end
   end
 endmodule

@@ -10,6 +10,7 @@ import subprocess
 from pathlib import Path
 
 RTL_CORE = [
+    "rtl/reset_sync.sv",
     "rtl/h_matrix_mem.sv",
     "rtl/edge_addr_gen.sv",
     "rtl/tile_scheduler.sv",
@@ -430,7 +431,7 @@ module tb_bike_decoder_random;
     e_read_col_idx = '0;
     repeat (2) @(posedge clk);
     rst_n = 1'b1;
-    @(posedge clk);
+    repeat (3) @(posedge clk);
 
     load_h_matrix();
     load_syndrome();

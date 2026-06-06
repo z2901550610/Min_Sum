@@ -70,7 +70,7 @@ module tb_decoder_top;
       decode_cycles = 0;
       repeat (2) @(posedge clk);
       rst_n = 1'b1;
-      @(posedge clk);
+      repeat (3) @(posedge clk);
       checks_active = 1'b1;
     end
   endtask

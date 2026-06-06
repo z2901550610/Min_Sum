@@ -20,7 +20,7 @@ export BIKE_PARALLEL_L
 VECTOR_SVH := tb/generated/bike_demo_vectors.svh
 TOY_CASE_SVH := tb/generated/bike_toy_case.svh
 RTL_PKG := rtl/bike_pkg.sv
-RTL_CORE := rtl/h_matrix_mem.sv rtl/edge_addr_gen.sv rtl/tile_scheduler.sv rtl/check_state_ram.sv rtl/msg_sign_ram.sv rtl/tile_accum_ram.sv rtl/c2v_cache_ram.sv rtl/vnu_update.sv rtl/decision_ram.sv rtl/decoder_top.sv
+RTL_CORE := rtl/reset_sync.sv rtl/h_matrix_mem.sv rtl/edge_addr_gen.sv rtl/tile_scheduler.sv rtl/check_state_ram.sv rtl/msg_sign_ram.sv rtl/tile_accum_ram.sv rtl/c2v_cache_ram.sv rtl/vnu_update.sv rtl/decision_ram.sv rtl/decoder_top.sv
 RTL := $(RTL_PKG) $(RTL_CORE)
 MAINTAINED_SV := $(sort $(wildcard rtl/*.sv) $(wildcard tb/*.sv))
 BIKE_RANDOM_BASE_SEED ?= 1

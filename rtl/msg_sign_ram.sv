@@ -5,12 +5,10 @@ module msg_sign_ram
 (
     input  logic                   i_clk,
     input  logic                   i_c2v_valid[0:L-1],
-    input  logic [ LANE_IDX_W-1:0] i_c2v_row_bank[0:L-1],
     input  logic [ROW_BANK_AW-1:0] i_c2v_row_addr[0:L-1],
     input  logic [  EDGE_ID_W-1:0] i_c2v_edge_id[0:L-1],
     output logic                   o_c2v_sign[0:L-1],
     input  logic                   i_v2c_valid[0:L-1],
-    input  logic [ LANE_IDX_W-1:0] i_v2c_row_bank[0:L-1],
     input  logic [ROW_BANK_AW-1:0] i_v2c_row_addr[0:L-1],
     input  logic [  EDGE_ID_W-1:0] i_v2c_edge_id[0:L-1],
     input  logic                   i_v2c_sign[0:L-1]
@@ -21,10 +19,23 @@ module msg_sign_ram
 
   logic bank_rdata[0:L-1];
 
+  function automatic logic [SIGN_BANK_AW-1:0] edge_base(input  logic [EDGE_ID_W-1:0] edge_id);
+    logic [SIGN_BANK_AW-1:0] acc;
+    begin
+      acc = '0;
+      for (int bit_idx = 0; bit_idx < SIGN_BANK_AW; bit_idx++) begin
+        if (((ROW_SEG_SIZE >> bit_idx) & 1) != 0) begin
+          acc = acc + (SIGN_BANK_AW'(edge_id) << bit_idx);
+        end
+      end
+      edge_base = acc;
+    end
+  endfunction
+
   function automatic logic [SIGN_BANK_AW-1:0] bank_addr(input  logic [EDGE_ID_W-1:0] edge_id,
                                                         input  logic [ROW_BANK_AW-1:0] row_addr);
     begin
-      bank_addr = SIGN_BANK_AW'((int'(edge_id) * ROW_SEG_SIZE) + int'(row_addr));
+      bank_addr = edge_base(edge_id) + SIGN_BANK_AW'(row_addr);
     end
   endfunction
 
@@ -43,16 +54,14 @@ module msg_sign_ram
         bank_we = 1'b0;
         bank_waddr = '0;
         bank_wdata = 1'b0;
-        for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-          if (i_c2v_valid[lane_idx] && (int'(i_c2v_row_bank[lane_idx]) == bank_idx)) begin
-            bank_re = 1'b1;
-            bank_raddr = bank_addr(i_c2v_edge_id[lane_idx], i_c2v_row_addr[lane_idx]);
-          end
-          if (i_v2c_valid[lane_idx] && (int'(i_v2c_row_bank[lane_idx]) == bank_idx)) begin
-            bank_we = 1'b1;
-            bank_waddr = bank_addr(i_v2c_edge_id[lane_idx], i_v2c_row_addr[lane_idx]);
-            bank_wdata = i_v2c_sign[lane_idx];
-          end
+        if (i_c2v_valid[bank_idx]) begin
+          bank_re = 1'b1;
+          bank_raddr = bank_addr(i_c2v_edge_id[bank_idx], i_c2v_row_addr[bank_idx]);
+        end
+        if (i_v2c_valid[bank_idx]) begin
+          bank_we = 1'b1;
+          bank_waddr = bank_addr(i_v2c_edge_id[bank_idx], i_v2c_row_addr[bank_idx]);
+          bank_wdata = i_v2c_sign[bank_idx];
         end
       end
 
@@ -67,13 +76,8 @@ module msg_sign_ram
   endgenerate
 
   always_comb begin
-    for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-      o_c2v_sign[lane_idx] = 1'b0;
-      for (int bank_idx = 0; bank_idx < L; bank_idx++) begin
-        if (i_c2v_valid[lane_idx] && (int'(i_c2v_row_bank[lane_idx]) == bank_idx)) begin
-          o_c2v_sign[lane_idx] = bank_rdata[bank_idx];
-        end
-      end
+    for (int bank_idx = 0; bank_idx < L; bank_idx++) begin
+      o_c2v_sign[bank_idx] = i_c2v_valid[bank_idx] ? bank_rdata[bank_idx] : 1'b0;
     end
   end
 endmodule

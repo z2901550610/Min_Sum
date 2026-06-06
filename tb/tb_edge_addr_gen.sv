@@ -60,6 +60,17 @@ module tb_edge_addr_gen;
     end
   endfunction
 
+  function automatic bit has_tile_offset(input  logic [TILE_OFF_W-1:0] offset_value);
+    begin
+      has_tile_offset = 1'b0;
+      for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
+        if (valid[lane_idx] && (tile_offset[lane_idx] == TILE_OFF_W'(offset_value))) begin
+          has_tile_offset = 1'b1;
+        end
+      end
+    end
+  endfunction
+
   initial begin
     phase_valid = 1'b1;
     h_block_idx = '0;
@@ -68,29 +79,30 @@ module tb_edge_addr_gen;
     base_row = '0;
     edge_id = '0;
     #1;
-    for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-      if (!valid[lane_idx]) $fatal(1, "base_row=0 lane %0d should be valid", lane_idx);
-      if (row_idx[lane_idx] != ROW_IDX_W'(lane_idx)) $fatal(1, "base_row=0 row mismatch");
-      if (col_idx[lane_idx] != COL_W'(lane_idx)) $fatal(1, "base_row=0 col mismatch");
-      if (row_addr[lane_idx] != '0) $fatal(1, "base_row=0 row addr mismatch");
-      if (tile_offset[lane_idx] != TILE_OFF_W'(lane_idx)) $fatal(1, "tile offset mismatch");
+    for (int bank_idx = 0; bank_idx < L; bank_idx++) begin
+      if (!valid[bank_idx]) $fatal(1, "base_row=0 bank %0d should be valid", bank_idx);
+      if (row_idx[bank_idx] != ROW_IDX_W'(bank_idx)) $fatal(1, "base_row=0 row mismatch");
+      if (col_idx[bank_idx] != COL_W'(bank_idx)) $fatal(1, "base_row=0 col mismatch");
+      if (row_addr[bank_idx] != '0) $fatal(1, "base_row=0 row addr mismatch");
+      if (row_bank[bank_idx] != LANE_IDX_W'(bank_idx)) $fatal(1, "row bank mismatch");
+      if (tile_offset[bank_idx] != TILE_OFF_W'(bank_idx)) $fatal(1, "tile offset mismatch");
     end
     check_no_bank_conflict();
 
     base_row = ROW_IDX_W'(R - 1);
     q_seq = '0;
     #1;
-    if (!valid[0]) $fatal(1, "pre-wrap lane 0 should be valid");
-    for (int lane_idx = 1; lane_idx < L; lane_idx++) begin
-      if (valid[lane_idx]) $fatal(1, "pre-wrap lane %0d should be masked", lane_idx);
-    end
+    if (valid_count() != 1) $fatal(1, "pre-wrap should have one valid lane");
+    if (!has_tile_offset(0)) $fatal(1, "pre-wrap offset 0 should be valid");
     check_no_bank_conflict();
 
     q_seq = Q_SEQ_W'(1);
     #1;
-    if (valid[0]) $fatal(1, "post-wrap lane 0 should be masked");
-    for (int lane_idx = 1; lane_idx < L; lane_idx++) begin
-      if (!valid[lane_idx]) $fatal(1, "post-wrap lane %0d should be valid", lane_idx);
+    if (valid_count() != (L - 1)) $fatal(1, "post-wrap should have L-1 valid lanes");
+    for (int offset_idx = 1; offset_idx < L; offset_idx++) begin
+      if (!has_tile_offset(TILE_OFF_W'(offset_idx))) begin
+        $fatal(1, "post-wrap offset %0d should be valid", offset_idx);
+      end
     end
     check_no_bank_conflict();
 

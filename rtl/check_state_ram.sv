@@ -8,13 +8,11 @@ module check_state_ram
     input  logic                   i_c2v_pair_sel,
     input  logic                   i_c2v_epoch,
     input  logic                   i_c2v_valid[0:L-1],
-    input  logic [ LANE_IDX_W-1:0] i_c2v_row_bank[0:L-1],
     input  logic [ROW_BANK_AW-1:0] i_c2v_row_addr[0:L-1],
     output logic [ COMP_C2V_W-1:0] o_c2v_comp[0:L-1],
     input  logic                   i_v2c_pair_sel,
     input  logic                   i_v2c_epoch,
     input  logic                   i_v2c_valid[0:L-1],
-    input  logic [ LANE_IDX_W-1:0] i_v2c_row_bank[0:L-1],
     input  logic [ROW_BANK_AW-1:0] i_v2c_row_addr[0:L-1],
     output logic [ COMP_C2V_W-1:0] o_v2c_comp[0:L-1],
     input  logic [ COMP_C2V_W-1:0] i_v2c_wdata[0:L-1]
@@ -44,20 +42,16 @@ module check_state_ram
           v2c_bank_we = 1'b0;
           v2c_bank_waddr = '0;
           v2c_bank_wdata = '0;
-          for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-            if (i_c2v_valid[lane_idx] && (int'(i_c2v_pair_sel) == pair_idx) &&
-                (int'(i_c2v_row_bank[lane_idx]) == bank_idx)) begin
-              c2v_bank_re = 1'b1;
-              c2v_bank_raddr = i_c2v_row_addr[lane_idx];
-            end
-            if (i_v2c_valid[lane_idx] && (int'(i_v2c_pair_sel) == pair_idx) &&
-                (int'(i_v2c_row_bank[lane_idx]) == bank_idx)) begin
-              v2c_bank_re = 1'b1;
-              v2c_bank_raddr = i_v2c_row_addr[lane_idx];
-              v2c_bank_we = 1'b1;
-              v2c_bank_waddr = i_v2c_row_addr[lane_idx];
-              v2c_bank_wdata = i_v2c_wdata[lane_idx];
-            end
+          if (i_c2v_valid[bank_idx] && (int'(i_c2v_pair_sel) == pair_idx)) begin
+            c2v_bank_re = 1'b1;
+            c2v_bank_raddr = i_c2v_row_addr[bank_idx];
+          end
+          if (i_v2c_valid[bank_idx] && (int'(i_v2c_pair_sel) == pair_idx)) begin
+            v2c_bank_re = 1'b1;
+            v2c_bank_raddr = i_v2c_row_addr[bank_idx];
+            v2c_bank_we = 1'b1;
+            v2c_bank_waddr = i_v2c_row_addr[bank_idx];
+            v2c_bank_wdata = i_v2c_wdata[bank_idx];
           end
         end
 
@@ -88,17 +82,11 @@ module check_state_ram
   endgenerate
 
   always_comb begin
-    for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-      o_c2v_comp[lane_idx] = COMP_C2V_INIT;
-      o_v2c_comp[lane_idx] = COMP_C2V_INIT;
-      for (int bank_idx = 0; bank_idx < L; bank_idx++) begin
-        if (i_c2v_valid[lane_idx] && (int'(i_c2v_row_bank[lane_idx]) == bank_idx)) begin
-          o_c2v_comp[lane_idx] = c2v_bank_rdata[int'(i_c2v_pair_sel)][bank_idx];
-        end
-        if (i_v2c_valid[lane_idx] && (int'(i_v2c_row_bank[lane_idx]) == bank_idx)) begin
-          o_v2c_comp[lane_idx] = v2c_bank_rdata[int'(i_v2c_pair_sel)][bank_idx];
-        end
-      end
+    for (int bank_idx = 0; bank_idx < L; bank_idx++) begin
+      o_c2v_comp[bank_idx] = i_c2v_valid[bank_idx] ?
+                             c2v_bank_rdata[int'(i_c2v_pair_sel)][bank_idx] : COMP_C2V_INIT;
+      o_v2c_comp[bank_idx] = i_v2c_valid[bank_idx] ?
+                             v2c_bank_rdata[int'(i_v2c_pair_sel)][bank_idx] : COMP_C2V_INIT;
     end
   end
 endmodule

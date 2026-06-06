@@ -25,7 +25,7 @@ module h_matrix_mem
   localparam int H_ENTRY_COUNT = N0 * W;
   localparam int H_ENTRY_COUNT_W = (H_ENTRY_COUNT > 1) ? $clog2(H_ENTRY_COUNT + 1) : 1;
 
-  logic [      ROW_IDX_W-1:0] mem[0:N0-1][0:W-1];
+  (* ram_style = "distributed" *) logic [      ROW_IDX_W-1:0] mem[0:N0-1][0:W-1];
   logic                       loaded_bit[0:N0-1][0:W-1];
   logic [H_ENTRY_COUNT_W-1:0] loaded_count;
   logic                       error_reg;
@@ -67,7 +67,6 @@ module h_matrix_mem
       loaded_count <= '0;
       for (int h_block_idx = 0; h_block_idx < N0; h_block_idx++) begin
         for (int one_idx = 0; one_idx < W; one_idx++) begin
-          mem[h_block_idx][one_idx] <= '0;
           loaded_bit[h_block_idx][one_idx] <= 1'b0;
         end
       end

@@ -53,6 +53,7 @@ module decoder_top
   logic                          final_iter;
   logic                          iter_last_cycle;
   logic                          decode_start;
+  logic                          rst_n_sync;
 
   logic        [  ROW_IDX_W-1:0] c2v_h_base_row;
   logic        [  EDGE_ID_W-1:0] c2v_h_edge_id;
@@ -73,7 +74,7 @@ module decoder_top
   logic        [ROW_BANK_AW-1:0] v2c_row_addr[0:L-1];
   logic        [ TILE_OFF_W-1:0] v2c_tile_offset[0:L-1];
 
-  logic                          syndrome_mem[0:R-1];
+  (* ram_style = "distributed" *) logic                          syndrome_mem[0:R-1];
   logic                          comp_read_pair_sel;
   logic                          comp_write_pair_sel;
   logic                          pair_epoch[  0:1];
@@ -156,6 +157,12 @@ module decoder_top
   assign decode_start = i_start && o_h_loaded && !o_h_error;
   assign o_done = ctrl_done;
 
+  reset_sync u_reset_sync (
+      .i_clk  (i_clk),
+      .i_rst_n(i_rst_n),
+      .o_rst_n(rst_n_sync)
+  );
+
   always_comb begin
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
       logic        [COMP_C2V_W-1:0] c2v_comp_in;
@@ -200,7 +207,7 @@ module decoder_top
 
   h_matrix_mem u_h_mem (
       .i_clk(i_clk),
-      .i_rst_n(i_rst_n),
+      .i_rst_n(rst_n_sync),
       .i_clear(1'b0),
       .i_we(i_h_we),
       .i_h_block_idx(i_h_block_idx),
@@ -220,7 +227,7 @@ module decoder_top
 
   tile_scheduler u_tile_scheduler (
       .i_clk(i_clk),
-      .i_rst_n(i_rst_n),
+      .i_rst_n(rst_n_sync),
       .i_start(decode_start),
       .o_state(state),
       .o_c2v_valid(c2v_phase_active),
@@ -276,17 +283,15 @@ module decoder_top
 
   check_state_ram u_check_state_ram (
       .i_clk(i_clk),
-      .i_rst_n(i_rst_n),
+      .i_rst_n(rst_n_sync),
       .i_c2v_pair_sel(comp_read_pair_sel),
       .i_c2v_epoch(pair_epoch[comp_read_pair_sel]),
       .i_c2v_valid(c2v_valid),
-      .i_c2v_row_bank(c2v_row_bank),
       .i_c2v_row_addr(c2v_row_addr),
       .o_c2v_comp(c2v_comp_mem),
       .i_v2c_pair_sel(comp_write_pair_sel),
       .i_v2c_epoch(pair_epoch[comp_write_pair_sel]),
       .i_v2c_valid(v2c_valid),
-      .i_v2c_row_bank(v2c_row_bank),
       .i_v2c_row_addr(v2c_row_addr),
       .o_v2c_comp(v2c_comp_mem),
       .i_v2c_wdata(v2c_comp_next)
@@ -295,12 +300,10 @@ module decoder_top
   msg_sign_ram u_msg_sign_ram (
       .i_clk(i_clk),
       .i_c2v_valid(c2v_valid),
-      .i_c2v_row_bank(c2v_row_bank),
       .i_c2v_row_addr(c2v_row_addr),
       .i_c2v_edge_id(c2v_edge_id),
       .o_c2v_sign(c2v_sign_mem),
       .i_v2c_valid(v2c_valid),
-      .i_v2c_row_bank(v2c_row_bank),
       .i_v2c_row_addr(v2c_row_addr),
       .i_v2c_edge_id(v2c_edge_id),
       .i_v2c_sign(v2c_sign_wdata)
@@ -365,15 +368,12 @@ module decoder_top
   end
 `endif
 
-  always_ff @(posedge i_clk or negedge i_rst_n) begin
-    if (!i_rst_n) begin
+  always_ff @(posedge i_clk or negedge rst_n_sync) begin
+    if (!rst_n_sync) begin
       comp_read_pair_sel <= 1'b0;
       comp_write_pair_sel <= 1'b1;
       pair_epoch[0] <= 1'b0;
       pair_epoch[1] <= 1'b0;
-      for (int row_idx = 0; row_idx < R; row_idx++) begin
-        syndrome_mem[row_idx] <= 1'b0;
-      end
     end else begin
       if (i_syndrome_we) begin
         syndrome_mem[int'(i_syndrome_addr)] <= i_syndrome_wdata;

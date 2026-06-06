@@ -33,6 +33,7 @@
 ## Key Files
 
 - `Makefile` - canonical build/test entry points.
+- `docs/vivado_systemverilog_guidelines.md` - Vivado/SystemVerilog RTL, XDC, CDC, reset, resource inference, and verification rules for this repository.
 - `docs/references/cai-zhang-2023-low-complexity-parallel-min-sum-mdpc-decoder.pdf` - reference paper for the decoder architecture.
 - `rtl/bike_pkg.sv` - shared parameters/types.
 - `rtl/decoder_top.sv` - top-level decoder RTL.
@@ -44,4 +45,5 @@
 - Use `make format-rtl` for RTL/TB formatting. Declarations align direction/`logic`/packed width/name; unpacked dimensions stay tight to the name, e.g. `foo[0:L-1]`.
 - Keep terminal output compact; inspect saved logs only when a failure needs detail.
 - Do not delete generated files casually; generated SV headers are used by tests.
+- Follow `docs/vivado_systemverilog_guidelines.md` when generating, modifying, reviewing, or documenting RTL, testbenches, Vivado XDC, and synthesis scripts.
 - 文档和代码注释中只描述当前状态，不写与旧版本的对比（避免"不再"、"目前已改为"、"no longer"、"now"、"instead of"、"rather than"等表述）。设计文档应描述成品架构，而非修改记录。
