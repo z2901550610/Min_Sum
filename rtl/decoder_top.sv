@@ -66,6 +66,15 @@ module decoder_top
   logic        [ LANE_IDX_W-1:0] c2v_row_bank[0:L-1];
   logic        [ROW_BANK_AW-1:0] c2v_row_addr[0:L-1];
   logic        [ TILE_OFF_W-1:0] c2v_tile_offset[0:L-1];
+  logic                          c2v_valid_q[0:L-1];
+  logic        [  EDGE_ID_W-1:0] c2v_edge_id_q[0:L-1];
+  logic        [ TILE_OFF_W-1:0] c2v_tile_offset_q[0:L-1];
+  logic signed [      ACC_W-1:0] c2v_accum_rdata_q[0:L-1];
+  logic                          c2v_syndrome_q[0:L-1];
+  logic        [  ONE_IDX_W-1:0] c2v_one_idx_q;
+  logic        [    Q_SEQ_W-1:0] c2v_q_seq_q;
+  logic                          c2v_fill_buf_q;
+  logic                          c2v_iter_zero_q;
 
   logic                          v2c_valid[0:L-1];
   logic        [      COL_W-1:0] v2c_col_idx[0:L-1];
@@ -73,6 +82,15 @@ module decoder_top
   logic        [ LANE_IDX_W-1:0] v2c_row_bank[0:L-1];
   logic        [ROW_BANK_AW-1:0] v2c_row_addr[0:L-1];
   logic        [ TILE_OFF_W-1:0] v2c_tile_offset[0:L-1];
+  logic                          v2c_valid_q[0:L-1];
+  logic        [      COL_W-1:0] v2c_col_idx_q[0:L-1];
+  logic        [  EDGE_ID_W-1:0] v2c_edge_id_q[0:L-1];
+  logic        [ROW_BANK_AW-1:0] v2c_row_addr_q[0:L-1];
+  logic signed [      ACC_W-1:0] v2c_raw_sum_q[0:L-1];
+  logic        [  ONE_IDX_W-1:0] v2c_one_idx_q;
+  logic                          v2c_final_iter_q;
+  logic                          v2c_write_pair_sel_q;
+  logic                          v2c_write_epoch_q;
 
   logic                          syndrome_rdata[0:L-1];
   logic                          comp_read_pair_sel;
@@ -187,7 +205,7 @@ module decoder_top
       c2v_raw_next[lane_idx] = '0;
       v2c_comp_next[lane_idx] = COMP_C2V_INIT;
       v2c_sign_wdata[lane_idx] = v2c_msg_next[lane_idx][MSG_SIGN_BIT];
-      decision_we[lane_idx] = v2c_valid[lane_idx] && final_iter && (active_one_idx == '0);
+      decision_we[lane_idx] = v2c_valid_q[lane_idx] && v2c_final_iter_q && (v2c_one_idx_q == '0);
       decision_wdata[lane_idx] = v2c_posterior_next[lane_idx][ACC_W-1];
       c2v_comp_in = COMP_C2V_INIT;
       c2v_msg = '0;
@@ -195,24 +213,24 @@ module decoder_top
       c2v_accum_base = '0;
       v2c_comp_in = COMP_C2V_INIT;
 
-      if (c2v_valid[lane_idx]) begin
-        c2v_comp_in = (o_iter_count == '0) ? FIRST_ITER_C2V_COMP : c2v_comp_mem[lane_idx];
+      if (c2v_valid_q[lane_idx]) begin
+        c2v_comp_in = c2v_iter_zero_q ? FIRST_ITER_C2V_COMP : c2v_comp_mem[lane_idx];
         c2v_msg = cnu_b_msg(
           c2v_comp_in,
-          (o_iter_count == '0) ? 1'b0 : c2v_sign_mem[lane_idx],
-          syndrome_rdata[lane_idx],
-          c2v_edge_id[lane_idx]
+          c2v_iter_zero_q ? 1'b0 : c2v_sign_mem[lane_idx],
+          c2v_syndrome_q[lane_idx],
+          c2v_edge_id_q[lane_idx]
         );
         c2v_tc = ACC_W'($signed(signmag_to_tc(c2v_msg)));
         c2v_raw_next[lane_idx] = c2v_tc;
-        c2v_accum_base = (active_one_idx == '0) ? '0 : c2v_accum_rdata[lane_idx];
+        c2v_accum_base = (c2v_one_idx_q == '0) ? '0 : c2v_accum_rdata_q[lane_idx];
         c2v_accum_next[lane_idx] = c2v_accum_base + c2v_raw_next[lane_idx];
       end
 
-      if (v2c_valid[lane_idx]) begin
+      if (v2c_valid_q[lane_idx]) begin
         v2c_comp_in = v2c_comp_mem[lane_idx];
         v2c_comp_next[lane_idx] =
-            cnu_a_comp(v2c_comp_in, v2c_msg_next[lane_idx], v2c_edge_id[lane_idx]);
+            cnu_a_comp(v2c_comp_in, v2c_msg_next[lane_idx], v2c_edge_id_q[lane_idx]);
       end
     end
   end
@@ -306,7 +324,11 @@ module decoder_top
       .i_v2c_valid(v2c_valid),
       .i_v2c_row_addr(v2c_row_addr),
       .o_v2c_comp(v2c_comp_mem),
-      .i_v2c_wdata(v2c_comp_next)
+      .i_v2c_write_pair_sel(v2c_write_pair_sel_q),
+      .i_v2c_write_epoch(v2c_write_epoch_q),
+      .i_v2c_write_valid(v2c_valid_q),
+      .i_v2c_write_row_addr(v2c_row_addr_q),
+      .i_v2c_write_data(v2c_comp_next)
   );
 
   msg_sign_ram u_msg_sign_ram (
@@ -315,18 +337,21 @@ module decoder_top
       .i_c2v_row_addr(c2v_row_addr),
       .i_c2v_edge_id(c2v_edge_id),
       .o_c2v_sign(c2v_sign_mem),
-      .i_v2c_valid(v2c_valid),
-      .i_v2c_row_addr(v2c_row_addr),
-      .i_v2c_edge_id(v2c_edge_id),
+      .i_v2c_write_valid(v2c_valid_q),
+      .i_v2c_row_addr(v2c_row_addr_q),
+      .i_v2c_edge_id(v2c_edge_id_q),
       .i_v2c_sign(v2c_sign_wdata)
   );
 
   tile_accum_ram u_tile_accum_ram (
       .i_clk(i_clk),
-      .i_fill_buf(fill_buf),
-      .i_c2v_valid(c2v_valid),
-      .i_c2v_tile_offset(c2v_tile_offset),
+      .i_c2v_read_buf(fill_buf),
+      .i_c2v_read_valid(c2v_valid),
+      .i_c2v_read_tile_offset(c2v_tile_offset),
       .o_c2v_rdata(c2v_accum_rdata),
+      .i_c2v_write_buf(c2v_fill_buf_q),
+      .i_c2v_write_valid(c2v_valid_q),
+      .i_c2v_write_tile_offset(c2v_tile_offset_q),
       .i_c2v_wdata(c2v_accum_next),
       .i_active_buf(active_buf),
       .i_v2c_valid(v2c_valid),
@@ -336,11 +361,11 @@ module decoder_top
 
   c2v_cache_ram u_c2v_cache_ram (
       .i_clk(i_clk),
-      .i_fill_buf(fill_buf),
-      .i_c2v_valid(c2v_valid),
-      .i_c2v_one_idx(active_one_idx),
-      .i_c2v_q_seq(active_q_seq),
-      .i_c2v_wdata(c2v_raw_next),
+      .i_fill_buf(c2v_fill_buf_q),
+      .i_c2v_write_valid(c2v_valid_q),
+      .i_c2v_write_one_idx(c2v_one_idx_q),
+      .i_c2v_write_q_seq(c2v_q_seq_q),
+      .i_c2v_write_data(c2v_raw_next),
       .i_active_buf(active_buf),
       .i_v2c_valid(v2c_valid),
       .i_v2c_one_idx(active_one_idx),
@@ -349,8 +374,8 @@ module decoder_top
   );
 
   vnu_update u_vnu_update (
-      .i_valid(v2c_valid),
-      .i_raw_sum(v2c_raw_sum),
+      .i_valid(v2c_valid_q),
+      .i_raw_sum(v2c_raw_sum_q),
       .i_raw_c2v(v2c_raw_c2v),
       .o_posterior(v2c_posterior_next),
       .o_v2c_msg(v2c_msg_next)
@@ -359,7 +384,7 @@ module decoder_top
   decision_ram u_decision_ram (
       .i_clk(i_clk),
       .i_we(decision_we),
-      .i_write_col_idx(v2c_col_idx),
+      .i_write_col_idx(v2c_col_idx_q),
       .i_wdata(decision_wdata),
       .i_read_col_idx(i_e_read_col_idx),
       .o_rdata(o_e_rdata)
@@ -379,6 +404,52 @@ module decoder_top
     end
   end
 `endif
+
+  always_ff @(posedge i_clk or negedge rst_n_sync) begin
+    if (!rst_n_sync) begin
+      c2v_one_idx_q <= '0;
+      c2v_q_seq_q <= '0;
+      c2v_fill_buf_q <= 1'b0;
+      c2v_iter_zero_q <= 1'b0;
+      v2c_one_idx_q <= '0;
+      v2c_final_iter_q <= 1'b0;
+      v2c_write_pair_sel_q <= 1'b0;
+      v2c_write_epoch_q <= 1'b0;
+      for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
+        c2v_valid_q[lane_idx] <= 1'b0;
+        c2v_edge_id_q[lane_idx] <= '0;
+        c2v_tile_offset_q[lane_idx] <= '0;
+        c2v_accum_rdata_q[lane_idx] <= '0;
+        c2v_syndrome_q[lane_idx] <= 1'b0;
+        v2c_valid_q[lane_idx] <= 1'b0;
+        v2c_col_idx_q[lane_idx] <= '0;
+        v2c_edge_id_q[lane_idx] <= '0;
+        v2c_row_addr_q[lane_idx] <= '0;
+        v2c_raw_sum_q[lane_idx] <= '0;
+      end
+    end else begin
+      c2v_one_idx_q <= active_one_idx;
+      c2v_q_seq_q <= active_q_seq;
+      c2v_fill_buf_q <= fill_buf;
+      c2v_iter_zero_q <= (o_iter_count == '0);
+      v2c_one_idx_q <= active_one_idx;
+      v2c_final_iter_q <= final_iter;
+      v2c_write_pair_sel_q <= comp_write_pair_sel;
+      v2c_write_epoch_q <= pair_epoch[comp_write_pair_sel];
+      for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
+        c2v_valid_q[lane_idx] <= c2v_valid[lane_idx];
+        c2v_edge_id_q[lane_idx] <= c2v_edge_id[lane_idx];
+        c2v_tile_offset_q[lane_idx] <= c2v_tile_offset[lane_idx];
+        c2v_accum_rdata_q[lane_idx] <= c2v_accum_rdata[lane_idx];
+        c2v_syndrome_q[lane_idx] <= syndrome_rdata[lane_idx];
+        v2c_valid_q[lane_idx] <= v2c_valid[lane_idx];
+        v2c_col_idx_q[lane_idx] <= v2c_col_idx[lane_idx];
+        v2c_edge_id_q[lane_idx] <= v2c_edge_id[lane_idx];
+        v2c_row_addr_q[lane_idx] <= v2c_row_addr[lane_idx];
+        v2c_raw_sum_q[lane_idx] <= v2c_raw_sum[lane_idx];
+      end
+    end
+  end
 
   generate
     for (genvar bank_idx = 0; bank_idx < L; bank_idx++) begin : g_syndrome_bank

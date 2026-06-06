@@ -8,7 +8,7 @@ module msg_sign_ram
     input  logic [ROW_BANK_AW-1:0] i_c2v_row_addr[0:L-1],
     input  logic [  EDGE_ID_W-1:0] i_c2v_edge_id[0:L-1],
     output logic                   o_c2v_sign[0:L-1],
-    input  logic                   i_v2c_valid[0:L-1],
+    input  logic                   i_v2c_write_valid[0:L-1],
     input  logic [ROW_BANK_AW-1:0] i_v2c_row_addr[0:L-1],
     input  logic [  EDGE_ID_W-1:0] i_v2c_edge_id[0:L-1],
     input  logic                   i_v2c_sign[0:L-1]
@@ -16,8 +16,6 @@ module msg_sign_ram
 
   localparam int SIGN_BANK_DEPTH = ROW_EDGE_COUNT * ROW_SEG_SIZE;
   localparam int SIGN_BANK_AW = (SIGN_BANK_DEPTH > 1) ? $clog2(SIGN_BANK_DEPTH) : 1;
-
-  logic bank_rdata[0:L-1];
 
   function automatic logic [SIGN_BANK_AW-1:0] edge_base(input  logic [EDGE_ID_W-1:0] edge_id);
     logic [SIGN_BANK_AW-1:0] acc;
@@ -41,43 +39,33 @@ module msg_sign_ram
 
   generate
     for (genvar bank_idx = 0; bank_idx < L; bank_idx++) begin : g_bank
-      (* ram_style = "distributed" *) logic                    mem[0:SIGN_BANK_DEPTH-1];
-      logic                    bank_re;
+      (* ram_style = "block" *) logic                    mem[0:SIGN_BANK_DEPTH-1];
       logic [SIGN_BANK_AW-1:0] bank_raddr;
       logic                    bank_we;
       logic [SIGN_BANK_AW-1:0] bank_waddr;
       logic                    bank_wdata;
 
       always_comb begin
-        bank_re = 1'b0;
         bank_raddr = '0;
         bank_we = 1'b0;
         bank_waddr = '0;
         bank_wdata = 1'b0;
         if (i_c2v_valid[bank_idx]) begin
-          bank_re = 1'b1;
           bank_raddr = bank_addr(i_c2v_edge_id[bank_idx], i_c2v_row_addr[bank_idx]);
         end
-        if (i_v2c_valid[bank_idx]) begin
+        if (i_v2c_write_valid[bank_idx]) begin
           bank_we = 1'b1;
           bank_waddr = bank_addr(i_v2c_edge_id[bank_idx], i_v2c_row_addr[bank_idx]);
           bank_wdata = i_v2c_sign[bank_idx];
         end
       end
 
-      assign bank_rdata[bank_idx] = bank_re ? mem[bank_raddr] : 1'b0;
-
       always_ff @(posedge i_clk) begin
+        o_c2v_sign[bank_idx] <= i_c2v_valid[bank_idx] ? mem[bank_raddr] : 1'b0;
         if (bank_we) begin
           mem[bank_waddr] <= bank_wdata;
         end
       end
     end
   endgenerate
-
-  always_comb begin
-    for (int bank_idx = 0; bank_idx < L; bank_idx++) begin
-      o_c2v_sign[bank_idx] = i_c2v_valid[bank_idx] ? bank_rdata[bank_idx] : 1'b0;
-    end
-  end
 endmodule

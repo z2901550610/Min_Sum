@@ -4,10 +4,13 @@ module tile_accum_ram
   import bike_pkg::*;
 (
     input  logic                         i_clk,
-    input  logic                         i_fill_buf,
-    input  logic                         i_c2v_valid[0:L-1],
-    input  logic        [TILE_OFF_W-1:0] i_c2v_tile_offset[0:L-1],
+    input  logic                         i_c2v_read_buf,
+    input  logic                         i_c2v_read_valid[0:L-1],
+    input  logic        [TILE_OFF_W-1:0] i_c2v_read_tile_offset[0:L-1],
     output logic signed [     ACC_W-1:0] o_c2v_rdata[0:L-1],
+    input  logic                         i_c2v_write_buf,
+    input  logic                         i_c2v_write_valid[0:L-1],
+    input  logic        [TILE_OFF_W-1:0] i_c2v_write_tile_offset[0:L-1],
     input  logic signed [     ACC_W-1:0] i_c2v_wdata[0:L-1],
     input  logic                         i_active_buf,
     input  logic                         i_v2c_valid[0:L-1],
@@ -55,13 +58,17 @@ module tile_accum_ram
           c2v_bank_waddr = '0;
           c2v_bank_wdata = '0;
           for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-            if (i_c2v_valid[lane_idx] && (int'(i_fill_buf) == buf_idx) && (int'(offset_bank(
-                    i_c2v_tile_offset[lane_idx]
+            if (i_c2v_read_valid[lane_idx] && (int'(i_c2v_read_buf) == buf_idx) && (int'(offset_bank(
+                    i_c2v_read_tile_offset[lane_idx]
                 )) == bank_idx)) begin
               c2v_bank_re = 1'b1;
-              c2v_bank_raddr = offset_addr(i_c2v_tile_offset[lane_idx]);
+              c2v_bank_raddr = offset_addr(i_c2v_read_tile_offset[lane_idx]);
+            end
+            if (i_c2v_write_valid[lane_idx] && (int'(i_c2v_write_buf) == buf_idx) && (int'(offset_bank(
+                    i_c2v_write_tile_offset[lane_idx]
+                )) == bank_idx)) begin
               c2v_bank_we = 1'b1;
-              c2v_bank_waddr = offset_addr(i_c2v_tile_offset[lane_idx]);
+              c2v_bank_waddr = offset_addr(i_c2v_write_tile_offset[lane_idx]);
               c2v_bank_wdata = i_c2v_wdata[lane_idx];
             end
             if (i_v2c_valid[lane_idx] && (int'(i_active_buf) == buf_idx) && (int'(offset_bank(
@@ -90,10 +97,10 @@ module tile_accum_ram
       o_c2v_rdata[lane_idx] = '0;
       o_v2c_rdata[lane_idx] = '0;
       for (int bank_idx = 0; bank_idx < L; bank_idx++) begin
-        if (i_c2v_valid[lane_idx] && (int'(offset_bank(
-                i_c2v_tile_offset[lane_idx]
+        if (i_c2v_read_valid[lane_idx] && (int'(offset_bank(
+                i_c2v_read_tile_offset[lane_idx]
             )) == bank_idx)) begin
-          o_c2v_rdata[lane_idx] = c2v_bank_rdata[int'(i_fill_buf)][bank_idx];
+          o_c2v_rdata[lane_idx] = c2v_bank_rdata[int'(i_c2v_read_buf)][bank_idx];
         end
         if (i_v2c_valid[lane_idx] && (int'(offset_bank(
                 i_v2c_tile_offset[lane_idx]
