@@ -25,8 +25,12 @@ RTL := $(RTL_PKG) $(RTL_CORE)
 MAINTAINED_SV := $(sort $(wildcard rtl/*.sv) $(wildcard tb/*.sv))
 BIKE_RANDOM_BASE_SEED ?= 1
 BIKE_RANDOM_TRIALS ?= 1
-BIKE_RANDOM_ERROR_COUNT ?= 1
+BIKE_RANDOM_PARAM_SET ?= bike128
+BIKE_RANDOM_ERROR_COUNT ?=
 BIKE_RANDOM_PARALLEL_L ?= $(BIKE_PARALLEL_L)
+BIKE_RANDOM_C_TILE ?= 256
+BIKE_RANDOM_TIMEOUT_CYCLES ?= 800000
+BIKE_RANDOM_ERROR_ARG := $(if $(BIKE_RANDOM_ERROR_COUNT),--error-count $(BIKE_RANDOM_ERROR_COUNT),)
 
 .PHONY: all sim test test-unit test-integration test-bike-random format-rtl check-format-rtl lint-rtl vivado-synth FORCE
 
@@ -56,7 +60,7 @@ test-integration: $(TOY_CASE_SVH)
 	@$(SIM) ./obj_dir/Vtb_decoder_top +verilator+quiet
 
 test-bike-random:
-	@python3 scripts/run_bike_random.py --base-seed $(BIKE_RANDOM_BASE_SEED) --trials $(BIKE_RANDOM_TRIALS) --error-count $(BIKE_RANDOM_ERROR_COUNT) --parallel-l $(BIKE_RANDOM_PARALLEL_L) --verilator $(VERILATOR)
+	@python3 scripts/run_bike_random.py --param-set $(BIKE_RANDOM_PARAM_SET) --base-seed $(BIKE_RANDOM_BASE_SEED) --trials $(BIKE_RANDOM_TRIALS) $(BIKE_RANDOM_ERROR_ARG) --parallel-l $(BIKE_RANDOM_PARALLEL_L) --c-tile $(BIKE_RANDOM_C_TILE) --timeout-cycles $(BIKE_RANDOM_TIMEOUT_CYCLES) --verilator $(VERILATOR)
 
 format-rtl:
 	@$(VERIBLE_FORMAT) $(VERIBLE_FORMAT_FLAGS) --inplace $(MAINTAINED_SV)

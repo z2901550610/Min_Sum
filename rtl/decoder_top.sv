@@ -38,6 +38,7 @@ module decoder_top
   logic        [  TILE_ID_W-1:0] unused_v2c_tile_linear;
   logic                          unused_iter_first_cycle;
   logic        [      COL_W-1:0] unused_c2v_col_idx[0:L-1];
+  logic        [  ROW_IDX_W-1:0] unused_c2v_row_idx[0:L-1];
   logic        [  ROW_IDX_W-1:0] unused_v2c_row_idx[0:L-1];
   /* verilator lint_on UNUSEDSIGNAL */
   logic                          c2v_phase_active;
@@ -61,7 +62,6 @@ module decoder_top
   logic        [  EDGE_ID_W-1:0] v2c_h_edge_id;
 
   logic                          c2v_valid[0:L-1];
-  logic        [  ROW_IDX_W-1:0] c2v_row_idx[0:L-1];
   logic        [  EDGE_ID_W-1:0] c2v_edge_id[0:L-1];
   logic        [ LANE_IDX_W-1:0] c2v_row_bank[0:L-1];
   logic        [ROW_BANK_AW-1:0] c2v_row_addr[0:L-1];
@@ -74,7 +74,7 @@ module decoder_top
   logic        [ROW_BANK_AW-1:0] v2c_row_addr[0:L-1];
   logic        [ TILE_OFF_W-1:0] v2c_tile_offset[0:L-1];
 
-  (* ram_style = "distributed" *) logic                          syndrome_mem[0:R-1];
+  logic                          syndrome_rdata[0:L-1];
   logic                          comp_read_pair_sel;
   logic                          comp_write_pair_sel;
   logic                          pair_epoch[  0:1];
@@ -105,6 +105,18 @@ module decoder_top
       end else begin
         signmag_to_tc = MSG_W'($signed({1'b0, mag}));
       end
+    end
+  endfunction
+
+  function automatic logic [LANE_IDX_W-1:0] row_bank_of(input  logic [ROW_IDX_W-1:0] row_idx);
+    begin
+      row_bank_of = LANE_IDX_W'(int'(row_idx) % L);
+    end
+  endfunction
+
+  function automatic logic [ROW_BANK_AW-1:0] row_addr_of(input  logic [ROW_IDX_W-1:0] row_idx);
+    begin
+      row_addr_of = ROW_BANK_AW'(int'(row_idx) / L);
     end
   endfunction
 
@@ -188,7 +200,7 @@ module decoder_top
         c2v_msg = cnu_b_msg(
           c2v_comp_in,
           (o_iter_count == '0) ? 1'b0 : c2v_sign_mem[lane_idx],
-          syndrome_mem[int'(c2v_row_idx[lane_idx])],
+          syndrome_rdata[lane_idx],
           c2v_edge_id[lane_idx]
         );
         c2v_tc = ACC_W'($signed(signmag_to_tc(c2v_msg)));
@@ -257,7 +269,7 @@ module decoder_top
       .i_base_row(c2v_h_base_row),
       .i_edge_id(c2v_h_edge_id),
       .o_valid(c2v_valid),
-      .o_row_idx(c2v_row_idx),
+      .o_row_idx(unused_c2v_row_idx),
       .o_col_idx(unused_c2v_col_idx),
       .o_edge_id(c2v_edge_id),
       .o_row_bank(c2v_row_bank),
@@ -368,6 +380,20 @@ module decoder_top
   end
 `endif
 
+  generate
+    for (genvar bank_idx = 0; bank_idx < L; bank_idx++) begin : g_syndrome_bank
+      (* ram_style = "distributed" *) logic mem[0:ROW_SEG_SIZE-1];
+
+      assign syndrome_rdata[bank_idx] = c2v_valid[bank_idx] ? mem[c2v_row_addr[bank_idx]] : 1'b0;
+
+      always_ff @(posedge i_clk) begin
+        if (i_syndrome_we && (int'(row_bank_of(i_syndrome_addr)) == bank_idx)) begin
+          mem[row_addr_of(i_syndrome_addr)] <= i_syndrome_wdata;
+        end
+      end
+    end
+  endgenerate
+
   always_ff @(posedge i_clk or negedge rst_n_sync) begin
     if (!rst_n_sync) begin
       comp_read_pair_sel <= 1'b0;
@@ -375,10 +401,6 @@ module decoder_top
       pair_epoch[0] <= 1'b0;
       pair_epoch[1] <= 1'b0;
     end else begin
-      if (i_syndrome_we) begin
-        syndrome_mem[int'(i_syndrome_addr)] <= i_syndrome_wdata;
-      end
-
       if (decode_start) begin
         comp_read_pair_sel <= 1'b0;
         comp_write_pair_sel <= 1'b1;
