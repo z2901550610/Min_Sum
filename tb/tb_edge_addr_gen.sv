@@ -1,13 +1,13 @@
 `timescale 1ns / 1ps
 
-module tb_support_row_col_gen;
+module tb_edge_addr_gen;
   import bike_pkg::*;
 
   logic                   phase_valid;
   logic [  H_BLOCK_W-1:0] h_block_idx;
   logic [ TILE_IDX_W-1:0] tile_idx;
   logic [    Q_SEQ_W-1:0] q_seq;
-  logic [  ROW_IDX_W-1:0] support_row;
+  logic [  ROW_IDX_W-1:0] base_row;
   logic [  EDGE_ID_W-1:0] edge_id;
   logic                   valid[0:L-1];
   logic [  ROW_IDX_W-1:0] row_idx[0:L-1];
@@ -20,12 +20,12 @@ module tb_support_row_col_gen;
   logic [  EDGE_ID_W-1:0] observed_lane_edge_id[0:L-1];
   /* verilator lint_on UNUSEDSIGNAL */
 
-  support_row_col_gen dut (
+  edge_addr_gen dut (
       .i_phase_valid(phase_valid),
       .i_h_block_idx(h_block_idx),
       .i_tile_idx(tile_idx),
       .i_q_seq(q_seq),
-      .i_support_row(support_row),
+      .i_base_row(base_row),
       .i_edge_id(edge_id),
       .o_valid(valid),
       .o_row_idx(row_idx),
@@ -65,19 +65,19 @@ module tb_support_row_col_gen;
     h_block_idx = '0;
     tile_idx = '0;
     q_seq = '0;
-    support_row = '0;
+    base_row = '0;
     edge_id = '0;
     #1;
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-      if (!valid[lane_idx]) $fatal(1, "support=0 lane %0d should be valid", lane_idx);
-      if (row_idx[lane_idx] != ROW_IDX_W'(lane_idx)) $fatal(1, "support=0 row mismatch");
-      if (col_idx[lane_idx] != COL_W'(lane_idx)) $fatal(1, "support=0 col mismatch");
-      if (row_addr[lane_idx] != '0) $fatal(1, "support=0 row addr mismatch");
+      if (!valid[lane_idx]) $fatal(1, "base_row=0 lane %0d should be valid", lane_idx);
+      if (row_idx[lane_idx] != ROW_IDX_W'(lane_idx)) $fatal(1, "base_row=0 row mismatch");
+      if (col_idx[lane_idx] != COL_W'(lane_idx)) $fatal(1, "base_row=0 col mismatch");
+      if (row_addr[lane_idx] != '0) $fatal(1, "base_row=0 row addr mismatch");
       if (tile_offset[lane_idx] != TILE_OFF_W'(lane_idx)) $fatal(1, "tile offset mismatch");
     end
     check_no_bank_conflict();
 
-    support_row = ROW_IDX_W'(R - 1);
+    base_row = ROW_IDX_W'(R - 1);
     q_seq = '0;
     #1;
     if (!valid[0]) $fatal(1, "pre-wrap lane 0 should be valid");
@@ -94,7 +94,7 @@ module tb_support_row_col_gen;
     end
     check_no_bank_conflict();
 
-    support_row = '0;
+    base_row = '0;
     q_seq = Q_SEQ_W'(Q_TILE - 1);
     #1;
     if (valid_count() != 0) $fatal(1, "guard dummy should have no valid lanes");
@@ -109,7 +109,7 @@ module tb_support_row_col_gen;
     end
     check_no_bank_conflict();
 
-    $display("tb_support_row_col_gen PASS");
+    $display("tb_edge_addr_gen PASS");
     $finish;
   end
 endmodule

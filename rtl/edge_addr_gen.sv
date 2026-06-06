@@ -1,13 +1,13 @@
 `timescale 1ns / 1ps
-// Support-major row/column vector generator with one fixed guard cycle.
-module support_row_col_gen
+// L-lane edge address generator with one fixed guard cycle.
+module edge_addr_gen
   import bike_pkg::*;
 (
     input  logic                   i_phase_valid,
     input  logic [  H_BLOCK_W-1:0] i_h_block_idx,
     input  logic [ TILE_IDX_W-1:0] i_tile_idx,
     input  logic [    Q_SEQ_W-1:0] i_q_seq,
-    input  logic [  ROW_IDX_W-1:0] i_support_row,
+    input  logic [  ROW_IDX_W-1:0] i_base_row,
     input  logic [  EDGE_ID_W-1:0] i_edge_id,
     output logic                   o_valid[0:L-1],
     output logic [  ROW_IDX_W-1:0] o_row_idx[0:L-1],
@@ -32,7 +32,7 @@ module support_row_col_gen
     tile_base = int'(i_tile_idx) * C_TILE;
     tile_cols = (tile_base + C_TILE > R) ? (R - tile_base) : C_TILE;
     tile_end = tile_base + tile_cols;
-    wrap_col = R - int'(i_support_row);
+    wrap_col = R - int'(i_base_row);
     wrap_offset = wrap_col - tile_base;
     wrap_q = (wrap_offset >= 0) ? (wrap_offset / L) : 0;
     wrap_lane = (wrap_offset >= 0) ? (wrap_offset % L) : 0;
@@ -57,7 +57,7 @@ module support_row_col_gen
 
       offset = q_idx * L + lane_idx;
       col_local = tile_base + offset;
-      row_raw = col_local + int'(i_support_row);
+      row_raw = col_local + int'(i_base_row);
       row_idx = (row_raw >= R) ? (row_raw - R) : row_raw;
       lane_valid = i_phase_valid && (int'(i_q_seq) < Q_TILE) && (q_idx < Q_BASE) &&
                    (offset < tile_cols);

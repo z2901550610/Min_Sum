@@ -2,7 +2,7 @@
 
 ## 固定窗口
 
-调度器按 support-major tile 顺序执行。一个 tile 的逻辑坐标为：
+调度器按固定 tile 顺序执行。一个 tile 的逻辑坐标为：
 
 ```text
 tile_linear = h_block_idx * TILE_COUNT + tile_idx
@@ -43,7 +43,7 @@ T_DECODE = I_MAX * (TILES_TOTAL + 1) * W * Q_TILE
 
 ## 计数器
 
-`support_major_ctrl` 维护：
+`tile_scheduler` 维护：
 
 | 计数器 | 范围 |
 | --- | --- |
@@ -86,14 +86,14 @@ active_buf = ~window_idx[0]
 
 ## 启动与完成
 
-`decoder_top` 对启动做 support gate：
+`decoder_top` 对启动做 H load gate：
 
 ```text
-decode_start = i_start && o_support_loaded && !o_support_error
+decode_start = i_start && o_h_loaded && !o_h_error
 ```
 
-调度器收到 `decode_start` 后从迭代 0、窗口 0、support 项 0、`q_seq=0` 开始。达到第 `I_MAX` 轮最后一个窗口最后一个 `q_seq` 时拉高 `o_done`。
+调度器收到 `decode_start` 后从迭代 0、窗口 0、H 第一列项 0、`q_seq=0` 开始。达到第 `I_MAX` 轮最后一个窗口最后一个 `q_seq` 时拉高 `o_done`。
 
 ## 常量时间属性
 
-support 项数、tile 数、guard 周期数、迭代轮数都由公开参数决定。support 值只影响 lane valid mask 和 wrap split 位置，不影响窗口数量。
+H 第一列项数、tile 数、guard 周期数、迭代轮数都由公开参数决定。H base row 只影响 lane valid mask 和 wrap split 位置，不影响窗口数量。

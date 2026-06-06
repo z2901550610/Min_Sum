@@ -12,9 +12,9 @@ make test-bike-random BIKE_RANDOM_TRIALS=1
 `make test-unit` 覆盖：
 
 - message codec
-- support-major 控制器
-- support row/col 生成器
-- support 存储
+- tile scheduler
+- edge address generator
+- H matrix RAM
 - CNU_A/CNU_B 参考小模块
 
 `make test-integration` 使用 toy 参数运行完整 `decoder_top`。
@@ -37,7 +37,7 @@ python3 scripts/run_bike_random.py \
 脚本为每个 seed 生成：
 
 - 外部 `bike_pkg.sv`
-- support fixture
+- H first-column fixture
 - syndrome position list
 - target error position list
 - self-checking SystemVerilog testbench
@@ -46,8 +46,8 @@ python3 scripts/run_bike_random.py \
 
 完整顶层测试执行：
 
-1. 写入全部 support 项。
-2. 检查 `o_support_loaded` 和 `o_support_error`。
+1. 写入全部 H 第一列项。
+2. 检查 `o_h_loaded` 和 `o_h_error`。
 3. 写入 syndrome。
 4. 拉高 `i_start` 一个周期。
 5. 等待固定轮数完成。

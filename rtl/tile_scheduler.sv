@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
-// Fixed-window support-major tile scheduler.
-module support_major_ctrl
+// Fixed-window tile scheduler.
+module tile_scheduler
   import bike_pkg::*;
 (
     input  logic                   i_clk,

@@ -20,7 +20,7 @@ export BIKE_PARALLEL_L
 VECTOR_SVH := tb/generated/bike_demo_vectors.svh
 TOY_CASE_SVH := tb/generated/bike_toy_case.svh
 RTL_PKG := rtl/bike_pkg.sv
-RTL_CORE := rtl/support_mem.sv rtl/support_row_col_gen.sv rtl/support_major_ctrl.sv rtl/decoder_top.sv
+RTL_CORE := rtl/h_matrix_mem.sv rtl/edge_addr_gen.sv rtl/tile_scheduler.sv rtl/check_state_ram.sv rtl/msg_sign_ram.sv rtl/tile_accum_ram.sv rtl/c2v_cache_ram.sv rtl/vnu_update.sv rtl/decoder_top.sv
 RTL := $(RTL_PKG) $(RTL_CORE)
 MAINTAINED_SV := $(sort $(wildcard rtl/*.sv) $(wildcard tb/*.sv))
 BIKE_RANDOM_BASE_SEED ?= 1
@@ -40,12 +40,12 @@ test: test-unit test-integration
 test-unit: $(VECTOR_SVH)
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_msg_codec rtl/bike_pkg.sv rtl/msg_signmag_to_tc.sv rtl/msg_tc_to_signmag_sat.sv tb/tb_msg_codec.sv
 	@$(SIM) ./obj_dir/Vtb_msg_codec +verilator+quiet
-	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_support_major_ctrl rtl/bike_pkg.sv rtl/support_major_ctrl.sv tb/tb_support_major_ctrl.sv
-	@$(SIM) ./obj_dir/Vtb_support_major_ctrl +verilator+quiet
-	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_support_row_col_gen rtl/bike_pkg.sv rtl/support_row_col_gen.sv tb/tb_support_row_col_gen.sv
-	@$(SIM) ./obj_dir/Vtb_support_row_col_gen +verilator+quiet
-	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_support_mem rtl/bike_pkg.sv rtl/support_mem.sv tb/tb_support_mem.sv
-	@$(SIM) ./obj_dir/Vtb_support_mem +verilator+quiet
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_tile_scheduler rtl/bike_pkg.sv rtl/tile_scheduler.sv tb/tb_tile_scheduler.sv
+	@$(SIM) ./obj_dir/Vtb_tile_scheduler +verilator+quiet
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_edge_addr_gen rtl/bike_pkg.sv rtl/edge_addr_gen.sv tb/tb_edge_addr_gen.sv
+	@$(SIM) ./obj_dir/Vtb_edge_addr_gen +verilator+quiet
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_h_matrix_mem rtl/bike_pkg.sv rtl/h_matrix_mem.sv tb/tb_h_matrix_mem.sv
+	@$(SIM) ./obj_dir/Vtb_h_matrix_mem +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_cnu_a rtl/bike_pkg.sv rtl/cnu_a.sv tb/tb_cnu_a.sv
 	@$(SIM) ./obj_dir/Vtb_cnu_a +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_cnu_b rtl/bike_pkg.sv rtl/cnu_b.sv tb/tb_cnu_b.sv

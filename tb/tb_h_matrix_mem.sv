@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 
-module tb_support_mem;
+module tb_h_matrix_mem;
   import bike_pkg::*;
 
   logic                 clk;
@@ -9,29 +9,29 @@ module tb_support_mem;
   logic                 we;
   logic [H_BLOCK_W-1:0] h_block_idx;
   logic [ONE_IDX_W-1:0] one_idx;
-  logic [ROW_IDX_W-1:0] support_row;
-  logic [ROW_IDX_W-1:0] c2v_support_row;
+  logic [ROW_IDX_W-1:0] base_row;
+  logic [ROW_IDX_W-1:0] c2v_base_row;
   logic [EDGE_ID_W-1:0] c2v_edge_id;
-  logic [ROW_IDX_W-1:0] v2c_support_row;
+  logic [ROW_IDX_W-1:0] v2c_base_row;
   logic [EDGE_ID_W-1:0] v2c_edge_id;
   logic                 loaded;
   logic                 error;
 
-  support_mem dut (
+  h_matrix_mem dut (
       .i_clk(clk),
       .i_rst_n(rst_n),
       .i_clear(clear),
       .i_we(we),
       .i_h_block_idx(h_block_idx),
       .i_one_idx(one_idx),
-      .i_support_row(support_row),
+      .i_base_row(base_row),
       .i_c2v_h_block_idx(H_BLOCK_W'(0)),
       .i_c2v_one_idx(ONE_IDX_W'(1 % W)),
       .i_v2c_h_block_idx(H_BLOCK_W'(N0 - 1)),
       .i_v2c_one_idx(ONE_IDX_W'(W - 1)),
-      .o_c2v_support_row(c2v_support_row),
+      .o_c2v_base_row(c2v_base_row),
       .o_c2v_edge_id(c2v_edge_id),
-      .o_v2c_support_row(v2c_support_row),
+      .o_v2c_base_row(v2c_base_row),
       .o_v2c_edge_id(v2c_edge_id),
       .o_loaded(loaded),
       .o_error(error)
@@ -46,7 +46,7 @@ module tb_support_mem;
     we = 1'b0;
     h_block_idx = '0;
     one_idx = '0;
-    support_row = '0;
+    base_row = '0;
     repeat (2) @(posedge clk);
     rst_n = 1'b1;
     @(posedge clk);
@@ -56,20 +56,20 @@ module tb_support_mem;
         we = 1'b1;
         h_block_idx = H_BLOCK_W'(h);
         one_idx = ONE_IDX_W'(k);
-        support_row = ROW_IDX_W'((h * W + k) % R);
+        base_row = ROW_IDX_W'((h * W + k) % R);
         @(posedge clk);
       end
     end
     we = 1'b0;
     #1;
-    if (!loaded) $fatal(1, "support_mem loaded flag mismatch");
-    if (error) $fatal(1, "support_mem unexpected error");
-    if (c2v_support_row != ROW_IDX_W'(1 % R)) $fatal(1, "support_mem c2v read mismatch");
-    if (c2v_edge_id != EDGE_ID_W'(1 % W)) $fatal(1, "support_mem c2v edge mismatch");
-    if (v2c_support_row != ROW_IDX_W'(((N0 - 1) * W + (W - 1)) % R))
-      $fatal(1, "support_mem v2c read mismatch");
+    if (!loaded) $fatal(1, "h_matrix_mem loaded flag mismatch");
+    if (error) $fatal(1, "h_matrix_mem unexpected error");
+    if (c2v_base_row != ROW_IDX_W'(1 % R)) $fatal(1, "h_matrix_mem c2v read mismatch");
+    if (c2v_edge_id != EDGE_ID_W'(1 % W)) $fatal(1, "h_matrix_mem c2v edge mismatch");
+    if (v2c_base_row != ROW_IDX_W'(((N0 - 1) * W + (W - 1)) % R))
+      $fatal(1, "h_matrix_mem v2c read mismatch");
     if (v2c_edge_id != EDGE_ID_W'((N0 - 1) * W + (W - 1)))
-      $fatal(1, "support_mem v2c edge mismatch");
+      $fatal(1, "h_matrix_mem v2c edge mismatch");
 
     clear = 1'b1;
     @(posedge clk);
@@ -77,16 +77,16 @@ module tb_support_mem;
     we = 1'b1;
     h_block_idx = '0;
     one_idx = '0;
-    support_row = ROW_IDX_W'(2 % R);
+    base_row = ROW_IDX_W'(2 % R);
     @(posedge clk);
-    one_idx = ONE_IDX_W'(1 % W);
-    support_row = ROW_IDX_W'(2 % R);
+    one_idx  = ONE_IDX_W'(1 % W);
+    base_row = ROW_IDX_W'(2 % R);
     @(posedge clk);
     we = 1'b0;
     #1;
-    if (!error) $fatal(1, "support_mem duplicate was not detected");
+    if (!error) $fatal(1, "h_matrix_mem duplicate was not detected");
 
-    $display("tb_support_mem PASS");
+    $display("tb_h_matrix_mem PASS");
     $finish;
   end
 endmodule

@@ -13,12 +13,12 @@ module tb_decoder_top;
   logic                 syndrome_we;
   logic [ROW_IDX_W-1:0] syndrome_addr;
   logic                 syndrome_wdata;
-  logic                 support_we;
-  logic [H_BLOCK_W-1:0] support_h_block_idx;
-  logic [ONE_IDX_W-1:0] support_one_idx;
-  logic [ROW_IDX_W-1:0] support_row;
-  logic                 support_loaded;
-  logic                 support_error;
+  logic                 h_we;
+  logic [H_BLOCK_W-1:0] h_load_block_idx;
+  logic [ONE_IDX_W-1:0] h_load_one_idx;
+  logic [ROW_IDX_W-1:0] h_base_row;
+  logic                 h_loaded;
+  logic                 h_error;
   logic                 done;
   logic [    COL_W-1:0] e_read_col_idx;
   logic                 e_rdata;
@@ -37,13 +37,13 @@ module tb_decoder_top;
       .i_syndrome_we(syndrome_we),
       .i_syndrome_addr(syndrome_addr),
       .i_syndrome_wdata(syndrome_wdata),
-      .i_support_we(support_we),
-      .i_support_h_block_idx(support_h_block_idx),
-      .i_support_one_idx(support_one_idx),
-      .i_support_row(support_row),
+      .i_h_we(h_we),
+      .i_h_block_idx(h_load_block_idx),
+      .i_h_one_idx(h_load_one_idx),
+      .i_h_base_row(h_base_row),
       .i_e_read_col_idx(e_read_col_idx),
-      .o_support_loaded(support_loaded),
-      .o_support_error(support_error),
+      .o_h_loaded(h_loaded),
+      .o_h_error(h_error),
       .o_done(done),
       .o_e_rdata(e_rdata),
       .o_iter_count(iter_count)
@@ -59,10 +59,10 @@ module tb_decoder_top;
       syndrome_we = 1'b0;
       syndrome_addr = '0;
       syndrome_wdata = 1'b0;
-      support_we = 1'b0;
-      support_h_block_idx = '0;
-      support_one_idx = '0;
-      support_row = '0;
+      h_we = 1'b0;
+      h_load_block_idx = '0;
+      h_load_one_idx = '0;
+      h_base_row = '0;
       e_read_col_idx = '0;
       saw_overlap = 1'b0;
       saw_guard_dummy = 1'b0;
@@ -75,21 +75,21 @@ module tb_decoder_top;
     end
   endtask
 
-  task automatic load_supports;
+  task automatic load_h_matrix;
     begin
       for (int h_block_idx = 0; h_block_idx < N0; h_block_idx++) begin
         for (int one_idx = 0; one_idx < W; one_idx++) begin
-          support_we = 1'b1;
-          support_h_block_idx = H_BLOCK_W'(h_block_idx);
-          support_one_idx = ONE_IDX_W'(one_idx);
-          support_row = ROW_IDX_W'(TOY_CASE_SUPPORTS[h_block_idx][one_idx]);
+          h_we = 1'b1;
+          h_load_block_idx = H_BLOCK_W'(h_block_idx);
+          h_load_one_idx = ONE_IDX_W'(one_idx);
+          h_base_row = ROW_IDX_W'(TOY_CASE_H_BASE_ROWS[h_block_idx][one_idx]);
           @(posedge clk);
         end
       end
-      support_we = 1'b0;
+      h_we = 1'b0;
       @(posedge clk);
-      if (!support_loaded) $fatal(1, "support load did not complete");
-      if (support_error) $fatal(1, "support load reported error");
+      if (!h_loaded) $fatal(1, "H matrix load did not complete");
+      if (h_error) $fatal(1, "H matrix load reported error");
     end
   endtask
 
@@ -135,7 +135,7 @@ module tb_decoder_top;
           h_block_idx = var_idx / R;
           col_idx_i   = var_idx % R;
           for (int one_idx = 0; one_idx < W; one_idx++) begin
-            row_idx_i = (TOY_CASE_SUPPORTS[h_block_idx][one_idx] + col_idx_i) % R;
+            row_idx_i = (TOY_CASE_H_BASE_ROWS[h_block_idx][one_idx] + col_idx_i) % R;
             residual[row_idx_i] = residual[row_idx_i] ^ 1'b1;
           end
         end
@@ -180,7 +180,7 @@ module tb_decoder_top;
         ALPHA_SHIFT_1 != TOY_CASE_ALPHA_SHIFT_1) begin
       $fatal(1, "toy fixture parameter mismatch");
     end
-    load_supports();
+    load_h_matrix();
     load_syndrome(TOY_CASE_SYNDROME);
 
     start = 1'b1;
@@ -201,7 +201,7 @@ module tb_decoder_top;
       $fatal(1, "toy case iterations mismatch: got %0d exp %0d", iter_count, I_MAX);
     if (decode_cycles != expected_main_cycles)
       $fatal(1, "fixed cycle mismatch: got %0d exp %0d", decode_cycles, expected_main_cycles);
-    if (!saw_overlap) $fatal(1, "support-major tile overlap was not observed");
+    if (!saw_overlap) $fatal(1, "tile overlap was not observed");
     if (!saw_guard_dummy) $fatal(1, "guard dummy cycle was not observed");
     $display("toy case residual=%b exact=%0d cycles=%0d", final_residual, exact_match,
              decode_cycles);

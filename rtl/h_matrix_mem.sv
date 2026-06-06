@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
-// First-column support storage with fixed-depth duplicate tracking.
-module support_mem
+// H first-column index RAM with fixed-depth duplicate tracking.
+module h_matrix_mem
   import bike_pkg::*;
 (
     input  logic                 i_clk,
@@ -9,25 +9,25 @@ module support_mem
     input  logic                 i_we,
     input  logic [H_BLOCK_W-1:0] i_h_block_idx,
     input  logic [ONE_IDX_W-1:0] i_one_idx,
-    input  logic [ROW_IDX_W-1:0] i_support_row,
+    input  logic [ROW_IDX_W-1:0] i_base_row,
     input  logic [H_BLOCK_W-1:0] i_c2v_h_block_idx,
     input  logic [ONE_IDX_W-1:0] i_c2v_one_idx,
     input  logic [H_BLOCK_W-1:0] i_v2c_h_block_idx,
     input  logic [ONE_IDX_W-1:0] i_v2c_one_idx,
-    output logic [ROW_IDX_W-1:0] o_c2v_support_row,
+    output logic [ROW_IDX_W-1:0] o_c2v_base_row,
     output logic [EDGE_ID_W-1:0] o_c2v_edge_id,
-    output logic [ROW_IDX_W-1:0] o_v2c_support_row,
+    output logic [ROW_IDX_W-1:0] o_v2c_base_row,
     output logic [EDGE_ID_W-1:0] o_v2c_edge_id,
     output logic                 o_loaded,
     output logic                 o_error
 );
 
-  localparam int SUPPORT_COUNT = N0 * W;
-  localparam int SUPPORT_COUNT_W = (SUPPORT_COUNT > 1) ? $clog2(SUPPORT_COUNT + 1) : 1;
+  localparam int H_ENTRY_COUNT = N0 * W;
+  localparam int H_ENTRY_COUNT_W = (H_ENTRY_COUNT > 1) ? $clog2(H_ENTRY_COUNT + 1) : 1;
 
   logic [      ROW_IDX_W-1:0] mem[0:N0-1][0:W-1];
   logic                       loaded_bit[0:N0-1][0:W-1];
-  logic [SUPPORT_COUNT_W-1:0] loaded_count;
+  logic [H_ENTRY_COUNT_W-1:0] loaded_count;
   logic                       error_reg;
   logic                       duplicate_seen;
   logic                       index_valid;
@@ -40,11 +40,11 @@ module support_mem
   endfunction
 
   always_comb begin
-    o_c2v_support_row = mem[int'(i_c2v_h_block_idx)][int'(i_c2v_one_idx)];
+    o_c2v_base_row = mem[int'(i_c2v_h_block_idx)][int'(i_c2v_one_idx)];
     o_c2v_edge_id = edge_id_of(i_c2v_h_block_idx, i_c2v_one_idx);
-    o_v2c_support_row = mem[int'(i_v2c_h_block_idx)][int'(i_v2c_one_idx)];
+    o_v2c_base_row = mem[int'(i_v2c_h_block_idx)][int'(i_v2c_one_idx)];
     o_v2c_edge_id = edge_id_of(i_v2c_h_block_idx, i_v2c_one_idx);
-    o_loaded = (loaded_count == SUPPORT_COUNT_W'(SUPPORT_COUNT)) && !error_reg;
+    o_loaded = (loaded_count == H_ENTRY_COUNT_W'(H_ENTRY_COUNT)) && !error_reg;
     o_error = error_reg;
   end
 
@@ -54,7 +54,7 @@ module support_mem
     if (index_valid) begin
       for (int one_scan = 0; one_scan < W; one_scan++) begin
         if ((one_scan != int'(i_one_idx)) && loaded_bit[int'(i_h_block_idx)][one_scan] &&
-            (mem[int'(i_h_block_idx)][one_scan] == i_support_row)) begin
+            (mem[int'(i_h_block_idx)][one_scan] == i_base_row)) begin
           duplicate_seen = 1'b1;
         end
       end
@@ -80,12 +80,12 @@ module support_mem
         end
       end
     end else if (i_we) begin
-      if (!index_valid || (int'(i_support_row) >= R) || duplicate_seen) begin
+      if (!index_valid || (int'(i_base_row) >= R) || duplicate_seen) begin
         error_reg <= 1'b1;
       end else begin
-        mem[int'(i_h_block_idx)][int'(i_one_idx)] <= i_support_row;
+        mem[int'(i_h_block_idx)][int'(i_one_idx)] <= i_base_row;
         if (!loaded_bit[int'(i_h_block_idx)][int'(i_one_idx)]) begin
-          loaded_count <= loaded_count + SUPPORT_COUNT_W'(1);
+          loaded_count <= loaded_count + H_ENTRY_COUNT_W'(1);
         end
         loaded_bit[int'(i_h_block_idx)][int'(i_one_idx)] <= 1'b1;
       end

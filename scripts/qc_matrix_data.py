@@ -1,14 +1,14 @@
-"""Static first-column supports used by generated decoder fixtures."""
+"""Static H first-column row indices used by generated decoder fixtures."""
 
 from __future__ import annotations
 
 
-TOY_SUPPORTS = [
+TOY_H_BASE_ROWS = [
     [0, 2, 4],
     [0, 3, 4],
 ]
 
 
-DEFAULT_SUPPORTS = {
-    "test": TOY_SUPPORTS,
+DEFAULT_H_BASE_ROWS = {
+    "test": TOY_H_BASE_ROWS,
 }

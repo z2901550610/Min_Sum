@@ -5,8 +5,8 @@
 | 名称 | 范围 | 含义 |
 | --- | --- | --- |
 | `h_block_idx` | `0..N0-1` | circulant block 编号 |
-| `one_idx` | `0..W-1` | 一个 block 第一列中的 support 项编号 |
-| `support_row` | `0..R-1` | 第一列 support 行号 |
+| `one_idx` | `0..W-1` | 一个 block 第一列中的非零项编号 |
+| `base_row` | `0..R-1` | H 第一列行索引 |
 | `edge_id` | `0..N0*W-1` | row-local edge 编号，`h_block_idx * W + one_idx` |
 | `tile_idx` | `0..TILE_COUNT-1` | block 内 tile 编号 |
 | `tile_linear` | `0..TILES_TOTAL-1` | 全局 tile 编号 |
@@ -35,13 +35,12 @@
 
 | 名称 | 含义 |
 | --- | --- |
-| `support_mem` | 第一列 support 存储模块 |
-| `comp_pair` | compressed check-state 双 pair |
-| `comp_epoch` | compressed check-state row epoch |
+| `h_matrix_mem` | H 第一列行索引存储 |
+| `check_state_ram` | compressed check-state 双 pair RAM |
 | `pair_epoch` | pair 当前 epoch |
-| `sign_mem` | edge sign 状态 |
-| `tile_accum` | raw C2V tile 累加器 |
-| `tile_t` | raw C2V tile 边缓存 |
+| `msg_sign_ram` | edge sign RAM |
+| `tile_accum_ram` | raw C2V tile 累加 RAM |
+| `c2v_cache_ram` | raw C2V tile 边缓存 RAM |
 | `decision_mem` | 最终错误估计 bit |
 | `syndrome_mem` | 输入 syndrome bit |
 
@@ -75,7 +74,7 @@ tile-local 状态使用双 buffer：
 ```systemverilog
 logic [ROW_IDX_W-1:0] c2v_row_idx[0:L-1];
 logic [TILE_OFF_W-1:0] v2c_tile_offset[0:L-1];
-logic signed [ACC_W-1:0] tile_accum[0:1][0:C_TILE-1];
+logic signed [ACC_W-1:0] c2v_raw_next[0:L-1];
 ```
 
 unpacked 维度紧贴信号名。多 lane 信号使用 `[0:L-1]`。

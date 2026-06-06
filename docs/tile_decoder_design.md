@@ -1,11 +1,11 @@
-# Support-Major Tile Min-Sum 解码器设计
+# Tile Min-Sum 解码器设计
 
 ## 目标
 
-support-major tile 架构按第一列 support 项扫描 QC-MDPC 校验矩阵边。设计目标：
+tile 架构按 H 第一列行索引扫描 QC-MDPC 校验矩阵边。设计目标：
 
 - 主译码周期由公开参数固定决定。
-- support 值只影响 lane valid mask 和 row/col 地址。
+- H base row 只影响 lane valid mask 和 row/col 地址。
 - C2V 和 V2C 以 tile 双缓冲重叠执行。
 - 变量节点更新公式使用 raw C2V 求和后整体缩放。
 - 每个公开参数集可独立选择 `L` 和 `C_TILE`。
@@ -24,12 +24,12 @@ ROW_SEG_SIZE = ceil(R / L)
 
 `Q_TILE` 包含一个固定 guard 周期。`C_TILE` 要求为 `L` 的整数倍。
 
-## Support 几何
+## H Base Row 几何
 
-第 `b` 个 block 的第 `k` 个 support 项：
+第 `b` 个 block 的第 `k` 个 H 第一列项：
 
 ```text
-s       = support_mem[b][k]
+base_row = h_matrix_mem[b][k]
 edge_id = b * W + k
 ```
 
@@ -40,7 +40,7 @@ tile_base = tile_idx * C_TILE
 offset    = q_idx * L + lane
 col_local = tile_base + offset
 col_idx   = b * R + col_local
-row_raw   = col_local + s
+row_raw   = col_local + base_row
 row_idx   = row_raw - R if row_raw >= R else row_raw
 ```
 
@@ -55,7 +55,7 @@ phase_valid && q_idx < Q_BASE && offset < tile_cols
 跨越 `R-1 -> 0` 的 L-wide 访问组被拆成两个 micro-cycle。row/col 生成器先计算：
 
 ```text
-wrap_col    = R - s
+wrap_col    = R - base_row
 has_wrap    = tile_base < wrap_col && wrap_col < tile_end
 wrap_offset = wrap_col - tile_base
 wrap_q      = wrap_offset / L

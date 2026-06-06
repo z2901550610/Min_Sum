@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 
-module tb_support_major_ctrl;
+module tb_tile_scheduler;
   import bike_pkg::*;
 
   logic                   clk;
@@ -44,7 +44,7 @@ module tb_support_major_ctrl;
   logic                   observed_iter_last_cycle;
   /* verilator lint_on UNUSEDSIGNAL */
 
-  support_major_ctrl dut (
+  tile_scheduler dut (
       .i_clk(clk),
       .i_rst_n(rst_n),
       .i_start(start),
@@ -125,19 +125,19 @@ module tb_support_major_ctrl;
     start = 1'b0;
     while (done !== 1'b1) begin
       cycle_count++;
-      if (cycle_count > 20000) $fatal(1, "support_major_ctrl timeout");
+      if (cycle_count > 20000) $fatal(1, "tile_scheduler timeout");
       @(posedge clk);
     end
 
     if (cycle_count != I_MAX * (TILES_TOTAL + 1) * W * Q_TILE) begin
-      $fatal(1, "support_major_ctrl cycle mismatch: got %0d exp %0d", cycle_count,
+      $fatal(1, "tile_scheduler cycle mismatch: got %0d exp %0d", cycle_count,
              I_MAX * (TILES_TOTAL + 1) * W * Q_TILE);
     end
-    if (iter_count != ITER_W'(I_MAX)) $fatal(1, "support_major_ctrl iter mismatch");
+    if (iter_count != ITER_W'(I_MAX)) $fatal(1, "tile_scheduler iter mismatch");
     if (!saw_prime || !saw_overlap || !saw_drain) $fatal(1, "missing scheduler phase");
-    if (state != DEC_DONE) $fatal(1, "support_major_ctrl final state mismatch");
+    if (state != DEC_DONE) $fatal(1, "tile_scheduler final state mismatch");
 
-    $display("tb_support_major_ctrl PASS");
+    $display("tb_tile_scheduler PASS");
     $finish;
   end
 endmodule

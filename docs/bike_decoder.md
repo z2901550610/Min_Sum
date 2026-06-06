@@ -8,20 +8,20 @@
 H = [H0 | H1 | ... | H(N0-1)]
 ```
 
-每个 block 只通过第一列支撑集描述。第 `b` 个 block 的第 `k` 个支撑项为 `support_mem[b][k]`，本地变量列 `j` 对应的校验行为：
+每个 block 只通过第一列支撑集描述。第 `b` 个 block 的第 `k` 个支撑项为 `h_matrix_mem[b][k]`，本地变量列 `j` 对应的校验行为：
 
 ```text
-row = (j + support_mem[b][k]) mod R
+row = (j + h_matrix_mem[b][k]) mod R
 edge_id = b * W + k
 ```
 
-顶层接口包含 syndrome 写入、support 写入、启动、错误估计读出和完成状态。译码主循环固定执行 `I_MAX` 轮，不使用收敛提前停止。
+顶层接口包含 syndrome 写入、H 第一列写入、启动、错误估计读出和完成状态。译码主循环固定执行 `I_MAX` 轮，不使用收敛提前停止。
 
 ## 文档导航
 
 - [decoder_architecture.md](decoder_architecture.md)：模块划分、状态数组和数据通路
-- [decoder_schedule.md](decoder_schedule.md)：support-major tile 固定窗口调度
-- [support_major_decoder_design.md](support_major_decoder_design.md)：tile 几何、guard 规则和存储组织
+- [decoder_schedule.md](decoder_schedule.md)：tile 固定窗口调度
+- [tile_decoder_design.md](tile_decoder_design.md)：tile 几何、guard 规则和存储组织
 - [decoder_verification.md](decoder_verification.md)：回归入口、随机用例和残差检查
 - [naming_conventions.md](naming_conventions.md)：当前 RTL 命名规则
 
@@ -50,16 +50,16 @@ edge_id = b * W + k
 
 ## 顶层输入输出
 
-support 加载接口：
+H 加载接口：
 
 | 端口 | 含义 |
 | --- | --- |
-| `i_support_we` | 写入一个 support 项 |
-| `i_support_h_block_idx` | circulant block 编号 |
-| `i_support_one_idx` | block 第一列中第几个非零项 |
-| `i_support_row` | 第一列非零项行号 |
-| `o_support_loaded` | 全部 support 项已加载且未检测到错误 |
-| `o_support_error` | support 越界或重复 |
+| `i_h_we` | 写入一个 H 第一列项 |
+| `i_h_block_idx` | circulant block 编号 |
+| `i_h_one_idx` | block 第一列中第几个非零项 |
+| `i_h_base_row` | 第一列非零项行号 |
+| `o_h_loaded` | 全部 H 第一列项已加载且未检测到错误 |
+| `o_h_error` | H 第一列项越界或重复 |
 
 译码接口：
 
@@ -71,7 +71,7 @@ support 加载接口：
 | `o_iter_count` | 完成时等于 `I_MAX` |
 | `i_e_read_col_idx/o_e_rdata` | 最终错误估计串行读口 |
 
-`i_start` 在 `o_support_loaded && !o_support_error` 时生效。
+`i_start` 在 `o_h_loaded && !o_h_error` 时生效。
 
 ## 解码语义
 

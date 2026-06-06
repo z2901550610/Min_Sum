@@ -10,9 +10,14 @@ import subprocess
 from pathlib import Path
 
 RTL_CORE = [
-    "rtl/support_mem.sv",
-    "rtl/support_row_col_gen.sv",
-    "rtl/support_major_ctrl.sv",
+    "rtl/h_matrix_mem.sv",
+    "rtl/edge_addr_gen.sv",
+    "rtl/tile_scheduler.sv",
+    "rtl/check_state_ram.sv",
+    "rtl/msg_sign_ram.sv",
+    "rtl/tile_accum_ram.sv",
+    "rtl/c2v_cache_ram.sv",
+    "rtl/vnu_update.sv",
     "rtl/decoder_top.sv",
 ]
 
@@ -95,7 +100,7 @@ def bit_vector_hex(bits: list[int], width: int) -> str:
     return f"{width}'h{value:0{hex_digits}x}"
 
 
-def sample_support(rng: random.Random, r: int, w: int) -> list[int]:
+def sample_h_base_rows(rng: random.Random, r: int, w: int) -> list[int]:
     return sorted(rng.sample(range(r), w))
 
 
@@ -235,7 +240,7 @@ def emit_tb(
     error_positions: list[int],
     h_base: list[list[int]],
 ) -> None:
-    supports = ",\n    ".join(sv_array(support) for support in h_base)
+    h_base_rows = ",\n    ".join(sv_array(row_list) for row_list in h_base)
     syndrome_array_depth = max(1, len(syndrome_positions))
     error_array_depth = max(1, len(error_positions))
     path.write_text(
@@ -250,8 +255,8 @@ module tb_bike_decoder_random;
   localparam int ERROR_WEIGHT = {len(error_positions)};
   localparam int unsigned SYNDROME_POS [0:{syndrome_array_depth - 1}] = {sv_int_array(syndrome_positions)};
   localparam int unsigned ERROR_POS [0:{error_array_depth - 1}] = {sv_int_array(error_positions)};
-  localparam int unsigned TEST_SUPPORTS [0:N0-1][0:W-1] = '{{
-    {supports}
+  localparam int unsigned TEST_H_BASE_ROWS [0:N0-1][0:W-1] = '{{
+    {h_base_rows}
   }};
 
   logic clk;
@@ -261,12 +266,12 @@ module tb_bike_decoder_random;
   logic syndrome_we;
   logic [ROW_IDX_W-1:0] syndrome_addr;
   logic syndrome_wdata;
-  logic support_we;
-  logic [H_BLOCK_W-1:0] support_h_block_idx;
-  logic [ONE_IDX_W-1:0] support_one_idx;
-  logic [ROW_IDX_W-1:0] support_row;
-  logic support_loaded;
-  logic support_error;
+  logic h_we;
+  logic [H_BLOCK_W-1:0] h_load_block_idx;
+  logic [ONE_IDX_W-1:0] h_load_one_idx;
+  logic [ROW_IDX_W-1:0] h_base_row;
+  logic h_loaded;
+  logic h_error;
   logic [COL_W-1:0] e_read_col_idx;
   logic e_rdata;
   logic [N-1:0] e_out;
@@ -279,13 +284,13 @@ module tb_bike_decoder_random;
     .i_syndrome_we(syndrome_we),
     .i_syndrome_addr(syndrome_addr),
     .i_syndrome_wdata(syndrome_wdata),
-    .i_support_we(support_we),
-    .i_support_h_block_idx(support_h_block_idx),
-    .i_support_one_idx(support_one_idx),
-    .i_support_row(support_row),
+    .i_h_we(h_we),
+    .i_h_block_idx(h_load_block_idx),
+    .i_h_one_idx(h_load_one_idx),
+    .i_h_base_row(h_base_row),
     .i_e_read_col_idx(e_read_col_idx),
-    .o_support_loaded(support_loaded),
-    .o_support_error(support_error),
+    .o_h_loaded(h_loaded),
+    .o_h_error(h_error),
     .o_done(done),
     .o_e_rdata(e_rdata),
     .o_iter_count(iter_count)
@@ -346,17 +351,17 @@ module tb_bike_decoder_random;
     begin
       for (int h_block_idx = 0; h_block_idx < N0; h_block_idx++) begin
         for (int one_idx = 0; one_idx < W; one_idx++) begin
-          support_we = 1'b1;
-          support_h_block_idx = H_BLOCK_W'(h_block_idx);
-          support_one_idx = ONE_IDX_W'(one_idx);
-          support_row = ROW_IDX_W'(TEST_SUPPORTS[h_block_idx][one_idx]);
+          h_we = 1'b1;
+          h_load_block_idx = H_BLOCK_W'(h_block_idx);
+          h_load_one_idx = ONE_IDX_W'(one_idx);
+          h_base_row = ROW_IDX_W'(TEST_H_BASE_ROWS[h_block_idx][one_idx]);
           @(posedge clk);
         end
       end
-      support_we = 1'b0;
+      h_we = 1'b0;
       @(posedge clk);
-      if (!support_loaded || support_error) begin
-        $fatal(1, "support load failed loaded=%0b error=%0b", support_loaded, support_error);
+      if (!h_loaded || h_error) begin
+        $fatal(1, "H matrix load failed loaded=%0b error=%0b", h_loaded, h_error);
       end
     end
   endtask
@@ -378,7 +383,7 @@ module tb_bike_decoder_random;
           h_block_idx = H_BLOCK_W'(var_idx / R);
           col_idx = var_idx % R;
           for (edge_idx = 0; edge_idx < W; edge_idx++) begin
-            row_idx = ROW_IDX_W'((TEST_SUPPORTS[h_block_idx][edge_idx] + col_idx) % R);
+            row_idx = ROW_IDX_W'((TEST_H_BASE_ROWS[h_block_idx][edge_idx] + col_idx) % R);
             residual[row_idx] = residual[row_idx] ^ 1'b1;
           end
         end
@@ -414,10 +419,10 @@ module tb_bike_decoder_random;
 
     rst_n = 1'b0;
     start = 1'b0;
-    support_we = 1'b0;
-    support_h_block_idx = '0;
-    support_one_idx = '0;
-    support_row = '0;
+    h_we = 1'b0;
+    h_load_block_idx = '0;
+    h_load_one_idx = '0;
+    h_base_row = '0;
     syndrome_we = 1'b0;
     syndrome_addr = '0;
     syndrome_wdata = 1'b0;
@@ -512,7 +517,7 @@ def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int
     if args.w < 1 or args.w > args.r:
         raise ValueError("--w must be between 1 and --r")
 
-    h_base = [sample_support(rng, args.r, args.w) for _ in range(args.n0)]
+    h_base = [sample_h_base_rows(rng, args.r, args.w) for _ in range(args.n0)]
     error_positions = sorted(rng.sample(range(n), args.error_count))
     error_bits = [0 for _ in range(n)]
     for pos in error_positions:
