@@ -61,6 +61,18 @@ module decoder_top
   logic        [  ROW_IDX_W-1:0] v2c_h_base_row;
   logic        [  EDGE_ID_W-1:0] v2c_h_edge_id;
 
+  logic                          c2v_phase_e;
+  logic        [  H_BLOCK_W-1:0] c2v_h_block_idx_e;
+  logic        [ TILE_IDX_W-1:0] c2v_tile_idx_e;
+  logic        [  ONE_IDX_W-1:0] c2v_one_idx_e;
+  logic        [    Q_SEQ_W-1:0] c2v_q_seq_e;
+  logic                          c2v_fill_buf_e;
+  logic                          c2v_iter_zero_e;
+  logic        [  ROW_IDX_W-1:0] c2v_h_base_row_e;
+  logic        [  EDGE_ID_W-1:0] c2v_h_edge_id_e;
+  logic                          comp_read_pair_sel_e;
+  logic                          comp_read_epoch_e;
+
   logic                          c2v_valid[0:L-1];
   logic        [  EDGE_ID_W-1:0] c2v_edge_id[0:L-1];
   logic        [ LANE_IDX_W-1:0] c2v_row_bank[0:L-1];
@@ -85,6 +97,18 @@ module decoder_top
   logic        [    Q_SEQ_W-1:0] c2v_q_seq_q;
   logic                          c2v_fill_buf_q;
   logic                          c2v_iter_zero_q;
+
+  logic                          v2c_phase_e;
+  logic        [  H_BLOCK_W-1:0] v2c_h_block_idx_e;
+  logic        [ TILE_IDX_W-1:0] v2c_tile_idx_e;
+  logic        [  ONE_IDX_W-1:0] v2c_one_idx_e;
+  logic        [    Q_SEQ_W-1:0] v2c_q_seq_e;
+  logic                          v2c_active_buf_e;
+  logic                          v2c_final_iter_e;
+  logic        [  ROW_IDX_W-1:0] v2c_h_base_row_e;
+  logic        [  EDGE_ID_W-1:0] v2c_h_edge_id_e;
+  logic                          comp_write_pair_sel_e;
+  logic                          comp_write_epoch_e;
 
   logic                          v2c_valid[0:L-1];
   logic        [      COL_W-1:0] v2c_col_idx[0:L-1];
@@ -134,6 +158,7 @@ module decoder_top
   logic                          decision_we[0:L-1];
   logic                          decision_wdata[0:L-1];
   logic                          ctrl_done;
+  logic                          ctrl_done_r;
   logic                          ctrl_done_q;
 
   function automatic logic signed [MSG_W-1:0] signmag_to_tc(input  logic [MSG_W-1:0] msg);
@@ -302,12 +327,12 @@ module decoder_top
   );
 
   edge_addr_gen u_c2v_addr_gen (
-      .i_phase_valid(c2v_phase_active),
-      .i_h_block_idx(c2v_h_block_idx),
-      .i_tile_idx(c2v_tile_idx),
-      .i_q_seq(active_q_seq),
-      .i_base_row(c2v_h_base_row),
-      .i_edge_id(c2v_h_edge_id),
+      .i_phase_valid(c2v_phase_e),
+      .i_h_block_idx(c2v_h_block_idx_e),
+      .i_tile_idx(c2v_tile_idx_e),
+      .i_q_seq(c2v_q_seq_e),
+      .i_base_row(c2v_h_base_row_e),
+      .i_edge_id(c2v_h_edge_id_e),
       .o_valid(c2v_valid),
       .o_row_idx(unused_c2v_row_idx),
       .o_col_idx(unused_c2v_col_idx),
@@ -318,12 +343,12 @@ module decoder_top
   );
 
   edge_addr_gen u_v2c_addr_gen (
-      .i_phase_valid(v2c_phase_active),
-      .i_h_block_idx(v2c_h_block_idx),
-      .i_tile_idx(v2c_tile_idx),
-      .i_q_seq(active_q_seq),
-      .i_base_row(v2c_h_base_row),
-      .i_edge_id(v2c_h_edge_id),
+      .i_phase_valid(v2c_phase_e),
+      .i_h_block_idx(v2c_h_block_idx_e),
+      .i_tile_idx(v2c_tile_idx_e),
+      .i_q_seq(v2c_q_seq_e),
+      .i_base_row(v2c_h_base_row_e),
+      .i_edge_id(v2c_h_edge_id_e),
       .o_valid(v2c_valid),
       .o_row_idx(unused_v2c_row_idx),
       .o_col_idx(v2c_col_idx),
@@ -433,6 +458,17 @@ module decoder_top
       c2v_q_seq_q <= '0;
       c2v_fill_buf_q <= 1'b0;
       c2v_iter_zero_q <= 1'b0;
+      c2v_phase_e <= 1'b0;
+      c2v_h_block_idx_e <= '0;
+      c2v_tile_idx_e <= '0;
+      c2v_one_idx_e <= '0;
+      c2v_q_seq_e <= '0;
+      c2v_fill_buf_e <= 1'b0;
+      c2v_iter_zero_e <= 1'b0;
+      c2v_h_base_row_e <= '0;
+      c2v_h_edge_id_e <= '0;
+      comp_read_pair_sel_e <= 1'b0;
+      comp_read_epoch_e <= 1'b0;
       c2v_one_idx_r <= '0;
       c2v_q_seq_r <= '0;
       c2v_fill_buf_r <= 1'b0;
@@ -441,6 +477,17 @@ module decoder_top
       comp_read_epoch_r <= 1'b0;
       v2c_one_idx_q <= '0;
       v2c_final_iter_q <= 1'b0;
+      v2c_phase_e <= 1'b0;
+      v2c_h_block_idx_e <= '0;
+      v2c_tile_idx_e <= '0;
+      v2c_one_idx_e <= '0;
+      v2c_q_seq_e <= '0;
+      v2c_active_buf_e <= 1'b0;
+      v2c_final_iter_e <= 1'b0;
+      v2c_h_base_row_e <= '0;
+      v2c_h_edge_id_e <= '0;
+      comp_write_pair_sel_e <= 1'b0;
+      comp_write_epoch_e <= 1'b0;
       v2c_one_idx_r <= '0;
       v2c_q_seq_r <= '0;
       v2c_active_buf_r <= 1'b0;
@@ -449,6 +496,7 @@ module decoder_top
       comp_write_epoch_r <= 1'b0;
       v2c_write_pair_sel_q <= 1'b0;
       v2c_write_epoch_q <= 1'b0;
+      ctrl_done_r <= 1'b0;
       ctrl_done_q <= 1'b0;
       for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
         c2v_valid_r[lane_idx] <= 1'b0;
@@ -472,28 +520,51 @@ module decoder_top
         v2c_raw_sum_q[lane_idx] <= '0;
       end
     end else begin
-      c2v_one_idx_r <= active_one_idx;
-      c2v_q_seq_r <= active_q_seq;
-      c2v_fill_buf_r <= fill_buf;
-      c2v_iter_zero_r <= o_iter_count == '0;
-      comp_read_pair_sel_r <= comp_read_pair_sel;
-      comp_read_epoch_r <= pair_epoch[comp_read_pair_sel];
+      c2v_phase_e <= c2v_phase_active;
+      c2v_h_block_idx_e <= c2v_h_block_idx;
+      c2v_tile_idx_e <= c2v_tile_idx;
+      c2v_one_idx_e <= active_one_idx;
+      c2v_q_seq_e <= active_q_seq;
+      c2v_fill_buf_e <= fill_buf;
+      c2v_iter_zero_e <= o_iter_count == '0;
+      c2v_h_base_row_e <= c2v_h_base_row;
+      c2v_h_edge_id_e <= c2v_h_edge_id;
+      comp_read_pair_sel_e <= comp_read_pair_sel;
+      comp_read_epoch_e <= pair_epoch[comp_read_pair_sel];
+      c2v_one_idx_r <= c2v_one_idx_e;
+      c2v_q_seq_r <= c2v_q_seq_e;
+      c2v_fill_buf_r <= c2v_fill_buf_e;
+      c2v_iter_zero_r <= c2v_iter_zero_e;
+      comp_read_pair_sel_r <= comp_read_pair_sel_e;
+      comp_read_epoch_r <= comp_read_epoch_e;
       c2v_one_idx_q <= c2v_one_idx_r;
       c2v_q_seq_q <= c2v_q_seq_r;
       c2v_fill_buf_q <= c2v_fill_buf_r;
       c2v_iter_zero_q <= c2v_iter_zero_r;
 
-      v2c_one_idx_r <= active_one_idx;
-      v2c_q_seq_r <= active_q_seq;
-      v2c_active_buf_r <= active_buf;
-      v2c_final_iter_r <= final_iter;
-      comp_write_pair_sel_r <= comp_write_pair_sel;
-      comp_write_epoch_r <= pair_epoch[comp_write_pair_sel];
+      v2c_phase_e <= v2c_phase_active;
+      v2c_h_block_idx_e <= v2c_h_block_idx;
+      v2c_tile_idx_e <= v2c_tile_idx;
+      v2c_one_idx_e <= active_one_idx;
+      v2c_q_seq_e <= active_q_seq;
+      v2c_active_buf_e <= active_buf;
+      v2c_final_iter_e <= final_iter;
+      v2c_h_base_row_e <= v2c_h_base_row;
+      v2c_h_edge_id_e <= v2c_h_edge_id;
+      comp_write_pair_sel_e <= comp_write_pair_sel;
+      comp_write_epoch_e <= pair_epoch[comp_write_pair_sel];
+      v2c_one_idx_r <= v2c_one_idx_e;
+      v2c_q_seq_r <= v2c_q_seq_e;
+      v2c_active_buf_r <= v2c_active_buf_e;
+      v2c_final_iter_r <= v2c_final_iter_e;
+      comp_write_pair_sel_r <= comp_write_pair_sel_e;
+      comp_write_epoch_r <= comp_write_epoch_e;
       v2c_one_idx_q <= v2c_one_idx_r;
       v2c_final_iter_q <= v2c_final_iter_r;
       v2c_write_pair_sel_q <= comp_write_pair_sel_r;
       v2c_write_epoch_q <= comp_write_epoch_r;
-      ctrl_done_q <= ctrl_done;
+      ctrl_done_r <= ctrl_done;
+      ctrl_done_q <= ctrl_done_r;
       for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
         c2v_valid_r[lane_idx] <= c2v_valid[lane_idx];
         c2v_edge_id_r[lane_idx] <= c2v_edge_id[lane_idx];
