@@ -24,6 +24,12 @@ module check_state_ram
 
   logic [COMP_C2V_W-1:0] c2v_bank_rdata[0:1][0:L-1];
   logic [COMP_C2V_W-1:0] v2c_bank_rdata[0:1][0:L-1];
+  logic                  c2v_bank_read_valid[0:1][0:L-1];
+  logic                  v2c_bank_read_valid[0:1][0:L-1];
+  logic                  c2v_bank_read_epoch[0:1][0:L-1];
+  logic                  v2c_bank_read_epoch[0:1][0:L-1];
+  logic                  c2v_bank_epoch_rdata[0:1][0:L-1];
+  logic                  v2c_bank_epoch_rdata[0:1][0:L-1];
   logic                  c2v_pair_sel_q;
   logic                  v2c_pair_sel_q;
 
@@ -69,24 +75,27 @@ module check_state_ram
         end
 
         always_ff @(posedge i_clk) begin
-          if (bank_re && bank_read_is_c2v) begin
-            c2v_bank_rdata[pair_idx][bank_idx] <=
-                (epoch_mem[c2v_bank_raddr] == bank_read_epoch) ? mem[c2v_bank_raddr] :
-                                                                 COMP_C2V_INIT;
-          end else if (bank_read_is_c2v) begin
-            c2v_bank_rdata[pair_idx][bank_idx] <= COMP_C2V_INIT;
-          end
+          if (!i_rst_n) begin
+            c2v_bank_read_valid[pair_idx][bank_idx] <= 1'b0;
+            v2c_bank_read_valid[pair_idx][bank_idx] <= 1'b0;
+          end else begin
+            c2v_bank_read_valid[pair_idx][bank_idx] <= bank_re && bank_read_is_c2v;
+            c2v_bank_read_epoch[pair_idx][bank_idx] <= bank_read_epoch;
+            if (bank_re && bank_read_is_c2v) begin
+              c2v_bank_rdata[pair_idx][bank_idx] <= mem[c2v_bank_raddr];
+              c2v_bank_epoch_rdata[pair_idx][bank_idx] <= epoch_mem[c2v_bank_raddr];
+            end
 
-          if (bank_re && !bank_read_is_c2v) begin
-            v2c_bank_rdata[pair_idx][bank_idx] <=
-                (epoch_mem[v2c_bank_raddr] == bank_read_epoch) ? mem[v2c_bank_raddr] :
-                                                                 COMP_C2V_INIT;
-          end else if (!bank_read_is_c2v) begin
-            v2c_bank_rdata[pair_idx][bank_idx] <= COMP_C2V_INIT;
-          end
+            v2c_bank_read_valid[pair_idx][bank_idx] <= bank_re && !bank_read_is_c2v;
+            v2c_bank_read_epoch[pair_idx][bank_idx] <= bank_read_epoch;
+            if (bank_re && !bank_read_is_c2v) begin
+              v2c_bank_rdata[pair_idx][bank_idx] <= mem[v2c_bank_raddr];
+              v2c_bank_epoch_rdata[pair_idx][bank_idx] <= epoch_mem[v2c_bank_raddr];
+            end
 
-          if (v2c_bank_we) begin
-            mem[v2c_bank_waddr] <= v2c_bank_wdata;
+            if (v2c_bank_we) begin
+              mem[v2c_bank_waddr] <= v2c_bank_wdata;
+            end
           end
         end
 
@@ -115,8 +124,22 @@ module check_state_ram
 
   always_comb begin
     for (int bank_idx = 0; bank_idx < L; bank_idx++) begin
-      o_c2v_comp[bank_idx] = c2v_bank_rdata[int'(c2v_pair_sel_q)][bank_idx];
-      o_v2c_comp[bank_idx] = v2c_bank_rdata[int'(v2c_pair_sel_q)][bank_idx];
+      logic c2v_pair_idx;
+      logic v2c_pair_idx;
+      c2v_pair_idx = c2v_pair_sel_q;
+      v2c_pair_idx = v2c_pair_sel_q;
+      o_c2v_comp[bank_idx] =
+          (c2v_bank_read_valid[c2v_pair_idx][bank_idx] &&
+           (c2v_bank_epoch_rdata[c2v_pair_idx][bank_idx] ==
+            c2v_bank_read_epoch[c2v_pair_idx][bank_idx])) ? c2v_bank_rdata[c2v_pair_idx]
+                                                                     [bank_idx] :
+                                                             COMP_C2V_INIT;
+      o_v2c_comp[bank_idx] =
+          (v2c_bank_read_valid[v2c_pair_idx][bank_idx] &&
+           (v2c_bank_epoch_rdata[v2c_pair_idx][bank_idx] ==
+            v2c_bank_read_epoch[v2c_pair_idx][bank_idx])) ? v2c_bank_rdata[v2c_pair_idx]
+                                                                     [bank_idx] :
+                                                             COMP_C2V_INIT;
     end
   end
 endmodule

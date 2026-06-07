@@ -61,6 +61,9 @@ module tb_h_matrix_mem;
       end
     end
     we = 1'b0;
+    while (!loaded && !error) begin
+      @(posedge clk);
+    end
     #1;
     if (!loaded) $fatal(1, "h_matrix_mem loaded flag mismatch");
     if (error) $fatal(1, "h_matrix_mem unexpected error");
@@ -83,6 +86,9 @@ module tb_h_matrix_mem;
     base_row = ROW_IDX_W'(2 % R);
     @(posedge clk);
     we = 1'b0;
+    while (!error) begin
+      @(posedge clk);
+    end
     #1;
     if (!error) $fatal(1, "h_matrix_mem duplicate was not detected");
 

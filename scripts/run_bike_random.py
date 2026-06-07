@@ -361,7 +361,9 @@ module tb_bike_decoder_random;
         end
       end
       h_we = 1'b0;
-      @(posedge clk);
+      while (!h_loaded && !h_error) begin
+        @(posedge clk);
+      end
       if (!h_loaded || h_error) begin
         $fatal(1, "H matrix load failed loaded=%0b error=%0b", h_loaded, h_error);
       end

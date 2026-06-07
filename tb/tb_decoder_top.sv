@@ -87,7 +87,9 @@ module tb_decoder_top;
         end
       end
       h_we = 1'b0;
-      @(posedge clk);
+      while (!h_loaded && !h_error) begin
+        @(posedge clk);
+      end
       if (!h_loaded) $fatal(1, "H matrix load did not complete");
       if (h_error) $fatal(1, "H matrix load reported error");
     end
