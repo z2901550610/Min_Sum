@@ -34,8 +34,8 @@ module edge_addr_gen
     tile_end = tile_base + tile_cols;
     wrap_col = R - int'(i_base_row);
     wrap_offset = wrap_col - tile_base;
-    wrap_q = (wrap_offset >= 0) ? (wrap_offset / L) : 0;
-    wrap_lane = (wrap_offset >= 0) ? (wrap_offset % L) : 0;
+    wrap_q = (wrap_offset >= 0) ? (wrap_offset >> L_SHIFT) : 0;
+    wrap_lane = (wrap_offset >= 0) ? (wrap_offset & (L - 1)) : 0;
     has_wrap = (tile_base < wrap_col) && (wrap_col < tile_end);
     split_en = has_wrap && (wrap_lane != 0);
     q_idx = int'(i_q_seq);
@@ -66,11 +66,11 @@ module edge_addr_gen
       logic [LANE_IDX_W-1:0] out_bank;
       bit                    lane_valid;
 
-      offset = q_idx * L + lane_idx;
+      offset = (q_idx << L_SHIFT) + lane_idx;
       col_local = tile_base + offset;
       row_raw = col_local + int'(i_base_row);
       row_idx = (row_raw >= R) ? (row_raw - R) : row_raw;
-      out_bank = LANE_IDX_W'(row_idx % L);
+      out_bank = LANE_IDX_W'(row_idx & (L - 1));
       lane_valid = i_phase_valid && (int'(i_q_seq) < Q_TILE) && (q_idx < Q_BASE) &&
                    (offset < tile_cols);
 
@@ -88,7 +88,7 @@ module edge_addr_gen
         o_col_idx[out_bank] = COL_W'(int'(i_h_block_idx) * R + col_local);
         o_edge_id[out_bank] = i_edge_id;
         o_row_bank[out_bank] = out_bank;
-        o_row_addr[out_bank] = ROW_BANK_AW'(row_idx / L);
+        o_row_addr[out_bank] = ROW_BANK_AW'(row_idx >> L_SHIFT);
         o_tile_offset[out_bank] = TILE_OFF_W'(offset);
       end
     end

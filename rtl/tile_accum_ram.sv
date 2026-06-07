@@ -26,14 +26,14 @@ module tile_accum_ram
 
   function automatic logic [LANE_IDX_W-1:0] offset_bank(input  logic [TILE_OFF_W-1:0] tile_offset);
     begin
-      offset_bank = LANE_IDX_W'(int'(tile_offset) % L);
+      offset_bank = LANE_IDX_W'(int'(tile_offset) & (L - 1));
     end
   endfunction
 
   function automatic logic [ACCUM_BANK_AW-1:0] offset_addr(
       input  logic [TILE_OFF_W-1:0] tile_offset);
     begin
-      offset_addr = ACCUM_BANK_AW'(int'(tile_offset) / L);
+      offset_addr = ACCUM_BANK_AW'(tile_offset >> L_SHIFT);
     end
   endfunction
 

@@ -175,13 +175,13 @@ module decoder_top
 
   function automatic logic [LANE_IDX_W-1:0] row_bank_of(input  logic [ROW_IDX_W-1:0] row_idx);
     begin
-      row_bank_of = LANE_IDX_W'(int'(row_idx) % L);
+      row_bank_of = LANE_IDX_W'(int'(row_idx) & (L - 1));
     end
   endfunction
 
   function automatic logic [ROW_BANK_AW-1:0] row_addr_of(input  logic [ROW_IDX_W-1:0] row_idx);
     begin
-      row_addr_of = ROW_BANK_AW'(int'(row_idx) / L);
+      row_addr_of = ROW_BANK_AW'(row_idx >> L_SHIFT);
     end
   endfunction
 

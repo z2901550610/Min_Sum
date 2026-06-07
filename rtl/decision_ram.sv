@@ -18,13 +18,13 @@ module decision_ram
 
   function automatic logic [LANE_IDX_W-1:0] col_bank(input  logic [COL_W-1:0] col_idx);
     begin
-      col_bank = LANE_IDX_W'(int'(col_idx) % L);
+      col_bank = LANE_IDX_W'(int'(col_idx) & (L - 1));
     end
   endfunction
 
   function automatic logic [DEC_BANK_AW-1:0] col_addr(input  logic [COL_W-1:0] col_idx);
     begin
-      col_addr = DEC_BANK_AW'(int'(col_idx) / L);
+      col_addr = DEC_BANK_AW'(col_idx >> L_SHIFT);
     end
   endfunction
 

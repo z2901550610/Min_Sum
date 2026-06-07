@@ -114,6 +114,7 @@ package bike_pkg;
   localparam int EDGE_ID_W = (ROW_EDGE_COUNT > 1) ? $clog2(ROW_EDGE_COUNT) : 1;
   localparam int ROW_IDX_W = (R > 1) ? $clog2(R) : 1;
   localparam int LANE_IDX_W = (L > 1) ? $clog2(L) : 1;
+  localparam int L_SHIFT = (L > 1) ? $clog2(L) : 0;
   localparam int ITER_W = $clog2(I_MAX + 1);
 
   localparam int DEC_STATE_W = 4;
