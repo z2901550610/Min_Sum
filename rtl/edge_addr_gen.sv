@@ -18,35 +18,61 @@ module edge_addr_gen
     output logic [ TILE_OFF_W-1:0] o_tile_offset[0:L-1]
 );
 
+  localparam int ROW_CALC_W = ROW_IDX_W + 1;
+  localparam int OFF_CNT_W = TILE_OFF_W + 1;
+  localparam int LANE_SUM_W = LANE_IDX_W + 2;
+  localparam int R_LOW_INT = R & (L - 1);
+  localparam int R_BORROW_MIN_INT = (R_LOW_INT == 0) ? 0 : (L - R_LOW_INT);
+  localparam logic [LANE_IDX_W-1:0] R_LOW = LANE_IDX_W'(R_LOW_INT);
+  localparam logic [LANE_IDX_W-1:0] R_BORROW_MIN = LANE_IDX_W'(R_BORROW_MIN_INT);
+  localparam logic [ROW_BANK_AW-1:0] R_ADDR = ROW_BANK_AW'(R >> L_SHIFT);
+  localparam logic [OFF_CNT_W-1:0] C_TILE_OFF = OFF_CNT_W'(C_TILE);
+  localparam logic [ROW_CALC_W-1:0] R_CALC = ROW_CALC_W'(R);
+
   always_comb begin
-    int tile_base;
-    int tile_cols;
-    int tile_end;
-    int wrap_col;
-    int wrap_offset;
-    int wrap_q;
-    int wrap_lane;
-    int q_idx;
-    bit has_wrap;
-    bit split_en;
-    tile_base = int'(i_tile_idx) * C_TILE;
-    tile_cols = (tile_base + C_TILE > R) ? (R - tile_base) : C_TILE;
-    tile_end = tile_base + tile_cols;
-    wrap_col = R - int'(i_base_row);
-    wrap_offset = wrap_col - tile_base;
-    wrap_q = (wrap_offset >= 0) ? (wrap_offset >> L_SHIFT) : 0;
-    wrap_lane = (wrap_offset >= 0) ? (wrap_offset & (L - 1)) : 0;
+    logic [ ROW_CALC_W-1:0] tile_base;
+    logic [ ROW_CALC_W-1:0] tile_end;
+    logic [  OFF_CNT_W-1:0] tile_cols;
+    logic [ ROW_CALC_W-1:0] wrap_col;
+    logic [ ROW_CALC_W-1:0] wrap_offset;
+    logic [    Q_SEQ_W-1:0] wrap_q;
+    logic [ LANE_IDX_W-1:0] wrap_lane;
+    logic [    Q_SEQ_W-1:0] q_idx;
+    logic [ROW_BANK_AW-1:0] base_addr;
+    logic [ROW_BANK_AW-1:0] tile_addr_base;
+    logic [ LANE_IDX_W-1:0] base_bank;
+    logic [ LANE_IDX_W-1:0] post_bank_adjust;
+    logic                   has_wrap;
+    logic                   split_en;
+    logic                   post_region;
+
+    tile_base = ROW_CALC_W'(i_tile_idx) * ROW_CALC_W'(C_TILE);
+    tile_cols = ((tile_base + ROW_CALC_W'(C_TILE)) > R_CALC) ?
+                OFF_CNT_W'(R_CALC - tile_base) : C_TILE_OFF;
+    tile_end = tile_base + ROW_CALC_W'(tile_cols);
+    wrap_col = R_CALC - ROW_CALC_W'(i_base_row);
+    wrap_offset = (wrap_col >= tile_base) ? (wrap_col - tile_base) : '0;
+    wrap_q = Q_SEQ_W'(wrap_offset >> L_SHIFT);
+    wrap_lane = LANE_IDX_W'(wrap_offset[LANE_IDX_W-1:0]);
     has_wrap = (tile_base < wrap_col) && (wrap_col < tile_end);
-    split_en = has_wrap && (wrap_lane != 0);
-    q_idx = int'(i_q_seq);
+    split_en = has_wrap && (wrap_lane != '0);
+    q_idx = i_q_seq;
 
     if (split_en) begin
-      if (int'(i_q_seq) > (wrap_q + 1)) begin
-        q_idx = int'(i_q_seq) - 1;
+      if (i_q_seq > (wrap_q + Q_SEQ_W'(1))) begin
+        q_idx = i_q_seq - Q_SEQ_W'(1);
       end else begin
-        q_idx = (int'(i_q_seq) <= wrap_q) ? int'(i_q_seq) : wrap_q;
+        q_idx = (i_q_seq <= wrap_q) ? i_q_seq : wrap_q;
       end
     end
+
+    post_region = (tile_base >= wrap_col) ||
+                  (has_wrap && ((!split_en && (q_idx >= wrap_q)) ||
+                   (split_en && (i_q_seq > wrap_q))));
+    base_bank = i_base_row[LANE_IDX_W-1:0];
+    base_addr = ROW_BANK_AW'(i_base_row >> L_SHIFT);
+    tile_addr_base = ROW_BANK_AW'(i_tile_idx) * ROW_BANK_AW'(Q_BASE);
+    post_bank_adjust = post_region ? R_LOW : '0;
 
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
       o_valid[lane_idx] = 1'b0;
@@ -58,38 +84,46 @@ module edge_addr_gen
       o_tile_offset[lane_idx] = '0;
     end
 
-    for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-      int                    offset;
-      int                    col_local;
-      int                    row_raw;
-      int                    row_idx;
-      logic [LANE_IDX_W-1:0] out_bank;
-      bit                    lane_valid;
+    for (int bank_idx = 0; bank_idx < L; bank_idx++) begin
+      logic [ LANE_IDX_W-1:0] lane_idx;
+      logic [  OFF_CNT_W-1:0] offset;
+      logic [ ROW_CALC_W-1:0] col_local;
+      logic [ROW_BANK_AW-1:0] raw_row_addr;
+      logic [ROW_BANK_AW-1:0] row_addr;
+      logic [  ROW_IDX_W-1:0] row_idx;
+      logic [ LANE_SUM_W-1:0] low_sum;
+      logic                   carry_low;
+      logic                   borrow_low;
+      logic                   lane_valid;
 
-      offset = (q_idx << L_SHIFT) + lane_idx;
-      col_local = tile_base + offset;
-      row_raw = col_local + int'(i_base_row);
-      row_idx = (row_raw >= R) ? (row_raw - R) : row_raw;
-      out_bank = LANE_IDX_W'(row_idx & (L - 1));
-      lane_valid = i_phase_valid && (int'(i_q_seq) < Q_TILE) && (q_idx < Q_BASE) &&
-                   (offset < tile_cols);
+      lane_idx = LANE_IDX_W'(LANE_SUM_W'(bank_idx) + LANE_SUM_W'(post_bank_adjust) +
+                              LANE_SUM_W'(L) - LANE_SUM_W'(base_bank));
+      offset = {q_idx, {L_SHIFT{1'b0}}} + OFF_CNT_W'(lane_idx);
+      col_local = tile_base + ROW_CALC_W'(offset);
+      low_sum = LANE_SUM_W'(base_bank) + LANE_SUM_W'(lane_idx);
+      carry_low = low_sum >= LANE_SUM_W'(L);
+      borrow_low = (R_LOW != '0) && (LANE_IDX_W'(bank_idx) >= R_BORROW_MIN);
+      raw_row_addr = base_addr + tile_addr_base + ROW_BANK_AW'(q_idx) + ROW_BANK_AW'(carry_low);
+      row_addr = post_region ? (raw_row_addr - R_ADDR - ROW_BANK_AW'(borrow_low)) : raw_row_addr;
+      row_idx = ROW_IDX_W'(({row_addr, {L_SHIFT{1'b0}}}) + ROW_IDX_W'(bank_idx));
+      lane_valid = i_phase_valid && (q_idx < Q_SEQ_W'(Q_BASE)) && (offset < tile_cols);
 
-      if (split_en && (int'(i_q_seq) == wrap_q)) begin
+      if (split_en && (i_q_seq == wrap_q)) begin
         lane_valid &= lane_idx < wrap_lane;
-      end else if (split_en && (int'(i_q_seq) == (wrap_q + 1))) begin
+      end else if (split_en && (i_q_seq == (wrap_q + Q_SEQ_W'(1)))) begin
         lane_valid &= lane_idx >= wrap_lane;
-      end else if (!split_en && (int'(i_q_seq) >= Q_BASE)) begin
+      end else if (!split_en && (i_q_seq >= Q_SEQ_W'(Q_BASE))) begin
         lane_valid = 1'b0;
       end
 
       if (lane_valid) begin
-        o_valid[out_bank] = 1'b1;
-        o_row_idx[out_bank] = ROW_IDX_W'(row_idx);
-        o_col_idx[out_bank] = COL_W'(int'(i_h_block_idx) * R + col_local);
-        o_edge_id[out_bank] = i_edge_id;
-        o_row_bank[out_bank] = out_bank;
-        o_row_addr[out_bank] = ROW_BANK_AW'(row_idx >> L_SHIFT);
-        o_tile_offset[out_bank] = TILE_OFF_W'(offset);
+        o_valid[bank_idx] = 1'b1;
+        o_row_idx[bank_idx] = ROW_IDX_W'(row_idx);
+        o_col_idx[bank_idx] = COL_W'(int'(i_h_block_idx) * R + col_local);
+        o_edge_id[bank_idx] = i_edge_id;
+        o_row_bank[bank_idx] = LANE_IDX_W'(bank_idx);
+        o_row_addr[bank_idx] = row_addr;
+        o_tile_offset[bank_idx] = TILE_OFF_W'(offset);
       end
     end
   end
