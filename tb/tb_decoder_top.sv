@@ -197,7 +197,7 @@ module tb_decoder_top;
     read_error_vector(e_out);
     final_residual = residual_of(TOY_CASE_SYNDROME, e_out);
     exact_match = (e_out === TOY_CASE_ERROR);
-    expected_main_cycles = I_MAX * (TILES_TOTAL + 1) * W * Q_TILE + 2;
+    expected_main_cycles = I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE) + 2;
 
     if (int'(iter_count) != I_MAX)
       $fatal(1, "toy case iterations mismatch: got %0d exp %0d", iter_count, I_MAX);

@@ -22,7 +22,7 @@
 - 遵守 [naming_conventions.md](/Users/z2901550610/Documents/Min_Sum/docs/naming_conventions.md:1)。
 - 模块输入使用 `i_` 前缀，输出使用 `o_` 前缀，子模块实例使用 `u_` 前缀。
 - 时钟使用 `i_clk`。顶层外部复位端口使用 `i_rst_n`，含义是异步置位、同步释放的低有效复位源。
-- lane、tile、row、col、edge、pair、buffer 相关名称使用项目术语：`lane_idx`、`tile_idx`、`row_idx`、`col_idx`、`edge_id`、`pair_epoch`、`fill_buf`、`active_buf`。
+- lane、tile、row、col、edge、pair、buffer 相关名称使用项目术语：`lane_idx`、`tile_idx`、`row_idx`、`col_idx`、`edge_id`、`comp_clear_addr`、`fill_buf`、`active_buf`。
 - unpacked 数组维度紧贴信号名，例如：
 
 ```systemverilog
@@ -120,7 +120,7 @@ always_ff @(posedge i_clk or negedge rst_n_sync) begin
 end
 ```
 
-大型数据 RAM、累加 RAM、cache RAM、syndrome RAM 和 message RAM 的数据阵列按 Vivado RAM 推断模板组织。只有控制位、epoch、valid、loaded bit、状态和计数器需要复位时才复位。RAM 数据阵列写复位循环会影响 RAM 推断和资源映射。
+大型数据 RAM、累加 RAM、cache RAM、syndrome RAM 和 message RAM 的数据阵列按 Vivado RAM 推断模板组织。只有控制位、valid、loaded bit、状态和计数器需要复位时才复位。RAM 数据阵列写复位循环会影响 RAM 推断和资源映射。
 
 ## 组合逻辑
 
@@ -165,7 +165,7 @@ end
 - 需要 BRAM/URAM 时使用 Vivado UG901 推荐的同步读写模板，并明确 read-first、write-first 或 no-change 行为。
 - Vivado 会根据 RTL 模板和启发式规则选择 RAM 类型；`ram_style` 用于明确综合意图。常用值包括 `distributed`、`block`、`ultra`、`registers`。
 - 复杂 FIFO、异步 FIFO、跨域 FIFO、URAM 和标准 CDC 结构优先使用 AMD XPM。
-- 禁止为了清零 RAM 内容而给整个 RAM array 写复位循环。使用 epoch、valid、loaded bit 或外部加载协议表示内容有效性。
+- 禁止为了清零 RAM 内容而给整个 RAM array 写复位循环。使用 valid、loaded bit、固定写入窗口或外部加载协议表示内容有效性。
 - 写地址、读地址和 lane-to-bank mux 的组合路径需要关注时序；大扇入选择器需要 pipeline 或几何调整。
 
 ## DSP 和算术
@@ -268,7 +268,7 @@ make vivado-synth
 ## 规范落地清单
 
 - 顶层外部 reset 进入 `reset_sync`，内部控制逻辑和子模块使用同步释放后的 reset。
-- RAM 数据阵列不写全阵列 reset；控制有效性由 loaded bit、epoch、valid 或写入协议表达。
+- RAM 数据阵列不写全阵列 reset；控制有效性由 loaded bit、valid、固定写入窗口或写入协议表达。
 - `ram_style`、`ASYNC_REG`、`mark_debug`、`keep`、`dont_touch` 只在设计意图明确时使用。
 - XDC 先声明 clock，再声明 clock groups、I/O delay、timing exception 和 physical constraint。
 - Vivado batch 报告保存 methodology、CDC、timing summary、messages 和 utilization。

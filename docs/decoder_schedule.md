@@ -9,7 +9,7 @@ tile_linear = h_block_idx * TILE_COUNT + tile_idx
 tile_base   = tile_idx * C_TILE
 ```
 
-每个 tile 固定执行：
+每个迭代先执行 `ROW_SEG_SIZE` 个 check-state 写 pair 清空周期。每个 tile 固定执行：
 
 ```text
 W * Q_TILE
@@ -18,7 +18,7 @@ W * Q_TILE
 个主窗口周期。一个迭代包含 `TILES_TOTAL + 1` 个窗口：
 
 ```text
-T_ITER = (TILES_TOTAL + 1) * W * Q_TILE
+T_ITER = ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE
 ```
 
 第一个窗口执行 tile 0 的 C2V 填充，最后一个窗口执行最后一个 tile 的 V2C 排空，中间窗口同时执行当前 tile 的 C2V 和前一个 tile 的 V2C。
@@ -26,7 +26,7 @@ T_ITER = (TILES_TOTAL + 1) * W * Q_TILE
 完整译码周期数：
 
 ```text
-T_DECODE = I_MAX * (TILES_TOTAL + 1) * W * Q_TILE
+T_DECODE = I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE)
 ```
 
 ## 可见状态
@@ -34,6 +34,7 @@ T_DECODE = I_MAX * (TILES_TOTAL + 1) * W * Q_TILE
 | 状态 | 含义 |
 | --- | --- |
 | `DEC_WAIT_START` | 等待合法启动 |
+| `DEC_ITER_CLEAR` | check-state 写 pair 初始化 |
 | `DEC_ITER_C2V_PRIME` | 首 tile C2V 填充 |
 | `DEC_ITER_OVERLAP` | C2V(tile n) 与 V2C(tile n-1) 重叠 |
 | `DEC_ITER_V2C_DRAIN` | 尾 tile V2C 排空 |
@@ -47,12 +48,13 @@ T_DECODE = I_MAX * (TILES_TOTAL + 1) * W * Q_TILE
 
 | 计数器 | 范围 |
 | --- | --- |
+| `clear_addr` | `0 .. ROW_SEG_SIZE-1` |
 | `window_idx` | `0 .. TILES_TOTAL` |
 | `one_idx` | `0 .. W-1` |
 | `q_seq` | `0 .. Q_TILE-1` |
 | `iter_count` | `0 .. I_MAX` |
 
-`q_seq` 最内层递增；`q_seq` 到达 `Q_TILE-1` 后推进 `one_idx`；`one_idx` 到达 `W-1` 后推进 `window_idx`；最后一个窗口结束后推进迭代。
+`clear_addr` 在迭代开始递增；清空完成后进入 tile 窗口。`q_seq` 最内层递增；`q_seq` 到达 `Q_TILE-1` 后推进 `one_idx`；`one_idx` 到达 `W-1` 后推进 `window_idx`；最后一个窗口结束后推进迭代。
 
 ## 调度输出
 
@@ -66,8 +68,8 @@ v2c_tile = window_idx - 1
 有效条件：
 
 ```text
-c2v_valid = running && c2v_tile < TILES_TOTAL
-v2c_valid = running && window_idx > 0
+c2v_valid = running && !clear_valid && c2v_tile < TILES_TOTAL
+v2c_valid = running && !clear_valid && window_idx > 0
 ```
 
 tile 坐标展开：

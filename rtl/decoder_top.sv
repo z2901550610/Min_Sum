@@ -53,6 +53,8 @@ module decoder_top
   logic                          active_buf;
   logic                          final_iter;
   logic                          iter_last_cycle;
+  logic                          comp_clear_valid;
+  logic        [ROW_BANK_AW-1:0] comp_clear_addr;
   logic                          decode_start;
   logic                          rst_n_sync;
 
@@ -71,7 +73,6 @@ module decoder_top
   logic        [  ROW_IDX_W-1:0] c2v_h_base_row_e;
   logic        [  EDGE_ID_W-1:0] c2v_h_edge_id_e;
   logic                          comp_read_pair_sel_e;
-  logic                          comp_read_epoch_e;
 
   logic                          c2v_valid[0:L-1];
   logic        [  EDGE_ID_W-1:0] c2v_edge_id[0:L-1];
@@ -87,7 +88,6 @@ module decoder_top
   logic                          c2v_fill_buf_r;
   logic                          c2v_iter_zero_r;
   logic                          comp_read_pair_sel_r;
-  logic                          comp_read_epoch_r;
   logic                          c2v_valid_q[0:L-1];
   logic        [  EDGE_ID_W-1:0] c2v_edge_id_q[0:L-1];
   logic        [ TILE_OFF_W-1:0] c2v_tile_offset_q[0:L-1];
@@ -108,7 +108,6 @@ module decoder_top
   logic        [  ROW_IDX_W-1:0] v2c_h_base_row_e;
   logic        [  EDGE_ID_W-1:0] v2c_h_edge_id_e;
   logic                          comp_write_pair_sel_e;
-  logic                          comp_write_epoch_e;
 
   logic                          v2c_valid[0:L-1];
   logic        [      COL_W-1:0] v2c_col_idx[0:L-1];
@@ -126,7 +125,6 @@ module decoder_top
   logic                          v2c_active_buf_r;
   logic                          v2c_final_iter_r;
   logic                          comp_write_pair_sel_r;
-  logic                          comp_write_epoch_r;
   logic                          v2c_valid_q[0:L-1];
   logic        [      COL_W-1:0] v2c_col_idx_q[0:L-1];
   logic        [  EDGE_ID_W-1:0] v2c_edge_id_q[0:L-1];
@@ -135,12 +133,10 @@ module decoder_top
   logic        [  ONE_IDX_W-1:0] v2c_one_idx_q;
   logic                          v2c_final_iter_q;
   logic                          v2c_write_pair_sel_q;
-  logic                          v2c_write_epoch_q;
 
   logic                          syndrome_rdata[0:L-1];
   logic                          comp_read_pair_sel;
   logic                          comp_write_pair_sel;
-  logic                          pair_epoch[  0:1];
   logic        [ COMP_C2V_W-1:0] c2v_comp_mem[0:L-1];
   logic        [ COMP_C2V_W-1:0] v2c_comp_mem[0:L-1];
   logic                          c2v_sign_mem[0:L-1];
@@ -317,6 +313,8 @@ module decoder_top
       .o_v2c_tile_idx(v2c_tile_idx),
       .o_one_idx(active_one_idx),
       .o_q_seq(active_q_seq),
+      .o_clear_valid(comp_clear_valid),
+      .o_clear_addr(comp_clear_addr),
       .o_fill_buf(fill_buf),
       .o_active_buf(active_buf),
       .o_final_iter(final_iter),
@@ -361,18 +359,18 @@ module decoder_top
   check_state_ram u_check_state_ram (
       .i_clk(i_clk),
       .i_rst_n(rst_n_sync),
+      .i_clear_valid(comp_clear_valid),
+      .i_clear_pair_sel(comp_write_pair_sel),
+      .i_clear_row_addr(comp_clear_addr),
       .i_c2v_pair_sel(comp_read_pair_sel_r),
-      .i_c2v_epoch(comp_read_epoch_r),
       .i_c2v_valid(c2v_valid_r),
       .i_c2v_row_addr(c2v_row_addr_r),
       .o_c2v_comp(c2v_comp_mem),
       .i_v2c_pair_sel(comp_write_pair_sel_r),
-      .i_v2c_epoch(comp_write_epoch_r),
       .i_v2c_valid(v2c_valid_r),
       .i_v2c_row_addr(v2c_row_addr_r),
       .o_v2c_comp(v2c_comp_mem),
       .i_v2c_write_pair_sel(v2c_write_pair_sel_q),
-      .i_v2c_write_epoch(v2c_write_epoch_q),
       .i_v2c_write_valid(v2c_valid_q),
       .i_v2c_write_row_addr(v2c_row_addr_q),
       .i_v2c_write_data(v2c_comp_next)
@@ -468,13 +466,11 @@ module decoder_top
       c2v_h_base_row_e <= '0;
       c2v_h_edge_id_e <= '0;
       comp_read_pair_sel_e <= 1'b0;
-      comp_read_epoch_e <= 1'b0;
       c2v_one_idx_r <= '0;
       c2v_q_seq_r <= '0;
       c2v_fill_buf_r <= 1'b0;
       c2v_iter_zero_r <= 1'b0;
       comp_read_pair_sel_r <= 1'b0;
-      comp_read_epoch_r <= 1'b0;
       v2c_one_idx_q <= '0;
       v2c_final_iter_q <= 1'b0;
       v2c_phase_e <= 1'b0;
@@ -487,15 +483,12 @@ module decoder_top
       v2c_h_base_row_e <= '0;
       v2c_h_edge_id_e <= '0;
       comp_write_pair_sel_e <= 1'b0;
-      comp_write_epoch_e <= 1'b0;
       v2c_one_idx_r <= '0;
       v2c_q_seq_r <= '0;
       v2c_active_buf_r <= 1'b0;
       v2c_final_iter_r <= 1'b0;
       comp_write_pair_sel_r <= 1'b0;
-      comp_write_epoch_r <= 1'b0;
       v2c_write_pair_sel_q <= 1'b0;
-      v2c_write_epoch_q <= 1'b0;
       ctrl_done_r <= 1'b0;
       ctrl_done_q <= 1'b0;
       for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
@@ -530,13 +523,11 @@ module decoder_top
       c2v_h_base_row_e <= c2v_h_base_row;
       c2v_h_edge_id_e <= c2v_h_edge_id;
       comp_read_pair_sel_e <= comp_read_pair_sel;
-      comp_read_epoch_e <= pair_epoch[comp_read_pair_sel];
       c2v_one_idx_r <= c2v_one_idx_e;
       c2v_q_seq_r <= c2v_q_seq_e;
       c2v_fill_buf_r <= c2v_fill_buf_e;
       c2v_iter_zero_r <= c2v_iter_zero_e;
       comp_read_pair_sel_r <= comp_read_pair_sel_e;
-      comp_read_epoch_r <= comp_read_epoch_e;
       c2v_one_idx_q <= c2v_one_idx_r;
       c2v_q_seq_q <= c2v_q_seq_r;
       c2v_fill_buf_q <= c2v_fill_buf_r;
@@ -552,17 +543,14 @@ module decoder_top
       v2c_h_base_row_e <= v2c_h_base_row;
       v2c_h_edge_id_e <= v2c_h_edge_id;
       comp_write_pair_sel_e <= comp_write_pair_sel;
-      comp_write_epoch_e <= pair_epoch[comp_write_pair_sel];
       v2c_one_idx_r <= v2c_one_idx_e;
       v2c_q_seq_r <= v2c_q_seq_e;
       v2c_active_buf_r <= v2c_active_buf_e;
       v2c_final_iter_r <= v2c_final_iter_e;
       comp_write_pair_sel_r <= comp_write_pair_sel_e;
-      comp_write_epoch_r <= comp_write_epoch_e;
       v2c_one_idx_q <= v2c_one_idx_r;
       v2c_final_iter_q <= v2c_final_iter_r;
       v2c_write_pair_sel_q <= comp_write_pair_sel_r;
-      v2c_write_epoch_q <= comp_write_epoch_r;
       ctrl_done_r <= ctrl_done;
       ctrl_done_q <= ctrl_done_r;
       for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
@@ -606,21 +594,17 @@ module decoder_top
 
   always_ff @(posedge i_clk or negedge rst_n_sync) begin
     if (!rst_n_sync) begin
-      comp_read_pair_sel <= 1'b0;
+      comp_read_pair_sel  <= 1'b0;
       comp_write_pair_sel <= 1'b1;
-      pair_epoch[0] <= 1'b0;
-      pair_epoch[1] <= 1'b0;
     end else begin
       if (decode_start) begin
-        comp_read_pair_sel <= 1'b0;
+        comp_read_pair_sel  <= 1'b0;
         comp_write_pair_sel <= 1'b1;
-        pair_epoch[1] <= ~pair_epoch[1];
       end
 
       if (iter_last_cycle && !final_iter) begin
-        comp_read_pair_sel <= comp_write_pair_sel;
+        comp_read_pair_sel  <= comp_write_pair_sel;
         comp_write_pair_sel <= comp_read_pair_sel;
-        pair_epoch[comp_read_pair_sel] <= ~pair_epoch[comp_read_pair_sel];
       end
     end
   end

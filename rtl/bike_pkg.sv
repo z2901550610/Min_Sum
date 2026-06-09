@@ -119,6 +119,7 @@ package bike_pkg;
 
   localparam int DEC_STATE_W = 4;
   localparam logic [DEC_STATE_W-1:0] DEC_WAIT_START = 4'd0;
+  localparam logic [DEC_STATE_W-1:0] DEC_ITER_CLEAR = 4'd3;
   localparam logic [DEC_STATE_W-1:0] DEC_ITER_C2V_PRIME = 4'd4;
   localparam logic [DEC_STATE_W-1:0] DEC_ITER_OVERLAP = 4'd5;
   localparam logic [DEC_STATE_W-1:0] DEC_ITER_V2C_DRAIN = 4'd6;

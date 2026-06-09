@@ -37,7 +37,6 @@
 | --- | --- |
 | `h_matrix_mem` | H 第一列行索引存储 |
 | `check_state_ram` | compressed check-state 双 pair RAM |
-| `pair_epoch` | pair 当前 epoch |
 | `msg_sign_ram` | edge sign RAM |
 | `tile_accum_ram` | raw C2V tile 累加 RAM |
 | `c2v_cache_ram` | raw C2V tile 边缓存 RAM |
@@ -52,7 +51,8 @@ compressed check-state 使用双 pair：
 | --- | --- |
 | `comp_read_pair_sel` | C2V 读取的 pair |
 | `comp_write_pair_sel` | V2C 写入的 pair |
-| `pair_epoch` | 判断 pair 中 row 是否属于当前迭代 |
+| `comp_clear_valid` | check-state 写 pair 初始化有效 |
+| `comp_clear_addr` | check-state 写 pair 初始化地址 |
 
 tile-local 状态使用双 buffer：
 

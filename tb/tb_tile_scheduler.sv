@@ -18,6 +18,8 @@ module tb_tile_scheduler;
   logic [ TILE_IDX_W-1:0] v2c_tile_idx;
   logic [  ONE_IDX_W-1:0] one_idx;
   logic [    Q_SEQ_W-1:0] q_seq;
+  logic                   clear_valid;
+  logic [ROW_BANK_AW-1:0] clear_addr;
   logic                   fill_buf;
   logic                   active_buf;
   logic                   final_iter;
@@ -30,6 +32,7 @@ module tb_tile_scheduler;
   logic                   saw_prime;
   logic                   saw_overlap;
   logic                   saw_drain;
+  int                     clear_count;
   /* verilator lint_off UNUSEDSIGNAL */
   logic [  H_BLOCK_W-1:0] observed_c2v_h_block_idx;
   logic [ TILE_IDX_W-1:0] observed_c2v_tile_idx;
@@ -59,6 +62,8 @@ module tb_tile_scheduler;
       .o_v2c_tile_idx(v2c_tile_idx),
       .o_one_idx(one_idx),
       .o_q_seq(q_seq),
+      .o_clear_valid(clear_valid),
+      .o_clear_addr(clear_addr),
       .o_fill_buf(fill_buf),
       .o_active_buf(active_buf),
       .o_final_iter(final_iter),
@@ -76,6 +81,7 @@ module tb_tile_scheduler;
       saw_prime <= 1'b0;
       saw_overlap <= 1'b0;
       saw_drain <= 1'b0;
+      clear_count <= 0;
       observed_c2v_h_block_idx <= '0;
       observed_c2v_tile_idx <= '0;
       observed_v2c_h_block_idx <= '0;
@@ -99,6 +105,11 @@ module tb_tile_scheduler;
       observed_final_iter <= final_iter;
       observed_iter_first_cycle <= iter_first_cycle;
       observed_iter_last_cycle <= iter_last_cycle;
+      if (clear_valid) begin
+        clear_count <= clear_count + 1;
+        if (c2v_valid || v2c_valid) $fatal(1, "scheduler clear overlap with main phase");
+        if (clear_addr >= ROW_BANK_AW'(ROW_SEG_SIZE)) $fatal(1, "scheduler clear addr range");
+      end
       if (c2v_valid && !v2c_valid) saw_prime <= 1'b1;
       if (c2v_valid && v2c_valid) begin
         saw_overlap <= 1'b1;
@@ -129,10 +140,17 @@ module tb_tile_scheduler;
       @(posedge clk);
     end
 
-    if (cycle_count != I_MAX * (TILES_TOTAL + 1) * W * Q_TILE) begin
+    if (cycle_count != I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE)) begin
       $fatal(1, "tile_scheduler cycle mismatch: got %0d exp %0d", cycle_count,
-             I_MAX * (TILES_TOTAL + 1) * W * Q_TILE);
+             I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE));
     end
+    if (clear_count != I_MAX * ROW_SEG_SIZE)
+      $fatal(
+          1,
+          "tile_scheduler clear count mismatch: got %0d exp %0d",
+          clear_count,
+          I_MAX * ROW_SEG_SIZE
+      );
     if (iter_count != ITER_W'(I_MAX)) $fatal(1, "tile_scheduler iter mismatch");
     if (!saw_prime || !saw_overlap || !saw_drain) $fatal(1, "missing scheduler phase");
     if (state != DEC_DONE) $fatal(1, "tile_scheduler final state mismatch");

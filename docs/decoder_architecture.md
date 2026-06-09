@@ -26,8 +26,7 @@
 | --- | --- | --- |
 | `syndrome_mem` | `[R]` | 输入 syndrome |
 | `decision_mem` | `[N]` | 最终错误估计 bit |
-| `check_state_ram` | `2 * L` banks | 双 pair 压缩 check state 和 row epoch |
-| `pair_epoch` | `[2]` | 当前 pair 世代 bit |
+| `check_state_ram` | `2 * L` banks | 双 pair 压缩 check state |
 | `msg_sign_ram` | `L` banks | 每条 row-local edge 的上一轮 V2C sign |
 | `tile_accum_ram` | `2 * L` banks | tile-local raw C2V 累加和 |
 | `c2v_cache_ram` | `2 * L` banks | tile-local raw C2V 边值 |
@@ -38,7 +37,7 @@
 min1_mag, min2_mag, min_edge_id, sign_xor
 ```
 
-epoch 位用于判断某行是否在当前 pair 中已被写入。epoch 不匹配时，读出值按 `COMP_C2V_INIT` 处理。
+每个迭代的写 pair 由固定清空窗口写入 `COMP_C2V_INIT`，随后 V2C 数据通路按 row bank 写入下一轮 compressed check state。
 
 ## C2V 数据通路
 
@@ -83,8 +82,8 @@ comp_read_pair_sel  = current pair
 comp_write_pair_sel = next pair
 ```
 
-迭代末尾交换两个 pair，并翻转释放 pair 的 epoch。写 pair 中未触达的 row 在后续读取时由 epoch 机制返回初始 compressed state。
+迭代末尾交换两个 pair。每个迭代开始时，写 pair 的所有 row-bank 地址按固定顺序初始化为 `COMP_C2V_INIT`。
 
 ## 存储综合约束
 
-大状态存储使用 banked RAM 模块承载。功能有效性由固定写入窗口、H 加载门控和 epoch 位保证。
+大状态存储使用 banked RAM 模块承载。功能有效性由固定写入窗口、H 加载门控和 pair 调度保证。

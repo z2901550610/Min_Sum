@@ -92,7 +92,7 @@ T_TILE = W * Q_TILE
 一个迭代的固定窗口周期：
 
 ```text
-T_ITER = (TILES_TOTAL + 1) * T_TILE
+T_ITER = ROW_SEG_SIZE + (TILES_TOTAL + 1) * T_TILE
 ```
 
 完整译码：
@@ -106,13 +106,12 @@ T_DECODE = I_MAX * T_ITER
 | 状态 | 访问方式 |
 | --- | --- |
 | compressed check state | `comp_pair[pair][row_idx]` |
-| check-state epoch | `comp_epoch[pair][row_idx]` |
 | V2C sign | `sign_mem[edge_id][row_idx]` |
 | tile raw C2V sum | `tile_accum[buf][tile_offset]` |
 | tile raw C2V edge | `tile_t[buf][lane][one_idx * Q_TILE + q_seq]` |
 | decision bit | `decision_mem[col_idx]` |
 
-`tile_accum` 和 `tile_t` 使用 `fill_buf/active_buf` 双缓冲。compressed check state 使用 `comp_read_pair_sel/comp_write_pair_sel` 双 pair。
+`tile_accum` 和 `tile_t` 使用 `fill_buf/active_buf` 双缓冲。compressed check state 使用 `comp_read_pair_sel/comp_write_pair_sel` 双 pair。每轮写 pair 按固定地址序列初始化为 `COMP_C2V_INIT`。
 
 ## C2V
 

@@ -61,7 +61,7 @@ python3 scripts/run_bike_random.py \
 - C2V/V2C tile overlap 被观察到
 - guard dummy 周期被观察到
 - `o_iter_count == I_MAX`
-- 主循环周期数等于 `I_MAX * (TILES_TOTAL + 1) * W * Q_TILE`
+- 主循环周期数等于 `I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE)`
 
 ## 日志
 
