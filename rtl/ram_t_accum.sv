@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
-// Double-buffered tile accumulator storage.
-module tile_accum_ram
+// VNU tile accumulator storage for raw C2V sums.
+module ram_t_accum
   import bike_pkg::*;
 (
     input  logic                         i_clk,

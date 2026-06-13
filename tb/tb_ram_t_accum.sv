@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 
-module tb_tile_accum_ram;
+module tb_ram_t_accum;
   import bike_pkg::*;
 
   logic                         clk;
@@ -17,7 +17,7 @@ module tb_tile_accum_ram;
   logic        [TILE_OFF_W-1:0] v2c_tile_offset[0:L-1];
   logic signed [     ACC_W-1:0] v2c_rdata[0:L-1];
 
-  tile_accum_ram dut (
+  ram_t_accum dut (
       .i_clk(clk),
       .i_c2v_read_buf(c2v_read_buf),
       .i_c2v_read_valid(c2v_read_valid),
@@ -38,7 +38,7 @@ module tb_tile_accum_ram;
 
   initial begin
     #10000;
-    $fatal(1, "tb_tile_accum_ram timeout");
+    $fatal(1, "tb_ram_t_accum timeout");
   end
 
   task automatic clear_inputs;
@@ -106,7 +106,7 @@ module tb_tile_accum_ram;
     clear_inputs();
     expect_buf(1'b1, ACC_W'(12));
 
-    $display("tb_tile_accum_ram PASS");
+    $display("tb_ram_t_accum PASS");
     $finish;
   end
 endmodule

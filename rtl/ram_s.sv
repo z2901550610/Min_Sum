@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
-// Banked v2c sign storage indexed by edge and tile word.
-module msg_sign_ram
+// RAM S: banked V2C sign storage indexed by edge and tile word.
+module ram_s
   import bike_pkg::*;
 (
     input  logic                  i_clk,

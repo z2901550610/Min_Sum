@@ -35,12 +35,12 @@
 
 | 名称 | 含义 |
 | --- | --- |
-| `h_matrix_mem` | H 第一列行索引存储 |
-| `check_state_ram` | compressed check-state 双 pair RAM |
-| `msg_sign_ram` | edge sign RAM |
-| `tile_accum_ram` | raw C2V tile 累加 RAM |
-| `c2v_cache_ram` | raw C2V tile 边缓存 RAM |
-| `decision_mem` | 最终错误估计 bit |
+| `ram_i` | H 第一列行索引存储 |
+| `ram_m` | compressed check-state 双 pair RAM |
+| `ram_s` | edge sign RAM |
+| `ram_t_accum` | raw C2V tile 累加 RAM |
+| `ram_t` | raw C2V tile 边缓存 RAM |
+| `ram_c1` | 最终错误估计 bit |
 | `syndrome_mem` | 输入 syndrome bit |
 
 ## Pair 和 Buffer

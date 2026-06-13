@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 
-module tb_c2v_cache_ram;
+module tb_ram_t;
   import bike_pkg::*;
 
   logic                        clk;
@@ -15,7 +15,7 @@ module tb_c2v_cache_ram;
   logic        [  Q_SEQ_W-1:0] v2c_q_seq;
   logic signed [    ACC_W-1:0] v2c_rdata[0:L-1];
 
-  c2v_cache_ram dut (
+  ram_t dut (
       .i_clk(clk),
       .i_fill_buf(fill_buf),
       .i_c2v_write_valid(c2v_write_valid),
@@ -34,7 +34,7 @@ module tb_c2v_cache_ram;
 
   initial begin
     #10000;
-    $fatal(1, "tb_c2v_cache_ram timeout");
+    $fatal(1, "tb_ram_t timeout");
   end
 
   task automatic clear_inputs;
@@ -99,7 +99,7 @@ module tb_c2v_cache_ram;
     clear_inputs();
     read_expect(1'b1, ACC_W'(9));
 
-    $display("tb_c2v_cache_ram PASS");
+    $display("tb_ram_t PASS");
     $finish;
   end
 endmodule

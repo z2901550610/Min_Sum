@@ -9,10 +9,10 @@
 | RTL top | `decoder_top` |
 | Testbench | `tb_bike_decoder_random` |
 | Vivado version | 2023.2 |
-| FPGA device | `xc7k325tfbg676-2L` |
+| FPGA device | `xc7k480tiffv1156-2L` for current BIKE-256 run |
 | Clock constraint | 100 MHz, 10.000 ns |
 | Message width | `BIKE_MSG_BITS=5` |
-| Tile columns | `BIKE_C_TILE=256` |
+| Tile columns | `BIKE_C_TILE=288` for current BIKE-256 run |
 | Lane parallelism | `BIKE_PARALLEL_L=8` |
 | Decode iterations | `I_MAX=7` |
 
@@ -20,9 +20,9 @@
 
 | Level | Defines | Random seed | Decode cycles | Residual weight | Exact | LUT | FF | BRAM tile | DSP | WNS ns | TNS ns | Routed |
 | --- | --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| 128 | `BIKE_128_PARAMS` | 1 | 612096 | 0 | yes | 9983 | 2526 | 48 | 0 | 0.610 | 0.000 | yes |
+| 128 | `BIKE_128_PARAMS` | 1 | 612096 | 0 | yes | 10712 | 2968 | 56 | 0 | 0.544 | 0.000 | yes |
 | 160 | `BIKE_160_PARAMS` |  | 1231988 |  |  | 12270 | 3049 | 96 | 0 | 0.213 | 0.000 | yes |
-| 256 | `BIKE_256_PARAMS` |  | 4459863 |  |  | 16778 | 4235 | 232 | 0 | 0.246 | 0.000 | yes |
+| 256 | `BIKE_256_PARAMS` | 1 | 4441768 | 0 | yes | 17472 | 4666 | 368 | 0 | 0.510 | 0.000 | yes |
 | 384 | `BIKE_384_PARAMS` |  |  |  |  |  |  |  |  |  |  |  |
 
 ## BIKE-128
@@ -70,21 +70,21 @@ I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE) + 2
 
 ### Vivado Utilization
 
-Report: `report_utilization`, fully placed design, generated 2026-06-10 01:03:42.
+Report: `report_utilization`, fully placed design, generated 2026-06-13 21:36:01.
 
 | Resource | Used | Available | Utilization |
 | --- | ---: | ---: | ---: |
-| Slice LUTs | 9983 | 203800 | 4.90% |
-| LUT as Logic | 8655 | 203800 | 4.25% |
-| LUT as Distributed RAM | 1328 | 64000 | 2.08% |
-| Slice Registers | 2526 | 407600 | 0.62% |
-| Slice | 3167 | 50950 | 6.22% |
-| F7 Muxes | 878 | 101900 | 0.86% |
-| F8 Muxes | 170 | 50950 | 0.33% |
-| Block RAM Tile | 48 | 445 | 10.79% |
-| RAMB36E1 | 24 | 445 | 5.39% |
-| RAMB18E1 | 48 | 890 | 5.39% |
-| DSP | 0 | 840 | 0.00% |
+| Slice LUTs | 10712 | 298600 | 3.59% |
+| LUT as Logic | 9192 | 298600 | 3.08% |
+| LUT as Distributed RAM | 1520 | 108600 | 1.40% |
+| Slice Registers | 2968 | 597200 | 0.50% |
+| Slice | 3238 | 74650 | 4.34% |
+| F7 Muxes | 911 | 149300 | 0.61% |
+| F8 Muxes | 170 | 74650 | 0.23% |
+| Block RAM Tile | 56 | 955 | 5.86% |
+| RAMB36E1 | 32 | 955 | 3.35% |
+| RAMB18E1 | 48 | 1910 | 2.51% |
+| DSP | 0 | 1920 | 0.00% |
 | Bonded IOB | 61 | 400 | 15.25% |
 | BUFGCTRL | 1 | 32 | 3.13% |
 
@@ -92,30 +92,31 @@ Primitive highlights:
 
 | Primitive | Used |
 | --- | ---: |
-| FDCE | 1423 |
-| FDRE | 1101 |
-| LUT6 | 5199 |
-| LUT5 | 1573 |
-| LUT4 | 1141 |
-| LUT3 | 709 |
-| LUT2 | 1450 |
-| CARRY4 | 518 |
-| MUXF7 | 878 |
+| FDCE | 1913 |
+| FDRE | 1053 |
+| LUT6 | 5996 |
+| LUT5 | 1809 |
+| LUT4 | 1000 |
+| LUT3 | 584 |
+| LUT2 | 1104 |
+| CARRY4 | 340 |
+| MUXF7 | 911 |
 | MUXF8 | 170 |
-| RAMD64E | 992 |
-| RAMD32 | 464 |
-| RAMS32 | 128 |
+| RAMD64E | 1440 |
+| RAMD32 | 80 |
+| RAMB18E1 | 48 |
+| RAMB36E1 | 32 |
 
 ### Vivado Timing
 
-Report: `report_timing_summary`, routed design, generated 2026-06-10 01:04:38.
+Report: `report_timing_summary`, routed design, generated 2026-06-13 21:37:11.
 
 | Metric | Value |
 | --- | ---: |
-| WNS | 0.610 ns |
+| WNS | 0.544 ns |
 | TNS | 0.000 ns |
 | Setup failing endpoints | 0 |
-| WHS | 0.042 ns |
+| WHS | 0.051 ns |
 | THS | 0.000 ns |
 | Hold failing endpoints | 0 |
 | WPWS | 4.232 ns |
@@ -125,13 +126,13 @@ Worst setup path:
 
 | Field | Value |
 | --- | --- |
-| Source | `u_check_state_ram/g_pair[1].g_bank[0].mem_reg_2/CLKBWRCLK` |
-| Destination | `u_tile_accum_ram/g_buf[1].g_bank[2].mem_reg_r1_0_31_6_9/RAMA_D1/I` |
-| Data path delay | 8.962 ns |
-| Logic delay | 2.741 ns |
-| Route delay | 6.221 ns |
-| Logic levels | 12 |
-| Logic cells | `CARRY4=2 LUT2=1 LUT4=3 LUT6=6` |
+| Source | `u_msg_sign_ram/g_bank[5].mem_reg_3/CLKBWRCLK` |
+| Destination | `u_tile_accum_ram/g_buf[1].g_bank[2].mem_reg_r2_0_63_9_9/DP/I` |
+| Data path delay | 8.658 ns |
+| Logic delay | 3.044 ns |
+| Route delay | 5.614 ns |
+| Logic levels | 11 |
+| Logic cells | `CARRY4=2 LUT2=1 LUT4=1 LUT5=2 LUT6=4 MUXF7=1` |
 
 Methodology notes:
 
@@ -217,11 +218,11 @@ Memory mapping highlights:
 
 | Memory | Mapping |
 | --- | --- |
-| `check_state_ram` | True dual-port block RAM |
-| `msg_sign_ram` | 8 banks, each mapped as 163 K x 1 block RAM |
-| `c2v_cache_ram` | 16 lane/buffer RAMs, each mapped as 1 K x 11 block RAM |
-| `tile_accum_ram` | 16 banks, each mapped as 32 x 11 distributed RAM |
-| `decision_ram` | 8 banks, each mapped as 8 K x 1 distributed RAM |
+| `ram_m` | True dual-port block RAM |
+| `ram_s` | 8 banks, each mapped as 163 K x 1 block RAM |
+| `ram_t` | 16 lane/buffer RAMs, each mapped as 1 K x 11 block RAM |
+| `ram_t_accum` | 16 banks, each mapped as 32 x 11 distributed RAM |
+| `ram_c1` | 8 banks, each mapped as 8 K x 1 distributed RAM |
 | `syndrome` banks | 8 banks, each mapped as 2 K x 1 distributed RAM |
 
 Notes:
@@ -230,7 +231,7 @@ Notes:
 | --- | --- |
 | `Synth 8-6702` | Incremental synthesis guide was rejected and default synthesis ran |
 | `Synth 8-7052` | Several block RAM instances report that optional output registers were not merged |
-| `Netlist 29-101` | `check_state_ram` contains many primitives; hierarchy can help future floorplanning |
+| `Netlist 29-101` | `ram_m` contains many primitives; hierarchy can help future floorplanning |
 
 ### Vivado Utilization
 
@@ -315,23 +316,37 @@ Methodology notes:
 | `N0` | 3 |
 | `W` | 55 |
 | `T` | 429 |
-| `C_TILE` | 256 |
-| `TILE_COUNT` | 116 |
-| `TILES_TOTAL` | 348 |
-| `Q_TILE` | 33 |
+| `C_TILE` | 288 |
+| `TILE_COUNT` | 103 |
+| `TILES_TOTAL` | 309 |
+| `Q_TILE` | 37 |
 | `I_MAX` | 7 |
+
+### Simulation
+
+Random test result:
+
+| Field | Value |
+| --- | ---: |
+| Seed | 1 |
+| Iterations | 7 |
+| Decode cycles | 4441768 |
+| Target weight | 429 |
+| Output weight | 429 |
+| Residual weight | 0 |
+| Exact match | 1 |
 
 Cycle budget:
 
 ```text
 I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE) + 2
-= 7 * (3688 + (348 + 1) * 55 * 33) + 2
-= 4459863
+= 7 * (3688 + (309 + 1) * 55 * 37) + 2
+= 4441768
 ```
 
 ### Synthesis
 
-Report: `synth_design`, generated 2026-06-10.
+Report: `synth_design`, generated 2026-06-13.
 
 Defines:
 
@@ -339,89 +354,57 @@ Defines:
 BIKE_256_PARAMS
 BIKE_MSG_BITS=5
 BIKE_PARALLEL_L=8
-BIKE_C_TILE=256
+BIKE_C_TILE=288
 ```
 
-Synthesis status:
+FPGA device:
 
 | Field | Value |
-| --- | ---: |
-| Errors | 0 |
-| Critical warnings | 0 |
-| Warnings | 90 |
-| Elapsed time | 00:33:42 |
-| Peak memory | 7311.707 MB |
-
-Synthesis cell usage:
-
-| Cell | Count |
-| --- | ---: |
-| LUT1 | 217 |
-| LUT2 | 1700 |
-| LUT3 | 792 |
-| LUT4 | 1745 |
-| LUT5 | 2162 |
-| LUT6 | 8202 |
-| LUT total | 14818 |
-| CARRY4 | 763 |
-| MUXF7 | 2862 |
-| MUXF8 | 478 |
-| FDCE | 1686 |
-| FDPE | 2 |
-| FDRE | 2547 |
-| FF total | 4235 |
-| RAMB36E1 | 232 |
-| RAMD64E | 3664 |
-| RAMD32 | 464 |
-| RAMS32 | 128 |
-| BUFG | 1 |
-| IBUF | 61 |
-| OBUF | 7 |
+| --- | --- |
+| Part | `xc7k480tiffv1156-2L` |
 
 RTL component memory summary:
 
 | RAM group | Size | Count |
 | --- | --- | ---: |
-| Sign storage banks | 608520 x 1 bit | 8 |
+| Sign storage banks | 16 K x 36 bit | 8 |
 | Check-state banks | 3688 x 17 bit | 16 |
-| C2V cache banks | 1815 x 11 bit | 16 |
+| C2V cache banks | 2035 x 11 bit | 16 |
 
 Memory mapping highlights:
 
 | Memory | Mapping |
 | --- | --- |
-| `check_state_ram` | True dual-port block RAM |
-| `msg_sign_ram` | 8 banks, each mapped as 608520 x 1 block RAM storage |
-| `c2v_cache_ram` | 16 lane/buffer RAMs, each mapped as 1 K x 11 block RAM |
-| `tile_accum_ram` | 16 banks, each mapped as 32 x 11 distributed RAM |
-| `decision_ram` | 8 banks, each mapped as 16 K x 1 distributed RAM |
+| `ram_m` | True dual-port block RAM |
+| `ram_s` | 8 banks, each mapped as 16 K x 36 block RAM storage |
+| `ram_t` | 16 lane/buffer RAMs, each mapped as 1 K x 11 block RAM |
+| `ram_t_accum` | 16 banks, each mapped as 64 x 11 distributed RAM |
+| `ram_c1` | 8 banks, each mapped as 16 K x 1 distributed RAM |
 | `syndrome` banks | 8 banks, each mapped as 4 K x 1 distributed RAM |
 
 Notes:
 
 | Message | Note |
 | --- | --- |
-| `Synth 8-6702` | Incremental synthesis guide was rejected and default synthesis ran |
 | `Synth 8-7052` | Several block RAM instances report that optional output registers were not merged |
-| `Netlist 29-101` | `check_state_ram` contains many primitives; hierarchy can help future floorplanning |
 
 ### Vivado Utilization
 
-Report: `report_utilization`, fully placed design, generated 2026-06-10 10:49:49.
+Report: `report_utilization`, fully placed design, generated 2026-06-13 21:14:10.
 
 | Resource | Used | Available | Utilization |
 | --- | ---: | ---: | ---: |
-| Slice LUTs | 16778 | 203800 | 8.23% |
-| LUT as Logic | 12778 | 203800 | 6.27% |
-| LUT as Distributed RAM | 4000 | 64000 | 6.25% |
-| Slice Registers | 4235 | 407600 | 1.04% |
-| Slice | 6444 | 50950 | 12.65% |
-| F7 Muxes | 2862 | 101900 | 2.81% |
-| F8 Muxes | 478 | 50950 | 0.94% |
-| Block RAM Tile | 232 | 445 | 52.13% |
-| RAMB36E1 | 232 | 445 | 52.13% |
-| RAMB18E1 | 0 | 890 | 0.00% |
-| DSP | 0 | 840 | 0.00% |
+| Slice LUTs | 17472 | 298600 | 5.85% |
+| LUT as Logic | 13216 | 298600 | 4.43% |
+| LUT as Distributed RAM | 4256 | 108600 | 3.92% |
+| Slice Registers | 4666 | 597200 | 0.78% |
+| Slice | 6021 | 74650 | 8.07% |
+| F7 Muxes | 2877 | 149300 | 1.93% |
+| F8 Muxes | 478 | 74650 | 0.64% |
+| Block RAM Tile | 368 | 955 | 38.53% |
+| RAMB36E1 | 368 | 955 | 38.53% |
+| RAMB18E1 | 0 | 1910 | 0.00% |
+| DSP | 0 | 1920 | 0.00% |
 | Bonded IOB | 68 | 400 | 17.00% |
 | BUFGCTRL | 1 | 32 | 3.13% |
 
@@ -429,31 +412,35 @@ Primitive highlights:
 
 | Primitive | Used |
 | --- | ---: |
-| FDCE | 1686 |
-| FDRE | 2547 |
-| LUT6 | 8202 |
-| LUT5 | 2162 |
-| LUT4 | 1745 |
-| LUT3 | 792 |
-| LUT2 | 1700 |
-| CARRY4 | 763 |
-| MUXF7 | 2862 |
+| LUT6 | 9088 |
+| RAMD64E | 4176 |
+| MUXF7 | 2877 |
+| FDRE | 2475 |
+| FDCE | 2189 |
+| LUT5 | 2063 |
+| LUT4 | 1508 |
+| LUT2 | 1487 |
+| LUT3 | 824 |
+| CARRY4 | 573 |
 | MUXF8 | 478 |
-| RAMD64E | 3664 |
-| RAMD32 | 464 |
-| RAMS32 | 128 |
-| RAMB36E1 | 232 |
+| RAMB36E1 | 368 |
+| LUT1 | 147 |
+| RAMD32 | 80 |
+| IBUF | 61 |
+| OBUF | 7 |
+| FDPE | 2 |
+| BUFG | 1 |
 
 ### Vivado Timing
 
-Report: `report_timing_summary`, routed design, generated 2026-06-10 10:51:19.
+Report: `report_timing_summary`, routed design, generated 2026-06-13 21:17:34.
 
 | Metric | Value |
 | --- | ---: |
-| WNS | 0.246 ns |
+| WNS | 0.510 ns |
 | TNS | 0.000 ns |
 | Setup failing endpoints | 0 |
-| WHS | 0.049 ns |
+| WHS | 0.044 ns |
 | THS | 0.000 ns |
 | Hold failing endpoints | 0 |
 | WPWS | 4.232 ns |
@@ -463,13 +450,13 @@ Worst setup path:
 
 | Field | Value |
 | --- | --- |
-| Source | `u_c2v_cache_ram/g_buf[1].g_lane[6].mem_reg/CLKBWRCLK` |
-| Destination | `u_check_state_ram/g_pair[1].g_bank[6].mem_reg_2_1/DIADI[2]` |
-| Data path delay | 9.168 ns |
-| Logic delay | 3.370 ns |
-| Route delay | 5.798 ns |
-| Logic levels | 16 |
-| Logic cells | `CARRY4=3 LUT2=1 LUT3=2 LUT4=2 LUT5=3 LUT6=4 MUXF7=1` |
+| Source | `u_ram_s/g_bank[1].mem_reg_0_9/CLKBWRCLK` |
+| Destination | `u_ram_t_accum/g_buf[0].g_bank[2].mem_reg_r2_0_63_9_10/RAMA/I` |
+| Data path delay | 8.731 ns |
+| Logic delay | 2.832 ns |
+| Route delay | 5.899 ns |
+| Logic levels | 12 |
+| Logic cells | `CARRY4=3 LUT2=1 LUT4=1 LUT5=2 LUT6=4 MUXF7=1` |
 
 Methodology notes:
 
@@ -486,7 +473,7 @@ Copy this section when a new parameter level completes.
 
 | Field | Value |
 | --- | --- |
-| Defines | `BIKE_XXX_PARAMS BIKE_MSG_BITS=5 BIKE_PARALLEL_L=8 BIKE_C_TILE=256` |
+| Defines | `BIKE_XXX_PARAMS BIKE_MSG_BITS=5 BIKE_PARALLEL_L=8 BIKE_C_TILE=288` |
 | Random seed |  |
 | Decode cycles |  |
 | Target/output/residual weight |  |

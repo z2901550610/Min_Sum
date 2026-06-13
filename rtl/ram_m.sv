@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
-// Banked compressed check-state storage for the two iteration pairs.
-module check_state_ram
+// RAM M: banked compressed check-state storage for the two iteration pairs.
+module ram_m
   import bike_pkg::*;
 (
     input  logic                   i_clk,

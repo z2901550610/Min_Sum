@@ -29,7 +29,7 @@ ROW_SEG_SIZE = ceil(R / L)
 第 `b` 个 block 的第 `k` 个 H 第一列项：
 
 ```text
-base_row = h_matrix_mem[b][k]
+base_row = ram_i[b][k]
 edge_id = b * W + k
 ```
 
@@ -107,11 +107,11 @@ T_DECODE = I_MAX * T_ITER
 | --- | --- |
 | compressed check state | `comp_pair[pair][row_idx]` |
 | V2C sign | `sign_mem[edge_id][row_idx]` |
-| tile raw C2V sum | `tile_accum[buf][tile_offset]` |
-| tile raw C2V edge | `tile_t[buf][lane][one_idx * Q_TILE + q_seq]` |
-| decision bit | `decision_mem[col_idx]` |
+| tile raw C2V sum | `ram_t_accum[buf][tile_offset]` |
+| tile raw C2V edge | `ram_t[buf][lane][one_idx * Q_TILE + q_seq]` |
+| decision bit | `ram_c1[col_idx]` |
 
-`tile_accum` 和 `tile_t` 使用 `fill_buf/active_buf` 双缓冲。compressed check state 使用 `comp_read_pair_sel/comp_write_pair_sel` 双 pair。每轮写 pair 按固定地址序列初始化为 `COMP_C2V_INIT`。
+`ram_t_accum` 和 `ram_t` 使用 `fill_buf/active_buf` 双缓冲。compressed check state 使用 `comp_read_pair_sel/comp_write_pair_sel` 双 pair。每轮写 pair 按固定地址序列初始化为 `COMP_C2V_INIT`。
 
 ## C2V
 
@@ -121,8 +121,8 @@ T_DECODE = I_MAX * T_ITER
 comp = first_iter ? FIRST_ITER_C2V_COMP : comp_or_init(comp_read_pair_sel, row_idx)
 c2v  = cnu_b(comp, sign_mem[edge_id][row_idx], syndrome_mem[row_idx], edge_id)
 raw  = signmag_to_tc(c2v)
-tile_accum[fill_buf][tile_offset] += raw
-tile_t[fill_buf][lane][t_addr]     = raw
+ram_t_accum[fill_buf][tile_offset] += raw
+ram_t[fill_buf][lane][t_addr]       = raw
 ```
 
 `one_idx==0` 时 accumulator 从 0 开始。
@@ -132,10 +132,10 @@ tile_t[fill_buf][lane][t_addr]     = raw
 每个有效 lane：
 
 ```text
-raw_sum   = tile_accum[active_buf][tile_offset]
-raw_edge  = tile_t[active_buf][lane][t_addr]
+raw_sum   = ram_t_accum[active_buf][tile_offset]
+raw_edge  = ram_t[active_buf][lane][t_addr]
 posterior = C_VAL + scale(raw_sum)
 v2c       = C_VAL + scale(raw_sum - raw_edge)
 ```
 
-`v2c` 饱和编码后进入 CNU_A 规则，更新下一轮 compressed check state。最后一轮 `one_idx==0` 用 posterior sign 写入 `decision_mem[col_idx]`。
+`v2c` 饱和编码后进入 CNU_A 规则，更新下一轮 compressed check state。最后一轮 `one_idx==0` 用 posterior sign 写入 `ram_c1[col_idx]`。

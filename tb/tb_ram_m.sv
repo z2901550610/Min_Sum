@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 
-module tb_check_state_ram;
+module tb_ram_m;
   import bike_pkg::*;
 
   logic                   clk;
@@ -23,7 +23,7 @@ module tb_check_state_ram;
 
   localparam logic [COMP_C2V_W-1:0] TEST_COMP = {1'b1, EDGE_ID_W'(2), D'(7), D'(3)};
 
-  check_state_ram dut (
+  ram_m dut (
       .i_clk(clk),
       .i_rst_n(rst_n),
       .i_clear_valid(clear_valid),
@@ -48,7 +48,7 @@ module tb_check_state_ram;
 
   initial begin
     #10000;
-    $fatal(1, "tb_check_state_ram timeout");
+    $fatal(1, "tb_ram_m timeout");
   end
 
   task automatic clear_inputs;
@@ -108,7 +108,7 @@ module tb_check_state_ram;
     #1;
     if (c2v_comp[0] !== COMP_C2V_INIT) $fatal(1, "clear readback mismatch");
 
-    $display("tb_check_state_ram PASS");
+    $display("tb_ram_m PASS");
     $finish;
   end
 endmodule

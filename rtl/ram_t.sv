@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
-// Double-buffered raw C2V tile cache.
-module c2v_cache_ram
+// RAM T: double-buffered raw C2V tile cache.
+module ram_t
   import bike_pkg::*;
 (
     input  logic                        i_clk,

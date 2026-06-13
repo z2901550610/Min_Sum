@@ -33,15 +33,15 @@ proc run_step {name command} {
 set rtl_files [list \
   rtl/bike_pkg.sv \
   rtl/reset_sync.sv \
-  rtl/h_matrix_mem.sv \
+  rtl/ram_i.sv \
   rtl/edge_addr_gen.sv \
   rtl/tile_scheduler.sv \
-  rtl/check_state_ram.sv \
-  rtl/msg_sign_ram.sv \
-  rtl/tile_accum_ram.sv \
-  rtl/c2v_cache_ram.sv \
+  rtl/ram_m.sv \
+  rtl/ram_s.sv \
+  rtl/ram_t_accum.sv \
+  rtl/ram_t.sv \
   rtl/vnu_update.sv \
-  rtl/decision_ram.sv \
+  rtl/ram_c1.sv \
   rtl/decoder_top.sv \
 ]
 

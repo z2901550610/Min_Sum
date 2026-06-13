@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 
-module tb_h_matrix_mem;
+module tb_ram_i;
   import bike_pkg::*;
 
   logic                 clk;
@@ -17,7 +17,7 @@ module tb_h_matrix_mem;
   logic                 loaded;
   logic                 error;
 
-  h_matrix_mem dut (
+  ram_i dut (
       .i_clk(clk),
       .i_rst_n(rst_n),
       .i_clear(clear),
@@ -65,14 +65,13 @@ module tb_h_matrix_mem;
       @(posedge clk);
     end
     #1;
-    if (!loaded) $fatal(1, "h_matrix_mem loaded flag mismatch");
-    if (error) $fatal(1, "h_matrix_mem unexpected error");
-    if (c2v_base_row != ROW_IDX_W'(1 % R)) $fatal(1, "h_matrix_mem c2v read mismatch");
-    if (c2v_edge_id != EDGE_ID_W'(1 % W)) $fatal(1, "h_matrix_mem c2v edge mismatch");
+    if (!loaded) $fatal(1, "ram_i loaded flag mismatch");
+    if (error) $fatal(1, "ram_i unexpected error");
+    if (c2v_base_row != ROW_IDX_W'(1 % R)) $fatal(1, "ram_i c2v read mismatch");
+    if (c2v_edge_id != EDGE_ID_W'(1 % W)) $fatal(1, "ram_i c2v edge mismatch");
     if (v2c_base_row != ROW_IDX_W'(((N0 - 1) * W + (W - 1)) % R))
-      $fatal(1, "h_matrix_mem v2c read mismatch");
-    if (v2c_edge_id != EDGE_ID_W'((N0 - 1) * W + (W - 1)))
-      $fatal(1, "h_matrix_mem v2c edge mismatch");
+      $fatal(1, "ram_i v2c read mismatch");
+    if (v2c_edge_id != EDGE_ID_W'((N0 - 1) * W + (W - 1))) $fatal(1, "ram_i v2c edge mismatch");
 
     clear = 1'b1;
     @(posedge clk);
@@ -90,9 +89,9 @@ module tb_h_matrix_mem;
       @(posedge clk);
     end
     #1;
-    if (!error) $fatal(1, "h_matrix_mem duplicate was not detected");
+    if (!error) $fatal(1, "ram_i duplicate was not detected");
 
-    $display("tb_h_matrix_mem PASS");
+    $display("tb_ram_i PASS");
     $finish;
   end
 endmodule

@@ -253,7 +253,7 @@ module decoder_top
     end
   end
 
-  h_matrix_mem u_h_mem (
+  ram_i u_ram_i (
       .i_clk(i_clk),
       .i_rst_n(rst_n_sync),
       .i_clear(1'b0),
@@ -331,7 +331,7 @@ module decoder_top
       .o_tile_offset(v2c_tile_offset)
   );
 
-  check_state_ram u_check_state_ram (
+  ram_m u_ram_m (
       .i_clk(i_clk),
       .i_rst_n(rst_n_sync),
       .i_clear_valid(comp_clear_valid),
@@ -351,7 +351,7 @@ module decoder_top
       .i_v2c_write_data(v2c_comp_next)
   );
 
-  msg_sign_ram u_msg_sign_ram (
+  ram_s u_ram_s (
       .i_clk(i_clk),
       .i_rst_n(rst_n_sync),
       .i_c2v_valid(c2v_valid_r),
@@ -368,7 +368,7 @@ module decoder_top
       .i_v2c_sign(v2c_sign_wdata)
   );
 
-  tile_accum_ram u_tile_accum_ram (
+  ram_t_accum u_ram_t_accum (
       .i_clk(i_clk),
       .i_c2v_read_buf(c2v_fill_buf_r),
       .i_c2v_read_valid(c2v_valid_r),
@@ -384,7 +384,7 @@ module decoder_top
       .o_v2c_rdata(v2c_raw_sum)
   );
 
-  c2v_cache_ram u_c2v_cache_ram (
+  ram_t u_ram_t (
       .i_clk(i_clk),
       .i_fill_buf(c2v_fill_buf_q),
       .i_c2v_write_valid(c2v_valid_q),
@@ -406,7 +406,7 @@ module decoder_top
       .o_v2c_msg(v2c_msg_next)
   );
 
-  decision_ram u_decision_ram (
+  ram_c1 u_ram_c1 (
       .i_clk(i_clk),
       .i_we(decision_we),
       .i_write_col_idx(v2c_col_idx_q),

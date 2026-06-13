@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
-// H first-column index RAM with fixed-depth duplicate tracking.
-module h_matrix_mem
+// RAM I: H first-column index storage with fixed-depth duplicate tracking.
+module ram_i
   import bike_pkg::*;
 (
     input  logic                 i_clk,

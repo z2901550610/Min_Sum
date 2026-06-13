@@ -8,10 +8,10 @@
 H = [H0 | H1 | ... | H(N0-1)]
 ```
 
-每个 block 只通过第一列支撑集描述。第 `b` 个 block 的第 `k` 个支撑项为 `h_matrix_mem[b][k]`，本地变量列 `j` 对应的校验行为：
+每个 block 只通过第一列支撑集描述。第 `b` 个 block 的第 `k` 个支撑项为 `ram_i[b][k]`，本地变量列 `j` 对应的校验行为：
 
 ```text
-row = (j + h_matrix_mem[b][k]) mod R
+row = (j + ram_i[b][k]) mod R
 edge_id = b * W + k
 ```
 
