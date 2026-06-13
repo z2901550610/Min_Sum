@@ -18,8 +18,12 @@ RTL_CORE = [
     "rtl/msg_sign_ram.sv",
     "rtl/tile_accum_ram.sv",
     "rtl/c2v_cache_ram.sv",
+    "rtl/msg_tc_to_signmag_sat.sv",
     "rtl/vnu_update.sv",
     "rtl/decision_ram.sv",
+    "rtl/cnu_a.sv",
+    "rtl/cnu_b.sv",
+    "rtl/msg_signmag_to_tc.sv",
     "rtl/decoder_top.sv",
 ]
 
@@ -81,14 +85,14 @@ PARAM_SETS = {
     },
     "bike512": {
         "n0": 3,
-        "r": 156011,
+        "r": 108587,
         "w": 111,
         "error_count": 877,
         "i_max": 7,
-        "c_val": 5,
+        "c_val": 7,
         "msg_bits": 5,
-        "alpha_shift_0": 3,
-        "alpha_shift_1": 6,
+        "alpha_shift_0": 4,
+        "alpha_shift_1": 0,
     },
 }
 

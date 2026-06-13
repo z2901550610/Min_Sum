@@ -36,6 +36,11 @@ module tb_edge_addr_gen;
       .o_tile_offset(tile_offset)
   );
 
+  initial begin
+    #10000;
+    $fatal(1, "tb_edge_addr_gen timeout");
+  end
+
   task automatic check_no_bank_conflict;
     begin
       for (int lane_idx = 0; lane_idx < L; lane_idx++) begin

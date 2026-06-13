@@ -13,10 +13,10 @@
 | `tile_accum_ram` | 双缓冲 raw C2V 累加 RAM |
 | `c2v_cache_ram` | 双缓冲 raw C2V 边缓存 RAM |
 | `vnu_update` | 变量节点 posterior/extrinsic 更新 |
-| `cnu_a` / `cnu_b` | 压缩 check-state 更新和 C2V 重建的独立参考小模块 |
+| `cnu_a` / `cnu_b` | 压缩 check-state 更新和 C2V 重建硬件块 |
 | `msg_signmag_to_tc` / `msg_tc_to_signmag_sat` | sign-magnitude 与 two's-complement 消息转换参考小模块 |
 
-`decoder_top` 内联使用 CNU 和 message codec 的等价组合逻辑，RAM 和 VNU 数据通路由独立硬件块承载。独立 CNU/msg 模块由单元测试覆盖。
+`decoder_top` 实例化 CNU_A、CNU_B 和 C2V message codec。RAM、CNU 和 VNU 数据通路由独立硬件块承载。
 
 ## 状态数组
 
@@ -27,7 +27,7 @@
 | `syndrome_mem` | `[R]` | 输入 syndrome |
 | `decision_mem` | `[N]` | 最终错误估计 bit |
 | `check_state_ram` | `2 * L` banks | 双 pair 压缩 check state |
-| `msg_sign_ram` | `L` banks | 每条 row-local edge 的上一轮 V2C sign |
+| `msg_sign_ram` | `L` banks | 36-bit packed row-local edge V2C sign |
 | `tile_accum_ram` | `2 * L` banks | tile-local raw C2V 累加和 |
 | `c2v_cache_ram` | `2 * L` banks | tile-local raw C2V 边值 |
 
@@ -65,13 +65,13 @@ min1_mag, min2_mag, min_edge_id, sign_xor
 6. 写入 `check_state_ram` 和 `msg_sign_ram`。
 7. 最后一轮 `one_idx==0` 时写入 `decision_mem[col_idx]`。
 
-变量节点缩放采用 6-bit 小数 alpha：
+变量节点缩放采用公开参数给定的移位项 alpha：
 
 ```text
 scale(x) = round(x * alpha)
 ```
 
-alpha 由 `ALPHA_SHIFT_0` 和 `ALPHA_SHIFT_1` 表示为两个移位项之和。
+每个正 `ALPHA_SHIFT_*` 项贡献一个 `2^-shift` 项，`shift=0` 项贡献 0。
 
 ## Pair 切换
 

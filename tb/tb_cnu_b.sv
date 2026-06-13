@@ -18,6 +18,11 @@ module tb_cnu_b;
   );
 
   initial begin
+    #10000;
+    $fatal(1, "tb_cnu_b timeout");
+  end
+
+  initial begin
     comp_c2v_in  = {1'b1, EDGE_ID_W'(4), D'(5), D'(2)};
 
     v2c_sign_in  = 1;

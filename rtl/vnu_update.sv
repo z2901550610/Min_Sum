@@ -10,6 +10,9 @@ module vnu_update
     output logic        [MSG_W-1:0] o_v2c_msg[0:L-1]
 );
 
+  logic signed [ACC_W-1:0] v2c_tc[0:L-1];
+  logic        [MSG_W-1:0] v2c_msg_sat[0:L-1];
+
   function automatic logic signed [ACC_W-1:0] alpha_scale(input  logic signed [ACC_W-1:0] tc_value);
     localparam int SCALE_W = ACC_W + ALPHA_FRAC_W;
     logic signed [     SCALE_W-1:0] scale_ext;
@@ -46,32 +49,31 @@ module vnu_update
     end
   endfunction
 
-  function automatic logic [MSG_W-1:0] tc_to_signmag_sat(input  logic signed [ACC_W-1:0] tc_value);
-    logic                    sign_bit;
-    logic signed [ACC_W-1:0] mag_signed;
-    int                      mag_int;
-    begin
-      sign_bit = tc_value[ACC_W-1];
-      mag_signed = sign_bit ? -tc_value : tc_value;
-      mag_int = int'(mag_signed);
-      if (mag_int > MAG_MAX) begin
-        mag_int = MAG_MAX;
-      end
-      tc_to_signmag_sat = {sign_bit && (mag_int != 0), D'(mag_int)};
+  generate
+    for (genvar lane_idx = 0; lane_idx < L; lane_idx++) begin : g_msg_tc_to_signmag
+      msg_tc_to_signmag_sat #(
+          .W       (W),
+          .D       (D),
+          .MSG_W   (MSG_W),
+          .VNU_TC_W(ACC_W),
+          .MAG_MAX (MAG_MAX)
+      ) u_msg_tc_to_signmag_sat (
+          .i_tc (v2c_tc[lane_idx]),
+          .o_msg(v2c_msg_sat[lane_idx])
+      );
+
+      assign o_v2c_msg[lane_idx] = i_valid[lane_idx] ? v2c_msg_sat[lane_idx] : '0;
     end
-  endfunction
+  endgenerate
 
   always_comb begin
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-      logic signed [ACC_W-1:0] v2c_tc;
-
       o_posterior[lane_idx] = '0;
-      o_v2c_msg[lane_idx] = '0;
-      v2c_tc = '0;
+      v2c_tc[lane_idx] = '0;
       if (i_valid[lane_idx]) begin
         o_posterior[lane_idx] = ACC_W'($signed(C_VAL)) + alpha_scale(i_raw_sum[lane_idx]);
-        v2c_tc = ACC_W'($signed(C_VAL)) + alpha_scale(i_raw_sum[lane_idx] - i_raw_c2v[lane_idx]);
-        o_v2c_msg[lane_idx] = tc_to_signmag_sat(v2c_tc);
+        v2c_tc[lane_idx] = ACC_W'($signed(C_VAL)) +
+            alpha_scale(i_raw_sum[lane_idx] - i_raw_c2v[lane_idx]);
       end
     end
   end

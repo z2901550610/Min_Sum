@@ -49,6 +49,7 @@ module check_state_ram
           bank_we = 1'b0;
           bank_waddr = '0;
           bank_wdata = '0;
+          // Scheduler presents one read intent per pair bank; c2v priority is a deterministic guard.
           if (i_c2v_valid[bank_idx] && (int'(i_c2v_pair_sel) == pair_idx)) begin
             bank_re = 1'b1;
             bank_read_is_c2v = 1'b1;
@@ -69,7 +70,7 @@ module check_state_ram
           end
         end
 
-        always_ff @(posedge i_clk) begin
+        always_ff @(posedge i_clk or negedge i_rst_n) begin
           if (!i_rst_n) begin
             c2v_bank_read_valid[pair_idx][bank_idx] <= 1'b0;
             v2c_bank_read_valid[pair_idx][bank_idx] <= 1'b0;
