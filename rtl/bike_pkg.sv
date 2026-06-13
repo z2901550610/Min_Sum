@@ -91,7 +91,7 @@ package bike_pkg;
   localparam int ROW_SEG_SIZE = (R + L - 1) / L;
   localparam int VNU_TC_W = MSG_W + ((W > 1) ? $clog2(W + 1) : 1);
 `ifndef BIKE_C_TILE
-  localparam int C_TILE_CONFIG = 256;
+  localparam int C_TILE_CONFIG = 288;
 `else
   localparam int C_TILE_CONFIG = `BIKE_C_TILE;
 `endif

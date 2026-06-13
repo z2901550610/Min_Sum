@@ -121,7 +121,9 @@ module decoder_top
   logic        [  EDGE_ID_W-1:0] v2c_edge_id_r[0:L-1];
   logic        [ROW_BANK_AW-1:0] v2c_row_addr_r[0:L-1];
   logic        [ TILE_OFF_W-1:0] v2c_tile_offset_r[0:L-1];
+  logic                          v2c_phase_r;
   logic        [ TILE_IDX_W-1:0] v2c_tile_idx_r;
+  logic        [  EDGE_ID_W-1:0] v2c_h_edge_id_r;
   logic        [  ONE_IDX_W-1:0] v2c_one_idx_r;
   logic        [    Q_SEQ_W-1:0] v2c_q_seq_r;
   logic                          v2c_active_buf_r;
@@ -132,9 +134,12 @@ module decoder_top
   logic        [  EDGE_ID_W-1:0] v2c_edge_id_q[0:L-1];
   logic        [ROW_BANK_AW-1:0] v2c_row_addr_q[0:L-1];
   logic        [ TILE_OFF_W-1:0] v2c_tile_offset_q[0:L-1];
-  logic        [ TILE_IDX_W-1:0] v2c_tile_idx_q;
   logic signed [      ACC_W-1:0] v2c_raw_sum_q[0:L-1];
+  logic                          v2c_phase_q;
+  logic        [ TILE_IDX_W-1:0] v2c_tile_idx_q;
+  logic        [  EDGE_ID_W-1:0] v2c_h_edge_id_q;
   logic        [  ONE_IDX_W-1:0] v2c_one_idx_q;
+  logic        [    Q_SEQ_W-1:0] v2c_q_seq_q;
   logic                          v2c_final_iter_q;
   logic                          v2c_write_pair_sel_q;
 
@@ -348,15 +353,18 @@ module decoder_top
 
   msg_sign_ram u_msg_sign_ram (
       .i_clk(i_clk),
+      .i_rst_n(rst_n_sync),
       .i_c2v_valid(c2v_valid_r),
       .i_c2v_tile_idx(c2v_tile_idx_r),
       .i_c2v_tile_offset(c2v_tile_offset_r),
       .i_c2v_edge_id(c2v_edge_id_r),
       .o_c2v_sign(c2v_sign_mem),
+      .i_v2c_phase_valid(v2c_phase_q),
+      .i_v2c_tile_idx(v2c_tile_idx_q),
+      .i_v2c_q_seq(v2c_q_seq_q),
+      .i_v2c_edge_id(v2c_h_edge_id_q),
       .i_v2c_write_valid(v2c_valid_q),
-      .i_v2c_write_tile_idx(v2c_tile_idx_q),
-      .i_v2c_write_tile_offset(v2c_tile_offset_q),
-      .i_v2c_edge_id(v2c_edge_id_q),
+      .i_v2c_tile_offset(v2c_tile_offset_q),
       .i_v2c_sign(v2c_sign_wdata)
   );
 
@@ -440,13 +448,16 @@ module decoder_top
       comp_read_pair_sel_e <= 1'b0;
       c2v_one_idx_r <= '0;
       c2v_q_seq_r <= '0;
+      c2v_tile_idx_r <= '0;
       c2v_fill_buf_r <= 1'b0;
       c2v_iter_zero_r <= 1'b0;
-      c2v_tile_idx_r <= '0;
       comp_read_pair_sel_r <= 1'b0;
       v2c_one_idx_q <= '0;
-      v2c_final_iter_q <= 1'b0;
+      v2c_q_seq_q <= '0;
+      v2c_phase_q <= 1'b0;
       v2c_tile_idx_q <= '0;
+      v2c_h_edge_id_q <= '0;
+      v2c_final_iter_q <= 1'b0;
       v2c_phase_e <= 1'b0;
       v2c_h_block_idx_e <= '0;
       v2c_tile_idx_e <= '0;
@@ -457,11 +468,13 @@ module decoder_top
       v2c_h_base_row_e <= '0;
       v2c_h_edge_id_e <= '0;
       comp_write_pair_sel_e <= 1'b0;
+      v2c_phase_r <= 1'b0;
+      v2c_tile_idx_r <= '0;
+      v2c_h_edge_id_r <= '0;
       v2c_one_idx_r <= '0;
       v2c_q_seq_r <= '0;
       v2c_active_buf_r <= 1'b0;
       v2c_final_iter_r <= 1'b0;
-      v2c_tile_idx_r <= '0;
       comp_write_pair_sel_r <= 1'b0;
       v2c_write_pair_sel_q <= 1'b0;
       ctrl_done_r <= 1'b0;
@@ -501,9 +514,9 @@ module decoder_top
       comp_read_pair_sel_e <= comp_read_pair_sel;
       c2v_one_idx_r <= c2v_one_idx_e;
       c2v_q_seq_r <= c2v_q_seq_e;
+      c2v_tile_idx_r <= c2v_tile_idx_e;
       c2v_fill_buf_r <= c2v_fill_buf_e;
       c2v_iter_zero_r <= c2v_iter_zero_e;
-      c2v_tile_idx_r <= c2v_tile_idx_e;
       comp_read_pair_sel_r <= comp_read_pair_sel_e;
       c2v_one_idx_q <= c2v_one_idx_r;
       c2v_q_seq_q <= c2v_q_seq_r;
@@ -520,15 +533,20 @@ module decoder_top
       v2c_h_base_row_e <= v2c_h_base_row;
       v2c_h_edge_id_e <= v2c_h_edge_id;
       comp_write_pair_sel_e <= comp_write_pair_sel;
+      v2c_phase_r <= v2c_phase_e;
+      v2c_tile_idx_r <= v2c_tile_idx_e;
+      v2c_h_edge_id_r <= v2c_h_edge_id_e;
       v2c_one_idx_r <= v2c_one_idx_e;
       v2c_q_seq_r <= v2c_q_seq_e;
       v2c_active_buf_r <= v2c_active_buf_e;
       v2c_final_iter_r <= v2c_final_iter_e;
-      v2c_tile_idx_r <= v2c_tile_idx_e;
       comp_write_pair_sel_r <= comp_write_pair_sel_e;
-      v2c_one_idx_q <= v2c_one_idx_r;
-      v2c_final_iter_q <= v2c_final_iter_r;
+      v2c_phase_q <= v2c_phase_r;
       v2c_tile_idx_q <= v2c_tile_idx_r;
+      v2c_h_edge_id_q <= v2c_h_edge_id_r;
+      v2c_one_idx_q <= v2c_one_idx_r;
+      v2c_q_seq_q <= v2c_q_seq_r;
+      v2c_final_iter_q <= v2c_final_iter_r;
       v2c_write_pair_sel_q <= comp_write_pair_sel_r;
       ctrl_done_r <= ctrl_done;
       ctrl_done_q <= ctrl_done_r;
