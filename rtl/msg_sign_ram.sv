@@ -58,6 +58,9 @@ module msg_sign_ram
       logic                    bank_we;
       logic [SIGN_BANK_AW-1:0] bank_waddr;
       logic [SIGN_WORD_AW-1:0] bank_wbit;
+      logic [ SIGN_WORD_W-1:0] bank_rword_q;
+      logic [SIGN_WORD_AW-1:0] bank_rbit_q;
+      logic                    bank_read_valid_q;
       logic [ SIGN_WORD_W-1:0] bank_word_q;
       logic [ SIGN_WORD_W-1:0] bank_word_next;
       logic                    bank_word_start;
@@ -82,8 +85,12 @@ module msg_sign_ram
         end
       end
 
+      always_comb begin
+        o_c2v_sign[bank_idx] = bank_read_valid_q ? bank_rword_q[bank_rbit_q] : 1'b0;
+      end
+
       always_ff @(posedge i_clk) begin
-        o_c2v_sign[bank_idx] <= i_c2v_valid[bank_idx] ? mem[bank_raddr][bank_rbit] : 1'b0;
+        bank_rword_q <= mem[bank_raddr];
         if (bank_we) begin
           mem[bank_waddr] <= bank_word_next;
         end
@@ -92,8 +99,12 @@ module msg_sign_ram
       always_ff @(posedge i_clk or negedge i_rst_n) begin
         if (!i_rst_n) begin
           bank_word_q <= '0;
+          bank_rbit_q <= '0;
+          bank_read_valid_q <= 1'b0;
         end else begin
           bank_word_q <= bank_we ? '0 : bank_word_next;
+          bank_rbit_q <= bank_rbit;
+          bank_read_valid_q <= i_c2v_valid[bank_idx];
         end
       end
     end

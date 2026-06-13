@@ -38,6 +38,14 @@ module tile_scheduler
   logic [   ONE_IDX_W-1:0] one_idx_q;
   logic [     Q_SEQ_W-1:0] q_seq_q;
   logic [      ITER_W-1:0] iter_count_q;
+  logic                    c2v_tile_active_q;
+  logic                    v2c_tile_active_q;
+  logic [   TILE_ID_W-1:0] c2v_tile_linear_state_q;
+  logic [   TILE_ID_W-1:0] v2c_tile_linear_state_q;
+  logic [   H_BLOCK_W-1:0] c2v_h_block_state_q;
+  logic [  TILE_IDX_W-1:0] c2v_tile_idx_state_q;
+  logic [   H_BLOCK_W-1:0] v2c_h_block_state_q;
+  logic [  TILE_IDX_W-1:0] v2c_tile_idx_state_q;
   logic                    done_q;
 
   logic                    running_d;
@@ -47,6 +55,14 @@ module tile_scheduler
   logic [   ONE_IDX_W-1:0] one_idx_d;
   logic [     Q_SEQ_W-1:0] q_seq_d;
   logic [      ITER_W-1:0] iter_count_d;
+  logic                    c2v_tile_active_d;
+  logic                    v2c_tile_active_d;
+  logic [   TILE_ID_W-1:0] c2v_tile_linear_state_d;
+  logic [   TILE_ID_W-1:0] v2c_tile_linear_state_d;
+  logic [   H_BLOCK_W-1:0] c2v_h_block_state_d;
+  logic [  TILE_IDX_W-1:0] c2v_tile_idx_state_d;
+  logic [   H_BLOCK_W-1:0] v2c_h_block_state_d;
+  logic [  TILE_IDX_W-1:0] v2c_tile_idx_state_d;
   logic                    done_d;
 
   logic [ DEC_STATE_W-1:0] state_d;
@@ -66,15 +82,23 @@ module tile_scheduler
   logic                    iter_first_cycle_d;
   logic                    iter_last_cycle_d;
 
-  function automatic logic [H_BLOCK_W-1:0] tile_h_block(input int tile_linear);
+  function automatic logic [TILE_ID_W-1:0] next_tile_linear(
+      input  logic [TILE_ID_W-1:0] tile_linear);
     begin
-      tile_h_block = H_BLOCK_W'(tile_linear / TILE_COUNT);
+      next_tile_linear = tile_linear + TILE_ID_W'(1);
     end
   endfunction
 
-  function automatic logic [TILE_IDX_W-1:0] tile_idx_local(input int tile_linear);
+  function automatic logic [TILE_IDX_W-1:0] next_tile_idx(input  logic [TILE_IDX_W-1:0] tile_idx);
     begin
-      tile_idx_local = TILE_IDX_W'(tile_linear % TILE_COUNT);
+      next_tile_idx = (int'(tile_idx) == (TILE_COUNT - 1)) ? '0 : tile_idx + TILE_IDX_W'(1);
+    end
+  endfunction
+
+  function automatic logic [H_BLOCK_W-1:0] next_h_block(input  logic [H_BLOCK_W-1:0] h_block,
+                                                        input  logic [TILE_IDX_W-1:0] tile_idx);
+    begin
+      next_h_block = (int'(tile_idx) == (TILE_COUNT - 1)) ? h_block + H_BLOCK_W'(1) : h_block;
     end
   endfunction
 
@@ -88,9 +112,17 @@ module tile_scheduler
     one_idx_d = one_idx_q;
     q_seq_d = q_seq_q;
     iter_count_d = iter_count_q;
+    c2v_tile_active_d = c2v_tile_active_q;
+    v2c_tile_active_d = v2c_tile_active_q;
+    c2v_tile_linear_state_d = c2v_tile_linear_state_q;
+    v2c_tile_linear_state_d = v2c_tile_linear_state_q;
+    c2v_h_block_state_d = c2v_h_block_state_q;
+    c2v_tile_idx_state_d = c2v_tile_idx_state_q;
+    v2c_h_block_state_d = v2c_h_block_state_q;
+    v2c_tile_idx_state_d = v2c_tile_idx_state_q;
     done_d = done_q;
 
-    current_last_cycle = running_q && !clear_q && (int'(window_idx_q) == TILES_TOTAL) &&
+    current_last_cycle = running_q && !clear_q && !c2v_tile_active_q && v2c_tile_active_q &&
                          (int'(one_idx_q) == (W - 1)) &&
                          (int'(q_seq_q) == (Q_TILE - 1));
 
@@ -102,6 +134,14 @@ module tile_scheduler
       one_idx_d = '0;
       q_seq_d = '0;
       iter_count_d = '0;
+      c2v_tile_active_d = 1'b1;
+      v2c_tile_active_d = 1'b0;
+      c2v_tile_linear_state_d = '0;
+      v2c_tile_linear_state_d = '0;
+      c2v_h_block_state_d = '0;
+      c2v_tile_idx_state_d = '0;
+      v2c_h_block_state_d = '0;
+      v2c_tile_idx_state_d = '0;
       done_d = 1'b0;
     end else if (running_q) begin
       if (clear_q) begin
@@ -123,12 +163,29 @@ module tile_scheduler
           one_idx_d = '0;
           q_seq_d = '0;
           iter_count_d = iter_count_q + ITER_W'(1);
+          c2v_tile_active_d = 1'b1;
+          v2c_tile_active_d = 1'b0;
+          c2v_tile_linear_state_d = '0;
+          v2c_tile_linear_state_d = '0;
+          c2v_h_block_state_d = '0;
+          c2v_tile_idx_state_d = '0;
+          v2c_h_block_state_d = '0;
+          v2c_tile_idx_state_d = '0;
         end
       end else if (int'(q_seq_q) == (Q_TILE - 1)) begin
         q_seq_d = '0;
         if (int'(one_idx_q) == (W - 1)) begin
           one_idx_d = '0;
           window_idx_d = window_idx_q + WINDOW_IDX_W'(1);
+          c2v_tile_active_d = c2v_tile_active_q && (c2v_tile_linear_state_q !=
+                                                    TILE_ID_W'(TILES_TOTAL - 1));
+          v2c_tile_active_d = c2v_tile_active_q;
+          v2c_tile_linear_state_d = c2v_tile_linear_state_q;
+          v2c_h_block_state_d = c2v_h_block_state_q;
+          v2c_tile_idx_state_d = c2v_tile_idx_state_q;
+          c2v_tile_linear_state_d = next_tile_linear(c2v_tile_linear_state_q);
+          c2v_h_block_state_d = next_h_block(c2v_h_block_state_q, c2v_tile_idx_state_q);
+          c2v_tile_idx_state_d = next_tile_idx(c2v_tile_idx_state_q);
         end else begin
           one_idx_d = one_idx_q + ONE_IDX_W'(1);
         end
@@ -139,30 +196,25 @@ module tile_scheduler
   end
 
   always_comb begin
-    int   c2v_tile_i;
-    int   v2c_tile_i;
     logic clear_active_d;
 
     clear_active_d = running_q && clear_q;
-    c2v_tile_i = int'(window_idx_d);
-    v2c_tile_i = int'(window_idx_d) - 1;
-    c2v_valid_d = running_d && !i_start && !clear_active_d && (c2v_tile_i < TILES_TOTAL);
-    v2c_valid_d = running_d && !i_start && !clear_active_d && (int'(window_idx_d) > 0);
-    c2v_tile_linear_d = c2v_valid_d ? TILE_ID_W'(c2v_tile_i) : '0;
-    v2c_tile_linear_d = v2c_valid_d ? TILE_ID_W'(v2c_tile_i) : '0;
-    c2v_h_block_idx_d = c2v_valid_d ? tile_h_block(c2v_tile_i) : '0;
-    c2v_tile_idx_d = c2v_valid_d ? tile_idx_local(c2v_tile_i) : '0;
-    v2c_h_block_idx_d = v2c_valid_d ? tile_h_block(v2c_tile_i) : '0;
-    v2c_tile_idx_d = v2c_valid_d ? tile_idx_local(v2c_tile_i) : '0;
+    c2v_valid_d = running_d && !i_start && !clear_active_d && c2v_tile_active_d;
+    v2c_valid_d = running_d && !i_start && !clear_active_d && v2c_tile_active_d;
+    c2v_tile_linear_d = c2v_valid_d ? c2v_tile_linear_state_d : '0;
+    v2c_tile_linear_d = v2c_valid_d ? v2c_tile_linear_state_d : '0;
+    c2v_h_block_idx_d = c2v_valid_d ? c2v_h_block_state_d : '0;
+    c2v_tile_idx_d = c2v_valid_d ? c2v_tile_idx_state_d : '0;
+    v2c_h_block_idx_d = v2c_valid_d ? v2c_h_block_state_d : '0;
+    v2c_tile_idx_d = v2c_valid_d ? v2c_tile_idx_state_d : '0;
     clear_valid_d = clear_active_d;
     clear_addr_out_d = clear_addr_q;
     fill_buf_d = window_idx_d[0];
     active_buf_d = ~window_idx_d[0];
     final_iter_d = running_d && !clear_active_d && (int'(iter_count_d) == (I_MAX - 1));
-    iter_first_cycle_d =
-        running_d && !i_start && !clear_active_d && (window_idx_d == '0) && (one_idx_d == '0) &&
-        (q_seq_d == '0);
-    iter_last_cycle_d = running_d && !clear_active_d && (int'(window_idx_d) == TILES_TOTAL) &&
+    iter_first_cycle_d = running_d && !i_start && !clear_active_d && c2v_tile_active_d &&
+                         !v2c_tile_active_d && (one_idx_d == '0) && (q_seq_d == '0);
+    iter_last_cycle_d = running_d && !clear_active_d && !c2v_tile_active_d && v2c_tile_active_d &&
                         (int'(one_idx_d) == (W - 1)) && (int'(q_seq_d) == (Q_TILE - 1));
 
     if (!running_d) begin
@@ -187,6 +239,14 @@ module tile_scheduler
       one_idx_q <= '0;
       q_seq_q <= '0;
       iter_count_q <= '0;
+      c2v_tile_active_q <= 1'b0;
+      v2c_tile_active_q <= 1'b0;
+      c2v_tile_linear_state_q <= '0;
+      v2c_tile_linear_state_q <= '0;
+      c2v_h_block_state_q <= '0;
+      c2v_tile_idx_state_q <= '0;
+      v2c_h_block_state_q <= '0;
+      v2c_tile_idx_state_q <= '0;
       done_q <= 1'b0;
       o_state <= DEC_WAIT_START;
       o_c2v_valid <= 1'b0;
@@ -216,6 +276,14 @@ module tile_scheduler
       one_idx_q <= one_idx_d;
       q_seq_q <= q_seq_d;
       iter_count_q <= iter_count_d;
+      c2v_tile_active_q <= c2v_tile_active_d;
+      v2c_tile_active_q <= v2c_tile_active_d;
+      c2v_tile_linear_state_q <= c2v_tile_linear_state_d;
+      v2c_tile_linear_state_q <= v2c_tile_linear_state_d;
+      c2v_h_block_state_q <= c2v_h_block_state_d;
+      c2v_tile_idx_state_q <= c2v_tile_idx_state_d;
+      v2c_h_block_state_q <= v2c_h_block_state_d;
+      v2c_tile_idx_state_q <= v2c_tile_idx_state_d;
       done_q <= done_d;
       o_state <= state_d;
       o_c2v_valid <= c2v_valid_d;
