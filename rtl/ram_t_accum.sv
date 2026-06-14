@@ -80,7 +80,9 @@ module ram_t_accum
           end
         end
 
-        assign c2v_bank_rdata[buf_idx][bank_idx] = c2v_bank_re ? mem[c2v_bank_raddr] : '0;
+        assign c2v_bank_rdata[buf_idx][bank_idx] =
+            c2v_bank_re ? ((c2v_bank_we && (c2v_bank_waddr == c2v_bank_raddr)) ?
+                           c2v_bank_wdata : mem[c2v_bank_raddr]) : '0;
         assign v2c_bank_rdata[buf_idx][bank_idx] = v2c_bank_re ? mem[v2c_bank_raddr] : '0;
 
         always_ff @(posedge i_clk) begin

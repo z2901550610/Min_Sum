@@ -4,7 +4,7 @@ VERILATOR_LOG_DIR ?= build/logs/verilator
 BIKE_PARALLEL_L ?= 8
 BIKE_SYNTH_PARAM ?= BIKE_128_PARAMS
 BIKE_SYNTH_PARALLEL_L ?= 16
-BIKE_SYNTH_C_TILE ?= 288
+BIKE_SYNTH_C_TILE ?=
 VERILATOR_FLAGS ?= --binary --sv -DBIKE_TOY_PARAMS -DBIKE_PARALLEL_L=$(BIKE_PARALLEL_L) -DBIKE_SIM_DEBUG -Wall -Wno-fatal -I./tb -I./rtl
 SIM ?= ./scripts/run_quiet.py
 VIVADO ?= vivado
@@ -85,6 +85,6 @@ lint-rtl:
 
 vivado-synth:
 	@mkdir -p $(VIVADO_BUILD_DIR)
-	@BIKE_PARAM_DEFINE=$(BIKE_SYNTH_PARAM) BIKE_PARALLEL_L=$(BIKE_SYNTH_PARALLEL_L) BIKE_C_TILE=$(BIKE_SYNTH_C_TILE) $(VIVADO) -mode batch -source scripts/vivado_synth.tcl -tclargs $(VIVADO_BUILD_DIR)
+	@BIKE_PARAM_DEFINE=$(BIKE_SYNTH_PARAM) BIKE_PARALLEL_L=$(BIKE_SYNTH_PARALLEL_L) $(if $(BIKE_SYNTH_C_TILE),BIKE_C_TILE=$(BIKE_SYNTH_C_TILE),) $(VIVADO) -mode batch -source scripts/vivado_synth.tcl -tclargs $(VIVADO_BUILD_DIR)
 
 sim: test
