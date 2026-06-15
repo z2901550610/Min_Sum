@@ -11,6 +11,7 @@ from pathlib import Path
 
 RTL_CORE = [
     "rtl/reset_sync.sv",
+    "rtl/decoder_profile_config.sv",
     "rtl/ram_i.sv",
     "rtl/edge_addr_gen.sv",
     "rtl/tile_scheduler.sv",
@@ -197,6 +198,18 @@ package bike_pkg;
   parameter int LANE_IDX_W = (L > 1) ? $clog2(L) : 1;
   parameter int L_SHIFT = (L > 1) ? $clog2(L) : 0;
   parameter int ITER_W = $clog2(I_MAX + 1);
+
+  parameter int PROFILE_COUNT = 5;
+  parameter int PROFILE_ID_W = 3;
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_BIKE_128 = 3'd0;
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_BIKE_160 = 3'd1;
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_BIKE_256 = 3'd2;
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_BIKE_384 = 3'd3;
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_BIKE_512 = 3'd4;
+  parameter int CFG_R_W = ROW_IDX_W + 1;
+  parameter int CFG_W_W = ONE_IDX_W + 1;
+  parameter int CFG_CVAL_W = MSG_W;
+  parameter int CFG_ALPHA_SHIFT_W = 3;
 
   localparam int DEC_STATE_W = 4;
   localparam logic [DEC_STATE_W-1:0] DEC_WAIT_START       = 4'd0;
