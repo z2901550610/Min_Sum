@@ -76,6 +76,129 @@ module tb_edge_addr_gen;
     end
   endfunction
 
+  task automatic check_tile_coverage(input int block_value, input int tile_value,
+                                     input int base_value);
+    bit                   seen             [0:C_TILE-1];
+    int                   tile_base;
+    int                   tile_cols;
+    int                   seen_total;
+    logic [EDGE_ID_W-1:0] expected_edge_id;
+    begin
+      tile_base = tile_value * C_TILE;
+      tile_cols = ((tile_base + C_TILE) > R) ? (R - tile_base) : C_TILE;
+      expected_edge_id = EDGE_ID_W'(block_value * W);
+      seen_total = 0;
+
+      for (int offset_idx = 0; offset_idx < C_TILE; offset_idx++) begin
+        seen[offset_idx] = 1'b0;
+      end
+
+      h_block_idx = H_BLOCK_W'(block_value);
+      tile_idx = TILE_IDX_W'(tile_value);
+      base_row = ROW_IDX_W'(base_value);
+      edge_id = expected_edge_id;
+
+      for (int q_seq_idx = 0; q_seq_idx < Q_TILE; q_seq_idx++) begin
+        q_seq = Q_SEQ_W'(q_seq_idx);
+        #1;
+        check_no_bank_conflict();
+
+        for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
+          if (valid[lane_idx]) begin
+            int offset_value;
+            int col_local;
+            int expected_col;
+            int expected_row;
+
+            offset_value = int'(tile_offset[lane_idx]);
+            if ((offset_value < 0) || (offset_value >= tile_cols)) begin
+              $fatal(1,
+                     "coverage offset range base=%0d tile=%0d q=%0d lane=%0d offset=%0d cols=%0d",
+                     base_value, tile_value, q_seq_idx, lane_idx, offset_value, tile_cols);
+            end
+            if (seen[offset_value]) begin
+              $fatal(1, "coverage duplicate base=%0d tile=%0d q=%0d lane=%0d offset=%0d",
+                     base_value, tile_value, q_seq_idx, lane_idx, offset_value);
+            end
+            seen[offset_value] = 1'b1;
+            seen_total++;
+
+            col_local = tile_base + offset_value;
+            expected_col = block_value * R + col_local;
+            expected_row = base_value + col_local;
+            if (expected_row >= R) expected_row -= R;
+
+            if (int'(col_idx[lane_idx]) != expected_col) begin
+              $fatal(1, "coverage col mismatch base=%0d tile=%0d q=%0d lane=%0d got=%0d exp=%0d",
+                     base_value, tile_value, q_seq_idx, lane_idx, int'(col_idx[lane_idx]),
+                     expected_col);
+            end
+            if (int'(row_idx[lane_idx]) != expected_row) begin
+              $fatal(1, "coverage row mismatch base=%0d tile=%0d q=%0d lane=%0d got=%0d exp=%0d",
+                     base_value, tile_value, q_seq_idx, lane_idx, int'(row_idx[lane_idx]),
+                     expected_row);
+            end
+            if (int'(row_bank[lane_idx]) != (expected_row % L)) begin
+              $fatal(1, "coverage row bank mismatch base=%0d tile=%0d q=%0d lane=%0d", base_value,
+                     tile_value, q_seq_idx, lane_idx);
+            end
+            if (int'(row_addr[lane_idx]) != (expected_row >> L_SHIFT)) begin
+              $fatal(1, "coverage row addr mismatch base=%0d tile=%0d q=%0d lane=%0d", base_value,
+                     tile_value, q_seq_idx, lane_idx);
+            end
+            if (lane_edge_id[lane_idx] != expected_edge_id) begin
+              $fatal(1, "coverage edge id mismatch base=%0d tile=%0d q=%0d lane=%0d", base_value,
+                     tile_value, q_seq_idx, lane_idx);
+            end
+          end
+        end
+      end
+
+      if (seen_total != tile_cols) begin
+        $fatal(1, "coverage count mismatch base=%0d tile=%0d got=%0d exp=%0d", base_value,
+               tile_value, seen_total, tile_cols);
+      end
+      for (int offset_idx = 0; offset_idx < tile_cols; offset_idx++) begin
+        if (!seen[offset_idx]) begin
+          $fatal(1, "coverage missing base=%0d tile=%0d offset=%0d", base_value, tile_value,
+                 offset_idx);
+        end
+      end
+    end
+  endtask
+
+  task automatic check_representative_coverage;
+    int base_samples[0:7];
+    begin
+      base_samples[0] = 0;
+      base_samples[1] = 1 % R;
+      base_samples[2] = (L > 1) ? ((L - 1) % R) : 0;
+      base_samples[3] = L % R;
+      base_samples[4] = (R > L) ? (R - L) : 0;
+      base_samples[5] = R - 1;
+      base_samples[6] = R / 2;
+      base_samples[7] = (R > C_TILE) ? (R - C_TILE) : 0;
+
+      for (int block_idx = 0; block_idx < N0; block_idx++) begin
+        for (int tile_value = 0; tile_value < TILE_COUNT; tile_value++) begin
+          for (int sample_idx = 0; sample_idx < 8; sample_idx++) begin
+            check_tile_coverage(block_idx, tile_value, base_samples[sample_idx]);
+          end
+        end
+      end
+
+      if (R <= 1024) begin
+        for (int block_idx = 0; block_idx < N0; block_idx++) begin
+          for (int tile_value = 0; tile_value < TILE_COUNT; tile_value++) begin
+            for (int base_value = 0; base_value < R; base_value++) begin
+              check_tile_coverage(block_idx, tile_value, base_value);
+            end
+          end
+        end
+      end
+    end
+  endtask
+
   initial begin
     phase_valid = 1'b1;
     h_block_idx = '0;
@@ -125,6 +248,8 @@ module tb_edge_addr_gen;
       end
     end
     check_no_bank_conflict();
+
+    check_representative_coverage();
 
     $display("tb_edge_addr_gen PASS");
     $finish;

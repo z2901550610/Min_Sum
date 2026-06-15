@@ -1,102 +1,405 @@
-# 解码器架构
+# BIKE Min-Sum 译码器架构
 
-## 模块划分
+本文档介绍面向 BIKE（Bit Flipping Key Encapsulation）后量子密码系统的 QC-MDPC 码 min-sum 译码器硬件架构。目标读者为具有 LDPC 码和 BIKE 基础知识的研究生。
 
-| 模块 | 职责 |
-| --- | --- |
-| `decoder_top` | 顶层接口、C2V/V2C 数据通路、最终错误估计读口 |
-| `ram_i` | 保存 H 第一列行索引，执行固定深度范围检查、重复检测和加载完成计数 |
-| `edge_addr_gen` | 根据 tile 坐标和 H base row 生成 L 路 row/col/edge 访问 |
-| `tile_scheduler` | 生成固定 tile 窗口调度 |
-| `ram_m` | 双 pair compressed check-state banked RAM |
-| `ram_s` | edge sign banked RAM |
-| `ram_t_accum` | 双缓冲 raw C2V 累加 RAM |
-| `ram_t` | 双缓冲 raw C2V 边缓存 RAM |
-| `ram_c1` | 最终错误估计 bit RAM |
-| `vnu_update` | 变量节点 posterior/extrinsic 更新 |
-| `cnu_a` / `cnu_b` | 压缩 check-state 更新和 C2V 重建硬件块 |
-| `msg_signmag_to_tc` / `msg_tc_to_signmag_sat` | sign-magnitude 与 two's-complement 消息转换参考小模块 |
+## 1. 背景
 
-`decoder_top` 实例化 CNU_A、CNU_B 和 C2V message codec。RAM、CNU 和 VNU 数据通路由独立硬件块承载。
+BIKE 是 NIST 后量子密码标准化候选方案之一，其核心解密操作是对一个被随机错误向量 $\mathbf{e}$（汉明重量为 $t$）污染的 QC-MDPC 码字进行译码，即从接收向量 $\mathbf{x} = \mathbf{c} \oplus \mathbf{e}$ 中恢复原始码字 $\mathbf{c}$。QC-MDPC 码的校验矩阵 $\mathbf{H}$ 由 $n_0$ 个大小为 $r \times r$ 的循环矩阵水平拼接而成，每个循环矩阵由其第一列（汉明重量为 $w$）完全定义。因此 $\mathbf{H}$ 的维度为 $r \times n_0 r$，列重为 $w$。
 
-## 论文 RAM 对应关系
+与通信系统中使用的 LDPC 码相比，MDPC 码有两个显著特点：
 
-| RTL 名称 | 论文名称 | 内容 |
+- **高列重**：LDPC 码的列重通常为 3～4，而 BIKE 使用的 MDPC 码列重为 27～111（取决于安全等级），这使得校验节点处理的复杂度大幅增加。
+- **稀疏但不规则的循环结构**：$\mathbf{H}$ 的每个循环块中，非零元素的位置是随机生成的，无法像通信 LDPC 码那样利用规则的循环置换矩阵结构进行批量并行处理。
+
+min-sum 算法相比简单的 bit-flipping 算法能提供数个数量级的纠错性能提升 [1]，是 BIKE 译码器的首选算法。
+
+## 2. Min-Sum 译码算法
+
+### 2.1 标准归一化 Min-Sum 算法
+
+设 $\mathcal{N}(j)$ 为与变量节点 $j$ 相连的校验节点集合，$\mathcal{M}(i)$ 为与校验节点 $i$ 相连的变量节点集合。译码算法的每次迭代包含以下步骤：
+
+**校验节点更新（C2V）**：对每个校验节点 $i$，计算发往变量节点 $j \in \mathcal{M}(i)$ 的消息：
+
+$$v_{i,j}^{\text{mag}} = \begin{cases} \min_{j' \in \mathcal{M}(i),\, j' \neq j} |u_{i,j'}| & \text{（排除自身后的最小值）} \end{cases}$$
+
+$$v_{i,j}^{\text{sign}} = \left( \bigoplus_{j' \in \mathcal{M}(i)} \text{sign}(u_{i,j'}) \right) \oplus \text{sign}(u_{i,j})$$
+
+其中 $u_{i,j}$ 是变量节点 $j$ 发往校验节点 $i$ 的 V2C 消息，$\oplus$ 表示异或运算。
+
+**变量节点更新（V2C）**：对每个变量节点 $j$，计算发往校验节点 $i \in \mathcal{N}(j)$ 的消息：
+
+$$u_{i,j} = \gamma_j + \alpha \sum_{i' \in \mathcal{N}(j),\, i' \neq i} v_{i',j}$$
+
+其中 $\gamma_j$ 是信道初始信息（BIKE 中为硬判决 $\pm C$），$\alpha$ 是归一化缩放因子。
+
+**后验信息与硬判决**：
+
+$$\tilde{\gamma}_j = \gamma_j + \alpha \sum_{i \in \mathcal{N}(j)} v_{i,j}$$
+
+$$\hat{x}_j = \text{sign}(\tilde{\gamma}_j)$$
+
+若 $\mathbf{H}\hat{\mathbf{x}}^T = \mathbf{0}$，译码成功；否则继续迭代，直至达到最大迭代次数 $I_{\max}$。
+
+### 2.2 BIKE 特有的译码问题设置
+
+BIKE 译码与通信 LDPC 译码的一个关键区别在于：译码器输入是硬判决比特而非软信息。接收向量的每个比特 $x_j \in \{0, 1\}$ 被直接转换为初始对数似然比（LLR）：
+
+$$\gamma_j = \begin{cases} +C & x_j = 0 \\ -C & x_j = 1 \end{cases}$$
+
+常数 $C$ 的最优值取决于量化位宽和列重，需要通过仿真确定。对于 BIKE-128/160/256 等参数集，$C = 5$ 是经仿真验证的最优值。
+
+此外，校验节点 $i$ 的目标校验值等于 syndrome 的第 $i$ 个比特 $s_i$，这在 C2V 符号计算中体现为一个额外的异或项。
+
+### 2.3 归一化缩放因子的选择
+
+对于列重为 3～4 的 LDPC 码，$\alpha$ 通常取 0.5 或 0.25 即可获得良好性能，且可通过简单的右移实现。但 MDPC 码的列重高达 27～111，V2C 消息的累加和远大于单个 C2V 消息的幅度，因此需要更小的 $\alpha$ 来防止累加和过度主导译码过程。仿真表明，对于 BIKE-128，$\alpha = 0.1875$（即 $2^{-3} + 2^{-4}$）能在 4 bit 量化下取得最优纠错性能。
+
+为避免乘法器，$\alpha$ 被限制为至多两个非零位的二进制小数，使得缩放运算仅需一次加法/减法实现。
+
+## 3. 译码器总体架构
+
+### 3.1 设计目标
+
+本译码器的硬性设计约束是**恒定时间译码**：对于给定的 BIKE 参数等级，译码延迟必须固定，不依赖于私钥、错误模式或译码器收敛行为。这意味着不能使用提前终止或数据相关的调度深度。
+
+### 3.2 架构概览
+
+译码器采用 **L 路并行**的处理架构（默认 $L = 8$），在每个时钟周期同时处理 $L$ 个校验矩阵元素。数据通路分为两条流水线：
+
+- **C2V 流水线**：从压缩的校验节点状态中重建 C2V 消息，并将其累加到变量节点的部分和中。
+- **V2C 流水线**：利用累加的 C2V 总和计算 V2C 消息，并更新校验节点的压缩状态。
+
+两条流水线在时间上**重叠执行**：当 V2C 流水线正在处理当前列的 V2C 消息时，C2V 流水线已经开始处理下一列的 C2V 消息。这种重叠使得每个迭代的总延迟接近 C2V 和 V2C 各自延迟之和的一半。
+
+### 3.3 列分组处理
+
+为实现高效的 L 路并行处理，$\mathbf{H}$ 矩阵的 $r$ 列被划分为若干**列组**，每组包含 $C_{\text{tile}}$ 个连续列（默认 $C_{\text{tile}} = 288$）。每个列组内，$L$ 个处理单元并行处理 $L$ 个列位置。由于 QC-MDPC 码的循环结构，列组内各列的非零元素位置可通过第一列的索引循环移位得到。
+
+这种分组方式相比逐列处理（如参考论文 [1] 的方案）有两个优势：
+
+1. **负载均衡**：每个列组内需要处理的非零元素数量相对均匀，避免了随机 H 矩阵导致的列间负载差异。
+2. **累加器深度可控**：每组的 C2V 消息数量有确定上界，使得累加器的位宽和存储深度可以精确规划。
+
+### 3.4 双缓冲机制
+
+译码器使用**双缓冲**策略实现迭代间的无缝衔接：
+
+- **校验节点状态存储**（存储压缩 C2V 信息）采用两对 buffer：当迭代 $k$ 的 V2C 阶段向一对 buffer 写入更新后的状态时，迭代 $k+1$ 的 C2V 阶段从另一对 buffer 读取状态。每次迭代结束时交换读写指针。
+- **C2V 部分和累加器**和**单个 C2V 值缓存**同样采用双缓冲：C2V 阶段写入一组 buffer，V2C 阶段从另一组读取。
+
+## 4. 校验节点处理
+
+校验节点处理是 min-sum 算法中计算复杂度最高的部分。对于列重为 $w$ 的 MDPC 码，每个校验节点需要从 $w$ 个传入的 V2C 消息中找到最小值和次小值，并维护所有符号的异或和。
+
+### 4.1 压缩表示
+
+为了避免存储每个校验节点的全部 $w$ 个 C2V 消息，译码器使用**压缩校验节点状态**，每个校验节点仅存储以下信息：
+
+| 字段 | 位宽 | 含义 |
 | --- | --- | --- |
-| `ram_i` | RAM I | H 第一列非零行索引 |
-| `ram_m` | RAM M0/M1/M2/M3 | `min1_mag, min2_mag, min_edge_id, sign_xor` 压缩 check state |
-| `ram_s` | RAM S | V2C sign bit |
-| `ram_t` | RAM T | VNU 计算 V2C 时使用的单边 raw C2V |
-| `ram_t_accum` | VNU 累加存储 | tile 内 raw C2V 总和 |
-| `ram_c1` | RAM C1 | 最终错误估计 bit |
-| `syndrome_mem` | syndrome 存储 | 输入 syndrome bit |
+| min1 | $D$ bit | 最小 V2C 幅度 |
+| min2 | $D$ bit | 次小 V2C 幅度 |
+| min_id | $\lceil \log_2(n_0 w) \rceil$ bit | 贡献最小值的变量节点编号 |
+| sign_xor | 1 bit | 所有 V2C 符号的异或累积 |
 
-## 状态数组
+其中 $D$ 是消息幅度的量化位宽（默认 4 bit）。这个压缩表示足以重建任意一条 C2V 消息：
 
-顶层使用公开参数定宽的状态数组：
+- **幅度选择**：若请求 C2V 的变量节点正是贡献最小值的节点，则使用 min2；否则使用 min1。
+- **符号计算**：sign_xor $\oplus$ 该节点自身的 V2C 符号 $\oplus$ syndrome 比特。
 
-| 数组 | 维度 | 内容 |
-| --- | --- | --- |
-| `syndrome_mem` | `[R]` | 输入 syndrome |
-| `ram_c1` | `[N]` | 最终错误估计 bit |
-| `ram_m` | `2 * L` banks | 双 pair 压缩 check state |
-| `ram_s` | `L` banks | 36-bit packed row-local edge V2C sign |
-| `ram_t_accum` | `2 * L` banks | tile-local raw C2V 累加和 |
-| `ram_t` | `2 * L` banks | tile-local raw C2V 边值 |
+### 4.2 校验节点状态更新（CNU A）
 
-`comp_pair` 保存：
+CNU A 是一个纯组合逻辑模块，在 V2C 阶段运行。每当一条新的 V2C 消息到达，CNU A 增量更新压缩状态：
+
+1. 将新 V2C 的符号异或到 sign_xor 中。
+2. 将新 V2C 的幅度与当前 min1、min2 比较：
+   - 若 $\leq$ min1：新值成为 min1，原 min1 降为 min2，记录新节点编号。
+   - 若 $<$ min2（但 $>$ min1）：新值成为 min2。
+
+经过 $w$ 个 V2C 消息的处理后，压缩状态中包含了重建所有 C2V 消息所需的完整信息。
+
+### 4.3 C2V 消息重建（CNU B）
+
+CNU B 同样是纯组合逻辑模块，在 C2V 阶段运行。给定压缩状态和请求节点的编号，CNU B 输出对应的 C2V 消息：
+
+- **幅度**：若请求节点的编号等于 min_id，取 min2；否则取 min1。
+- **符号**：sign_xor $\oplus$ 该节点存储的 V2C 符号 $\oplus$ syndrome 比特。
+
+## 5. 变量节点处理
+
+### 5.1 C2V 消息累加
+
+在 C2V 阶段，译码器逐条处理每个变量节点对应的 C2V 消息。CNU B 输出的 C2V 消息（符号-幅度格式）被转换为二进制补码格式后，累加到该变量节点的**部分和累加器**中。
+
+每个变量节点对应一个累加器条目，存储 $\sum_{i \in \mathcal{N}(j)} v_{i,j}$ 的当前部分和。由于 $w$ 个 C2V 消息在多个时钟周期内逐步到达，累加器采用**读-累加-写回**的反馈结构。累加器的位宽为 $\lceil \log_2(w+1) \rceil + D + 1$，足以容纳 $w$ 个 $D$ bit 幅度消息的累加和。
+
+### 5.2 V2C 消息计算
+
+在 V2C 阶段，译码器利用已累加的 C2V 总和计算每条 V2C 消息。变量节点 $j$ 发往校验节点 $i$ 的 V2C 消息为：
+
+$$u_{i,j} = \gamma_j + \alpha \left( \sum_{i' \in \mathcal{N}(j)} v_{i',j} - v_{i,j} \right)$$
+
+其中 $v_{i,j}$ 是该变量节点在当前迭代中收到的来自校验节点 $i$ 的 C2V 消息。减去 $v_{i,j}$ 实现了"排除自身"的变量节点规则。
+
+硬件实现上，C2V 总和已经预先累加并存储在累加器中，而单个 C2V 值也已在 C2V 阶段单独缓存。因此 V2C 计算仅需一次减法、一次缩放和一次加法。
+
+### 5.3 α 缩放实现
+
+缩放因子 $\alpha$ 通过两个移位量的加法实现：
+
+$$\alpha \cdot x \approx x \cdot 2^{-s_0} + x \cdot 2^{-s_1}$$
+
+其中 $s_0$ 和 $s_1$ 是两个移位量。例如 BIKE-128 使用 $s_0 = 3$、$s_1 = 4$，则 $\alpha = 2^{-3} + 2^{-4} = 0.1875$。
+
+缩放运算使用**收敛舍入**（convergent rounding）：先将移位结果加上 $\frac{1}{2}$ 的最小有效位，再截断。论文 [1] 的分析表明，对缩放结果进行舍入而非截断，能显著改善纠错性能。
+
+### 5.4 后验信息与硬判决
+
+变量节点 $j$ 的后验 LLR 为：
+
+$$\tilde{\gamma}_j = \gamma_j + \alpha \sum_{i \in \mathcal{N}(j)} v_{i,j}$$
+
+在最后一次迭代中，后验 LLR 的符号位被取出作为硬判决结果，写入判决存储。
+
+## 6. 存储架构
+
+译码器使用以下存储单元：
+
+### 6.1 校验矩阵索引存储
+
+$\mathbf{H}$ 矩阵的结构信息以 $n_0 \times w$ 个基行索引的形式存储在寄存器阵列中。每个索引表示对应循环矩阵第一列中非零元素所在的行号。在译码过程中，通过将基行索引与列偏移进行模 $r$ 加法，实时计算每个非零元素的实际行号。
+
+这种存储方式避免了参考论文中 RAM I 的读-改-写开销：论文方案需要在每个时钟周期读出索引、加 1 再写回，而本设计直接通过组合逻辑计算下一列的索引，无需额外的存储访问。
+
+### 6.2 压缩 C2V 状态存储
+
+每个校验节点的压缩状态（min1、min2、min_id、sign_xor）存储在双端口 block RAM 中。存储按 $L$ 路分 bank，每个 bank 深度为 $\lceil r / L \rceil$。
+
+双缓冲通过两对 buffer 实现：C2V 阶段从一对读取，V2C 阶段向另一对写入，迭代结束时交换。
+
+### 6.3 V2C 符号存储
+
+每条 V2C 消息的符号位需要在 C2V 阶段被 CNU B 读取。符号位以**打包字**的形式存储在 block RAM 中：每个字包含 $Q_{\text{base}} = \lceil C_{\text{tile}} / L \rceil$ 个符号位，对应一个列组内某一路的所有符号。
+
+在 V2C 阶段，符号位逐个积累到寄存器中；当一个列组处理完毕时，整个字一次性写入 block RAM。这种宽字写入方式减少了写操作次数，且自然适配 block RAM 的写端口宽度。
+
+在 C2V 阶段，符号字被整字读出，按需提取各个符号位。
+
+### 6.4 C2V 部分和累加器
+
+每个列组内的 C2V 部分和存储在**分布式 RAM**（LUT 实现）中。选择分布式 RAM 而非 block RAM 的原因是：累加器需要在同一个 C2V 流水节拍内完成读-累加-写回的反馈操作，分布式 RAM 的读写延迟更低，能满足时序要求。
+
+存储按 $L$ 路分 bank，每个 bank 深度为 $Q_{\text{base}}$，双缓冲。
+
+### 6.5 单个 C2V 值缓存
+
+C2V 阶段计算出的单个 C2V 消息需要在 V2C 阶段被减去。这些值缓存在 block RAM 中，按 $L$ 路分 bank，每路深度为 $W \times Q_{\text{tile}}$，双缓冲。
+
+### 6.6 判决存储
+
+最后一次迭代的硬判决结果存储在分布式 RAM 中，每位变量节点一个比特。外部接口可异步读取任意位置的判决比特。
+
+### 6.7 Syndrome 存储
+
+Syndrome 向量（$r$ 个比特）存储在分布式 RAM 中，按 $L$ 路分 bank。在 C2V 阶段被 CNU B 读取，参与 C2V 符号计算。
+
+## 7. 译码过程详解
+
+本节从一次完整译码请求的角度描述硬件执行顺序。为了便于刚接触 LDPC 和 BIKE 的读者理解，可以把译码图看成两类节点和一批边：
+
+- **变量节点**对应待估计的错误向量比特，共 $n_0 r$ 个。
+- **校验节点**对应 syndrome 方程，共 $r$ 个。
+- **边**对应 $\mathbf{H}$ 中的非零元素。BIKE 的 QC 结构使得每个循环块只需要存储 $w$ 个第一列行号，其余列的非零行号由循环移位得到。
+
+硬件每次不处理整张图，而是处理一个 tile。一个 tile 是某个循环块中的一段连续变量列。调度器按固定顺序扫描所有 tile、所有第一列非零项和 tile 内的 $L$ 路列位置，因此每个公开参数等级的周期数是确定的。
+
+### 7.1 输入准备与启动
+
+外部逻辑在启动译码前写入两类信息：
+
+1. **Syndrome**：通过 `i_syndrome_we`、`i_syndrome_addr` 和 `i_syndrome_wdata` 写入 $s_0,\dots,s_{r-1}$。这些比特表示每个校验方程的目标奇偶值。
+2. **H 第一列支撑集**：通过 `i_h_we`、`i_h_block_idx`、`i_h_one_idx` 和 `i_h_base_row` 写入每个循环块第一列中 1 的行号。`ram_i` 会检查 block/one 索引是否在范围内、行号是否小于 $r$，以及同一 block 内是否出现重复行号。
+
+当所有 $n_0 w$ 个 H 项写入完成且没有检测到错误时，`o_h_loaded=1`、`o_h_error=0`。顶层使用
 
 ```text
-min1_mag, min2_mag, min_edge_id, sign_xor
+decode_start = i_start && o_h_loaded && !o_h_error
 ```
 
-每个迭代的写 pair 由固定清空窗口写入 `COMP_C2V_INIT`，随后 V2C 数据通路按 row bank 写入下一轮 compressed check state。
+作为调度器的启动条件。若 H 尚未装载完成或装载错误，`i_start` 不会触发主译码流程。
 
-## C2V 数据通路
+### 7.2 每轮初始化
 
-每个有效 lane 执行：
-
-1. 读取 edge address generator 生成的 `row_idx`、`edge_id` 和 `tile_offset`。
-2. 读取当前迭代的 compressed check state。
-3. 读取上一轮对应 edge sign；第一次迭代使用 sign 0 和 `FIRST_ITER_C2V_COMP`。
-4. 用 CNU_B 规则重建 sign-magnitude C2V。
-5. 将 C2V 转为 two's-complement raw 值。
-6. 写入 `ram_t`。
-7. 累加到 `ram_t_accum`。
-
-`one_idx==0` 时 tile accumulator 从 0 开始，后续 H 第一列项持续累加同一 tile offset 的 raw C2V。
-
-## V2C 数据通路
-
-每个有效 lane 执行：
-
-1. 读取 `ram_t_accum` 作为 raw C2V 总和。
-2. 读取 `ram_t` 作为当前边 raw C2V。
-3. 计算 posterior 和 extrinsic V2C。
-4. 将 V2C 饱和为 sign-magnitude 消息。
-5. 用 CNU_A 规则更新下一轮 compressed check state。
-6. 写入 `ram_m` 和 `ram_s`。
-7. 最后一轮 `one_idx==0` 时写入 `ram_c1[col_idx]`。
-
-变量节点缩放采用公开参数给定的移位项 alpha：
+每一轮迭代开始时，调度器进入 `DEC_ITER_CLEAR`，执行固定的 `ROW_SEG_SIZE = ceil(r / L)` 个清空周期。每个周期对压缩校验状态的写 pair 中同一个 row segment 地址进行写入，所有 bank 都写成 `COMP_C2V_INIT`：
 
 ```text
-scale(x) = round(x * alpha)
+sign_xor = 0
+min_id   = 0
+min1     = MAG_MAX
+min2     = MAG_MAX
 ```
 
-每个正 `ALPHA_SHIFT_*` 项贡献一个 `2^-shift` 项，`shift=0` 项贡献 0。
+这个初始化的含义是：下一轮 V2C 消息开始进入 CNU A 前，校验节点状态中还没有接收任何本轮 V2C 消息，因此最小值和次小值都设置为最大幅度。清空只作用于 V2C 将要写入的 pair；C2V 读取的 pair 保持稳定，用于生成本轮 C2V 消息。
 
-## Pair 切换
+部分和累加器不需要整块清空。C2V 流水线在每个 tile 的 `one_idx==0` 时把该变量列的部分和基值视为 0，然后从第一条 C2V 消息开始累加。这样清零动作被并入固定扫描流程。
 
-每轮开始时：
+首次迭代的 C2V 输入使用 `FIRST_ITER_C2V_COMP`，其 `min1=min2=C_VAL`、`sign_xor=0`。这相当于在没有上一轮 V2C 历史的情况下，为每条边提供一致的初始可靠度。后续迭代从压缩校验状态 RAM 读取上一轮 V2C 形成的 min-sum 状态。
+
+### 7.3 主流水的 C2V 工作
+
+C2V 阶段的任务是“从校验节点向变量节点发消息”。对每个有效 lane，流水线执行以下操作：
+
+1. 根据当前 `h_block_idx`、`tile_idx`、`one_idx` 和 `q_seq` 生成变量列号 `col_idx`、校验行号 `row_idx`、边编号 `edge_id` 和 tile 内偏移 `tile_offset`。
+2. 从 syndrome RAM 读出 `syndrome[row_idx]`。
+3. 从压缩校验状态 RAM 读出该校验行的 `min1/min2/min_id/sign_xor`。首次迭代使用固定初值。
+4. CNU B 重建当前边的 C2V 消息：
 
 ```text
-comp_read_pair_sel  = current pair
-comp_write_pair_sel = next pair
+mag  = (edge_id == min_id) ? min2 : min1
+sign = sign_xor ^ v2c_sign(edge_id, row_idx) ^ syndrome(row_idx)
 ```
 
-迭代末尾交换两个 pair。每个迭代开始时，写 pair 的所有 row-bank 地址按固定顺序初始化为 `COMP_C2V_INIT`。
+5. 将符号-幅度格式的 C2V 转成二进制补码 `raw`。
+6. 把 `raw` 加到当前变量列的 tile 部分和中，写入 `ram_t_accum[fill_buf][tile_offset]`。
+7. 同时把单条边的 `raw` 写入 `ram_t[fill_buf]`，供 V2C 阶段执行“排除自身”时读取。
 
-## 存储综合约束
+从算法角度看，C2V 的输出是校验方程给变量比特的建议。若某条边本身贡献了校验节点最小幅度，发回给它的幅度要使用次小值；这样可以避免一个变量节点把自己的信息直接绕一圈又收到回来。
 
-大状态存储使用 banked RAM 模块承载。功能有效性由固定写入窗口、H 加载门控和 pair 调度保证。
+### 7.4 主流水的 V2C 工作
+
+V2C 阶段的任务是“变量节点综合所有校验建议，再把新消息发回校验节点”。硬件处理的 tile 比 C2V 晚一个窗口，因此 C2V 已经把该 tile 的所有 raw C2V 消息和总和写入 active buffer。
+
+对每个有效 lane，流水线执行以下操作：
+
+1. 从 `ram_t_accum[active_buf][tile_offset]` 读取该变量列的 raw C2V 总和 `raw_sum`。
+2. 从 `ram_t[active_buf]` 读取当前边的 raw C2V 值 `raw_edge`。
+3. 计算后验值：
+
+```text
+posterior = C_VAL + alpha_scale(raw_sum)
+```
+
+4. 计算当前边的新 V2C 消息：
+
+```text
+v2c = C_VAL + alpha_scale(raw_sum - raw_edge)
+```
+
+`raw_sum - raw_edge` 对应 min-sum 算法中的“排除自身”规则。后验值用于最终硬判决，V2C 用于更新下一轮的校验节点状态。
+
+5. 将 V2C 补码值饱和转换为符号-幅度格式。
+6. CNU A 用该 V2C 消息更新写 pair 中的压缩校验状态：符号进入异或累积，幅度参与 `min1/min2/min_id` 比较。
+7. 将 V2C 符号写入符号 RAM，供下一次 C2V 重建消息时使用。
+
+当同一校验行的压缩状态在相邻流水级中存在读写相关时，顶层使用旁路路径提供最新的 `v2c_comp_p`，使 CNU A 在固定节拍内看到已经更新的状态。
+
+### 7.5 Tile 重叠与双缓冲
+
+每轮迭代包含 `TILES_TOTAL + 1` 个窗口：
+
+- 第 0 个窗口只有 C2V 有效，用来填充第一个 tile 的部分和和单边 C2V 缓存。
+- 中间窗口同时运行两条流水：C2V 处理当前 tile，V2C 处理前一个 tile。
+- 最后一个窗口只有 V2C 有效，用来排空最后一个 tile。
+
+`fill_buf` 和 `active_buf` 由窗口编号的奇偶性决定。C2V 写入 `fill_buf`，V2C 读取 `active_buf`。这种交替关系保证 V2C 读取的是已经完成 C2V 累加的 tile，C2V 写入的是另一个 buffer。
+
+压缩校验状态使用 read pair 和 write pair。每轮 V2C 把下一轮需要的状态写入 write pair；迭代结束且尚有下一轮时，read pair 与 write pair 交换。这样每轮读到的是上一轮完整形成的状态，写入的是本轮正在形成的状态。
+
+### 7.6 最后一轮判决与输出
+
+译码器固定执行 `I_MAX` 轮。最后一轮的 V2C 阶段会为每个变量列计算 `posterior`。由于同一个变量列在 `one_idx=0..W-1` 中会被访问 $w$ 次，而后验值只和 `raw_sum` 有关，硬件只在 `one_idx==0` 时把该列判决写入 `ram_c1`：
+
+```text
+decision_bit = sign(posterior)
+```
+
+所有 tile 的 V2C 排空完成后，`o_done` 经过顶层寄存器对齐后拉高，`o_iter_count` 等于 `I_MAX`。外部逻辑可以通过 `i_e_read_col_idx` 异步读取对应列的错误估计 `o_e_rdata`。
+
+译码器不会在 syndrome 满足校验时提前停止，也不会根据后验值数量、错误重量或收敛情况改变窗口数量。固定轮数是恒定时间要求的一部分。
+
+### 7.7 边界情况与处理方式
+
+**最后一个 tile 不满 `C_TILE` 列**：`edge_addr_gen` 计算 `tile_cols = min(C_TILE, r - tile_base)`。当 `offset >= tile_cols` 时，该 lane 的 `valid` 置 0。无效 lane 不读写状态，不改变部分和，也不写判决；调度器仍执行完整 `W * Q_TILE` 个周期。
+
+**循环行号跨越 $r-1 \rightarrow 0$**：BIKE 循环块的行号为 `(base_row + col_local) mod r`。若某个 L-wide 访问组跨过模 $r$ 边界，并且跨越点落在 lane 中间，`edge_addr_gen` 把该组拆成两个 micro-cycle：前半周期处理跨越前的 lane，后半周期处理跨越后的 lane。`Q_TILE = Q_BASE + 1` 中额外的 1 个 guard 周期为这种拆分预留固定预算。
+
+**没有发生跨越拆分**：guard 周期仍然存在，但所有 lane 无效。这样 H 第一列行号只影响 lane mask 和地址，不影响周期数。
+
+**同一周期的 bank 冲突**：行号按低位分到 $L$ 个 row bank。地址生成器会重排 lane，使同一有效周期内每个 bank 至多访问一次。仿真断言检查 C2V 和 V2C 的 row-bank 冲突。
+
+**首次迭代没有上一轮消息**：C2V 读取固定的 `FIRST_ITER_C2V_COMP` 和符号 0。该处理方式给所有边相同的初始信息，不需要额外预热轮。
+
+**H 装载异常**：`ram_i` 检测索引越界、行号越界和同一 block 内重复行号。发生异常后 `o_h_error=1`，`decode_start` 无效，主译码调度不会启动。
+
+**无效 lane 的存储输出**：RAM 读无效时输出 `COMP_C2V_INIT` 或 0，组合计算结果被 valid 屏蔽，不参与写回。该规则让流水线保持固定形状，同时避免无效 lane 污染状态。
+
+**复位与启动对齐**：异步输入复位先经过 `reset_sync`。合法启动时调度器、pair 选择和流水控制从迭代 0、窗口 0、`one_idx=0`、`q_seq=0` 开始，已寄存的 `done` 状态被清除。
+
+## 8. 调度与流水线
+
+### 8.1 迭代调度
+
+每次译码迭代的处理流程为：
+
+1. **清零阶段**：将压缩 C2V 状态写 pair 初始化；tile 部分和在 C2V 扫描每列的第一条边时从 0 开始累加。
+2. **C2V 先导阶段**：仅 C2V 流水线活跃，处理第一个列组。
+3. **重叠阶段**：C2V 和 V2C 流水线同时活跃。C2V 处理第 $k+1$ 个列组，V2C 处理第 $k$ 个列组。
+4. **V2C 尾部阶段**：C2V 已处理完所有列组，仅 V2C 流水线活跃，处理最后一个列组。
+5. **迭代检查**：若达到 $I_{\max}$ 次迭代，输出判决结果并结束。
+
+### 8.2 流水线级数
+
+C2V 和 V2C 流水线各有 3～4 个寄存器级，分别对应地址生成、RAM 读取、计算和写回阶段。流水线深度确保在 100 MHz 时钟下满足时序要求。
+
+### 8.3 固定周期预算
+
+每次迭代的时钟周期数为：
+
+$$T_{\text{iter}} = T_{\text{clear}} + (T_{\text{total}} + 1) \times W \times Q_{\text{tile}}$$
+
+其中 $T_{\text{clear}} = \lceil r / L \rceil$ 是每轮压缩校验状态写 pair 初始化周期数，$T_{\text{total}} = n_0 \times \lceil r / C_{\text{tile}} \rceil$ 是总列组数，$W$ 是每列的非零元素数，$Q_{\text{tile}}$ 是每组需要的 L 路并行周期数。总译码周期为 $I_{\max} \times T_{\text{iter}}$，完全固定，不依赖于数据内容。
+
+## 9. 与参考论文的对比
+
+本文档描述的译码器架构基于 Cai 和 Zhang [1] 提出的并行 min-sum MDPC 译码器，但在若干关键方面进行了重新设计。
+
+### 9.1 列分组 vs. 逐列处理
+
+**论文方案**：按 H 矩阵列逐列处理，每个时钟周期处理一列的非零元素。下一列的索引通过当前列索引加 1 模 $r$ 得到。为实现 L 路并行，非零索引需要预先分割并存入 L 个 RAM I 块中。
+
+**本设计**：将 $r$ 列划分为若干列组（每组 $C_{\text{tile}}$ 列），组内 L 路并行处理。基行索引存储在寄存器中，实际行号通过组合逻辑实时计算。
+
+**改动原因**：逐列处理中，随机生成的 H 矩阵导致各列的非零元素数量差异较大，L 个 RAM I 块中的条目数不均衡，增加了最坏情况延迟（论文为此提出了灵活消息存储方案）。列分组方式将不均衡问题从列间转移到组内，而组内通过固定周期数的 L 路并行处理自然消除了不均衡。
+
+### 9.2 单级缩放 vs. 两级缩放
+
+**论文方案**：提出两级缩放方案，将 $\alpha = \alpha_1 \cdot \alpha_2$。C2V 消息先分组（每组 $g$ 条），组内累加后乘以 $\alpha_1$ 并舍入，各组结果再累加后乘以 $\alpha_2$。这将累加器的关键路径从 $\lceil \log_2(w \cdot (2^D - 1)) \rceil$ 级降低到 $p$ 级。
+
+**本设计**：采用单级缩放，$\alpha = 2^{-s_0} + 2^{-s_1}$，在累加完成后一次性应用。
+
+**改动原因**：两级缩放的中间舍入会引入精度损失，论文本身也承认这一点并提出了分组大小再平衡方案来弥补。在 FPGA 实现中，综合工具能够将宽位加法器映射到 carry chain，使得关键路径不会像理论分析那样线性增长。实际综合结果表明，单级缩放方案在 100 MHz 时序下仍有足够的正裕量（WNS > 0.2 ns），因此两级缩放的复杂度增加并无必要。
+
+### 9.3 H 矩阵索引存储方式
+
+**论文方案**：索引存储在 RAM I 中，每个时钟周期读出后加 1 写回，实现列间索引推移。
+
+**本设计**：基行索引存储在小型寄存器阵列中，通过组合逻辑（加法器 + 模运算）实时计算任意列的行号。
+
+**改动原因**：RAM I 的读-改-写操作占用了一个 RAM 端口且增加了流水线延迟。寄存器阵列方案虽然面积略大（$n_0 \times w$ 个寄存器），但完全消除了索引推移的时序开销，且 $n_0 \times w$ 的数量级（BIKE-128 为 $3 \times 27 = 81$）使得寄存器面积可以忽略。
+
+### 9.4 符号存储
+
+**论文方案**：使用移位寄存器收集符号位，攒满 $2^e$ 个后写入宽字 RAM。
+
+**本设计**：符号位以 $Q_{\text{base}}$ 位宽字为单位存储，在 V2C 阶段逐位积累到寄存器中，列组处理完毕时整字写入 block RAM。
+
+**改动原因**：两种方案本质等价，但本设计的写入粒度与列组边界对齐，简化了控制逻辑。整字写入方式也更适合综合工具将符号存储推断为 block RAM。
+
+## 10. 总结
+
+本文档描述了一种面向 BIKE 后量子密码系统的 QC-MDPC 码 min-sum 译码器架构。该架构在参考论文 [1] 的基础上，通过列分组并行处理、寄存器阵列存储 H 矩阵、单级 α 缩放和列组级流水重叠等设计选择，在保持恒定时间译码的同时实现了高效的 FPGA 实现。对于 BIKE-256 参数集，译码器在 Xilinx Kintex-7 xc7k480t FPGA 上以 100 MHz 时钟运行，译码延迟为 4,441,768 个时钟周期（约 44.4 ms），资源占用为 17,354 LUT、4,689 FF、244 BRAM tile，时序裕量 0.288 ns。
+
+## 参考文献
+
+[1] J. Cai and X. Zhang, "Low-complexity parallel min-sum medium-density parity-check decoder for McEliece cryptosystem," *IEEE Trans. Circuits Syst. I, Reg. Papers*, vol. 70, no. 12, pp. 5327–5339, Dec. 2023.

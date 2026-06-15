@@ -100,7 +100,7 @@ package bike_pkg;
 `elsif BIKE_384_PARAMS
   localparam int C_TILE_CONFIG = 456;
 `elsif BIKE_512_PARAMS
-  localparam int C_TILE_CONFIG = 1448;
+  localparam int C_TILE_CONFIG = 1168;
 `else
   localparam int C_TILE_CONFIG = 288;
 `endif

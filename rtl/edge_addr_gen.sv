@@ -1,5 +1,6 @@
 `timescale 1ns / 1ps
 // L-lane edge address generator with one fixed guard cycle.
+(* use_dsp = "no" *)
 module edge_addr_gen
   import bike_pkg::*;
 (

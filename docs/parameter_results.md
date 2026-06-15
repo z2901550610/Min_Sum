@@ -20,10 +20,10 @@
 
 | Level | Defines | Random seed | Decode cycles | Residual weight | Exact | LUT | FF | BRAM tile | DSP | WNS ns | TNS ns | Routed |
 | --- | --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| 128 | `BIKE_128_PARAMS` | 1 | 612096 | 0 | yes | 10712 | 2968 | 56 | 0 | 0.544 | 0.000 | yes |
-| 160 | `BIKE_160_PARAMS` |  | 1231988 |  |  | 12270 | 3049 | 96 | 0 | 0.213 | 0.000 | yes |
-| 256 | `BIKE_256_PARAMS` | 1 | 4441768 | 0 | yes | 17472 | 4666 | 368 | 0 | 0.510 | 0.000 | yes |
-| 384 | `BIKE_384_PARAMS` |  |  |  |  |  |  |  |  |  |  |  |
+| 128 | `BIKE_128_PARAMS` | 1 | 612096 | 0 | yes | 11042 | 3090 | 56 | 0 | 0.499 | 0.000 | yes |
+| 160 | `BIKE_160_PARAMS` |  | 1231988 |  |  | 12861 | 3546 | 88 | 0 | 0.398 | 0.000 | yes |
+| 256 | `BIKE_256_PARAMS` | 1 | 4441768 | 0 | yes | 17354 | 4689 | 244 | 0 | 0.288 | 0.000 | yes |
+| 384 | `BIKE_384_PARAMS` |  | 13227608 |  |  | 24686 | 7498 | 570 | 0 | 0.448 | 0.000 | yes |
 
 ## BIKE-128
 
@@ -70,20 +70,20 @@ I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE) + 2
 
 ### Vivado Utilization
 
-Report: `report_utilization`, fully placed design, generated 2026-06-13 21:36:01.
+Report: `report_utilization`, fully placed design, generated 2026-06-13 23:11:36.
 
 | Resource | Used | Available | Utilization |
 | --- | ---: | ---: | ---: |
-| Slice LUTs | 10712 | 298600 | 3.59% |
-| LUT as Logic | 9192 | 298600 | 3.08% |
+| Slice LUTs | 11042 | 298600 | 3.70% |
+| LUT as Logic | 9522 | 298600 | 3.19% |
 | LUT as Distributed RAM | 1520 | 108600 | 1.40% |
-| Slice Registers | 2968 | 597200 | 0.50% |
-| Slice | 3238 | 74650 | 4.34% |
-| F7 Muxes | 911 | 149300 | 0.61% |
-| F8 Muxes | 170 | 74650 | 0.23% |
+| Slice Registers | 3090 | 597200 | 0.52% |
+| Slice | 3255 | 74650 | 4.36% |
+| F7 Muxes | 927 | 149300 | 0.62% |
+| F8 Muxes | 194 | 74650 | 0.26% |
 | Block RAM Tile | 56 | 955 | 5.86% |
-| RAMB36E1 | 32 | 955 | 3.35% |
-| RAMB18E1 | 48 | 1910 | 2.51% |
+| RAMB36E1 | 40 | 955 | 4.19% |
+| RAMB18E1 | 32 | 1910 | 1.68% |
 | DSP | 0 | 1920 | 0.00% |
 | Bonded IOB | 61 | 400 | 15.25% |
 | BUFGCTRL | 1 | 32 | 3.13% |
@@ -92,28 +92,28 @@ Primitive highlights:
 
 | Primitive | Used |
 | --- | ---: |
-| FDCE | 1913 |
+| FDCE | 2035 |
 | FDRE | 1053 |
-| LUT6 | 5996 |
-| LUT5 | 1809 |
-| LUT4 | 1000 |
-| LUT3 | 584 |
-| LUT2 | 1104 |
-| CARRY4 | 340 |
-| MUXF7 | 911 |
-| MUXF8 | 170 |
+| LUT6 | 6039 |
+| LUT5 | 2004 |
+| LUT4 | 1122 |
+| LUT3 | 547 |
+| LUT2 | 992 |
+| CARRY4 | 329 |
+| MUXF7 | 927 |
+| MUXF8 | 194 |
 | RAMD64E | 1440 |
 | RAMD32 | 80 |
-| RAMB18E1 | 48 |
-| RAMB36E1 | 32 |
+| RAMB18E1 | 32 |
+| RAMB36E1 | 40 |
 
 ### Vivado Timing
 
-Report: `report_timing_summary`, routed design, generated 2026-06-13 21:37:11.
+Report: `report_timing_summary`, routed design, generated 2026-06-13 23:13:22.
 
 | Metric | Value |
 | --- | ---: |
-| WNS | 0.544 ns |
+| WNS | 0.499 ns |
 | TNS | 0.000 ns |
 | Setup failing endpoints | 0 |
 | WHS | 0.051 ns |
@@ -126,13 +126,13 @@ Worst setup path:
 
 | Field | Value |
 | --- | --- |
-| Source | `u_msg_sign_ram/g_bank[5].mem_reg_3/CLKBWRCLK` |
-| Destination | `u_tile_accum_ram/g_buf[1].g_bank[2].mem_reg_r2_0_63_9_9/DP/I` |
-| Data path delay | 8.658 ns |
-| Logic delay | 3.044 ns |
-| Route delay | 5.614 ns |
-| Logic levels | 11 |
-| Logic cells | `CARRY4=2 LUT2=1 LUT4=1 LUT5=2 LUT6=4 MUXF7=1` |
+| Source | `u_ram_t/g_buf[1].g_lane[1].mem_reg/CLKBWRCLK` |
+| Destination | `u_ram_m/g_pair[1].g_bank[1].mem_reg_2/DIADI[3]` |
+| Data path delay | 8.984 ns |
+| Logic delay | 3.639 ns |
+| Route delay | 5.345 ns |
+| Logic levels | 15 |
+| Logic cells | `CARRY4=3 LUT2=1 LUT3=2 LUT4=2 LUT5=3 LUT6=3 MUXF7=1` |
 
 Methodology notes:
 
@@ -165,91 +165,23 @@ I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE) + 2
 = 1231988
 ```
 
-### Synthesis
-
-Report: `synth_design`, generated 2026-06-10 09:53:44.
-
-Defines:
-
-```text
-BIKE_160_PARAMS
-BIKE_MSG_BITS=5
-BIKE_PARALLEL_L=8
-BIKE_C_TILE=256
-```
-
-Synthesis status:
-
-| Field | Value |
-| --- | ---: |
-| Errors | 0 |
-| Critical warnings | 0 |
-| Warnings | 18 |
-| Elapsed time | 00:10:13 |
-| Peak memory | 4034.637 MB |
-
-Synthesis cell usage:
-
-| Cell | Count |
-| --- | ---: |
-| LUT1 | 161 |
-| LUT2 | 1630 |
-| LUT3 | 856 |
-| LUT4 | 1343 |
-| LUT5 | 1917 |
-| LUT6 | 6245 |
-| LUT total | 12152 |
-| CARRY4 | 671 |
-| MUXF7 | 1322 |
-| MUXF8 | 230 |
-| FDCE | 1529 |
-| FDPE | 2 |
-| FDRE | 1518 |
-| FF total | 3049 |
-| RAMB36E1 | 96 |
-| RAMD64E | 1568 |
-| RAMD32 | 464 |
-| RAMS32 | 128 |
-| BUFG | 1 |
-| IBUF | 58 |
-| OBUF | 7 |
-
-Memory mapping highlights:
-
-| Memory | Mapping |
-| --- | --- |
-| `ram_m` | True dual-port block RAM |
-| `ram_s` | 8 banks, each mapped as 163 K x 1 block RAM |
-| `ram_t` | 16 lane/buffer RAMs, each mapped as 1 K x 11 block RAM |
-| `ram_t_accum` | 16 banks, each mapped as 32 x 11 distributed RAM |
-| `ram_c1` | 8 banks, each mapped as 8 K x 1 distributed RAM |
-| `syndrome` banks | 8 banks, each mapped as 2 K x 1 distributed RAM |
-
-Notes:
-
-| Message | Note |
-| --- | --- |
-| `Synth 8-6702` | Incremental synthesis guide was rejected and default synthesis ran |
-| `Synth 8-7052` | Several block RAM instances report that optional output registers were not merged |
-| `Netlist 29-101` | `ram_m` contains many primitives; hierarchy can help future floorplanning |
-
 ### Vivado Utilization
 
-Report: `report_utilization`, fully placed design, generated 2026-06-10 09:57:07.
+Report: `report_utilization`, fully placed design, generated 2026-06-13 23:27:14.
 
 | Resource | Used | Available | Utilization |
 | --- | ---: | ---: | ---: |
-| Slice LUTs | 12270 | 203800 | 6.02% |
-| LUT as Logic | 10366 | 203800 | 5.09% |
-| LUT as Distributed RAM | 1904 | 64000 | 2.98% |
-| Slice Registers | 3049 | 407600 | 0.75% |
-| Slice | 4170 | 50950 | 8.18% |
-| F7 Muxes | 1322 | 101900 | 1.30% |
-| F8 Muxes | 230 | 50950 | 0.45% |
-| Block RAM Tile | 96 | 445 | 21.57% |
-| RAMB36E1 | 96 | 445 | 21.57% |
-| RAMB18E1 | 0 | 890 | 0.00% |
-| DSP | 0 | 840 | 0.00% |
+| Slice LUTs | 12861 | 298600 | 4.31% |
+| LUT as Logic | 10701 | 298600 | 3.58% |
+| LUT as Distributed RAM | 2160 | 108600 | 1.99% |
+| Slice Registers | 3546 | 597200 | 0.59% |
+| Slice | 4137 | 74650 | 5.54% |
+| F7 Muxes | 1386 | 149300 | 0.93% |
+| F8 Muxes | 248 | 74650 | 0.33% |
+| Block RAM Tile | 88 | 955 | 9.21% |
+| RAMB36E1 | 88 | 955 | 9.21% |
+| RAMB18E1 | 0 | 1910 | 0.00% |
+| DSP | 0 | 1920 | 0.00% |
 | Bonded IOB | 65 | 400 | 16.25% |
 | BUFGCTRL | 1 | 32 | 3.13% |
 
@@ -257,31 +189,30 @@ Primitive highlights:
 
 | Primitive | Used |
 | --- | ---: |
-| FDCE | 1529 |
-| FDRE | 1518 |
-| LUT6 | 6245 |
-| LUT5 | 1917 |
-| LUT4 | 1343 |
-| LUT3 | 856 |
-| LUT2 | 1630 |
-| CARRY4 | 671 |
-| MUXF7 | 1322 |
-| MUXF8 | 230 |
-| RAMD64E | 1568 |
-| RAMD32 | 464 |
-| RAMS32 | 128 |
-| RAMB36E1 | 96 |
+| LUT6 | 6922 |
+| RAMD64E | 2080 |
+| LUT5 | 2074 |
+| FDCE | 2074 |
+| FDRE | 1470 |
+| MUXF7 | 1386 |
+| LUT4 | 1335 |
+| LUT2 | 1162 |
+| LUT3 | 460 |
+| CARRY4 | 442 |
+| MUXF8 | 248 |
+| RAMB36E1 | 88 |
+| RAMD32 | 80 |
 
 ### Vivado Timing
 
-Report: `report_timing_summary`, routed design, generated 2026-06-10 09:58:09.
+Report: `report_timing_summary`, routed design, generated 2026-06-13 23:29:04.
 
 | Metric | Value |
 | --- | ---: |
-| WNS | 0.213 ns |
+| WNS | 0.398 ns |
 | TNS | 0.000 ns |
 | Setup failing endpoints | 0 |
-| WHS | 0.057 ns |
+| WHS | 0.059 ns |
 | THS | 0.000 ns |
 | Hold failing endpoints | 0 |
 | WPWS | 4.232 ns |
@@ -291,13 +222,13 @@ Worst setup path:
 
 | Field | Value |
 | --- | --- |
-| Source | `u_tile_scheduler/q_seq_q_reg[3]` |
-| Destination | `u_tile_scheduler/o_v2c_h_block_idx_reg[1]` |
-| Data path delay | 9.643 ns |
-| Logic delay | 3.355 ns |
-| Route delay | 6.288 ns |
-| Logic levels | 26 |
-| Logic cells | `CARRY4=14 LUT2=1 LUT3=2 LUT4=1 LUT5=5 LUT6=3` |
+| Source | `v2c_tile_idx_e_reg[2]/C` |
+| Destination | `v2c_col_idx_r_reg[6][11]/D` |
+| Data path delay | 9.458 ns |
+| Logic delay | 3.425 ns |
+| Route delay | 6.033 ns |
+| Logic levels | 21 |
+| Logic cells | `CARRY4=10 LUT2=3 LUT3=1 LUT4=1 LUT5=2 LUT6=4` |
 
 Methodology notes:
 
@@ -390,20 +321,20 @@ Notes:
 
 ### Vivado Utilization
 
-Report: `report_utilization`, fully placed design, generated 2026-06-13 21:14:10.
+Report: `report_utilization`, fully placed design, generated 2026-06-13 23:43:12.
 
 | Resource | Used | Available | Utilization |
 | --- | ---: | ---: | ---: |
-| Slice LUTs | 17472 | 298600 | 5.85% |
-| LUT as Logic | 13216 | 298600 | 4.43% |
+| Slice LUTs | 17354 | 298600 | 5.81% |
+| LUT as Logic | 13098 | 298600 | 4.39% |
 | LUT as Distributed RAM | 4256 | 108600 | 3.92% |
-| Slice Registers | 4666 | 597200 | 0.78% |
-| Slice | 6021 | 74650 | 8.07% |
-| F7 Muxes | 2877 | 149300 | 1.93% |
+| Slice Registers | 4689 | 597200 | 0.79% |
+| Slice | 5825 | 74650 | 7.80% |
+| F7 Muxes | 2853 | 149300 | 1.91% |
 | F8 Muxes | 478 | 74650 | 0.64% |
-| Block RAM Tile | 368 | 955 | 38.53% |
-| RAMB36E1 | 368 | 955 | 38.53% |
-| RAMB18E1 | 0 | 1910 | 0.00% |
+| Block RAM Tile | 244 | 955 | 25.55% |
+| RAMB36E1 | 232 | 955 | 24.29% |
+| RAMB18E1 | 24 | 1910 | 1.26% |
 | DSP | 0 | 1920 | 0.00% |
 | Bonded IOB | 68 | 400 | 17.00% |
 | BUFGCTRL | 1 | 32 | 3.13% |
@@ -412,35 +343,36 @@ Primitive highlights:
 
 | Primitive | Used |
 | --- | ---: |
-| LUT6 | 9088 |
+| LUT6 | 8736 |
 | RAMD64E | 4176 |
-| MUXF7 | 2877 |
+| MUXF7 | 2853 |
 | FDRE | 2475 |
-| FDCE | 2189 |
-| LUT5 | 2063 |
-| LUT4 | 1508 |
-| LUT2 | 1487 |
-| LUT3 | 824 |
-| CARRY4 | 573 |
+| FDCE | 2212 |
+| LUT5 | 2154 |
+| LUT4 | 1361 |
+| LUT2 | 1497 |
+| LUT3 | 589 |
+| CARRY4 | 611 |
 | MUXF8 | 478 |
-| RAMB36E1 | 368 |
-| LUT1 | 147 |
+| RAMB36E1 | 232 |
+| LUT1 | 221 |
 | RAMD32 | 80 |
 | IBUF | 61 |
+| RAMB18E1 | 24 |
 | OBUF | 7 |
 | FDPE | 2 |
 | BUFG | 1 |
 
 ### Vivado Timing
 
-Report: `report_timing_summary`, routed design, generated 2026-06-13 21:17:34.
+Report: `report_timing_summary`, routed design, generated 2026-06-13 23:45:01.
 
 | Metric | Value |
 | --- | ---: |
-| WNS | 0.510 ns |
+| WNS | 0.288 ns |
 | TNS | 0.000 ns |
 | Setup failing endpoints | 0 |
-| WHS | 0.044 ns |
+| WHS | 0.059 ns |
 | THS | 0.000 ns |
 | Hold failing endpoints | 0 |
 | WPWS | 4.232 ns |
@@ -450,13 +382,13 @@ Worst setup path:
 
 | Field | Value |
 | --- | --- |
-| Source | `u_ram_s/g_bank[1].mem_reg_0_9/CLKBWRCLK` |
-| Destination | `u_ram_t_accum/g_buf[0].g_bank[2].mem_reg_r2_0_63_9_10/RAMA/I` |
-| Data path delay | 8.731 ns |
-| Logic delay | 2.832 ns |
-| Route delay | 5.899 ns |
-| Logic levels | 12 |
-| Logic cells | `CARRY4=3 LUT2=1 LUT4=1 LUT5=2 LUT6=4 MUXF7=1` |
+| Source | `v2c_tile_idx_e_reg[2]/C` |
+| Destination | `v2c_row_addr_r_reg[3][11]/D` |
+| Data path delay | 9.316 ns |
+| Logic delay | 3.855 ns |
+| Route delay | 5.461 ns |
+| Logic levels | 22 |
+| Logic cells | `CARRY4=13 LUT1=1 LUT3=1 LUT4=2 LUT5=1 LUT6=4` |
 
 Methodology notes:
 
@@ -464,6 +396,107 @@ Methodology notes:
 | --- | ---: | --- |
 | `SYNTH-5` | 912 | Distributed RAM mapping selected by timing constraints |
 | `TIMING-18` | 49 | Top-level input/output delay constraints are not modeled |
+
+## BIKE-384
+
+### Parameters
+
+| Field | Value |
+| --- | ---: |
+| `R` | 59069 |
+| `N0` | 3 |
+| `W` | 83 |
+| `T` | 659 |
+| `C_TILE` | 456 |
+| `TILE_COUNT` | 130 |
+| `TILES_TOTAL` | 390 |
+| `Q_TILE` | 58 |
+| `I_MAX` | 7 |
+
+Cycle budget:
+
+```text
+I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE) + 2
+= 7 * (7384 + (390 + 1) * 83 * 58) + 2
+= 13227608
+```
+
+### Vivado Utilization
+
+Report: `report_utilization`, fully placed design, generated 2026-06-14 23:46:55.
+
+| Resource | Used | Available | Utilization |
+| --- | ---: | ---: | ---: |
+| CLB LUTs | 24686 | 663360 | 3.72% |
+| LUT as Logic | 16750 | 663360 | 2.53% |
+| LUT as Distributed RAM | 7936 | 293760 | 2.70% |
+| CLB Registers | 7498 | 1326720 | 0.57% |
+| CLB | 5058 | 82920 | 6.10% |
+| F7 Muxes | 5499 | 331680 | 1.66% |
+| F8 Muxes | 2657 | 165840 | 1.60% |
+| Block RAM Tile | 570 | 2160 | 26.39% |
+| RAMB36E2 | 570 | 2160 | 26.39% |
+| RAMB18 | 0 | 4320 | 0.00% |
+| DSP | 0 | 5520 | 0.00% |
+| Bonded IOB | 72 | 832 | 8.65% |
+| BUFGCE | 2 | 576 | 0.35% |
+
+Primitive highlights:
+
+| Primitive | Used |
+| --- | ---: |
+| LUT6 | 11897 |
+| RAMD64E | 7888 |
+| MUXF7 | 5499 |
+| FDRE | 4000 |
+| FDCE | 3368 |
+| LUT5 | 3035 |
+| MUXF8 | 2657 |
+| LUT2 | 1856 |
+| LUT4 | 1534 |
+| RAMB36E2 | 570 |
+| LUT3 | 528 |
+| CARRY8 | 167 |
+| FDPE | 130 |
+| IBUF | 65 |
+| RAMD32 | 48 |
+| LUT1 | 44 |
+| OBUF | 7 |
+| BUFGCE | 2 |
+
+### Vivado Timing
+
+Report: `report_timing_summary`, routed design, generated 2026-06-14 23:54:04.
+
+| Metric | Value |
+| --- | ---: |
+| WNS | 0.448 ns |
+| TNS | 0.000 ns |
+| Setup failing endpoints | 0 |
+| WHS | 0.030 ns |
+| THS | 0.000 ns |
+| Hold failing endpoints | 0 |
+| WPWS | 3.850 ns |
+| Clock period | 9.660 ns |
+
+Worst setup path:
+
+| Field | Value |
+| --- | --- |
+| Source | `v2c_write_h_edge_id_p_reg[2]/C` |
+| Destination | `u_ram_s/g_bank[1].mem_reg_bram_25/ADDRARDADDR[12]` |
+| Data path delay | 8.999 ns |
+| Logic delay | 0.515 ns |
+| Route delay | 8.484 ns |
+| Logic levels | 2 |
+| Logic cells | `CARRY8=1 LUT2=1` |
+
+Methodology notes:
+
+| Rule | Count | Note |
+| --- | ---: | --- |
+| `SYNTH-5` | 912 | Distributed RAM mapping selected by timing constraints |
+| `TIMING-18` | 52 | Top-level input/output delay constraints are not modeled |
 
 ## Result Template
 
