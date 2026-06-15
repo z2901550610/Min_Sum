@@ -5,7 +5,16 @@ package bike_pkg;
   /* verilator lint_off UNUSEDPARAM */
 
 `ifndef BIKE_TOY_PARAMS
-`ifdef BIKE_128_PARAMS
+`ifdef BIKE_UNIFIED_PARAMS
+  localparam int N0 = 3;
+  localparam int R = 108587;
+  localparam int W = 111;
+  localparam int T = 877;
+  localparam int I_MAX = 7;
+  localparam int C_VAL = 7;
+  localparam int ALPHA_SHIFT_0 = 4;
+  localparam int ALPHA_SHIFT_1 = 0;
+`elsif BIKE_128_PARAMS
   localparam int N0 = 3;
   localparam int R = 8117;
   localparam int W = 27;
@@ -91,7 +100,9 @@ package bike_pkg;
   localparam int ROW_SEG_SIZE = (R + L - 1) / L;
   localparam int VNU_TC_W = MSG_W + ((W > 1) ? $clog2(W + 1) : 1);
 `ifndef BIKE_C_TILE
-`ifdef BIKE_128_PARAMS
+`ifdef BIKE_UNIFIED_PARAMS
+  localparam int C_TILE_CONFIG = 576;
+`elsif BIKE_128_PARAMS
   localparam int C_TILE_CONFIG = 256;
 `elsif BIKE_160_PARAMS
   localparam int C_TILE_CONFIG = 256;
@@ -128,6 +139,18 @@ package bike_pkg;
   localparam int LANE_IDX_W = (L > 1) ? $clog2(L) : 1;
   localparam int L_SHIFT = (L > 1) ? $clog2(L) : 0;
   localparam int ITER_W = $clog2(I_MAX + 1);
+
+  localparam int PROFILE_COUNT = 5;
+  localparam int PROFILE_ID_W = 3;
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_BIKE_128 = 3'd0;
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_BIKE_160 = 3'd1;
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_BIKE_256 = 3'd2;
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_BIKE_384 = 3'd3;
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_BIKE_512 = 3'd4;
+  localparam int CFG_R_W = ROW_IDX_W + 1;
+  localparam int CFG_W_W = ONE_IDX_W + 1;
+  localparam int CFG_CVAL_W = MSG_W;
+  localparam int CFG_ALPHA_SHIFT_W = 3;
 
   localparam int DEC_STATE_W = 4;
   localparam logic [DEC_STATE_W-1:0] DEC_WAIT_START = 4'd0;

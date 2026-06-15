@@ -3,17 +3,22 @@
 module vnu_update
   import bike_pkg::*;
 (
-    input  logic                    i_valid[0:L-1],
-    input  logic signed [ACC_W-1:0] i_raw_sum[0:L-1],
-    input  logic signed [ACC_W-1:0] i_raw_c2v[0:L-1],
-    output logic signed [ACC_W-1:0] o_posterior[0:L-1],
-    output logic        [MSG_W-1:0] o_v2c_msg[0:L-1]
+    input  logic                                i_valid[0:L-1],
+    input  logic signed [            ACC_W-1:0] i_raw_sum[0:L-1],
+    input  logic signed [            ACC_W-1:0] i_raw_c2v[0:L-1],
+    input  logic        [       CFG_CVAL_W-1:0] i_cfg_c_val,
+    input  logic        [CFG_ALPHA_SHIFT_W-1:0] i_cfg_alpha_shift_0,
+    input  logic        [CFG_ALPHA_SHIFT_W-1:0] i_cfg_alpha_shift_1,
+    output logic signed [            ACC_W-1:0] o_posterior[0:L-1],
+    output logic        [            MSG_W-1:0] o_v2c_msg[0:L-1]
 );
 
   logic signed [ACC_W-1:0] v2c_tc[0:L-1];
   logic        [MSG_W-1:0] v2c_msg_sat[0:L-1];
 
-  function automatic logic signed [ACC_W-1:0] alpha_scale(input  logic signed [ACC_W-1:0] tc_value);
+  function automatic logic signed [ACC_W-1:0] alpha_scale(
+      input  logic signed [ACC_W-1:0] tc_value, input  logic [CFG_ALPHA_SHIFT_W-1:0] shift_0,
+      input  logic [CFG_ALPHA_SHIFT_W-1:0] shift_1);
     localparam int SCALE_W = ACC_W + ALPHA_FRAC_W;
     logic signed [     SCALE_W-1:0] scale_ext;
     logic signed [     SCALE_W-1:0] scaled_full;
@@ -26,11 +31,11 @@ module vnu_update
     begin
       scale_ext   = SCALE_W'($signed(tc_value));
       scaled_full = '0;
-      if ((ALPHA_SHIFT_0 > 0) && (ALPHA_SHIFT_0 <= ALPHA_FRAC_W)) begin
-        scaled_full = scaled_full + (scale_ext <<< (ALPHA_FRAC_W - ALPHA_SHIFT_0));
+      if ((shift_0 > '0) && (int'(shift_0) <= ALPHA_FRAC_W)) begin
+        scaled_full = scaled_full + (scale_ext <<< (ALPHA_FRAC_W - int'(shift_0)));
       end
-      if ((ALPHA_SHIFT_1 > 0) && (ALPHA_SHIFT_1 <= ALPHA_FRAC_W)) begin
-        scaled_full = scaled_full + (scale_ext <<< (ALPHA_FRAC_W - ALPHA_SHIFT_1));
+      if ((shift_1 > '0) && (int'(shift_1) <= ALPHA_FRAC_W)) begin
+        scaled_full = scaled_full + (scale_ext <<< (ALPHA_FRAC_W - int'(shift_1)));
       end
 
       floor_tc = scaled_full[SCALE_W-1:ALPHA_FRAC_W];
@@ -71,9 +76,10 @@ module vnu_update
       o_posterior[lane_idx] = '0;
       v2c_tc[lane_idx] = '0;
       if (i_valid[lane_idx]) begin
-        o_posterior[lane_idx] = ACC_W'($signed(C_VAL)) + alpha_scale(i_raw_sum[lane_idx]);
-        v2c_tc[lane_idx] = ACC_W'($signed(C_VAL)) +
-            alpha_scale(i_raw_sum[lane_idx] - i_raw_c2v[lane_idx]);
+        o_posterior[lane_idx] = ACC_W'($signed(i_cfg_c_val)) +
+            alpha_scale(i_raw_sum[lane_idx], i_cfg_alpha_shift_0, i_cfg_alpha_shift_1);
+        v2c_tc[lane_idx] = ACC_W'($signed(i_cfg_c_val)) + alpha_scale(
+            i_raw_sum[lane_idx] - i_raw_c2v[lane_idx], i_cfg_alpha_shift_0, i_cfg_alpha_shift_1);
       end
     end
   end

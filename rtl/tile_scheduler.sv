@@ -6,6 +6,9 @@ module tile_scheduler
     input  logic                   i_clk,
     input  logic                   i_rst_n,
     input  logic                   i_start,
+    input  logic [    CFG_W_W-1:0] i_cfg_w,
+    input  logic [ TILE_IDX_W-1:0] i_cfg_tile_count,
+    input  logic [ROW_BANK_AW-1:0] i_cfg_row_seg_size,
     output logic [DEC_STATE_W-1:0] o_state,
     output logic                   o_c2v_valid,
     output logic                   o_v2c_valid,
@@ -89,21 +92,13 @@ module tile_scheduler
     end
   endfunction
 
-  function automatic logic [TILE_IDX_W-1:0] next_tile_idx(input  logic [TILE_IDX_W-1:0] tile_idx);
-    begin
-      next_tile_idx = (int'(tile_idx) == (TILE_COUNT - 1)) ? '0 : tile_idx + TILE_IDX_W'(1);
-    end
-  endfunction
-
-  function automatic logic [H_BLOCK_W-1:0] next_h_block(input  logic [H_BLOCK_W-1:0] h_block,
-                                                        input  logic [TILE_IDX_W-1:0] tile_idx);
-    begin
-      next_h_block = (int'(tile_idx) == (TILE_COUNT - 1)) ? h_block + H_BLOCK_W'(1) : h_block;
-    end
-  endfunction
-
   always_comb begin
     logic current_last_cycle;
+    logic last_one_idx;
+    logic last_q_seq;
+    logic last_clear_addr;
+    logic last_tile_idx;
+    logic last_tile_linear;
 
     running_d = running_q;
     clear_d = clear_q;
@@ -122,9 +117,13 @@ module tile_scheduler
     v2c_tile_idx_state_d = v2c_tile_idx_state_q;
     done_d = done_q;
 
+    last_one_idx = int'(one_idx_q) == (int'(i_cfg_w) - 1);
+    last_q_seq = int'(q_seq_q) == (Q_TILE - 1);
+    last_clear_addr = int'(clear_addr_q) == (int'(i_cfg_row_seg_size) - 1);
+    last_tile_idx = int'(c2v_tile_idx_state_q) == (int'(i_cfg_tile_count) - 1);
+    last_tile_linear = int'(c2v_tile_linear_state_q) == ((N0 * int'(i_cfg_tile_count)) - 1);
     current_last_cycle = running_q && !clear_q && !c2v_tile_active_q && v2c_tile_active_q &&
-                         (int'(one_idx_q) == (W - 1)) &&
-                         (int'(q_seq_q) == (Q_TILE - 1));
+                         last_one_idx && last_q_seq;
 
     if (i_start) begin
       running_d = 1'b1;
@@ -145,7 +144,7 @@ module tile_scheduler
       done_d = 1'b0;
     end else if (running_q) begin
       if (clear_q) begin
-        if (int'(clear_addr_q) == (ROW_SEG_SIZE - 1)) begin
+        if (last_clear_addr) begin
           clear_d = 1'b0;
           clear_addr_d = '0;
         end else begin
@@ -172,20 +171,20 @@ module tile_scheduler
           v2c_h_block_state_d = '0;
           v2c_tile_idx_state_d = '0;
         end
-      end else if (int'(q_seq_q) == (Q_TILE - 1)) begin
+      end else if (last_q_seq) begin
         q_seq_d = '0;
-        if (int'(one_idx_q) == (W - 1)) begin
+        if (last_one_idx) begin
           one_idx_d = '0;
           window_idx_d = window_idx_q + WINDOW_IDX_W'(1);
-          c2v_tile_active_d = c2v_tile_active_q && (c2v_tile_linear_state_q !=
-                                                    TILE_ID_W'(TILES_TOTAL - 1));
+          c2v_tile_active_d = c2v_tile_active_q && !last_tile_linear;
           v2c_tile_active_d = c2v_tile_active_q;
           v2c_tile_linear_state_d = c2v_tile_linear_state_q;
           v2c_h_block_state_d = c2v_h_block_state_q;
           v2c_tile_idx_state_d = c2v_tile_idx_state_q;
           c2v_tile_linear_state_d = next_tile_linear(c2v_tile_linear_state_q);
-          c2v_h_block_state_d = next_h_block(c2v_h_block_state_q, c2v_tile_idx_state_q);
-          c2v_tile_idx_state_d = next_tile_idx(c2v_tile_idx_state_q);
+          c2v_h_block_state_d = last_tile_idx ? c2v_h_block_state_q + H_BLOCK_W'(1) :
+              c2v_h_block_state_q;
+          c2v_tile_idx_state_d = last_tile_idx ? '0 : c2v_tile_idx_state_q + TILE_IDX_W'(1);
         end else begin
           one_idx_d = one_idx_q + ONE_IDX_W'(1);
         end
@@ -215,7 +214,8 @@ module tile_scheduler
     iter_first_cycle_d = running_d && !i_start && !clear_active_d && c2v_tile_active_d &&
                          !v2c_tile_active_d && (one_idx_d == '0) && (q_seq_d == '0);
     iter_last_cycle_d = running_d && !clear_active_d && !c2v_tile_active_d && v2c_tile_active_d &&
-                        (int'(one_idx_d) == (W - 1)) && (int'(q_seq_d) == (Q_TILE - 1));
+                        (int'(one_idx_d) == (int'(i_cfg_w) - 1)) &&
+                        (int'(q_seq_d) == (Q_TILE - 1));
 
     if (!running_d) begin
       state_d = done_d ? DEC_DONE : DEC_WAIT_START;

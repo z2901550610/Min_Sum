@@ -3,22 +3,25 @@
 module decoder_top
   import bike_pkg::*;
 (
-    input  logic                 i_clk,
-    input  logic                 i_rst_n,
-    input  logic                 i_start,
-    input  logic                 i_syndrome_we,
-    input  logic [ROW_IDX_W-1:0] i_syndrome_addr,
-    input  logic                 i_syndrome_wdata,
-    input  logic                 i_h_we,
-    input  logic [H_BLOCK_W-1:0] i_h_block_idx,
-    input  logic [ONE_IDX_W-1:0] i_h_one_idx,
-    input  logic [ROW_IDX_W-1:0] i_h_base_row,
-    input  logic [    COL_W-1:0] i_e_read_col_idx,
-    output logic                 o_h_loaded,
-    output logic                 o_h_error,
-    output logic                 o_done,
-    output logic                 o_e_rdata,
-    output logic [   ITER_W-1:0] o_iter_count
+    input  logic                    i_clk,
+    input  logic                    i_rst_n,
+    input  logic                    i_start,
+`ifdef BIKE_UNIFIED_PARAMS
+    input  logic [PROFILE_ID_W-1:0] i_profile_sel,
+`endif
+    input  logic                    i_syndrome_we,
+    input  logic [   ROW_IDX_W-1:0] i_syndrome_addr,
+    input  logic                    i_syndrome_wdata,
+    input  logic                    i_h_we,
+    input  logic [   H_BLOCK_W-1:0] i_h_block_idx,
+    input  logic [   ONE_IDX_W-1:0] i_h_one_idx,
+    input  logic [   ROW_IDX_W-1:0] i_h_base_row,
+    input  logic [       COL_W-1:0] i_e_read_col_idx,
+    output logic                    o_h_loaded,
+    output logic                    o_h_error,
+    output logic                    o_done,
+    output logic                    o_e_rdata,
+    output logic [      ITER_W-1:0] o_iter_count
 );
 
   localparam bit C2V_WRITE_PIPELINE = (Q_TILE > 2);
@@ -35,176 +38,185 @@ module decoder_top
 `endif
 
   /* verilator lint_off UNUSEDSIGNAL */
-  logic        [DEC_STATE_W-1:0] state;
-  logic        [  TILE_ID_W-1:0] unused_c2v_tile_linear;
-  logic        [  TILE_ID_W-1:0] unused_v2c_tile_linear;
-  logic                          unused_iter_first_cycle;
-  logic        [      COL_W-1:0] unused_c2v_col_idx[0:L-1];
-  logic        [  ROW_IDX_W-1:0] unused_c2v_row_idx[0:L-1];
-  logic        [  ROW_IDX_W-1:0] unused_v2c_row_idx[0:L-1];
+  logic        [      DEC_STATE_W-1:0] state;
+  logic        [        TILE_ID_W-1:0] unused_c2v_tile_linear;
+  logic        [        TILE_ID_W-1:0] unused_v2c_tile_linear;
+  logic                                unused_iter_first_cycle;
+  logic        [            COL_W-1:0] unused_c2v_col_idx[0:L-1];
+  logic        [        ROW_IDX_W-1:0] unused_c2v_row_idx[0:L-1];
+  logic        [        ROW_IDX_W-1:0] unused_v2c_row_idx[0:L-1];
   /* verilator lint_on UNUSEDSIGNAL */
-  logic                          c2v_phase_active;
-  logic                          v2c_phase_active;
-  logic        [  H_BLOCK_W-1:0] c2v_h_block_idx;
-  logic        [ TILE_IDX_W-1:0] c2v_tile_idx;
-  logic        [  H_BLOCK_W-1:0] v2c_h_block_idx;
-  logic        [ TILE_IDX_W-1:0] v2c_tile_idx;
-  logic        [  ONE_IDX_W-1:0] active_one_idx;
-  logic        [    Q_SEQ_W-1:0] active_q_seq;
-  logic                          fill_buf;
-  logic                          active_buf;
-  logic                          final_iter;
-  logic                          iter_last_cycle;
-  logic                          comp_clear_valid;
-  logic        [ROW_BANK_AW-1:0] comp_clear_addr;
-  logic                          decode_start;
-  logic                          rst_n_sync;
+  logic                                c2v_phase_active;
+  logic                                v2c_phase_active;
+  logic        [        H_BLOCK_W-1:0] c2v_h_block_idx;
+  logic        [       TILE_IDX_W-1:0] c2v_tile_idx;
+  logic        [        H_BLOCK_W-1:0] v2c_h_block_idx;
+  logic        [       TILE_IDX_W-1:0] v2c_tile_idx;
+  logic        [        ONE_IDX_W-1:0] active_one_idx;
+  logic        [          Q_SEQ_W-1:0] active_q_seq;
+  logic                                fill_buf;
+  logic                                active_buf;
+  logic                                final_iter;
+  logic                                iter_last_cycle;
+  logic                                comp_clear_valid;
+  logic        [      ROW_BANK_AW-1:0] comp_clear_addr;
+  logic                                decode_start;
+  logic                                rst_n_sync;
+  logic        [          CFG_R_W-1:0] cfg_r;
+  logic        [          CFG_W_W-1:0] cfg_w;
+  logic        [       TILE_IDX_W-1:0] cfg_tile_count;
+  logic        [      ROW_BANK_AW-1:0] cfg_row_seg_size;
+  logic        [       CFG_CVAL_W-1:0] cfg_c_val;
+  logic        [CFG_ALPHA_SHIFT_W-1:0] cfg_alpha_shift_0;
+  logic        [CFG_ALPHA_SHIFT_W-1:0] cfg_alpha_shift_1;
+  logic        [     PROFILE_ID_W-1:0] profile_sel;
 
-  logic        [  ROW_IDX_W-1:0] c2v_h_base_row;
-  logic        [  EDGE_ID_W-1:0] c2v_h_edge_id;
-  logic        [  ROW_IDX_W-1:0] v2c_h_base_row;
-  logic        [  EDGE_ID_W-1:0] v2c_h_edge_id;
+  logic        [        ROW_IDX_W-1:0] c2v_h_base_row;
+  logic        [        EDGE_ID_W-1:0] c2v_h_edge_id;
+  logic        [        ROW_IDX_W-1:0] v2c_h_base_row;
+  logic        [        EDGE_ID_W-1:0] v2c_h_edge_id;
 
-  logic                          c2v_phase_e;
-  logic        [  H_BLOCK_W-1:0] c2v_h_block_idx_e;
-  logic        [ TILE_IDX_W-1:0] c2v_tile_idx_e;
-  logic        [  ONE_IDX_W-1:0] c2v_one_idx_e;
-  logic        [    Q_SEQ_W-1:0] c2v_q_seq_e;
-  logic                          c2v_fill_buf_e;
-  logic                          c2v_iter_zero_e;
-  logic        [  ROW_IDX_W-1:0] c2v_h_base_row_e;
-  logic        [  EDGE_ID_W-1:0] c2v_h_edge_id_e;
-  logic                          comp_read_pair_sel_e;
+  logic                                c2v_phase_e;
+  logic        [        H_BLOCK_W-1:0] c2v_h_block_idx_e;
+  logic        [       TILE_IDX_W-1:0] c2v_tile_idx_e;
+  logic        [        ONE_IDX_W-1:0] c2v_one_idx_e;
+  logic        [          Q_SEQ_W-1:0] c2v_q_seq_e;
+  logic                                c2v_fill_buf_e;
+  logic                                c2v_iter_zero_e;
+  logic        [        ROW_IDX_W-1:0] c2v_h_base_row_e;
+  logic        [        EDGE_ID_W-1:0] c2v_h_edge_id_e;
+  logic                                comp_read_pair_sel_e;
 
-  logic                          c2v_valid[0:L-1];
-  logic        [  EDGE_ID_W-1:0] c2v_edge_id[0:L-1];
-  logic        [ LANE_IDX_W-1:0] c2v_row_bank[0:L-1];
-  logic        [ROW_BANK_AW-1:0] c2v_row_addr[0:L-1];
-  logic        [ TILE_OFF_W-1:0] c2v_tile_offset[0:L-1];
-  logic                          c2v_valid_r[0:L-1];
-  logic        [  EDGE_ID_W-1:0] c2v_edge_id_r[0:L-1];
-  logic        [ROW_BANK_AW-1:0] c2v_row_addr_r[0:L-1];
-  logic        [ TILE_OFF_W-1:0] c2v_tile_offset_r[0:L-1];
-  logic        [ TILE_IDX_W-1:0] c2v_tile_idx_r;
-  logic        [  ONE_IDX_W-1:0] c2v_one_idx_r;
-  logic        [    Q_SEQ_W-1:0] c2v_q_seq_r;
-  logic                          c2v_fill_buf_r;
-  logic                          c2v_iter_zero_r;
-  logic                          comp_read_pair_sel_r;
-  logic                          c2v_valid_q[0:L-1];
-  logic        [  EDGE_ID_W-1:0] c2v_edge_id_q[0:L-1];
-  logic        [ TILE_OFF_W-1:0] c2v_tile_offset_q[0:L-1];
-  logic signed [      ACC_W-1:0] c2v_accum_rdata_q[0:L-1];
-  logic                          c2v_syndrome_q[0:L-1];
-  logic        [  ONE_IDX_W-1:0] c2v_one_idx_q;
-  logic        [    Q_SEQ_W-1:0] c2v_q_seq_q;
-  logic                          c2v_fill_buf_q;
-  logic                          c2v_iter_zero_q;
-  logic                          c2v_valid_p[0:L-1];
-  logic        [ TILE_OFF_W-1:0] c2v_tile_offset_p[0:L-1];
-  logic        [  ONE_IDX_W-1:0] c2v_one_idx_p;
-  logic        [    Q_SEQ_W-1:0] c2v_q_seq_p;
-  logic                          c2v_fill_buf_p;
-  logic signed [      ACC_W-1:0] c2v_accum_base_p[0:L-1];
-  logic signed [      ACC_W-1:0] c2v_raw_next_p[0:L-1];
-  logic signed [      ACC_W-1:0] c2v_accum_next_p[0:L-1];
-  logic                          c2v_write_valid[0:L-1];
-  logic        [ TILE_OFF_W-1:0] c2v_write_tile_offset[0:L-1];
-  logic        [  ONE_IDX_W-1:0] c2v_write_one_idx;
-  logic        [    Q_SEQ_W-1:0] c2v_write_q_seq;
-  logic                          c2v_write_fill_buf;
-  logic signed [      ACC_W-1:0] c2v_write_raw[0:L-1];
-  logic signed [      ACC_W-1:0] c2v_write_accum[0:L-1];
+  logic                                c2v_valid[0:L-1];
+  logic        [        EDGE_ID_W-1:0] c2v_edge_id[0:L-1];
+  logic        [       LANE_IDX_W-1:0] c2v_row_bank[0:L-1];
+  logic        [      ROW_BANK_AW-1:0] c2v_row_addr[0:L-1];
+  logic        [       TILE_OFF_W-1:0] c2v_tile_offset[0:L-1];
+  logic                                c2v_valid_r[0:L-1];
+  logic        [        EDGE_ID_W-1:0] c2v_edge_id_r[0:L-1];
+  logic        [      ROW_BANK_AW-1:0] c2v_row_addr_r[0:L-1];
+  logic        [       TILE_OFF_W-1:0] c2v_tile_offset_r[0:L-1];
+  logic        [       TILE_IDX_W-1:0] c2v_tile_idx_r;
+  logic        [        ONE_IDX_W-1:0] c2v_one_idx_r;
+  logic        [          Q_SEQ_W-1:0] c2v_q_seq_r;
+  logic                                c2v_fill_buf_r;
+  logic                                c2v_iter_zero_r;
+  logic                                comp_read_pair_sel_r;
+  logic                                c2v_valid_q[0:L-1];
+  logic        [        EDGE_ID_W-1:0] c2v_edge_id_q[0:L-1];
+  logic        [       TILE_OFF_W-1:0] c2v_tile_offset_q[0:L-1];
+  logic signed [            ACC_W-1:0] c2v_accum_rdata_q[0:L-1];
+  logic                                c2v_syndrome_q[0:L-1];
+  logic        [        ONE_IDX_W-1:0] c2v_one_idx_q;
+  logic        [          Q_SEQ_W-1:0] c2v_q_seq_q;
+  logic                                c2v_fill_buf_q;
+  logic                                c2v_iter_zero_q;
+  logic                                c2v_valid_p[0:L-1];
+  logic        [       TILE_OFF_W-1:0] c2v_tile_offset_p[0:L-1];
+  logic        [        ONE_IDX_W-1:0] c2v_one_idx_p;
+  logic        [          Q_SEQ_W-1:0] c2v_q_seq_p;
+  logic                                c2v_fill_buf_p;
+  logic signed [            ACC_W-1:0] c2v_accum_base_p[0:L-1];
+  logic signed [            ACC_W-1:0] c2v_raw_next_p[0:L-1];
+  logic signed [            ACC_W-1:0] c2v_accum_next_p[0:L-1];
+  logic                                c2v_write_valid[0:L-1];
+  logic        [       TILE_OFF_W-1:0] c2v_write_tile_offset[0:L-1];
+  logic        [        ONE_IDX_W-1:0] c2v_write_one_idx;
+  logic        [          Q_SEQ_W-1:0] c2v_write_q_seq;
+  logic                                c2v_write_fill_buf;
+  logic signed [            ACC_W-1:0] c2v_write_raw[0:L-1];
+  logic signed [            ACC_W-1:0] c2v_write_accum[0:L-1];
 
-  logic                          v2c_phase_e;
-  logic        [  H_BLOCK_W-1:0] v2c_h_block_idx_e;
-  logic        [ TILE_IDX_W-1:0] v2c_tile_idx_e;
-  logic        [  ONE_IDX_W-1:0] v2c_one_idx_e;
-  logic        [    Q_SEQ_W-1:0] v2c_q_seq_e;
-  logic                          v2c_active_buf_e;
-  logic                          v2c_final_iter_e;
-  logic        [  ROW_IDX_W-1:0] v2c_h_base_row_e;
-  logic        [  EDGE_ID_W-1:0] v2c_h_edge_id_e;
-  logic                          comp_write_pair_sel_e;
+  logic                                v2c_phase_e;
+  logic        [        H_BLOCK_W-1:0] v2c_h_block_idx_e;
+  logic        [       TILE_IDX_W-1:0] v2c_tile_idx_e;
+  logic        [        ONE_IDX_W-1:0] v2c_one_idx_e;
+  logic        [          Q_SEQ_W-1:0] v2c_q_seq_e;
+  logic                                v2c_active_buf_e;
+  logic                                v2c_final_iter_e;
+  logic        [        ROW_IDX_W-1:0] v2c_h_base_row_e;
+  logic        [        EDGE_ID_W-1:0] v2c_h_edge_id_e;
+  logic                                comp_write_pair_sel_e;
 
-  logic                          v2c_valid[0:L-1];
-  logic        [      COL_W-1:0] v2c_col_idx[0:L-1];
-  logic        [  EDGE_ID_W-1:0] v2c_edge_id[0:L-1];
-  logic        [ LANE_IDX_W-1:0] v2c_row_bank[0:L-1];
-  logic        [ROW_BANK_AW-1:0] v2c_row_addr[0:L-1];
-  logic        [ TILE_OFF_W-1:0] v2c_tile_offset[0:L-1];
-  logic                          v2c_valid_r[0:L-1];
-  logic        [      COL_W-1:0] v2c_col_idx_r[0:L-1];
-  logic        [  EDGE_ID_W-1:0] v2c_edge_id_r[0:L-1];
-  logic        [ROW_BANK_AW-1:0] v2c_row_addr_r[0:L-1];
-  logic        [ TILE_OFF_W-1:0] v2c_tile_offset_r[0:L-1];
-  logic                          v2c_phase_r;
-  logic        [ TILE_IDX_W-1:0] v2c_tile_idx_r;
-  logic        [  EDGE_ID_W-1:0] v2c_h_edge_id_r;
-  logic        [  ONE_IDX_W-1:0] v2c_one_idx_r;
-  logic        [    Q_SEQ_W-1:0] v2c_q_seq_r;
-  logic                          v2c_active_buf_r;
-  logic                          v2c_final_iter_r;
-  logic                          comp_write_pair_sel_r;
-  logic                          v2c_valid_q[0:L-1];
-  logic        [      COL_W-1:0] v2c_col_idx_q[0:L-1];
-  logic        [  EDGE_ID_W-1:0] v2c_edge_id_q[0:L-1];
-  logic        [ROW_BANK_AW-1:0] v2c_row_addr_q[0:L-1];
-  logic        [ TILE_OFF_W-1:0] v2c_tile_offset_q[0:L-1];
-  logic signed [      ACC_W-1:0] v2c_raw_sum_q[0:L-1];
-  logic                          v2c_phase_q;
-  logic        [ TILE_IDX_W-1:0] v2c_tile_idx_q;
-  logic        [  EDGE_ID_W-1:0] v2c_h_edge_id_q;
-  logic        [  ONE_IDX_W-1:0] v2c_one_idx_q;
-  logic        [    Q_SEQ_W-1:0] v2c_q_seq_q;
-  logic                          v2c_final_iter_q;
-  logic                          v2c_write_pair_sel_q;
-  logic                          v2c_write_phase_p;
-  logic        [ TILE_IDX_W-1:0] v2c_write_tile_idx_p;
-  logic        [  EDGE_ID_W-1:0] v2c_write_h_edge_id_p;
-  logic        [    Q_SEQ_W-1:0] v2c_write_q_seq_p;
-  logic                          v2c_write_pair_sel_p;
-  logic                          v2c_valid_p[0:L-1];
-  logic        [      COL_W-1:0] v2c_col_idx_p[0:L-1];
-  logic        [ROW_BANK_AW-1:0] v2c_row_addr_p[0:L-1];
-  logic        [ TILE_OFF_W-1:0] v2c_tile_offset_p[0:L-1];
-  logic        [ COMP_C2V_W-1:0] v2c_comp_p[0:L-1];
-  logic                          v2c_sign_p[0:L-1];
-  logic                          decision_we_p[0:L-1];
-  logic                          decision_wdata_p[0:L-1];
-  logic                          v2c_bypass_pair_sel_b;
-  logic                          v2c_bypass_valid_b[0:L-1];
-  logic        [ROW_BANK_AW-1:0] v2c_bypass_row_addr_b[0:L-1];
-  logic        [ COMP_C2V_W-1:0] v2c_bypass_comp_b[0:L-1];
+  logic                                v2c_valid[0:L-1];
+  logic        [            COL_W-1:0] v2c_col_idx[0:L-1];
+  logic        [        EDGE_ID_W-1:0] v2c_edge_id[0:L-1];
+  logic        [       LANE_IDX_W-1:0] v2c_row_bank[0:L-1];
+  logic        [      ROW_BANK_AW-1:0] v2c_row_addr[0:L-1];
+  logic        [       TILE_OFF_W-1:0] v2c_tile_offset[0:L-1];
+  logic                                v2c_valid_r[0:L-1];
+  logic        [            COL_W-1:0] v2c_col_idx_r[0:L-1];
+  logic        [        EDGE_ID_W-1:0] v2c_edge_id_r[0:L-1];
+  logic        [      ROW_BANK_AW-1:0] v2c_row_addr_r[0:L-1];
+  logic        [       TILE_OFF_W-1:0] v2c_tile_offset_r[0:L-1];
+  logic                                v2c_phase_r;
+  logic        [       TILE_IDX_W-1:0] v2c_tile_idx_r;
+  logic        [        EDGE_ID_W-1:0] v2c_h_edge_id_r;
+  logic        [        ONE_IDX_W-1:0] v2c_one_idx_r;
+  logic        [          Q_SEQ_W-1:0] v2c_q_seq_r;
+  logic                                v2c_active_buf_r;
+  logic                                v2c_final_iter_r;
+  logic                                comp_write_pair_sel_r;
+  logic                                v2c_valid_q[0:L-1];
+  logic        [            COL_W-1:0] v2c_col_idx_q[0:L-1];
+  logic        [        EDGE_ID_W-1:0] v2c_edge_id_q[0:L-1];
+  logic        [      ROW_BANK_AW-1:0] v2c_row_addr_q[0:L-1];
+  logic        [       TILE_OFF_W-1:0] v2c_tile_offset_q[0:L-1];
+  logic signed [            ACC_W-1:0] v2c_raw_sum_q[0:L-1];
+  logic                                v2c_phase_q;
+  logic        [       TILE_IDX_W-1:0] v2c_tile_idx_q;
+  logic        [        EDGE_ID_W-1:0] v2c_h_edge_id_q;
+  logic        [        ONE_IDX_W-1:0] v2c_one_idx_q;
+  logic        [          Q_SEQ_W-1:0] v2c_q_seq_q;
+  logic                                v2c_final_iter_q;
+  logic                                v2c_write_pair_sel_q;
+  logic                                v2c_write_phase_p;
+  logic        [       TILE_IDX_W-1:0] v2c_write_tile_idx_p;
+  logic        [        EDGE_ID_W-1:0] v2c_write_h_edge_id_p;
+  logic        [          Q_SEQ_W-1:0] v2c_write_q_seq_p;
+  logic                                v2c_write_pair_sel_p;
+  logic                                v2c_valid_p[0:L-1];
+  logic        [            COL_W-1:0] v2c_col_idx_p[0:L-1];
+  logic        [      ROW_BANK_AW-1:0] v2c_row_addr_p[0:L-1];
+  logic        [       TILE_OFF_W-1:0] v2c_tile_offset_p[0:L-1];
+  logic        [       COMP_C2V_W-1:0] v2c_comp_p[0:L-1];
+  logic                                v2c_sign_p[0:L-1];
+  logic                                decision_we_p[0:L-1];
+  logic                                decision_wdata_p[0:L-1];
+  logic                                v2c_bypass_pair_sel_b;
+  logic                                v2c_bypass_valid_b[0:L-1];
+  logic        [      ROW_BANK_AW-1:0] v2c_bypass_row_addr_b[0:L-1];
+  logic        [       COMP_C2V_W-1:0] v2c_bypass_comp_b[0:L-1];
 
-  logic                          syndrome_rdata[0:L-1];
-  logic                          comp_read_pair_sel;
-  logic                          comp_write_pair_sel;
-  logic        [ COMP_C2V_W-1:0] c2v_comp_mem[0:L-1];
-  logic        [ COMP_C2V_W-1:0] v2c_comp_mem[0:L-1];
-  logic        [ COMP_C2V_W-1:0] v2c_comp_eff[0:L-1];
-  logic                          c2v_sign_mem[0:L-1];
-  logic                          v2c_sign_wdata[0:L-1];
-  logic signed [      ACC_W-1:0] c2v_accum_rdata[0:L-1];
-  logic signed [      ACC_W-1:0] v2c_raw_sum[0:L-1];
-  logic signed [      ACC_W-1:0] v2c_raw_c2v[0:L-1];
-  logic signed [      ACC_W-1:0] c2v_raw_next[0:L-1];
-  logic signed [      ACC_W-1:0] v2c_posterior_next[0:L-1];
-  logic        [      MSG_W-1:0] v2c_msg_next[0:L-1];
-  logic        [ COMP_C2V_W-1:0] v2c_comp_next[0:L-1];
-  logic        [ COMP_C2V_W-1:0] c2v_cnu_b_comp[0:L-1];
-  logic                          c2v_cnu_b_sign[0:L-1];
-  logic                          c2v_cnu_b_syndrome[0:L-1];
-  logic        [      MSG_W-1:0] c2v_msg[0:L-1];
-  logic signed [      MSG_W-1:0] c2v_tc[0:L-1];
-  logic        [ COMP_C2V_W-1:0] v2c_cnu_a_comp_in[0:L-1];
-  logic        [ COMP_C2V_W-1:0] v2c_cnu_a_comp_out[0:L-1];
-  logic                          v2c_cnu_a_sign[0:L-1];
-  logic                          decision_we[0:L-1];
-  logic                          decision_wdata[0:L-1];
-  logic                          ctrl_done;
-  logic                          ctrl_done_r;
-  logic                          ctrl_done_q;
+  logic                                syndrome_rdata[0:L-1];
+  logic                                comp_read_pair_sel;
+  logic                                comp_write_pair_sel;
+  logic        [       COMP_C2V_W-1:0] c2v_comp_mem[0:L-1];
+  logic        [       COMP_C2V_W-1:0] v2c_comp_mem[0:L-1];
+  logic        [       COMP_C2V_W-1:0] v2c_comp_eff[0:L-1];
+  logic                                c2v_sign_mem[0:L-1];
+  logic                                v2c_sign_wdata[0:L-1];
+  logic signed [            ACC_W-1:0] c2v_accum_rdata[0:L-1];
+  logic signed [            ACC_W-1:0] v2c_raw_sum[0:L-1];
+  logic signed [            ACC_W-1:0] v2c_raw_c2v[0:L-1];
+  logic signed [            ACC_W-1:0] c2v_raw_next[0:L-1];
+  logic signed [            ACC_W-1:0] v2c_posterior_next[0:L-1];
+  logic        [            MSG_W-1:0] v2c_msg_next[0:L-1];
+  logic        [       COMP_C2V_W-1:0] v2c_comp_next[0:L-1];
+  logic        [       COMP_C2V_W-1:0] c2v_cnu_b_comp[0:L-1];
+  logic        [       COMP_C2V_W-1:0] first_iter_c2v_comp;
+  logic                                c2v_cnu_b_sign[0:L-1];
+  logic                                c2v_cnu_b_syndrome[0:L-1];
+  logic        [            MSG_W-1:0] c2v_msg[0:L-1];
+  logic signed [            MSG_W-1:0] c2v_tc[0:L-1];
+  logic        [       COMP_C2V_W-1:0] v2c_cnu_a_comp_in[0:L-1];
+  logic        [       COMP_C2V_W-1:0] v2c_cnu_a_comp_out[0:L-1];
+  logic                                v2c_cnu_a_sign[0:L-1];
+  logic                                decision_we[0:L-1];
+  logic                                decision_wdata[0:L-1];
+  logic                                ctrl_done;
+  logic                                ctrl_done_r;
+  logic                                ctrl_done_q;
 
   function automatic logic [LANE_IDX_W-1:0] row_bank_of(input  logic [ROW_IDX_W-1:0] row_idx);
     begin
@@ -218,6 +230,12 @@ module decoder_top
     end
   endfunction
 
+`ifdef BIKE_UNIFIED_PARAMS
+  assign profile_sel = i_profile_sel;
+`else
+  assign profile_sel = PROFILE_BIKE_128;
+`endif
+
   assign decode_start = i_start && o_h_loaded && !o_h_error;
   assign o_done = ctrl_done_q;
 
@@ -225,6 +243,17 @@ module decoder_top
       .i_clk  (i_clk),
       .i_rst_n(i_rst_n),
       .o_rst_n(rst_n_sync)
+  );
+
+  decoder_profile_config u_decoder_profile_config (
+      .i_profile_sel(profile_sel),
+      .o_r(cfg_r),
+      .o_w(cfg_w),
+      .o_tile_count(cfg_tile_count),
+      .o_row_seg_size(cfg_row_seg_size),
+      .o_c_val(cfg_c_val),
+      .o_alpha_shift_0(cfg_alpha_shift_0),
+      .o_alpha_shift_1(cfg_alpha_shift_1)
   );
 
   generate
@@ -258,13 +287,15 @@ module decoder_top
   endgenerate
 
   always_comb begin
+    first_iter_c2v_comp = {1'b0, EDGE_ID_W'(0), D'(cfg_c_val), D'(cfg_c_val)};
+
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
       c2v_raw_next[lane_idx] = '0;
       v2c_comp_next[lane_idx] = COMP_C2V_INIT;
       v2c_sign_wdata[lane_idx] = v2c_cnu_a_sign[lane_idx];
       decision_we[lane_idx] = v2c_valid_q[lane_idx] && v2c_final_iter_q && (v2c_one_idx_q == '0);
       decision_wdata[lane_idx] = v2c_posterior_next[lane_idx][ACC_W-1];
-      c2v_cnu_b_comp[lane_idx] = c2v_iter_zero_q ? FIRST_ITER_C2V_COMP : c2v_comp_mem[lane_idx];
+      c2v_cnu_b_comp[lane_idx] = c2v_iter_zero_q ? first_iter_c2v_comp : c2v_comp_mem[lane_idx];
       c2v_cnu_b_sign[lane_idx] = c2v_iter_zero_q ? 1'b0 : c2v_sign_mem[lane_idx];
       c2v_cnu_b_syndrome[lane_idx] = c2v_syndrome_q[lane_idx];
       v2c_comp_eff[lane_idx] = v2c_comp_mem[lane_idx];
@@ -321,6 +352,8 @@ module decoder_top
       .i_c2v_one_idx(active_one_idx),
       .i_v2c_h_block_idx(v2c_h_block_idx),
       .i_v2c_one_idx(active_one_idx),
+      .i_cfg_r(cfg_r),
+      .i_cfg_w(cfg_w),
       .o_c2v_base_row(c2v_h_base_row),
       .o_c2v_edge_id(c2v_h_edge_id),
       .o_v2c_base_row(v2c_h_base_row),
@@ -333,6 +366,9 @@ module decoder_top
       .i_clk(i_clk),
       .i_rst_n(rst_n_sync),
       .i_start(decode_start),
+      .i_cfg_w(cfg_w),
+      .i_cfg_tile_count(cfg_tile_count),
+      .i_cfg_row_seg_size(cfg_row_seg_size),
       .o_state(state),
       .o_c2v_valid(c2v_phase_active),
       .o_v2c_valid(v2c_phase_active),
@@ -362,6 +398,7 @@ module decoder_top
       .i_q_seq(c2v_q_seq_e),
       .i_base_row(c2v_h_base_row_e),
       .i_edge_id(c2v_h_edge_id_e),
+      .i_cfg_r(cfg_r),
       .o_valid(c2v_valid),
       .o_row_idx(unused_c2v_row_idx),
       .o_col_idx(unused_c2v_col_idx),
@@ -378,6 +415,7 @@ module decoder_top
       .i_q_seq(v2c_q_seq_e),
       .i_base_row(v2c_h_base_row_e),
       .i_edge_id(v2c_h_edge_id_e),
+      .i_cfg_r(cfg_r),
       .o_valid(v2c_valid),
       .o_row_idx(unused_v2c_row_idx),
       .o_col_idx(v2c_col_idx),
@@ -458,6 +496,9 @@ module decoder_top
       .i_valid(v2c_valid_q),
       .i_raw_sum(v2c_raw_sum_q),
       .i_raw_c2v(v2c_raw_c2v),
+      .i_cfg_c_val(cfg_c_val),
+      .i_cfg_alpha_shift_0(cfg_alpha_shift_0),
+      .i_cfg_alpha_shift_1(cfg_alpha_shift_1),
       .o_posterior(v2c_posterior_next),
       .o_v2c_msg(v2c_msg_next)
   );

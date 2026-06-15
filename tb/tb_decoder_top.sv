@@ -34,6 +34,9 @@ module tb_decoder_top;
       .i_clk(clk),
       .i_rst_n(rst_n),
       .i_start(start),
+`ifdef BIKE_UNIFIED_PARAMS
+      .i_profile_sel(PROFILE_BIKE_128),
+`endif
       .i_syndrome_we(syndrome_we),
       .i_syndrome_addr(syndrome_addr),
       .i_syndrome_wdata(syndrome_wdata),

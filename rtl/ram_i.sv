@@ -14,6 +14,8 @@ module ram_i
     input  logic [ONE_IDX_W-1:0] i_c2v_one_idx,
     input  logic [H_BLOCK_W-1:0] i_v2c_h_block_idx,
     input  logic [ONE_IDX_W-1:0] i_v2c_one_idx,
+    input  logic [  CFG_R_W-1:0] i_cfg_r,
+    input  logic [  CFG_W_W-1:0] i_cfg_w,
     output logic [ROW_IDX_W-1:0] o_c2v_base_row,
     output logic [EDGE_ID_W-1:0] o_c2v_edge_id,
     output logic [ROW_IDX_W-1:0] o_v2c_base_row,
@@ -47,16 +49,19 @@ module ram_i
   function automatic logic [EDGE_ID_W-1:0] edge_id_of(input  logic [H_BLOCK_W-1:0] h_block_idx,
                                                       input  logic [ONE_IDX_W-1:0] one_idx);
     begin
-      edge_id_of = EDGE_ID_W'(int'(h_block_idx) * W + int'(one_idx));
+      edge_id_of = EDGE_ID_W'(int'(h_block_idx) * int'(i_cfg_w) + int'(one_idx));
     end
   endfunction
 
   always_comb begin
+    logic [H_ENTRY_COUNT_W-1:0] loaded_target;
+
     o_c2v_base_row = mem[int'(i_c2v_h_block_idx)][int'(i_c2v_one_idx)];
     o_c2v_edge_id = edge_id_of(i_c2v_h_block_idx, i_c2v_one_idx);
     o_v2c_base_row = mem[int'(i_v2c_h_block_idx)][int'(i_v2c_one_idx)];
     o_v2c_edge_id = edge_id_of(i_v2c_h_block_idx, i_v2c_one_idx);
-    o_loaded = (loaded_count == H_ENTRY_COUNT_W'(H_ENTRY_COUNT)) && !error_reg;
+    loaded_target = H_ENTRY_COUNT_W'(N0 * int'(i_cfg_w));
+    o_loaded = (loaded_count == loaded_target) && !error_reg;
     o_error = error_reg;
   end
 
@@ -64,7 +69,7 @@ module ram_i
     duplicate_seen = 1'b0;
     if (write_req_q && write_index_valid_q) begin
       for (int one_scan = 0; one_scan < W; one_scan++) begin
-        if ((one_scan != int'(write_one_idx_q)) &&
+        if ((one_scan < int'(i_cfg_w)) && (one_scan != int'(write_one_idx_q)) &&
             loaded_bit[int'(write_h_block_idx_q)][one_scan] &&
             (mem[int'(write_h_block_idx_q)][one_scan] == write_base_row_q)) begin
           duplicate_seen = 1'b1;
@@ -132,8 +137,8 @@ module ram_i
       write_h_block_idx_q <= i_h_block_idx;
       write_one_idx_q <= i_one_idx;
       write_base_row_q <= i_base_row;
-      write_index_valid_q <= (int'(i_h_block_idx) < N0) && (int'(i_one_idx) < W);
-      write_base_row_valid_q <= int'(i_base_row) < R;
+      write_index_valid_q <= (int'(i_h_block_idx) < N0) && (int'(i_one_idx) < int'(i_cfg_w));
+      write_base_row_valid_q <= int'(i_base_row) < int'(i_cfg_r);
 
       check_valid_q <= write_req_q;
       check_h_block_idx_q <= write_h_block_idx_q;

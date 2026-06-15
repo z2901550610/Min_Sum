@@ -27,6 +27,7 @@ module tb_edge_addr_gen;
       .i_q_seq(q_seq),
       .i_base_row(base_row),
       .i_edge_id(edge_id),
+      .i_cfg_r(CFG_R_W'(R)),
       .o_valid(valid),
       .o_row_idx(row_idx),
       .o_col_idx(col_idx),

@@ -29,6 +29,8 @@ module tb_ram_i;
       .i_c2v_one_idx(ONE_IDX_W'(1 % W)),
       .i_v2c_h_block_idx(H_BLOCK_W'(N0 - 1)),
       .i_v2c_one_idx(ONE_IDX_W'(W - 1)),
+      .i_cfg_r(CFG_R_W'(R)),
+      .i_cfg_w(CFG_W_W'(W)),
       .o_c2v_base_row(c2v_base_row),
       .o_c2v_edge_id(c2v_edge_id),
       .o_v2c_base_row(v2c_base_row),
