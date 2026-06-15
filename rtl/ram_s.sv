@@ -61,6 +61,9 @@ module ram_s
       logic [ SIGN_WORD_W-1:0] bank_rword_q;
       logic [SIGN_WORD_AW-1:0] bank_rbit_q;
       logic                    bank_read_valid_q;
+      logic                    bank_we_q;
+      logic [SIGN_BANK_AW-1:0] bank_waddr_q;
+      logic [ SIGN_WORD_W-1:0] bank_wdata_q;
       logic [ SIGN_WORD_W-1:0] bank_word_q;
       logic [ SIGN_WORD_W-1:0] bank_word_next;
       logic                    bank_word_start;
@@ -91,17 +94,23 @@ module ram_s
 
       always_ff @(posedge i_clk) begin
         bank_rword_q <= mem[bank_raddr];
-        if (bank_we) begin
-          mem[bank_waddr] <= bank_word_next;
+        if (bank_we_q) begin
+          mem[bank_waddr_q] <= bank_wdata_q;
         end
       end
 
       always_ff @(posedge i_clk or negedge i_rst_n) begin
         if (!i_rst_n) begin
+          bank_we_q <= 1'b0;
+          bank_waddr_q <= '0;
+          bank_wdata_q <= '0;
           bank_word_q <= '0;
           bank_rbit_q <= '0;
           bank_read_valid_q <= 1'b0;
         end else begin
+          bank_we_q <= bank_we;
+          bank_waddr_q <= bank_waddr;
+          bank_wdata_q <= bank_word_next;
           bank_word_q <= bank_we ? '0 : bank_word_next;
           bank_rbit_q <= bank_rbit;
           bank_read_valid_q <= i_c2v_valid[bank_idx];
