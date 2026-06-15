@@ -322,7 +322,7 @@ decision_bit = sign(posterior)
 
 **最后一个 tile 不满 `C_TILE` 列**：`edge_addr_gen` 计算 `tile_cols = min(C_TILE, r - tile_base)`。当 `offset >= tile_cols` 时，该 lane 的 `valid` 置 0。无效 lane 不读写状态，不改变部分和，也不写判决；调度器仍执行完整 `W * Q_TILE` 个周期。
 
-**循环行号跨越 $r-1 \rightarrow 0$**：BIKE 循环块的行号为 `(base_row + col_local) mod r`。若某个 L-wide 访问组跨过模 $r$ 边界，并且跨越点落在 lane 中间，`edge_addr_gen` 把该组拆成两个 micro-cycle：前半周期处理跨越前的 lane，后半周期处理跨越后的 lane。`Q_TILE = Q_BASE + 1` 中额外的 1 个 guard 周期为这种拆分预留固定预算。
+**循环行号跨越 $r-1 \rightarrow 0$**：BIKE 循环块的行号为 `(base_row + col_local) mod r`。若某个 L-wide 访问组跨过模 $r$ 边界，并且跨越点落在 lane 中间，`edge_addr_gen` 把该组拆成两个 micro-cycle：前半周期处理跨越前的 lane，后半周期处理跨越后的 lane。`Q_TILE = Q_BASE + 2` 中的 guard 周期为跨模拆分、C2V 输入寄存和写回对齐预留固定预算。
 
 **没有发生跨越拆分**：guard 周期仍然存在，但所有 lane 无效。这样 H 第一列行号只影响 lane mask 和地址，不影响周期数。
 

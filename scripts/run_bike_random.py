@@ -179,7 +179,7 @@ package bike_pkg;
   parameter int C_TILE_CONFIG = {c_tile};
   parameter int C_TILE = (C_TILE_CONFIG > R) ? R : C_TILE_CONFIG;
   parameter int Q_BASE = (C_TILE + L - 1) / L;
-  parameter int Q_TILE = Q_BASE + 1;
+  parameter int Q_TILE = Q_BASE + 2;
   parameter int TILE_COUNT = (R + C_TILE - 1) / C_TILE;
   parameter int TILES_TOTAL = N0 * TILE_COUNT;
   parameter int TILE_ID_W = (TILES_TOTAL > 1) ? $clog2(TILES_TOTAL) : 1;

@@ -24,7 +24,7 @@ module decoder_top
     output logic [      ITER_W-1:0] o_iter_count
 );
 
-  localparam bit C2V_WRITE_PIPELINE = (Q_TILE > 2);
+  localparam bit C2V_WRITE_PIPELINE = (Q_BASE > 1);
 
 `ifndef SYNTHESIS
   initial begin
@@ -70,6 +70,7 @@ module decoder_top
   logic        [CFG_ALPHA_SHIFT_W-1:0] cfg_alpha_shift_0;
   logic        [CFG_ALPHA_SHIFT_W-1:0] cfg_alpha_shift_1;
   logic        [     PROFILE_ID_W-1:0] profile_sel;
+  logic        [     PROFILE_ID_W-1:0] profile_sel_in;
 
   logic        [        ROW_IDX_W-1:0] c2v_h_base_row;
   logic        [        EDGE_ID_W-1:0] c2v_h_edge_id;
@@ -111,6 +112,17 @@ module decoder_top
   logic        [          Q_SEQ_W-1:0] c2v_q_seq_q;
   logic                                c2v_fill_buf_q;
   logic                                c2v_iter_zero_q;
+  logic                                c2v_valid_c[0:L-1];
+  logic        [        EDGE_ID_W-1:0] c2v_edge_id_c[0:L-1];
+  logic        [       TILE_OFF_W-1:0] c2v_tile_offset_c[0:L-1];
+  logic signed [            ACC_W-1:0] c2v_accum_rdata_c[0:L-1];
+  logic        [       COMP_C2V_W-1:0] c2v_comp_c[0:L-1];
+  logic                                c2v_sign_c[0:L-1];
+  logic                                c2v_syndrome_c[0:L-1];
+  logic        [        ONE_IDX_W-1:0] c2v_one_idx_c;
+  logic        [          Q_SEQ_W-1:0] c2v_q_seq_c;
+  logic                                c2v_fill_buf_c;
+  logic                                c2v_iter_zero_c;
   logic                                c2v_valid_p[0:L-1];
   logic        [       TILE_OFF_W-1:0] c2v_tile_offset_p[0:L-1];
   logic        [        ONE_IDX_W-1:0] c2v_one_idx_p;
@@ -231,9 +243,9 @@ module decoder_top
   endfunction
 
 `ifdef BIKE_UNIFIED_PARAMS
-  assign profile_sel = i_profile_sel;
+  assign profile_sel_in = i_profile_sel;
 `else
-  assign profile_sel = PROFILE_BIKE_128;
+  assign profile_sel_in = PROFILE_BIKE_128;
 `endif
 
   assign decode_start = i_start && o_h_loaded && !o_h_error;
@@ -262,7 +274,7 @@ module decoder_top
           .i_comp_c2v    (c2v_cnu_b_comp[lane_idx]),
           .i_v2c_sign    (c2v_cnu_b_sign[lane_idx]),
           .i_syndrome_bit(c2v_cnu_b_syndrome[lane_idx]),
-          .i_edge_id     (c2v_edge_id_q[lane_idx]),
+          .i_edge_id     (c2v_edge_id_c[lane_idx]),
           .o_c2v_msg     (c2v_msg[lane_idx])
       );
 
@@ -295,9 +307,9 @@ module decoder_top
       v2c_sign_wdata[lane_idx] = v2c_cnu_a_sign[lane_idx];
       decision_we[lane_idx] = v2c_valid_q[lane_idx] && v2c_final_iter_q && (v2c_one_idx_q == '0);
       decision_wdata[lane_idx] = v2c_posterior_next[lane_idx][ACC_W-1];
-      c2v_cnu_b_comp[lane_idx] = c2v_iter_zero_q ? first_iter_c2v_comp : c2v_comp_mem[lane_idx];
-      c2v_cnu_b_sign[lane_idx] = c2v_iter_zero_q ? 1'b0 : c2v_sign_mem[lane_idx];
-      c2v_cnu_b_syndrome[lane_idx] = c2v_syndrome_q[lane_idx];
+      c2v_cnu_b_comp[lane_idx] = c2v_iter_zero_c ? first_iter_c2v_comp : c2v_comp_c[lane_idx];
+      c2v_cnu_b_sign[lane_idx] = c2v_iter_zero_c ? 1'b0 : c2v_sign_c[lane_idx];
+      c2v_cnu_b_syndrome[lane_idx] = c2v_syndrome_c[lane_idx];
       v2c_comp_eff[lane_idx] = v2c_comp_mem[lane_idx];
       if (v2c_valid_q[lane_idx] && v2c_bypass_valid_b[lane_idx] &&
           (v2c_bypass_pair_sel_b == v2c_write_pair_sel_q) &&
@@ -306,7 +318,7 @@ module decoder_top
       end
       v2c_cnu_a_comp_in[lane_idx] = v2c_valid_q[lane_idx] ? v2c_comp_eff[lane_idx] : COMP_C2V_INIT;
 
-      if (c2v_valid_q[lane_idx]) begin
+      if (c2v_valid_c[lane_idx]) begin
         c2v_raw_next[lane_idx] = ACC_W'($signed(c2v_tc[lane_idx]));
       end
 
@@ -317,11 +329,11 @@ module decoder_top
         c2v_write_raw[lane_idx] = c2v_raw_next_p[lane_idx];
         c2v_write_accum[lane_idx] = c2v_accum_next_p[lane_idx];
       end else begin
-        c2v_write_valid[lane_idx] = c2v_valid_q[lane_idx];
-        c2v_write_tile_offset[lane_idx] = c2v_tile_offset_q[lane_idx];
+        c2v_write_valid[lane_idx] = c2v_valid_c[lane_idx];
+        c2v_write_tile_offset[lane_idx] = c2v_tile_offset_c[lane_idx];
         c2v_write_raw[lane_idx] = c2v_raw_next[lane_idx];
         c2v_write_accum[lane_idx] =
-            ((c2v_one_idx_q == '0) ? '0 : c2v_accum_rdata_q[lane_idx]) + c2v_raw_next[lane_idx];
+            ((c2v_one_idx_c == '0) ? '0 : c2v_accum_rdata_c[lane_idx]) + c2v_raw_next[lane_idx];
       end
 
       if (v2c_valid_q[lane_idx]) begin
@@ -334,9 +346,9 @@ module decoder_top
       c2v_write_one_idx = c2v_one_idx_p;
       c2v_write_q_seq = c2v_q_seq_p;
     end else begin
-      c2v_write_fill_buf = c2v_fill_buf_q;
-      c2v_write_one_idx = c2v_one_idx_q;
-      c2v_write_q_seq = c2v_q_seq_q;
+      c2v_write_fill_buf = c2v_fill_buf_c;
+      c2v_write_one_idx = c2v_one_idx_c;
+      c2v_write_q_seq = c2v_q_seq_c;
     end
   end
 
@@ -529,10 +541,15 @@ module decoder_top
 
   always_ff @(posedge i_clk or negedge rst_n_sync) begin
     if (!rst_n_sync) begin
+      profile_sel <= PROFILE_BIKE_128;
       c2v_one_idx_q <= '0;
       c2v_q_seq_q <= '0;
       c2v_fill_buf_q <= 1'b0;
       c2v_iter_zero_q <= 1'b0;
+      c2v_one_idx_c <= '0;
+      c2v_q_seq_c <= '0;
+      c2v_fill_buf_c <= 1'b0;
+      c2v_iter_zero_c <= 1'b0;
       c2v_one_idx_p <= '0;
       c2v_q_seq_p <= '0;
       c2v_fill_buf_p <= 1'b0;
@@ -595,6 +612,13 @@ module decoder_top
         c2v_tile_offset_q[lane_idx] <= '0;
         c2v_accum_rdata_q[lane_idx] <= '0;
         c2v_syndrome_q[lane_idx] <= 1'b0;
+        c2v_valid_c[lane_idx] <= 1'b0;
+        c2v_edge_id_c[lane_idx] <= '0;
+        c2v_tile_offset_c[lane_idx] <= '0;
+        c2v_accum_rdata_c[lane_idx] <= '0;
+        c2v_comp_c[lane_idx] <= COMP_C2V_INIT;
+        c2v_sign_c[lane_idx] <= 1'b0;
+        c2v_syndrome_c[lane_idx] <= 1'b0;
         c2v_valid_p[lane_idx] <= 1'b0;
         c2v_tile_offset_p[lane_idx] <= '0;
         c2v_accum_base_p[lane_idx] <= '0;
@@ -623,6 +647,10 @@ module decoder_top
         v2c_bypass_comp_b[lane_idx] <= COMP_C2V_INIT;
       end
     end else begin
+      if ((state == DEC_WAIT_START) || (state == DEC_DONE)) begin
+        profile_sel <= profile_sel_in;
+      end
+
       c2v_phase_e <= c2v_phase_active;
       c2v_h_block_idx_e <= c2v_h_block_idx;
       c2v_tile_idx_e <= c2v_tile_idx;
@@ -643,9 +671,13 @@ module decoder_top
       c2v_q_seq_q <= c2v_q_seq_r;
       c2v_fill_buf_q <= c2v_fill_buf_r;
       c2v_iter_zero_q <= c2v_iter_zero_r;
-      c2v_one_idx_p <= c2v_one_idx_q;
-      c2v_q_seq_p <= c2v_q_seq_q;
-      c2v_fill_buf_p <= c2v_fill_buf_q;
+      c2v_one_idx_c <= c2v_one_idx_q;
+      c2v_q_seq_c <= c2v_q_seq_q;
+      c2v_fill_buf_c <= c2v_fill_buf_q;
+      c2v_iter_zero_c <= c2v_iter_zero_q;
+      c2v_one_idx_p <= c2v_one_idx_c;
+      c2v_q_seq_p <= c2v_q_seq_c;
+      c2v_fill_buf_p <= c2v_fill_buf_c;
 
       v2c_phase_e <= v2c_phase_active;
       v2c_h_block_idx_e <= v2c_h_block_idx;
@@ -690,9 +722,16 @@ module decoder_top
         c2v_tile_offset_q[lane_idx] <= c2v_tile_offset_r[lane_idx];
         c2v_accum_rdata_q[lane_idx] <= c2v_accum_rdata[lane_idx];
         c2v_syndrome_q[lane_idx] <= syndrome_rdata[lane_idx];
-        c2v_valid_p[lane_idx] <= c2v_valid_q[lane_idx];
-        c2v_tile_offset_p[lane_idx] <= c2v_tile_offset_q[lane_idx];
-        c2v_accum_base_p[lane_idx] <= (c2v_one_idx_q == '0) ? '0 : c2v_accum_rdata_q[lane_idx];
+        c2v_valid_c[lane_idx] <= c2v_valid_q[lane_idx];
+        c2v_edge_id_c[lane_idx] <= c2v_edge_id_q[lane_idx];
+        c2v_tile_offset_c[lane_idx] <= c2v_tile_offset_q[lane_idx];
+        c2v_accum_rdata_c[lane_idx] <= c2v_accum_rdata_q[lane_idx];
+        c2v_comp_c[lane_idx] <= c2v_comp_mem[lane_idx];
+        c2v_sign_c[lane_idx] <= c2v_sign_mem[lane_idx];
+        c2v_syndrome_c[lane_idx] <= c2v_syndrome_q[lane_idx];
+        c2v_valid_p[lane_idx] <= c2v_valid_c[lane_idx];
+        c2v_tile_offset_p[lane_idx] <= c2v_tile_offset_c[lane_idx];
+        c2v_accum_base_p[lane_idx] <= (c2v_one_idx_c == '0) ? '0 : c2v_accum_rdata_c[lane_idx];
         c2v_raw_next_p[lane_idx] <= c2v_raw_next[lane_idx];
         v2c_valid_r[lane_idx] <= v2c_valid[lane_idx];
         v2c_col_idx_r[lane_idx] <= v2c_col_idx[lane_idx];

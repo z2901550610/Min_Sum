@@ -16,13 +16,13 @@ tile 架构按 H 第一列行索引扫描 QC-MDPC 校验矩阵边。设计目标
 N            = N0 * R
 C_TILE       = min(R, BIKE_C_TILE)
 Q_BASE       = ceil(C_TILE / L)
-Q_TILE       = Q_BASE + 1
+Q_TILE       = Q_BASE + 2
 TILE_COUNT   = ceil(R / C_TILE)
 TILES_TOTAL  = N0 * TILE_COUNT
 ROW_SEG_SIZE = ceil(R / L)
 ```
 
-`Q_TILE` 包含一个固定 guard 周期。`C_TILE` 要求为 `L` 的整数倍。
+`Q_TILE` 包含两个固定 guard 周期。`C_TILE` 要求为 `L` 的整数倍。
 
 ## H Base Row 几何
 
@@ -67,7 +67,7 @@ split_en    = has_wrap && wrap_lane != 0
 
 ```text
 q_seq < Q_BASE : q_idx = q_seq
-q_seq = Q_BASE : invalid guard
+q_seq >= Q_BASE : invalid guard
 ```
 
 `split_en=1`：
@@ -79,7 +79,7 @@ q_seq = wrap_q + 1 : q_idx = wrap_q, lane >= wrap_lane
 q_seq > wrap_q + 1 : q_idx = q_seq - 1
 ```
 
-所有支撑项固定执行 `Q_TILE` 个 `q_seq`。
+所有支撑项固定执行 `Q_TILE` 个 `q_seq`。guard 周期为跨模拆分、C2V 输入寄存和写回对齐提供固定预算。
 
 ## 迭代窗口
 

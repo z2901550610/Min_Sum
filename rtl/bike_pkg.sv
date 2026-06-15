@@ -120,7 +120,7 @@ package bike_pkg;
 `endif
   localparam int C_TILE = (C_TILE_CONFIG > R) ? R : C_TILE_CONFIG;
   localparam int Q_BASE = (C_TILE + L - 1) / L;
-  localparam int Q_TILE = Q_BASE + 1;
+  localparam int Q_TILE = Q_BASE + 2;
   localparam int TILE_COUNT = (R + C_TILE - 1) / C_TILE;
   localparam int TILES_TOTAL = N0 * TILE_COUNT;
   localparam int TILE_ID_W = (TILES_TOTAL > 1) ? $clog2(TILES_TOTAL) : 1;
