@@ -59,10 +59,10 @@ module decoder_profile_config
         o_alpha_shift_1 = CFG_ALPHA_SHIFT_W'(4);
       end
       PROFILE_BIKE_384: begin
-        o_r = CFG_R_W'(59069);
+        o_r = CFG_R_W'(61283);
         o_w = CFG_W_W'(83);
-        o_tile_count = TILE_IDX_W'((59069 + C_TILE - 1) / C_TILE);
-        o_row_seg_size = ROW_BANK_AW'((59069 + L - 1) / L);
+        o_tile_count = TILE_IDX_W'((61283 + C_TILE - 1) / C_TILE);
+        o_row_seg_size = ROW_BANK_AW'((61283 + L - 1) / L);
         o_c_val = CFG_CVAL_W'(5);
         o_alpha_shift_0 = CFG_ALPHA_SHIFT_W'(3);
         o_alpha_shift_1 = CFG_ALPHA_SHIFT_W'(6);

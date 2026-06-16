@@ -91,6 +91,7 @@ module edge_addr_gen
     for (int bank_idx = 0; bank_idx < L; bank_idx++) begin
       logic [ LANE_IDX_W-1:0] lane_idx;
       logic [  OFF_CNT_W-1:0] offset;
+      logic [    OFF_CNT_W:0] offset_sum;
       logic [ ROW_CALC_W-1:0] col_local;
       logic [ROW_BANK_AW-1:0] raw_row_addr;
       logic [ROW_BANK_AW-1:0] row_addr;
@@ -102,7 +103,8 @@ module edge_addr_gen
 
       lane_idx = LANE_IDX_W'(LANE_SUM_W'(bank_idx) + LANE_SUM_W'(post_bank_adjust) +
                               LANE_SUM_W'(L) - LANE_SUM_W'(base_bank));
-      offset = {q_idx, {L_SHIFT{1'b0}}} + OFF_CNT_W'(lane_idx);
+      offset_sum = {1'b0, OFF_CNT_W'({q_idx, {L_SHIFT{1'b0}}})} + {1'b0, OFF_CNT_W'(lane_idx)};
+      offset = OFF_CNT_W'(offset_sum);
       col_local = tile_base + ROW_CALC_W'(offset);
       low_sum = LANE_SUM_W'(base_bank) + LANE_SUM_W'(lane_idx);
       carry_low = low_sum >= LANE_SUM_W'(L);
@@ -111,7 +113,8 @@ module edge_addr_gen
       row_addr = post_region ? (raw_row_addr - cfg_r_addr - ROW_BANK_AW'(borrow_low)) :
           raw_row_addr;
       row_idx = ROW_IDX_W'(({row_addr, {L_SHIFT{1'b0}}}) + ROW_IDX_W'(bank_idx));
-      lane_valid = i_phase_valid && (q_idx < Q_SEQ_W'(Q_BASE)) && (offset < tile_cols);
+      lane_valid = i_phase_valid && (q_idx < Q_SEQ_W'(Q_BASE)) && !offset_sum[OFF_CNT_W] &&
+          (offset < tile_cols);
 
       if (split_en && (i_q_seq == wrap_q)) begin
         lane_valid &= lane_idx < wrap_lane;

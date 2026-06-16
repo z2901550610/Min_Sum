@@ -32,8 +32,11 @@ BIKE_RANDOM_PARALLEL_L ?= $(BIKE_PARALLEL_L)
 BIKE_RANDOM_C_TILE ?= 288
 BIKE_RANDOM_TIMEOUT_CYCLES ?= 800000
 BIKE_RANDOM_ERROR_ARG := $(if $(BIKE_RANDOM_ERROR_COUNT),--error-count $(BIKE_RANDOM_ERROR_COUNT),)
+BIKE_UNIFIED_RANDOM_PARAM_SETS ?= bike128 bike160 bike256 bike384 bike512
+BIKE_UNIFIED_RANDOM_C_TILE ?= 576
+BIKE_UNIFIED_RANDOM_TIMEOUT_CYCLES ?= 40000000
 
-.PHONY: all sim test test-unit test-integration test-bike-random format-rtl check-format-rtl lint-rtl vivado-synth FORCE
+.PHONY: all sim test test-unit test-integration test-bike-random test-bike-unified-random format-rtl check-format-rtl lint-rtl vivado-synth FORCE
 
 all: test
 
@@ -72,6 +75,11 @@ test-integration: $(TOY_CASE_SVH)
 
 test-bike-random:
 	@python3 scripts/run_bike_random.py --param-set $(BIKE_RANDOM_PARAM_SET) --base-seed $(BIKE_RANDOM_BASE_SEED) --trials $(BIKE_RANDOM_TRIALS) $(BIKE_RANDOM_ERROR_ARG) --parallel-l $(BIKE_RANDOM_PARALLEL_L) --c-tile $(BIKE_RANDOM_C_TILE) --timeout-cycles $(BIKE_RANDOM_TIMEOUT_CYCLES) --verilator $(VERILATOR)
+
+test-bike-unified-random:
+	@for param_set in $(BIKE_UNIFIED_RANDOM_PARAM_SETS); do \
+		python3 scripts/run_bike_random.py --unified --param-set $$param_set --base-seed $(BIKE_RANDOM_BASE_SEED) --trials $(BIKE_RANDOM_TRIALS) $(BIKE_RANDOM_ERROR_ARG) --parallel-l $(BIKE_RANDOM_PARALLEL_L) --c-tile $(BIKE_UNIFIED_RANDOM_C_TILE) --timeout-cycles $(BIKE_UNIFIED_RANDOM_TIMEOUT_CYCLES) --out-dir tb/generated/bike_unified_random/$$param_set --verilator $(VERILATOR); \
+	done
 
 format-rtl:
 	@$(VERIBLE_FORMAT) $(VERIBLE_FORMAT_FLAGS) --inplace $(MAINTAINED_SV)

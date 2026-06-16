@@ -75,7 +75,7 @@ PARAM_SETS = {
     },
     "bike384": {
         "n0": 3,
-        "r": 59069,
+        "r": 61283,
         "w": 83,
         "error_count": 659,
         "i_max": 7,
@@ -95,6 +95,14 @@ PARAM_SETS = {
         "alpha_shift_0": 4,
         "alpha_shift_1": 0,
     },
+}
+
+PROFILE_IDS = {
+    "bike128": "PROFILE_BIKE_128",
+    "bike160": "PROFILE_BIKE_160",
+    "bike256": "PROFILE_BIKE_256",
+    "bike384": "PROFILE_BIKE_384",
+    "bike512": "PROFILE_BIKE_512",
 }
 
 
@@ -257,6 +265,9 @@ def emit_tb(
     *,
     seed: int,
     timeout_cycles: int,
+    test_r: int,
+    test_w: int,
+    profile_id: str,
     syndrome_positions: list[int],
     error_positions: list[int],
     h_base: list[list[int]],
@@ -272,11 +283,23 @@ module tb_bike_decoder_random;
 
   localparam int TEST_SEED = {seed};
   localparam int TIMEOUT_CYCLES = {timeout_cycles};
+  localparam int TEST_R = {test_r};
+  localparam int TEST_W = {test_w};
+  localparam int TEST_N = N0 * TEST_R;
+  localparam int TEST_ROW_IDX_W = (TEST_R > 1) ? $clog2(TEST_R) : 1;
+`ifdef BIKE_UNIFIED_PARAMS
+  localparam logic [PROFILE_ID_W-1:0] TEST_PROFILE_ID = {profile_id};
+`endif
+  localparam int TEST_ROW_SEG_SIZE = (TEST_R + L - 1) / L;
+  localparam int TEST_TILE_COUNT = (TEST_R + C_TILE - 1) / C_TILE;
+  localparam int TEST_DECODE_CYCLES = I_MAX * (
+      TEST_ROW_SEG_SIZE + (((N0 * TEST_TILE_COUNT) + 1) * TEST_W * Q_TILE)
+  ) + 2;
   localparam int SYNDROME_WEIGHT = {len(syndrome_positions)};
   localparam int ERROR_WEIGHT = {len(error_positions)};
   localparam int unsigned SYNDROME_POS [0:{syndrome_array_depth - 1}] = {sv_int_array(syndrome_positions)};
   localparam int unsigned ERROR_POS [0:{error_array_depth - 1}] = {sv_int_array(error_positions)};
-  localparam int unsigned TEST_H_BASE_ROWS [0:N0-1][0:W-1] = '{{
+  localparam int unsigned TEST_H_BASE_ROWS [0:N0-1][0:TEST_W-1] = '{{
     {h_base_rows}
   }};
 
@@ -295,13 +318,16 @@ module tb_bike_decoder_random;
   logic h_error;
   logic [COL_W-1:0] e_read_col_idx;
   logic e_rdata;
-  logic [N-1:0] e_out;
+  logic [TEST_N-1:0] e_out;
   logic [ITER_W-1:0] iter_count;
 
   decoder_top dut (
     .i_clk(clk),
     .i_rst_n(rst_n),
     .i_start(start),
+`ifdef BIKE_UNIFIED_PARAMS
+    .i_profile_sel(TEST_PROFILE_ID),
+`endif
     .i_syndrome_we(syndrome_we),
     .i_syndrome_addr(syndrome_addr),
     .i_syndrome_wdata(syndrome_wdata),
@@ -342,10 +368,10 @@ module tb_bike_decoder_random;
     end
   endfunction
 
-  function automatic logic candidate_matches_target(input logic [N-1:0] candidate);
+  function automatic logic candidate_matches_target(input logic [TEST_N-1:0] candidate);
     begin
       candidate_matches_target = 1'b1;
-      for (int col_idx = 0; col_idx < N; col_idx++) begin
+      for (int col_idx = 0; col_idx < TEST_N; col_idx++) begin
         if (candidate[col_idx] != target_bit_at(col_idx)) begin
           candidate_matches_target = 1'b0;
         end
@@ -355,7 +381,7 @@ module tb_bike_decoder_random;
 
   task automatic load_syndrome;
     begin
-      for (int row_idx = 0; row_idx < R; row_idx++) begin
+      for (int row_idx = 0; row_idx < TEST_R; row_idx++) begin
         syndrome_we = 1'b1;
         syndrome_addr = ROW_IDX_W'(row_idx);
         syndrome_wdata = syndrome_bit_at(row_idx);
@@ -371,7 +397,7 @@ module tb_bike_decoder_random;
   task automatic load_h_matrix;
     begin
       for (int h_block_idx = 0; h_block_idx < N0; h_block_idx++) begin
-        for (int one_idx = 0; one_idx < W; one_idx++) begin
+        for (int one_idx = 0; one_idx < TEST_W; one_idx++) begin
           h_we = 1'b1;
           h_load_block_idx = H_BLOCK_W'(h_block_idx);
           h_load_one_idx = ONE_IDX_W'(one_idx);
@@ -389,24 +415,27 @@ module tb_bike_decoder_random;
     end
   endtask
 
-  function automatic logic [R-1:0] residual_of(input logic [N-1:0] candidate);
-    logic [R-1:0] residual;
+  function automatic logic [TEST_R-1:0] residual_of(input logic [TEST_N-1:0] candidate);
+    logic [TEST_R-1:0] residual;
     int var_idx;
     logic [H_BLOCK_W-1:0] h_block_idx;
     int col_idx;
     int edge_idx;
-    logic [ROW_IDX_W-1:0] row_idx;
+    logic [TEST_ROW_IDX_W-1:0] row_idx;
     begin
-      residual = '0;
+      for (int row_clear_idx = 0; row_clear_idx < TEST_R; row_clear_idx++) begin
+        residual[row_clear_idx] = 1'b0;
+      end
       for (int idx = 0; idx < SYNDROME_WEIGHT; idx++) begin
         residual[SYNDROME_POS[idx]] = 1'b1;
       end
-      for (var_idx = 0; var_idx < N; var_idx++) begin
+      for (var_idx = 0; var_idx < TEST_N; var_idx++) begin
         if (candidate[var_idx]) begin
-          h_block_idx = H_BLOCK_W'(var_idx / R);
-          col_idx = var_idx % R;
-          for (edge_idx = 0; edge_idx < W; edge_idx++) begin
-            row_idx = ROW_IDX_W'((TEST_H_BASE_ROWS[h_block_idx][edge_idx] + col_idx) % R);
+          h_block_idx = H_BLOCK_W'(var_idx / TEST_R);
+          col_idx = var_idx % TEST_R;
+          for (edge_idx = 0; edge_idx < TEST_W; edge_idx++) begin
+            row_idx = TEST_ROW_IDX_W'((TEST_H_BASE_ROWS[h_block_idx][edge_idx] + col_idx) %
+                                      TEST_R);
             residual[row_idx] = residual[row_idx] ^ 1'b1;
           end
         end
@@ -415,21 +444,21 @@ module tb_bike_decoder_random;
     end
   endfunction
 
-  function automatic int weight_r(input logic [R-1:0] bits);
+  function automatic int weight_r(input logic [TEST_R-1:0] bits);
     int idx;
     begin
       weight_r = 0;
-      for (idx = 0; idx < R; idx++) begin
+      for (idx = 0; idx < TEST_R; idx++) begin
         weight_r += bits[idx] ? 1 : 0;
       end
     end
   endfunction
 
-  function automatic int weight_n(input logic [N-1:0] bits);
+  function automatic int weight_n(input logic [TEST_N-1:0] bits);
     int idx;
     begin
       weight_n = 0;
-      for (idx = 0; idx < N; idx++) begin
+      for (idx = 0; idx < TEST_N; idx++) begin
         weight_n += bits[idx] ? 1 : 0;
       end
     end
@@ -437,7 +466,7 @@ module tb_bike_decoder_random;
 
   initial begin
     int cycles;
-    logic [R-1:0] residual;
+    logic [TEST_R-1:0] residual;
     bit exact_match;
 
     rst_n = 1'b0;
@@ -470,10 +499,15 @@ module tb_bike_decoder_random;
       $fatal(1, "seed=%0d timeout after %0d cycles", TEST_SEED, cycles);
     end
 
-    for (int clear_idx = 0; clear_idx < N; clear_idx++) begin
+    if (cycles != TEST_DECODE_CYCLES) begin
+      $fatal(1, "seed=%0d cycle mismatch: got %0d exp %0d", TEST_SEED, cycles,
+             TEST_DECODE_CYCLES);
+    end
+
+    for (int clear_idx = 0; clear_idx < TEST_N; clear_idx++) begin
       e_out[clear_idx] = 1'b0;
     end
-    for (int col_idx = 0; col_idx < N; col_idx++) begin
+    for (int col_idx = 0; col_idx < TEST_N; col_idx++) begin
       e_read_col_idx = COL_W'(col_idx);
       @(posedge clk);
       #1;
@@ -493,7 +527,7 @@ module tb_bike_decoder_random;
       weight_r(residual),
       exact_match
     );
-    if (residual != '0) begin
+    if (weight_r(residual) != 0) begin
       $fatal(1, "seed=%0d residual check failed; residual_weight=%0d", TEST_SEED,
              weight_r(residual));
     end
@@ -549,46 +583,71 @@ def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int
 
     pkg_path = out_dir / "bike_pkg.sv"
     tb_path = out_dir / "tb_bike_decoder_random.sv"
-    emit_pkg(
-        pkg_path,
-        n0=args.n0,
-        r=args.r,
-        w=args.w,
-        i_max=args.i_max,
-        c_val=args.c_val,
-        msg_bits=args.msg_bits,
-        alpha_shift_0=args.alpha_shift_0,
-        alpha_shift_1=args.alpha_shift_1,
-        l=args.parallel_l,
-        c_tile=args.c_tile,
-        t=args.error_count,
-    )
+    if not args.unified:
+        emit_pkg(
+            pkg_path,
+            n0=args.n0,
+            r=args.r,
+            w=args.w,
+            i_max=args.i_max,
+            c_val=args.c_val,
+            msg_bits=args.msg_bits,
+            alpha_shift_0=args.alpha_shift_0,
+            alpha_shift_1=args.alpha_shift_1,
+            l=args.parallel_l,
+            c_tile=args.c_tile,
+            t=args.error_count,
+        )
     emit_tb(
         tb_path,
         seed=seed,
         timeout_cycles=args.timeout_cycles,
+        test_r=args.r,
+        test_w=args.w,
+        profile_id=PROFILE_IDS.get(args.param_set or "", "PROFILE_BIKE_128"),
         syndrome_positions=[idx for idx, bit in enumerate(syndrome) if bit],
         error_positions=error_positions,
         h_base=h_base,
     )
 
-    command = [
-        args.verilator,
-        "--binary",
-        "--sv",
-        "-DBIKE_PKG_EXTERNAL",
-        "-DBIKE_SIM_DEBUG",
-        "-Wall",
-        "-Wno-fatal",
-        "-I./tb",
-        "--Mdir",
-        str(obj_dir),
-        "--top-module",
-        "tb_bike_decoder_random",
-        str(pkg_path),
-        *RTL_CORE,
-        str(tb_path),
-    ]
+    command = [args.verilator, "--binary", "--sv"]
+    if args.unified:
+        command.extend(
+            [
+                "-DBIKE_UNIFIED_PARAMS",
+                f"-DBIKE_PARALLEL_L={args.parallel_l}",
+                f"-DBIKE_C_TILE={args.c_tile}",
+                f"-DBIKE_MSG_BITS={args.msg_bits}",
+                "-DBIKE_SIM_DEBUG",
+                "-Wall",
+                "-Wno-fatal",
+                "-I./tb",
+                "--Mdir",
+                str(obj_dir),
+                "--top-module",
+                "tb_bike_decoder_random",
+                "rtl/bike_pkg.sv",
+                *RTL_CORE,
+                str(tb_path),
+            ]
+        )
+    else:
+        command.extend(
+            [
+                "-DBIKE_PKG_EXTERNAL",
+                "-DBIKE_SIM_DEBUG",
+                "-Wall",
+                "-Wno-fatal",
+                "-I./tb",
+                "--Mdir",
+                str(obj_dir),
+                "--top-module",
+                "tb_bike_decoder_random",
+                str(pkg_path),
+                *RTL_CORE,
+                str(tb_path),
+            ]
+        )
     run_command(command, repo_root)
     run_command(["scripts/run_quiet.py", str(obj_dir / "Vtb_bike_decoder_random"), "+verilator+quiet"], repo_root)
     return True
@@ -610,6 +669,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout-cycles", type=int, default=200000)
     parser.add_argument("--out-dir", default="tb/generated/bike_random")
     parser.add_argument("--verilator", default="verilator")
+    parser.add_argument(
+        "--unified",
+        action="store_true",
+        help="Compile the shared BIKE_UNIFIED_PARAMS RTL package and select the named public profile.",
+    )
     parser.add_argument("--n0", type=int, default=None)
     parser.add_argument("--r", type=int, default=None)
     parser.add_argument("--w", type=int, default=None)
@@ -647,6 +711,8 @@ def main() -> int:
         raise ValueError("--msg-bits must be at least 2")
     if args.c_val < 0 or args.c_val > ((1 << (args.msg_bits - 1)) - 1):
         raise ValueError("--c-val must fit in the configured sign-magnitude message magnitude")
+    if args.unified and (args.param_set not in PROFILE_IDS):
+        raise ValueError("--unified requires --param-set to be one of the BIKE profile names")
 
     for case_idx in range(args.trials):
         seed = args.base_seed + case_idx

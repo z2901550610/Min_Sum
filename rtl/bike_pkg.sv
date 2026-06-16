@@ -43,7 +43,7 @@ package bike_pkg;
   localparam int ALPHA_SHIFT_1 = 4;
 `elsif BIKE_384_PARAMS
   localparam int N0 = 3;
-  localparam int R = 59069;
+  localparam int R = 61283;
   localparam int W = 83;
   localparam int T = 659;
   localparam int I_MAX = 7;
