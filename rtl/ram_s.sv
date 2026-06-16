@@ -23,6 +23,10 @@ module ram_s
   localparam int SIGN_WORD_AW = (SIGN_WORD_W > 1) ? $clog2(SIGN_WORD_W) : 1;
   localparam int SIGN_BANK_DEPTH = ROW_EDGE_COUNT * TILE_COUNT;
   localparam int SIGN_BANK_AW = (SIGN_BANK_DEPTH > 1) ? $clog2(SIGN_BANK_DEPTH) : 1;
+  localparam int SIGN_CHUNK_DEPTH = 4096;
+  localparam int SIGN_CHUNK_COUNT = (SIGN_BANK_DEPTH + SIGN_CHUNK_DEPTH - 1) / SIGN_CHUNK_DEPTH;
+  localparam int SIGN_CHUNK_IDX_W = (SIGN_CHUNK_COUNT > 1) ? $clog2(SIGN_CHUNK_COUNT) : 1;
+  localparam int SIGN_CHUNK_AW = $clog2(SIGN_CHUNK_DEPTH);
 
   function automatic logic [SIGN_BANK_AW-1:0] edge_base(input  logic [EDGE_ID_W-1:0] edge_id);
     logic [SIGN_BANK_AW-1:0] acc;
@@ -50,29 +54,47 @@ module ram_s
     end
   endfunction
 
+  function automatic logic [SIGN_CHUNK_IDX_W-1:0] sign_chunk_idx(
+      input  logic [SIGN_BANK_AW-1:0] addr);
+    begin
+      sign_chunk_idx = SIGN_CHUNK_IDX_W'(int'(addr) / SIGN_CHUNK_DEPTH);
+    end
+  endfunction
+
+  function automatic logic [SIGN_CHUNK_AW-1:0] sign_chunk_addr(input  logic [SIGN_BANK_AW-1:0] addr);
+    begin
+      sign_chunk_addr = SIGN_CHUNK_AW'(int'(addr) % SIGN_CHUNK_DEPTH);
+    end
+  endfunction
+
   generate
     for (genvar bank_idx = 0; bank_idx < L; bank_idx++) begin : g_bank
-      (* ram_style = "block" *) logic [ SIGN_WORD_W-1:0] mem[0:SIGN_BANK_DEPTH-1];
-      logic [SIGN_BANK_AW-1:0] bank_raddr;
-      logic [SIGN_WORD_AW-1:0] bank_rbit;
-      logic                    bank_we;
-      logic [SIGN_BANK_AW-1:0] bank_waddr;
-      logic [SIGN_WORD_AW-1:0] bank_wbit;
-      logic [ SIGN_WORD_W-1:0] bank_rword_q;
-      logic [SIGN_WORD_AW-1:0] bank_rbit_q;
-      logic                    bank_read_valid_q;
-      logic                    bank_we_q;
-      logic [SIGN_BANK_AW-1:0] bank_waddr_q;
-      logic [ SIGN_WORD_W-1:0] bank_wdata_q;
-      logic [ SIGN_WORD_W-1:0] bank_word_q;
-      logic [ SIGN_WORD_W-1:0] bank_word_next;
-      logic                    bank_word_start;
-      logic                    bank_word_flush;
+      logic [    SIGN_BANK_AW-1:0] bank_raddr;
+      logic [SIGN_CHUNK_IDX_W-1:0] bank_rchunk;
+      logic [   SIGN_CHUNK_AW-1:0] bank_raddr_local;
+      logic [    SIGN_WORD_AW-1:0] bank_rbit;
+      logic                        bank_we;
+      logic [    SIGN_BANK_AW-1:0] bank_waddr;
+      logic [SIGN_CHUNK_IDX_W-1:0] bank_wchunk;
+      logic [   SIGN_CHUNK_AW-1:0] bank_waddr_local;
+      logic [    SIGN_WORD_AW-1:0] bank_wbit;
+      logic [SIGN_CHUNK_IDX_W-1:0] bank_rchunk_q;
+      logic [    SIGN_WORD_AW-1:0] bank_rbit_q;
+      logic                        bank_read_valid_q;
+      logic [     SIGN_WORD_W-1:0] bank_word_q;
+      logic [     SIGN_WORD_W-1:0] bank_word_next;
+      logic                        bank_word_start;
+      logic                        bank_word_flush;
+      logic [     SIGN_WORD_W-1:0] bank_chunk_rword_q[0:SIGN_CHUNK_COUNT-1];
 
       always_comb begin
         bank_raddr = '0;
+        bank_rchunk = '0;
+        bank_raddr_local = '0;
         bank_rbit = '0;
         bank_waddr = bank_addr(i_v2c_edge_id, i_v2c_tile_idx);
+        bank_wchunk = sign_chunk_idx(bank_waddr);
+        bank_waddr_local = sign_chunk_addr(bank_waddr);
         bank_wbit = '0;
         bank_word_start = i_v2c_phase_valid && (i_v2c_q_seq == '0);
         bank_word_flush = i_v2c_phase_valid && (i_v2c_q_seq == Q_SEQ_W'(Q_TILE - 1));
@@ -80,7 +102,9 @@ module ram_s
         bank_word_next = bank_word_start ? '0 : bank_word_q;
         if (i_c2v_valid[bank_idx]) begin
           bank_raddr = bank_addr(i_c2v_edge_id[bank_idx], i_c2v_tile_idx);
-          bank_rbit  = word_bit(i_c2v_tile_offset[bank_idx]);
+          bank_rchunk = sign_chunk_idx(bank_raddr);
+          bank_raddr_local = sign_chunk_addr(bank_raddr);
+          bank_rbit = word_bit(i_c2v_tile_offset[bank_idx]);
         end
         if (i_v2c_write_valid[bank_idx]) begin
           bank_wbit = word_bit(i_v2c_tile_offset[bank_idx]);
@@ -89,31 +113,56 @@ module ram_s
       end
 
       always_comb begin
-        o_c2v_sign[bank_idx] = bank_read_valid_q ? bank_rword_q[bank_rbit_q] : 1'b0;
-      end
-
-      always_ff @(posedge i_clk) begin
-        bank_rword_q <= mem[bank_raddr];
-        if (bank_we_q) begin
-          mem[bank_waddr_q] <= bank_wdata_q;
+        o_c2v_sign[bank_idx] = 1'b0;
+        for (int chunk_sel = 0; chunk_sel < SIGN_CHUNK_COUNT; chunk_sel++) begin
+          if (bank_read_valid_q && (int'(bank_rchunk_q) == chunk_sel)) begin
+            o_c2v_sign[bank_idx] = bank_chunk_rword_q[chunk_sel][bank_rbit_q];
+          end
         end
       end
 
       always_ff @(posedge i_clk or negedge i_rst_n) begin
         if (!i_rst_n) begin
-          bank_we_q <= 1'b0;
-          bank_waddr_q <= '0;
-          bank_wdata_q <= '0;
           bank_word_q <= '0;
+          bank_rchunk_q <= '0;
           bank_rbit_q <= '0;
           bank_read_valid_q <= 1'b0;
         end else begin
-          bank_we_q <= bank_we;
-          bank_waddr_q <= bank_waddr;
-          bank_wdata_q <= bank_word_next;
           bank_word_q <= bank_we ? '0 : bank_word_next;
+          bank_rchunk_q <= bank_rchunk;
           bank_rbit_q <= bank_rbit;
           bank_read_valid_q <= i_c2v_valid[bank_idx];
+        end
+      end
+
+      for (genvar chunk_idx = 0; chunk_idx < SIGN_CHUNK_COUNT; chunk_idx++) begin : g_chunk
+        (* ram_style = "block" *) logic [  SIGN_WORD_W-1:0] mem[0:SIGN_CHUNK_DEPTH-1];
+        logic                     bank_we_q;
+        logic [SIGN_CHUNK_AW-1:0] bank_waddr_q;
+        logic [  SIGN_WORD_W-1:0] bank_wdata_q;
+
+        always_ff @(posedge i_clk) begin
+          if (int'(bank_rchunk) == chunk_idx) begin
+            bank_chunk_rword_q[chunk_idx] <= mem[bank_raddr_local];
+          end
+          if (bank_we_q) begin
+            mem[bank_waddr_q] <= bank_wdata_q;
+          end
+        end
+
+        always_ff @(posedge i_clk or negedge i_rst_n) begin
+          if (!i_rst_n) begin
+            bank_we_q <= 1'b0;
+            bank_waddr_q <= '0;
+            bank_wdata_q <= '0;
+          end else begin
+            bank_we_q <= 1'b0;
+            if (bank_we && (int'(bank_wchunk) == chunk_idx)) begin
+              bank_we_q <= 1'b1;
+              bank_waddr_q <= bank_waddr_local;
+              bank_wdata_q <= bank_word_next;
+            end
+          end
         end
       end
     end
