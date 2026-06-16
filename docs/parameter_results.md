@@ -20,10 +20,10 @@
 
 | Level | Defines | Random seed | Decode cycles | Residual weight | Exact | LUT | FF | BRAM tile | DSP | WNS ns | TNS ns | Routed |
 | --- | --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| 128 | `BIKE_128_PARAMS` | 1 | 612096 | 0 | yes | 11042 | 3090 | 56 | 0 | 0.499 | 0.000 | yes |
-| 160 | `BIKE_160_PARAMS` |  | 1231988 |  |  | 12861 | 3546 | 88 | 0 | 0.398 | 0.000 | yes |
-| 256 | `BIKE_256_PARAMS` | 1 | 4441768 | 0 | yes | 17354 | 4689 | 244 | 0 | 0.288 | 0.000 | yes |
-| 384 | `BIKE_384_PARAMS` |  | 13970903 |  |  | 24686 | 7498 | 570 | 0 | 0.448 | 0.000 | yes |
+| 128 | `BIKE_128_PARAMS` | 1 | 612097 | 0 | yes | 11042 | 3090 | 56 | 0 | 0.499 | 0.000 | yes |
+| 160 | `BIKE_160_PARAMS` |  | 1231989 |  |  | 12861 | 3546 | 88 | 0 | 0.398 | 0.000 | yes |
+| 256 | `BIKE_256_PARAMS` | 1 | 4441769 | 0 | yes | 17354 | 4689 | 244 | 0 | 0.288 | 0.000 | yes |
+| 384 | `BIKE_384_PARAMS` |  | 13970904 |  |  | 24686 | 7498 | 570 | 0 | 0.448 | 0.000 | yes |
 
 ## BIKE-128
 
@@ -54,7 +54,7 @@ Random test result:
 | --- | ---: |
 | Seed | 1 |
 | Iterations | 7 |
-| Decode cycles | 612096 |
+| Decode cycles | 612097 |
 | Target weight | 201 |
 | Output weight | 201 |
 | Residual weight | 0 |
@@ -63,9 +63,9 @@ Random test result:
 Cycle budget:
 
 ```text
-I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE) + 2
-= 7 * (1015 + (96 + 1) * 27 * 33) + 2
-= 612096
+I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE) + 3
+= 7 * (1015 + (96 + 1) * 27 * 33) + 3
+= 612097
 ```
 
 ### Vivado Utilization
@@ -160,9 +160,9 @@ Methodology notes:
 Cycle budget:
 
 ```text
-I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE) + 2
-= 7 * (1593 + (150 + 1) * 35 * 33) + 2
-= 1231988
+I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE) + 3
+= 7 * (1593 + (150 + 1) * 35 * 33) + 3
+= 1231989
 ```
 
 ### Vivado Utilization
@@ -261,7 +261,7 @@ Random test result:
 | --- | ---: |
 | Seed | 1 |
 | Iterations | 7 |
-| Decode cycles | 4441768 |
+| Decode cycles | 4441769 |
 | Target weight | 429 |
 | Output weight | 429 |
 | Residual weight | 0 |
@@ -270,9 +270,9 @@ Random test result:
 Cycle budget:
 
 ```text
-I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE) + 2
-= 7 * (3688 + (309 + 1) * 55 * 37) + 2
-= 4441768
+I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE) + 3
+= 7 * (3688 + (309 + 1) * 55 * 37) + 3
+= 4441769
 ```
 
 ### Synthesis
@@ -416,9 +416,9 @@ Methodology notes:
 Cycle budget:
 
 ```text
-I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE) + 2
-= 7 * (7661 + (405 + 1) * 83 * 59) + 2
-= 13970903
+I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE) + 3
+= 7 * (7661 + (405 + 1) * 83 * 59) + 3
+= 13970904
 ```
 
 ### Vivado Utilization

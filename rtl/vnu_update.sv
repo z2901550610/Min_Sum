@@ -3,6 +3,8 @@
 module vnu_update
   import bike_pkg::*;
 (
+    input  logic                                i_clk,
+    input  logic                                i_rst_n,
     input  logic                                i_valid[0:L-1],
     input  logic signed [            ACC_W-1:0] i_raw_sum[0:L-1],
     input  logic signed [            ACC_W-1:0] i_raw_c2v[0:L-1],
@@ -13,21 +15,20 @@ module vnu_update
     output logic        [            MSG_W-1:0] o_v2c_msg[0:L-1]
 );
 
-  logic signed [ACC_W-1:0] v2c_tc[0:L-1];
-  logic        [MSG_W-1:0] v2c_msg_sat[0:L-1];
+  localparam int SCALE_W = ACC_W + ALPHA_FRAC_W;
 
-  function automatic logic signed [ACC_W-1:0] alpha_scale(
+  logic                      scale_valid_q[0:L-1];
+  logic signed [SCALE_W-1:0] posterior_scaled_q[0:L-1];
+  logic signed [SCALE_W-1:0] v2c_scaled_q[0:L-1];
+  logic signed [  ACC_W-1:0] posterior_tc[0:L-1];
+  logic signed [  ACC_W-1:0] v2c_tc[0:L-1];
+  logic        [  MSG_W-1:0] v2c_msg_sat[0:L-1];
+
+  function automatic logic signed [SCALE_W-1:0] alpha_accum(
       input  logic signed [ACC_W-1:0] tc_value, input  logic [CFG_ALPHA_SHIFT_W-1:0] shift_0,
       input  logic [CFG_ALPHA_SHIFT_W-1:0] shift_1);
-    localparam int SCALE_W = ACC_W + ALPHA_FRAC_W;
-    logic signed [     SCALE_W-1:0] scale_ext;
-    logic signed [     SCALE_W-1:0] scaled_full;
-    logic signed [       ACC_W-1:0] floor_tc;
-    logic signed [       ACC_W-1:0] trunc_tc;
-    logic        [ALPHA_FRAC_W-1:0] frac_bits;
-    logic        [  ALPHA_FRAC_W:0] neg_frac_mag;
-    logic                           frac_nonzero;
-    logic                           round_bit;
+    logic signed [SCALE_W-1:0] scale_ext;
+    logic signed [SCALE_W-1:0] scaled_full;
     begin
       scale_ext   = SCALE_W'($signed(tc_value));
       scaled_full = '0;
@@ -37,7 +38,19 @@ module vnu_update
       if ((shift_1 > '0) && (int'(shift_1) <= ALPHA_FRAC_W)) begin
         scaled_full = scaled_full + (scale_ext <<< (ALPHA_FRAC_W - int'(shift_1)));
       end
+      alpha_accum = scaled_full;
+    end
+  endfunction
 
+  function automatic logic signed [ACC_W-1:0] alpha_round(
+      input  logic signed [SCALE_W-1:0] scaled_full);
+    logic signed [       ACC_W-1:0] floor_tc;
+    logic signed [       ACC_W-1:0] trunc_tc;
+    logic        [ALPHA_FRAC_W-1:0] frac_bits;
+    logic        [  ALPHA_FRAC_W:0] neg_frac_mag;
+    logic                           frac_nonzero;
+    logic                           round_bit;
+    begin
       floor_tc = scaled_full[SCALE_W-1:ALPHA_FRAC_W];
       frac_bits = scaled_full[ALPHA_FRAC_W-1:0];
       frac_nonzero = |frac_bits;
@@ -45,11 +58,11 @@ module vnu_update
         trunc_tc = frac_nonzero ? (floor_tc + ACC_W'(1)) : floor_tc;
         neg_frac_mag = frac_nonzero ? ({1'b1, {ALPHA_FRAC_W{1'b0}}} - {1'b0, frac_bits}) : '0;
         round_bit = neg_frac_mag[ALPHA_FRAC_W-1];
-        alpha_scale = round_bit ? (trunc_tc - ACC_W'(1)) : trunc_tc;
+        alpha_round = round_bit ? (trunc_tc - ACC_W'(1)) : trunc_tc;
       end else begin
         trunc_tc = floor_tc;
         round_bit = frac_bits[ALPHA_FRAC_W-1];
-        alpha_scale = round_bit ? (trunc_tc + ACC_W'(1)) : trunc_tc;
+        alpha_round = round_bit ? (trunc_tc + ACC_W'(1)) : trunc_tc;
       end
     end
   endfunction
@@ -67,19 +80,45 @@ module vnu_update
           .o_msg(v2c_msg_sat[lane_idx])
       );
 
-      assign o_v2c_msg[lane_idx] = i_valid[lane_idx] ? v2c_msg_sat[lane_idx] : '0;
+      assign o_v2c_msg[lane_idx] = scale_valid_q[lane_idx] ? v2c_msg_sat[lane_idx] : '0;
     end
   endgenerate
 
   always_comb begin
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
       o_posterior[lane_idx] = '0;
+      posterior_tc[lane_idx] = '0;
       v2c_tc[lane_idx] = '0;
-      if (i_valid[lane_idx]) begin
-        o_posterior[lane_idx] = ACC_W'($signed(i_cfg_c_val)) +
-            alpha_scale(i_raw_sum[lane_idx], i_cfg_alpha_shift_0, i_cfg_alpha_shift_1);
-        v2c_tc[lane_idx] = ACC_W'($signed(i_cfg_c_val)) + alpha_scale(
-            i_raw_sum[lane_idx] - i_raw_c2v[lane_idx], i_cfg_alpha_shift_0, i_cfg_alpha_shift_1);
+      if (scale_valid_q[lane_idx]) begin
+        posterior_tc[lane_idx] = ACC_W'($signed(i_cfg_c_val)) +
+            alpha_round(posterior_scaled_q[lane_idx]);
+        v2c_tc[lane_idx] = ACC_W'($signed(i_cfg_c_val)) + alpha_round(v2c_scaled_q[lane_idx]);
+        o_posterior[lane_idx] = posterior_tc[lane_idx];
+      end
+    end
+  end
+
+  always_ff @(posedge i_clk or negedge i_rst_n) begin
+    if (!i_rst_n) begin
+      for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
+        scale_valid_q[lane_idx] <= 1'b0;
+        posterior_scaled_q[lane_idx] <= '0;
+        v2c_scaled_q[lane_idx] <= '0;
+      end
+    end else begin
+      for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
+        scale_valid_q[lane_idx] <= i_valid[lane_idx];
+        if (i_valid[lane_idx]) begin
+          posterior_scaled_q[lane_idx] <= alpha_accum(
+              i_raw_sum[lane_idx], i_cfg_alpha_shift_0, i_cfg_alpha_shift_1
+          );
+          v2c_scaled_q[lane_idx] <= alpha_accum(
+              i_raw_sum[lane_idx] - i_raw_c2v[lane_idx], i_cfg_alpha_shift_0, i_cfg_alpha_shift_1
+          );
+        end else begin
+          posterior_scaled_q[lane_idx] <= '0;
+          v2c_scaled_q[lane_idx] <= '0;
+        end
       end
     end
   end
