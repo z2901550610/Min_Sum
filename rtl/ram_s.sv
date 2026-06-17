@@ -20,6 +20,7 @@ module ram_s
 );
 
   localparam int SIGN_WORD_W = Q_BASE;
+  localparam int SIGN_FRAME_W = L * SIGN_WORD_W;
   localparam int SIGN_WORD_AW = (SIGN_WORD_W > 1) ? $clog2(SIGN_WORD_W) : 1;
   localparam int SIGN_BANK_DEPTH = ROW_EDGE_COUNT * TILE_COUNT;
   localparam int SIGN_BANK_AW = (SIGN_BANK_DEPTH > 1) ? $clog2(SIGN_BANK_DEPTH) : 1;
@@ -27,6 +28,10 @@ module ram_s
   localparam int SIGN_CHUNK_COUNT = (SIGN_BANK_DEPTH + SIGN_CHUNK_DEPTH - 1) / SIGN_CHUNK_DEPTH;
   localparam int SIGN_CHUNK_IDX_W = (SIGN_CHUNK_COUNT > 1) ? $clog2(SIGN_CHUNK_COUNT) : 1;
   localparam int SIGN_CHUNK_AW = $clog2(SIGN_CHUNK_DEPTH);
+
+  typedef logic [SIGN_WORD_AW-1:0] sign_word_idx_t;
+  typedef logic [SIGN_WORD_W-1:0] sign_word_t;
+  typedef logic [SIGN_FRAME_W-1:0] sign_frame_t;
 
   function automatic logic [SIGN_BANK_AW-1:0] edge_base(input  logic [EDGE_ID_W-1:0] edge_id);
     logic [SIGN_BANK_AW-1:0] acc;
@@ -67,112 +72,134 @@ module ram_s
     end
   endfunction
 
-  generate
-    for (genvar bank_idx = 0; bank_idx < L; bank_idx++) begin : g_bank
-      logic [    SIGN_BANK_AW-1:0] bank_raddr;
-      logic [SIGN_CHUNK_IDX_W-1:0] bank_rchunk;
-      logic [   SIGN_CHUNK_AW-1:0] bank_raddr_local;
-      logic [    SIGN_WORD_AW-1:0] bank_rbit;
-      logic                        bank_we;
-      logic [    SIGN_BANK_AW-1:0] bank_waddr;
-      logic [SIGN_CHUNK_IDX_W-1:0] bank_wchunk;
-      logic [   SIGN_CHUNK_AW-1:0] bank_waddr_local;
-      logic [    SIGN_WORD_AW-1:0] bank_wbit;
-      logic [SIGN_CHUNK_IDX_W-1:0] bank_rchunk_q;
-      logic [    SIGN_WORD_AW-1:0] bank_rbit_q;
-      logic                        bank_read_valid_q;
-      logic [     SIGN_WORD_W-1:0] bank_word_q;
-      logic [     SIGN_WORD_W-1:0] bank_word_next;
-      logic                        bank_word_start;
-      logic                        bank_word_flush;
-      logic [     SIGN_WORD_W-1:0] bank_chunk_rword_q[0:SIGN_CHUNK_COUNT-1];
-      logic                        bank_sign_next;
-      logic                        bank_sign_q;
+  logic           [    SIGN_BANK_AW-1:0] read_addr;
+  logic           [SIGN_CHUNK_IDX_W-1:0] read_chunk;
+  logic           [   SIGN_CHUNK_AW-1:0] read_addr_local;
+  logic                                  read_valid;
+  logic           [SIGN_CHUNK_IDX_W-1:0] read_chunk_q;
+  logic                                  read_valid_q;
+  sign_word_idx_t                        lane_rbit        [               0:L-1];
+  sign_word_idx_t                        lane_rbit_q      [               0:L-1];
+  logic                                  lane_read_valid_q[               0:L-1];
+  sign_word_t                            lane_word_q      [               0:L-1];
+  sign_word_t                            lane_word_next   [               0:L-1];
+  logic                                  lane_sign_next[               0:L-1];
+  logic                                  lane_sign_q[               0:L-1];
+  logic                                  word_start;
+  logic                                  word_flush;
+  logic           [    SIGN_BANK_AW-1:0] write_addr;
+  logic           [SIGN_CHUNK_IDX_W-1:0] write_chunk;
+  logic           [   SIGN_CHUNK_AW-1:0] write_addr_local;
+  sign_word_idx_t                        write_bit;
+  sign_frame_t                           write_frame_next;
+  sign_frame_t                           read_frame_next;
+  sign_frame_t                           chunk_rframe_q   [0:SIGN_CHUNK_COUNT-1];
 
-      always_comb begin
-        bank_raddr = '0;
-        bank_rchunk = '0;
-        bank_raddr_local = '0;
-        bank_rbit = '0;
-        bank_waddr = bank_addr(i_v2c_edge_id, i_v2c_tile_idx);
-        bank_wchunk = sign_chunk_idx(bank_waddr);
-        bank_waddr_local = sign_chunk_addr(bank_waddr);
-        bank_wbit = '0;
-        bank_word_start = i_v2c_phase_valid && (i_v2c_q_seq == '0);
-        bank_word_flush = i_v2c_phase_valid && (i_v2c_q_seq == Q_SEQ_W'(Q_TILE - 1));
-        bank_we = bank_word_flush;
-        bank_word_next = bank_word_start ? '0 : bank_word_q;
-        if (i_c2v_valid[bank_idx]) begin
-          bank_raddr = bank_addr(i_c2v_edge_id[bank_idx], i_c2v_tile_idx);
-          bank_rchunk = sign_chunk_idx(bank_raddr);
-          bank_raddr_local = sign_chunk_addr(bank_raddr);
-          bank_rbit = word_bit(i_c2v_tile_offset[bank_idx]);
+  always_comb begin
+    logic [EDGE_ID_W-1:0] read_edge_id;
+
+    read_valid   = 1'b0;
+    read_edge_id = '0;
+    for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
+      lane_rbit[lane_idx] = '0;
+      if (i_c2v_valid[lane_idx]) begin
+        if (!read_valid) begin
+          read_edge_id = i_c2v_edge_id[lane_idx];
         end
-        if (i_v2c_write_valid[bank_idx]) begin
-          bank_wbit = word_bit(i_v2c_tile_offset[bank_idx]);
-          bank_word_next[bank_wbit] = i_v2c_sign[bank_idx];
-        end
+        read_valid = 1'b1;
+        lane_rbit[lane_idx] = word_bit(i_c2v_tile_offset[lane_idx]);
       end
+    end
 
-      always_comb begin
-        bank_sign_next = 1'b0;
-        for (int chunk_sel = 0; chunk_sel < SIGN_CHUNK_COUNT; chunk_sel++) begin
-          if (bank_read_valid_q && (int'(bank_rchunk_q) == chunk_sel)) begin
-            bank_sign_next = bank_chunk_rword_q[chunk_sel][bank_rbit_q];
-          end
-        end
+    read_addr = bank_addr(read_edge_id, i_c2v_tile_idx);
+    read_chunk = sign_chunk_idx(read_addr);
+    read_addr_local = sign_chunk_addr(read_addr);
+  end
+
+  always_comb begin
+    word_start = i_v2c_phase_valid && (i_v2c_q_seq == '0);
+    word_flush = i_v2c_phase_valid && (i_v2c_q_seq == Q_SEQ_W'(Q_TILE - 1));
+    write_addr = bank_addr(i_v2c_edge_id, i_v2c_tile_idx);
+    write_chunk = sign_chunk_idx(write_addr);
+    write_addr_local = sign_chunk_addr(write_addr);
+    write_frame_next = '0;
+
+    for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
+      write_bit = '0;
+      lane_word_next[lane_idx] = word_start ? '0 : lane_word_q[lane_idx];
+      if (i_v2c_write_valid[lane_idx]) begin
+        write_bit = word_bit(i_v2c_tile_offset[lane_idx]);
+        lane_word_next[lane_idx][write_bit] = i_v2c_sign[lane_idx];
       end
+      write_frame_next[(lane_idx*SIGN_WORD_W)+:SIGN_WORD_W] = lane_word_next[lane_idx];
+    end
+  end
 
-      always_comb begin
-        o_c2v_sign[bank_idx] = bank_sign_q;
+  always_comb begin
+    read_frame_next = '0;
+    for (int chunk_sel = 0; chunk_sel < SIGN_CHUNK_COUNT; chunk_sel++) begin
+      if (read_valid_q && (int'(read_chunk_q) == chunk_sel)) begin
+        read_frame_next = chunk_rframe_q[chunk_sel];
       end
+    end
 
-      always_ff @(posedge i_clk or negedge i_rst_n) begin
-        if (!i_rst_n) begin
-          bank_word_q <= '0;
-          bank_rchunk_q <= '0;
-          bank_rbit_q <= '0;
-          bank_read_valid_q <= 1'b0;
-          bank_sign_q <= 1'b0;
-        end else begin
-          bank_word_q <= bank_we ? '0 : bank_word_next;
-          bank_rchunk_q <= bank_rchunk;
-          bank_rbit_q <= bank_rbit;
-          bank_read_valid_q <= i_c2v_valid[bank_idx];
-          bank_sign_q <= bank_sign_next;
-        end
+    for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
+      lane_sign_next[lane_idx] = lane_read_valid_q[lane_idx] ?
+          read_frame_next[(lane_idx*SIGN_WORD_W)+int'(lane_rbit_q[lane_idx])] : 1'b0;
+      o_c2v_sign[lane_idx] = lane_sign_q[lane_idx];
+    end
+  end
+
+  always_ff @(posedge i_clk or negedge i_rst_n) begin
+    if (!i_rst_n) begin
+      read_chunk_q <= '0;
+      read_valid_q <= 1'b0;
+      for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
+        lane_word_q[lane_idx] <= '0;
+        lane_rbit_q[lane_idx] <= '0;
+        lane_read_valid_q[lane_idx] <= 1'b0;
+        lane_sign_q[lane_idx] <= 1'b0;
       end
+    end else begin
+      read_chunk_q <= read_chunk;
+      read_valid_q <= read_valid;
+      for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
+        lane_word_q[lane_idx] <= word_flush ? '0 : lane_word_next[lane_idx];
+        lane_rbit_q[lane_idx] <= lane_rbit[lane_idx];
+        lane_read_valid_q[lane_idx] <= i_c2v_valid[lane_idx];
+        lane_sign_q[lane_idx] <= lane_sign_next[lane_idx];
+      end
+    end
+  end
 
-      for (genvar chunk_idx = 0; chunk_idx < SIGN_CHUNK_COUNT; chunk_idx++) begin : g_chunk
-        (* ram_style = "block" *) logic [  SIGN_WORD_W-1:0] mem[0:SIGN_CHUNK_DEPTH-1];
-        (* equivalent_register_removal = "no" *) logic                     bank_we_q;
-        (* equivalent_register_removal = "no" *) logic [SIGN_CHUNK_AW-1:0] bank_waddr_q;
-        (* equivalent_register_removal = "no" *) logic [  SIGN_WORD_W-1:0] bank_wdata_q;
+  for (genvar chunk_idx = 0; chunk_idx < SIGN_CHUNK_COUNT; chunk_idx++) begin : g_chunk
+    (* ram_style = "block" *)sign_frame_t                     mem          [0:SIGN_CHUNK_DEPTH-1];
+    logic                            write_we_q;
+    logic        [SIGN_CHUNK_AW-1:0] write_addr_q;
+    sign_frame_t                     write_data_q;
 
-        always_ff @(posedge i_clk) begin
-          if (int'(bank_rchunk) == chunk_idx) begin
-            bank_chunk_rword_q[chunk_idx] <= mem[bank_raddr_local];
-          end
-          if (bank_we_q) begin
-            mem[bank_waddr_q] <= bank_wdata_q;
-          end
-        end
+    always_ff @(posedge i_clk) begin
+      if (read_valid && (int'(read_chunk) == chunk_idx)) begin
+        chunk_rframe_q[chunk_idx] <= mem[read_addr_local];
+      end
+      if (write_we_q) begin
+        mem[write_addr_q] <= write_data_q;
+      end
+    end
 
-        always_ff @(posedge i_clk or negedge i_rst_n) begin
-          if (!i_rst_n) begin
-            bank_we_q <= 1'b0;
-            bank_waddr_q <= '0;
-            bank_wdata_q <= '0;
-          end else begin
-            bank_we_q <= 1'b0;
-            if (bank_we && (int'(bank_wchunk) == chunk_idx)) begin
-              bank_we_q <= 1'b1;
-              bank_waddr_q <= bank_waddr_local;
-              bank_wdata_q <= bank_word_next;
-            end
-          end
+    always_ff @(posedge i_clk or negedge i_rst_n) begin
+      if (!i_rst_n) begin
+        write_we_q   <= 1'b0;
+        write_addr_q <= '0;
+        write_data_q <= '0;
+      end else begin
+        write_we_q <= 1'b0;
+        if (word_flush && (int'(write_chunk) == chunk_idx)) begin
+          write_we_q   <= 1'b1;
+          write_addr_q <= write_addr_local;
+          write_data_q <= write_frame_next;
         end
       end
     end
-  endgenerate
+  end
 endmodule
