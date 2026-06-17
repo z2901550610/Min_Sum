@@ -145,9 +145,9 @@ module ram_s
 
       for (genvar chunk_idx = 0; chunk_idx < SIGN_CHUNK_COUNT; chunk_idx++) begin : g_chunk
         (* ram_style = "block" *) logic [  SIGN_WORD_W-1:0] mem[0:SIGN_CHUNK_DEPTH-1];
-        logic                     bank_we_q;
-        logic [SIGN_CHUNK_AW-1:0] bank_waddr_q;
-        logic [  SIGN_WORD_W-1:0] bank_wdata_q;
+        (* equivalent_register_removal = "no" *) logic                     bank_we_q;
+        (* equivalent_register_removal = "no" *) logic [SIGN_CHUNK_AW-1:0] bank_waddr_q;
+        (* equivalent_register_removal = "no" *) logic [  SIGN_WORD_W-1:0] bank_wdata_q;
 
         always_ff @(posedge i_clk) begin
           if (int'(bank_rchunk) == chunk_idx) begin
