@@ -86,6 +86,8 @@ module ram_s
       logic                        bank_word_start;
       logic                        bank_word_flush;
       logic [     SIGN_WORD_W-1:0] bank_chunk_rword_q[0:SIGN_CHUNK_COUNT-1];
+      logic                        bank_sign_next;
+      logic                        bank_sign_q;
 
       always_comb begin
         bank_raddr = '0;
@@ -113,12 +115,16 @@ module ram_s
       end
 
       always_comb begin
-        o_c2v_sign[bank_idx] = 1'b0;
+        bank_sign_next = 1'b0;
         for (int chunk_sel = 0; chunk_sel < SIGN_CHUNK_COUNT; chunk_sel++) begin
           if (bank_read_valid_q && (int'(bank_rchunk_q) == chunk_sel)) begin
-            o_c2v_sign[bank_idx] = bank_chunk_rword_q[chunk_sel][bank_rbit_q];
+            bank_sign_next = bank_chunk_rword_q[chunk_sel][bank_rbit_q];
           end
         end
+      end
+
+      always_comb begin
+        o_c2v_sign[bank_idx] = bank_sign_q;
       end
 
       always_ff @(posedge i_clk or negedge i_rst_n) begin
@@ -127,11 +133,13 @@ module ram_s
           bank_rchunk_q <= '0;
           bank_rbit_q <= '0;
           bank_read_valid_q <= 1'b0;
+          bank_sign_q <= 1'b0;
         end else begin
           bank_word_q <= bank_we ? '0 : bank_word_next;
           bank_rchunk_q <= bank_rchunk;
           bank_rbit_q <= bank_rbit;
           bank_read_valid_q <= i_c2v_valid[bank_idx];
+          bank_sign_q <= bank_sign_next;
         end
       end
 

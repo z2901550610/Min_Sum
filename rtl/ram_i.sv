@@ -56,13 +56,28 @@ module ram_i
   always_comb begin
     logic [H_ENTRY_COUNT_W-1:0] loaded_target;
 
-    o_c2v_base_row = mem[int'(i_c2v_h_block_idx)][int'(i_c2v_one_idx)];
-    o_c2v_edge_id = edge_id_of(i_c2v_h_block_idx, i_c2v_one_idx);
-    o_v2c_base_row = mem[int'(i_v2c_h_block_idx)][int'(i_v2c_one_idx)];
-    o_v2c_edge_id = edge_id_of(i_v2c_h_block_idx, i_v2c_one_idx);
     loaded_target = H_ENTRY_COUNT_W'(N0 * int'(i_cfg_w));
     o_loaded = (loaded_count == loaded_target) && !error_reg;
     o_error = error_reg;
+  end
+
+  always_ff @(posedge i_clk or negedge i_rst_n) begin
+    if (!i_rst_n) begin
+      o_c2v_base_row <= '0;
+      o_c2v_edge_id  <= '0;
+      o_v2c_base_row <= '0;
+      o_v2c_edge_id  <= '0;
+    end else if (i_clear) begin
+      o_c2v_base_row <= '0;
+      o_c2v_edge_id  <= '0;
+      o_v2c_base_row <= '0;
+      o_v2c_edge_id  <= '0;
+    end else begin
+      o_c2v_base_row <= mem[int'(i_c2v_h_block_idx)][int'(i_c2v_one_idx)];
+      o_c2v_edge_id  <= edge_id_of(i_c2v_h_block_idx, i_c2v_one_idx);
+      o_v2c_base_row <= mem[int'(i_v2c_h_block_idx)][int'(i_v2c_one_idx)];
+      o_v2c_edge_id  <= edge_id_of(i_v2c_h_block_idx, i_v2c_one_idx);
+    end
   end
 
   always_comb begin

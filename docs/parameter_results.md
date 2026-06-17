@@ -38,7 +38,7 @@
 | `C_TILE` | 256 |
 | `TILE_COUNT` | 32 |
 | `TILES_TOTAL` | 96 |
-| `Q_TILE` | 33 |
+| `Q_TILE` | 34 |
 | `I_MAX` | 7 |
 
 ### Simulation
@@ -63,9 +63,9 @@ Random test result:
 Cycle budget:
 
 ```text
-I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE) + 3
-= 7 * (1015 + (96 + 1) * 27 * 33) + 3
-= 612097
+I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE) + 4
+= 7 * (1015 + (96 + 1) * 27 * 34) + 4
+= 630431
 ```
 
 ### Vivado Utilization
@@ -154,15 +154,15 @@ Methodology notes:
 | `C_TILE` | 256 |
 | `TILE_COUNT` | 50 |
 | `TILES_TOTAL` | 150 |
-| `Q_TILE` | 33 |
+| `Q_TILE` | 34 |
 | `I_MAX` | 7 |
 
 Cycle budget:
 
 ```text
-I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE) + 3
-= 7 * (1593 + (150 + 1) * 35 * 33) + 3
-= 1231989
+I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE) + 4
+= 7 * (1593 + (150 + 1) * 35 * 34) + 4
+= 1268985
 ```
 
 ### Vivado Utilization
@@ -250,7 +250,7 @@ Methodology notes:
 | `C_TILE` | 288 |
 | `TILE_COUNT` | 103 |
 | `TILES_TOTAL` | 309 |
-| `Q_TILE` | 37 |
+| `Q_TILE` | 38 |
 | `I_MAX` | 7 |
 
 ### Simulation
@@ -270,9 +270,9 @@ Random test result:
 Cycle budget:
 
 ```text
-I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE) + 3
-= 7 * (3688 + (309 + 1) * 55 * 37) + 3
-= 4441769
+I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE) + 4
+= 7 * (3688 + (309 + 1) * 55 * 38) + 4
+= 4561120
 ```
 
 ### Synthesis
@@ -410,15 +410,15 @@ Methodology notes:
 | `C_TILE` | 456 |
 | `TILE_COUNT` | 135 |
 | `TILES_TOTAL` | 405 |
-| `Q_TILE` | 59 |
+| `Q_TILE` | 60 |
 | `I_MAX` | 7 |
 
 Cycle budget:
 
 ```text
-I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE) + 3
-= 7 * (7661 + (405 + 1) * 83 * 59) + 3
-= 13970904
+I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE) + 4
+= 7 * (7661 + (405 + 1) * 83 * 60) + 4
+= 14206791
 ```
 
 ### Vivado Utilization
