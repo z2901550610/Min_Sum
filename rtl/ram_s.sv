@@ -34,8 +34,15 @@ module ram_s
   typedef logic [SIGN_FRAME_W-1:0] sign_frame_t;
 
   function automatic logic [SIGN_BANK_AW-1:0] edge_base(input  logic [EDGE_ID_W-1:0] edge_id);
+    logic [SIGN_BANK_AW-1:0] acc;
     begin
-      edge_base = SIGN_BANK_AW'(edge_id) * SIGN_BANK_AW'(TILE_COUNT);
+      acc = '0;
+      for (int bit_idx = 0; bit_idx < SIGN_BANK_AW; bit_idx++) begin
+        if (((TILE_COUNT >> bit_idx) & 1) != 0) begin
+          acc = acc + (SIGN_BANK_AW'(edge_id) << bit_idx);
+        end
+      end
+      edge_base = acc;
     end
   endfunction
 
@@ -69,7 +76,7 @@ module ram_s
   logic           [SIGN_CHUNK_IDX_W-1:0] read_chunk;
   logic           [   SIGN_CHUNK_AW-1:0] read_addr_local;
   logic                                  read_valid;
-  (* max_fanout = 16 *) logic           [SIGN_CHUNK_IDX_W-1:0] read_chunk_q;
+  logic           [SIGN_CHUNK_IDX_W-1:0] read_chunk_q;
   logic                                  read_valid_q;
   sign_word_idx_t                        lane_rbit        [               0:L-1];
   sign_word_idx_t                        lane_rbit_q      [               0:L-1];
