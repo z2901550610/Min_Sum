@@ -20,77 +20,44 @@ package bike_pkg;
 
   /* verilator lint_off UNUSEDPARAM */
 
+  // Per-profile values indexed [0:4] = {BIKE-128, 160, 256, 384, 512}.
+  localparam int P_R_VALS[0:4] = '{8117, 12739, 29501, 61283, 108587};
+  localparam int P_W_VALS[0:4] = '{27, 35, 55, 83, 111};
+  localparam int P_T_VALS[0:4] = '{201, 263, 429, 659, 877};
+  localparam int P_C_VALS[0:4] = '{5, 5, 5, 5, 7};
+  localparam int P_ASH0_VALS[0:4] = '{3, 3, 3, 3, 4};
+  localparam int P_ASH1_VALS[0:4] = '{4, 4, 4, 6, 0};
+  localparam int P_CTILE_VALS[0:4] = '{256, 256, 288, 464, 1168};
+
 `ifndef BIKE_TOY_PARAMS
-`ifdef BIKE_UNIFIED_PARAMS
   localparam int N0 = 3;
-  localparam int R = 108587;
-  localparam int W = 111;
-  localparam int T = 877;
   localparam int I_MAX = 7;
-  localparam int C_VAL = 7;
-  localparam int ALPHA_SHIFT_0 = 4;
-  localparam int ALPHA_SHIFT_1 = 0;
-`elsif BIKE_128_PARAMS
-  localparam int N0 = 3;
-  localparam int R = 8117;
-  localparam int W = 27;
-  localparam int T = 201;
-  localparam int I_MAX = 7;
-  localparam int C_VAL = 5;
-  localparam int ALPHA_SHIFT_0 = 3;
-  localparam int ALPHA_SHIFT_1 = 4;
+`ifdef BIKE_128_PARAMS
+  localparam int PROF_IDX = 0;
 `elsif BIKE_160_PARAMS
-  localparam int N0 = 3;
-  localparam int R = 12739;
-  localparam int W = 35;
-  localparam int T = 263;
-  localparam int I_MAX = 7;
-  localparam int C_VAL = 5;
-  localparam int ALPHA_SHIFT_0 = 3;
-  localparam int ALPHA_SHIFT_1 = 4;
+  localparam int PROF_IDX = 1;
 `elsif BIKE_256_PARAMS
-  localparam int N0 = 3;
-  localparam int R = 29501;
-  localparam int W = 55;
-  localparam int T = 429;
-  localparam int I_MAX = 7;
-  localparam int C_VAL = 5;
-  localparam int ALPHA_SHIFT_0 = 3;
-  localparam int ALPHA_SHIFT_1 = 4;
+  localparam int PROF_IDX = 2;
 `elsif BIKE_384_PARAMS
-  localparam int N0 = 3;
-  localparam int R = 61283;
-  localparam int W = 83;
-  localparam int T = 659;
-  localparam int I_MAX = 7;
-  localparam int C_VAL = 5;
-  localparam int ALPHA_SHIFT_0 = 3;
-  localparam int ALPHA_SHIFT_1 = 6;
+  localparam int PROF_IDX = 3;
 `elsif BIKE_512_PARAMS
-  localparam int N0 = 3;
-  localparam int R = 108587;
-  localparam int W = 111;
-  localparam int T = 877;
-  localparam int I_MAX = 7;
-  localparam int C_VAL = 7;
-  localparam int ALPHA_SHIFT_0 = 4;
-  localparam int ALPHA_SHIFT_1 = 0;
+  localparam int PROF_IDX = 4;
 `else
-  localparam int N0 = 3;
-  localparam int R = 8117;
-  localparam int W = 27;
-  localparam int T = 201;
-  localparam int I_MAX = 7;
-  localparam int C_VAL = 5;
-  localparam int ALPHA_SHIFT_0 = 3;
-  localparam int ALPHA_SHIFT_1 = 4;
+  localparam int PROF_IDX = 4;
 `endif
+  localparam int R = P_R_VALS[PROF_IDX];
+  localparam int W = P_W_VALS[PROF_IDX];
+  localparam int T = P_T_VALS[PROF_IDX];
+  localparam int C_VAL = P_C_VALS[PROF_IDX];
+  localparam int ALPHA_SHIFT_0 = P_ASH0_VALS[PROF_IDX];
+  localparam int ALPHA_SHIFT_1 = P_ASH1_VALS[PROF_IDX];
 `else
   localparam int N0 = 2;
+  localparam int I_MAX = 4;
+  localparam int PROF_IDX = 0;
   localparam int R = 8;
   localparam int W = 3;
   localparam int T = 1;
-  localparam int I_MAX = 4;
   localparam int C_VAL = 2;
   localparam int ALPHA_SHIFT_0 = 1;
   localparam int ALPHA_SHIFT_1 = 3;
@@ -115,24 +82,14 @@ package bike_pkg;
   localparam int MSG_W = D + 1;
   localparam int ROW_SEG_SIZE = (R + L - 1) / L;
   localparam int VNU_TC_W = MSG_W + ((W > 1) ? $clog2(W + 1) : 1);
-`ifndef BIKE_C_TILE
-`ifdef BIKE_UNIFIED_PARAMS
-  localparam int C_TILE_CONFIG = 576;
-`elsif BIKE_128_PARAMS
-  localparam int C_TILE_CONFIG = 256;
-`elsif BIKE_160_PARAMS
-  localparam int C_TILE_CONFIG = 256;
-`elsif BIKE_256_PARAMS
-  localparam int C_TILE_CONFIG = 288;
-`elsif BIKE_384_PARAMS
-  localparam int C_TILE_CONFIG = 464;
-`elsif BIKE_512_PARAMS
-  localparam int C_TILE_CONFIG = 1168;
-`else
-  localparam int C_TILE_CONFIG = 288;
-`endif
-`else
+`ifdef BIKE_C_TILE
   localparam int C_TILE_CONFIG = `BIKE_C_TILE;
+`elsif BIKE_UNIFIED_PARAMS
+  localparam int C_TILE_CONFIG = 576;
+`elsif BIKE_TOY_PARAMS
+  localparam int C_TILE_CONFIG = 288;
+`else
+  localparam int C_TILE_CONFIG = P_CTILE_VALS[PROF_IDX];
 `endif
   localparam int C_TILE = (C_TILE_CONFIG > R) ? R : C_TILE_CONFIG;
   localparam int Q_BASE = (C_TILE + L - 1) / L;

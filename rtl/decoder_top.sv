@@ -282,18 +282,6 @@ module decoder_top
   logic                                ctrl_done_s;
   logic                                ctrl_done_p;
 
-  function automatic logic [LANE_IDX_W-1:0] row_bank_of(input  logic [ROW_IDX_W-1:0] row_idx);
-    begin
-      row_bank_of = LANE_IDX_W'(int'(row_idx) & (L - 1));
-    end
-  endfunction
-
-  function automatic logic [ROW_BANK_AW-1:0] row_addr_of(input  logic [ROW_IDX_W-1:0] row_idx);
-    begin
-      row_addr_of = ROW_BANK_AW'(row_idx >> L_SHIFT);
-    end
-  endfunction
-
   assign profile_sel_in = PROFILE_RUNTIME_SELECT ? i_profile_sel : PROFILE_BIKE_128;
 
   assign decode_start = i_start && o_h_loaded && !o_h_error;
@@ -926,20 +914,15 @@ module decoder_top
     end
   end
 
-  generate
-    for (genvar bank_idx = 0; bank_idx < L; bank_idx++) begin : g_syndrome_bank
-      (* ram_style = "distributed" *) logic mem[0:ROW_SEG_SIZE-1];
-
-      assign syndrome_rdata[bank_idx] =
-          c2v_valid_r[bank_idx] ? mem[c2v_row_addr_r[bank_idx]] : 1'b0;
-
-      always_ff @(posedge i_clk) begin
-        if (i_syndrome_we && (int'(row_bank_of(i_syndrome_addr)) == bank_idx)) begin
-          mem[row_addr_of(i_syndrome_addr)] <= i_syndrome_wdata;
-        end
-      end
-    end
-  endgenerate
+  ram_syndrome u_ram_syndrome (
+      .i_clk        (i_clk),
+      .i_we         (i_syndrome_we),
+      .i_wr_addr    (i_syndrome_addr),
+      .i_wr_data    (i_syndrome_wdata),
+      .i_rd_valid   (c2v_valid_r),
+      .i_rd_row_addr(c2v_row_addr_r),
+      .o_rd_data    (syndrome_rdata)
+  );
 
   always_ff @(posedge i_clk or negedge rst_n_sync) begin
     if (!rst_n_sync) begin
