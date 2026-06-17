@@ -82,7 +82,7 @@ package bike_pkg;
 
   localparam int N = N0 * R;
 `ifndef BIKE_PARALLEL_L
-  localparam int L = 8;
+  localparam int L = 16;
 `else
   localparam int L = `BIKE_PARALLEL_L;
 `endif
@@ -109,7 +109,7 @@ package bike_pkg;
 `elsif BIKE_256_PARAMS
   localparam int C_TILE_CONFIG = 288;
 `elsif BIKE_384_PARAMS
-  localparam int C_TILE_CONFIG = 456;
+  localparam int C_TILE_CONFIG = 464;
 `elsif BIKE_512_PARAMS
   localparam int C_TILE_CONFIG = 1168;
 `else
@@ -123,8 +123,8 @@ package bike_pkg;
   localparam int Q_TILE = Q_BASE + 3;
   localparam int TILE_COUNT = (R + C_TILE - 1) / C_TILE;
   localparam int TILES_TOTAL = N0 * TILE_COUNT;
-  localparam int TILE_ID_W = (TILES_TOTAL > 1) ? $clog2(TILES_TOTAL) : 1;
-  localparam int TILE_IDX_W = (TILE_COUNT > 1) ? $clog2(TILE_COUNT) : 1;
+  localparam int TILE_ID_W = (TILES_TOTAL > 1) ? $clog2(TILES_TOTAL + 1) : 1;
+  localparam int TILE_IDX_W = (TILE_COUNT > 1) ? $clog2(TILE_COUNT + 1) : 1;
   localparam int TILE_OFF_W = (C_TILE > 1) ? $clog2(C_TILE) : 1;
   localparam int Q_SEQ_W = (Q_TILE > 1) ? $clog2(Q_TILE) : 1;
   localparam int ROW_BANK_AW = (ROW_SEG_SIZE > 1) ? $clog2(ROW_SEG_SIZE) : 1;

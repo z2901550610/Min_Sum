@@ -3,6 +3,8 @@
 module tb_ram_t_accum;
   import bike_pkg::*;
 
+  localparam int TEST_LANES = (C_TILE < L) ? C_TILE : L;
+
   logic                         clk;
   logic                         c2v_read_buf;
   logic                         c2v_read_valid[0:L-1];
@@ -63,18 +65,23 @@ module tb_ram_t_accum;
       c2v_read_buf = buf_sel;
       active_buf   = buf_sel;
       for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-        c2v_read_valid[lane_idx] = 1'b1;
+        c2v_read_valid[lane_idx] = lane_idx < TEST_LANES;
         c2v_read_tile_offset[lane_idx] = TILE_OFF_W'(lane_idx);
-        v2c_valid[lane_idx] = 1'b1;
+        v2c_valid[lane_idx] = lane_idx < TEST_LANES;
         v2c_tile_offset[lane_idx] = TILE_OFF_W'(lane_idx);
       end
       #1;
       for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-        if (c2v_rdata[lane_idx] !== (base_value + ACC_W'(lane_idx))) begin
+        if ((lane_idx < TEST_LANES) &&
+            (c2v_rdata[lane_idx] !== (base_value + ACC_W'(lane_idx)))) begin
           $fatal(1, "c2v read mismatch lane=%0d", lane_idx);
         end
-        if (v2c_rdata[lane_idx] !== (base_value + ACC_W'(lane_idx))) begin
+        if ((lane_idx < TEST_LANES) &&
+            (v2c_rdata[lane_idx] !== (base_value + ACC_W'(lane_idx)))) begin
           $fatal(1, "v2c read mismatch lane=%0d", lane_idx);
+        end
+        if ((lane_idx >= TEST_LANES) && ((c2v_rdata[lane_idx] !== '0) || (v2c_rdata[lane_idx] !== '0))) begin
+          $fatal(1, "inactive lane read mismatch lane=%0d", lane_idx);
         end
       end
     end
@@ -85,7 +92,7 @@ module tb_ram_t_accum;
 
     c2v_write_buf = 1'b0;
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-      c2v_write_valid[lane_idx] = 1'b1;
+      c2v_write_valid[lane_idx] = lane_idx < TEST_LANES;
       c2v_write_tile_offset[lane_idx] = TILE_OFF_W'(lane_idx);
       c2v_wdata[lane_idx] = ACC_W'(4 + lane_idx);
     end
@@ -97,7 +104,7 @@ module tb_ram_t_accum;
     clear_inputs();
     c2v_write_buf = 1'b1;
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-      c2v_write_valid[lane_idx] = 1'b1;
+      c2v_write_valid[lane_idx] = lane_idx < TEST_LANES;
       c2v_write_tile_offset[lane_idx] = TILE_OFF_W'(lane_idx);
       c2v_wdata[lane_idx] = ACC_W'(12 + lane_idx);
     end

@@ -65,7 +65,7 @@ $$\gamma_j = \begin{cases} +C & x_j = 0 \\ -C & x_j = 1 \end{cases}$$
 
 ### 3.2 架构概览
 
-译码器采用 **L 路并行**的处理架构（默认 $L = 8$），在每个时钟周期同时处理 $L$ 个校验矩阵元素。数据通路分为两条流水线：
+译码器采用 **L 路并行**的处理架构（默认 $L = 16$），在每个时钟周期同时处理 $L$ 个校验矩阵元素。数据通路分为两条流水线：
 
 - **C2V 流水线**：从压缩的校验节点状态中重建 C2V 消息，并将其累加到变量节点的部分和中。
 - **V2C 流水线**：利用累加的 C2V 总和计算 V2C 消息，并更新校验节点的压缩状态。
@@ -74,7 +74,7 @@ $$\gamma_j = \begin{cases} +C & x_j = 0 \\ -C & x_j = 1 \end{cases}$$
 
 ### 3.3 列分组处理
 
-为实现高效的 L 路并行处理，$\mathbf{H}$ 矩阵的 $r$ 列被划分为若干**列组**，每组包含 $C_{\text{tile}}$ 个连续列（默认 $C_{\text{tile}} = 288$）。每个列组内，$L$ 个处理单元并行处理 $L$ 个列位置。由于 QC-MDPC 码的循环结构，列组内各列的非零元素位置可通过第一列的索引循环移位得到。
+为实现高效的 L 路并行处理，$\mathbf{H}$ 矩阵的 $r$ 列被划分为若干**列组**，每组包含 $C_{\text{tile}}$ 个连续列。每个列组内，$L$ 个处理单元并行处理 $L$ 个列位置。由于 QC-MDPC 码的循环结构，列组内各列的非零元素位置可通过第一列的索引循环移位得到。
 
 这种分组方式相比逐列处理（如参考论文 [1] 的方案）有两个优势：
 
@@ -322,7 +322,7 @@ decision_bit = sign(posterior)
 
 **最后一个 tile 不满 `C_TILE` 列**：`edge_addr_gen` 计算 `tile_cols = min(C_TILE, r - tile_base)`。当 `offset >= tile_cols` 时，该 lane 的 `valid` 置 0。无效 lane 不读写状态，不改变部分和，也不写判决；调度器仍执行完整 `W * Q_TILE` 个周期。
 
-**循环行号跨越 $r-1 \rightarrow 0$**：BIKE 循环块的行号为 `(base_row + col_local) mod r`。若某个 L-wide 访问组跨过模 $r$ 边界，并且跨越点落在 lane 中间，`edge_addr_gen` 把该组拆成两个 micro-cycle：前半周期处理跨越前的 lane，后半周期处理跨越后的 lane。`Q_TILE = Q_BASE + 2` 中的 guard 周期为跨模拆分、C2V 输入寄存和写回对齐预留固定预算。
+**循环行号跨越 $r-1 \rightarrow 0$**：BIKE 循环块的行号为 `(base_row + col_local) mod r`。若某个 L-wide 访问组跨过模 $r$ 边界，并且跨越点落在 lane 中间，`edge_addr_gen` 把该组拆成两个 micro-cycle：前半周期处理跨越前的 lane，后半周期处理跨越后的 lane。`Q_TILE = Q_BASE + 3` 中的 guard 周期为跨模拆分、C2V 输入寄存和写回对齐预留固定预算。
 
 **没有发生跨越拆分**：guard 周期仍然存在，但所有 lane 无效。这样 H 第一列行号只影响 lane mask 和地址，不影响周期数。
 

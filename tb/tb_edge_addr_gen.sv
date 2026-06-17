@@ -77,6 +77,16 @@ module tb_edge_addr_gen;
     end
   endfunction
 
+  function automatic int first_group_cols(input int tile_value);
+    int tile_base;
+    int tile_cols;
+    begin
+      tile_base = tile_value * C_TILE;
+      tile_cols = ((tile_base + C_TILE) > R) ? (R - tile_base) : C_TILE;
+      first_group_cols = (tile_cols < L) ? tile_cols : L;
+    end
+  endfunction
+
   task automatic check_tile_coverage(input int block_value, input int tile_value,
                                      input int base_value);
     bit                   seen             [0:C_TILE-1];
@@ -208,13 +218,21 @@ module tb_edge_addr_gen;
     base_row = '0;
     edge_id = '0;
     #1;
+    if (valid_count() != first_group_cols(0)) begin
+      $fatal(1, "base_row=0 valid count mismatch got=%0d exp=%0d", valid_count(), first_group_cols(
+             0));
+    end
     for (int bank_idx = 0; bank_idx < L; bank_idx++) begin
-      if (!valid[bank_idx]) $fatal(1, "base_row=0 bank %0d should be valid", bank_idx);
-      if (row_idx[bank_idx] != ROW_IDX_W'(bank_idx)) $fatal(1, "base_row=0 row mismatch");
-      if (col_idx[bank_idx] != COL_W'(bank_idx)) $fatal(1, "base_row=0 col mismatch");
-      if (row_addr[bank_idx] != '0) $fatal(1, "base_row=0 row addr mismatch");
-      if (row_bank[bank_idx] != LANE_IDX_W'(bank_idx)) $fatal(1, "row bank mismatch");
-      if (tile_offset[bank_idx] != TILE_OFF_W'(bank_idx)) $fatal(1, "tile offset mismatch");
+      if (bank_idx < first_group_cols(0)) begin
+        if (!valid[bank_idx]) $fatal(1, "base_row=0 bank %0d should be valid", bank_idx);
+        if (row_idx[bank_idx] != ROW_IDX_W'(bank_idx)) $fatal(1, "base_row=0 row mismatch");
+        if (col_idx[bank_idx] != COL_W'(bank_idx)) $fatal(1, "base_row=0 col mismatch");
+        if (row_addr[bank_idx] != '0) $fatal(1, "base_row=0 row addr mismatch");
+        if (row_bank[bank_idx] != LANE_IDX_W'(bank_idx)) $fatal(1, "row bank mismatch");
+        if (tile_offset[bank_idx] != TILE_OFF_W'(bank_idx)) $fatal(1, "tile offset mismatch");
+      end else if (valid[bank_idx]) begin
+        $fatal(1, "base_row=0 bank %0d should be invalid", bank_idx);
+      end
     end
     check_no_bank_conflict();
 
@@ -227,8 +245,11 @@ module tb_edge_addr_gen;
 
     q_seq = Q_SEQ_W'(1);
     #1;
-    if (valid_count() != (L - 1)) $fatal(1, "post-wrap should have L-1 valid lanes");
-    for (int offset_idx = 1; offset_idx < L; offset_idx++) begin
+    if (valid_count() != (first_group_cols(0) - 1)) begin
+      $fatal(1, "post-wrap valid count mismatch got=%0d exp=%0d", valid_count(), first_group_cols(0
+             ) - 1);
+    end
+    for (int offset_idx = 1; offset_idx < first_group_cols(0); offset_idx++) begin
       if (!has_tile_offset(TILE_OFF_W'(offset_idx))) begin
         $fatal(1, "post-wrap offset %0d should be valid", offset_idx);
       end

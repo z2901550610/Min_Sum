@@ -16,13 +16,13 @@ tile 架构按 H 第一列行索引扫描 QC-MDPC 校验矩阵边。设计目标
 N            = N0 * R
 C_TILE       = min(R, BIKE_C_TILE)
 Q_BASE       = ceil(C_TILE / L)
-Q_TILE       = Q_BASE + 2
+Q_TILE       = Q_BASE + 3
 TILE_COUNT   = ceil(R / C_TILE)
 TILES_TOTAL  = N0 * TILE_COUNT
 ROW_SEG_SIZE = ceil(R / L)
 ```
 
-`Q_TILE` 包含两个固定 guard 周期。`C_TILE` 要求为 `L` 的整数倍。
+`Q_TILE` 包含三个固定 guard 周期。`C_TILE` 要求为 `L` 的整数倍。
 
 ## H Base Row 几何
 

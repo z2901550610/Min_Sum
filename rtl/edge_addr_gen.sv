@@ -73,7 +73,7 @@ module edge_addr_gen
     post_region = (tile_base >= wrap_col) ||
                   (has_wrap && ((!split_en && (q_idx >= wrap_q)) ||
                    (split_en && (i_q_seq > wrap_q))));
-    base_bank = i_base_row[LANE_IDX_W-1:0];
+    base_bank = LANE_IDX_W'(i_base_row);
     base_addr = ROW_BANK_AW'(i_base_row >> L_SHIFT);
     tile_addr_base = ROW_BANK_AW'(i_tile_idx) * ROW_BANK_AW'(Q_BASE);
     post_bank_adjust = post_region ? cfg_r_low : '0;

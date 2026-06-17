@@ -31,8 +31,8 @@ module decoder_top
     if ((L <= 0) || ((L & (L - 1)) != 0)) begin
       $fatal(1, "decoder_top requires L to be a power of two");
     end
-    if ((C_TILE <= 0) || ((C_TILE % L) != 0)) begin
-      $fatal(1, "decoder_top requires C_TILE to be a positive multiple of L");
+    if ((C_TILE <= 0) || ((C_TILE >= L) && ((C_TILE % L) != 0))) begin
+      $fatal(1, "decoder_top requires C_TILE to be positive and aligned to L when C_TILE >= L");
     end
   end
 `endif

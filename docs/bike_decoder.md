@@ -43,7 +43,7 @@ edge_id = b * W + k
 
 覆盖宏：
 
-- `BIKE_PARALLEL_L`：每周期 lane 数，默认 `8`
+- `BIKE_PARALLEL_L`：每周期 lane 数，默认 `16`
 - `BIKE_C_TILE`：每个 tile 的本地变量列数；`BIKE_UNIFIED_PARAMS` 默认 `576`
 - `BIKE_MSG_BITS`：sign-magnitude 消息总位宽，默认 `5`
 
