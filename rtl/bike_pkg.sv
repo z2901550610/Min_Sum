@@ -1,5 +1,21 @@
 `timescale 1ns / 1ps
 // Shared decoder parameters, field layouts, and RAM geometry.
+`ifndef BIKE_TOY_PARAMS
+`ifndef BIKE_UNIFIED_PARAMS
+`ifndef BIKE_128_PARAMS
+`ifndef BIKE_160_PARAMS
+`ifndef BIKE_256_PARAMS
+`ifndef BIKE_384_PARAMS
+`ifndef BIKE_512_PARAMS
+`define BIKE_UNIFIED_PARAMS
+`endif
+`endif
+`endif
+`endif
+`endif
+`endif
+`endif
+
 package bike_pkg;
 
   /* verilator lint_off UNUSEDPARAM */
@@ -147,6 +163,11 @@ package bike_pkg;
   localparam logic [PROFILE_ID_W-1:0] PROFILE_BIKE_256 = 3'd2;
   localparam logic [PROFILE_ID_W-1:0] PROFILE_BIKE_384 = 3'd3;
   localparam logic [PROFILE_ID_W-1:0] PROFILE_BIKE_512 = 3'd4;
+`ifdef BIKE_UNIFIED_PARAMS
+  localparam bit PROFILE_RUNTIME_SELECT = 1'b1;
+`else
+  localparam bit PROFILE_RUNTIME_SELECT = 1'b0;
+`endif
   localparam int CFG_R_W = ROW_IDX_W + 1;
   localparam int CFG_W_W = ONE_IDX_W + 1;
   localparam int CFG_CVAL_W = MSG_W;

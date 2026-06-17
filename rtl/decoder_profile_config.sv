@@ -13,12 +13,10 @@ module decoder_profile_config
     output logic [CFG_ALPHA_SHIFT_W-1:0] o_alpha_shift_1
 );
 
-`ifndef BIKE_UNIFIED_PARAMS
   /* verilator lint_off UNUSEDSIGNAL */
   logic unused_profile_sel;
-  assign unused_profile_sel = ^i_profile_sel;
+  assign unused_profile_sel = PROFILE_RUNTIME_SELECT ? 1'b0 : ^i_profile_sel;
   /* verilator lint_on UNUSEDSIGNAL */
-`endif
 
   always_comb begin
     o_r = CFG_R_W'(R);
@@ -29,63 +27,63 @@ module decoder_profile_config
     o_alpha_shift_0 = CFG_ALPHA_SHIFT_W'(ALPHA_SHIFT_0);
     o_alpha_shift_1 = CFG_ALPHA_SHIFT_W'(ALPHA_SHIFT_1);
 
-`ifdef BIKE_UNIFIED_PARAMS
-    unique case (i_profile_sel)
-      PROFILE_BIKE_128: begin
-        o_r = CFG_R_W'(8117);
-        o_w = CFG_W_W'(27);
-        o_tile_count = TILE_IDX_W'((8117 + C_TILE - 1) / C_TILE);
-        o_row_seg_size = ROW_BANK_AW'((8117 + L - 1) / L);
-        o_c_val = CFG_CVAL_W'(5);
-        o_alpha_shift_0 = CFG_ALPHA_SHIFT_W'(3);
-        o_alpha_shift_1 = CFG_ALPHA_SHIFT_W'(4);
-      end
-      PROFILE_BIKE_160: begin
-        o_r = CFG_R_W'(12739);
-        o_w = CFG_W_W'(35);
-        o_tile_count = TILE_IDX_W'((12739 + C_TILE - 1) / C_TILE);
-        o_row_seg_size = ROW_BANK_AW'((12739 + L - 1) / L);
-        o_c_val = CFG_CVAL_W'(5);
-        o_alpha_shift_0 = CFG_ALPHA_SHIFT_W'(3);
-        o_alpha_shift_1 = CFG_ALPHA_SHIFT_W'(4);
-      end
-      PROFILE_BIKE_256: begin
-        o_r = CFG_R_W'(29501);
-        o_w = CFG_W_W'(55);
-        o_tile_count = TILE_IDX_W'((29501 + C_TILE - 1) / C_TILE);
-        o_row_seg_size = ROW_BANK_AW'((29501 + L - 1) / L);
-        o_c_val = CFG_CVAL_W'(5);
-        o_alpha_shift_0 = CFG_ALPHA_SHIFT_W'(3);
-        o_alpha_shift_1 = CFG_ALPHA_SHIFT_W'(4);
-      end
-      PROFILE_BIKE_384: begin
-        o_r = CFG_R_W'(61283);
-        o_w = CFG_W_W'(83);
-        o_tile_count = TILE_IDX_W'((61283 + C_TILE - 1) / C_TILE);
-        o_row_seg_size = ROW_BANK_AW'((61283 + L - 1) / L);
-        o_c_val = CFG_CVAL_W'(5);
-        o_alpha_shift_0 = CFG_ALPHA_SHIFT_W'(3);
-        o_alpha_shift_1 = CFG_ALPHA_SHIFT_W'(6);
-      end
-      PROFILE_BIKE_512: begin
-        o_r = CFG_R_W'(108587);
-        o_w = CFG_W_W'(111);
-        o_tile_count = TILE_IDX_W'((108587 + C_TILE - 1) / C_TILE);
-        o_row_seg_size = ROW_BANK_AW'((108587 + L - 1) / L);
-        o_c_val = CFG_CVAL_W'(7);
-        o_alpha_shift_0 = CFG_ALPHA_SHIFT_W'(4);
-        o_alpha_shift_1 = CFG_ALPHA_SHIFT_W'(0);
-      end
-      default: begin
-        o_r = CFG_R_W'(8117);
-        o_w = CFG_W_W'(27);
-        o_tile_count = TILE_IDX_W'((8117 + C_TILE - 1) / C_TILE);
-        o_row_seg_size = ROW_BANK_AW'((8117 + L - 1) / L);
-        o_c_val = CFG_CVAL_W'(5);
-        o_alpha_shift_0 = CFG_ALPHA_SHIFT_W'(3);
-        o_alpha_shift_1 = CFG_ALPHA_SHIFT_W'(4);
-      end
-    endcase
-`endif
+    if (PROFILE_RUNTIME_SELECT) begin
+      unique case (i_profile_sel)
+        PROFILE_BIKE_128: begin
+          o_r = CFG_R_W'(8117);
+          o_w = CFG_W_W'(27);
+          o_tile_count = TILE_IDX_W'((8117 + C_TILE - 1) / C_TILE);
+          o_row_seg_size = ROW_BANK_AW'((8117 + L - 1) / L);
+          o_c_val = CFG_CVAL_W'(5);
+          o_alpha_shift_0 = CFG_ALPHA_SHIFT_W'(3);
+          o_alpha_shift_1 = CFG_ALPHA_SHIFT_W'(4);
+        end
+        PROFILE_BIKE_160: begin
+          o_r = CFG_R_W'(12739);
+          o_w = CFG_W_W'(35);
+          o_tile_count = TILE_IDX_W'((12739 + C_TILE - 1) / C_TILE);
+          o_row_seg_size = ROW_BANK_AW'((12739 + L - 1) / L);
+          o_c_val = CFG_CVAL_W'(5);
+          o_alpha_shift_0 = CFG_ALPHA_SHIFT_W'(3);
+          o_alpha_shift_1 = CFG_ALPHA_SHIFT_W'(4);
+        end
+        PROFILE_BIKE_256: begin
+          o_r = CFG_R_W'(29501);
+          o_w = CFG_W_W'(55);
+          o_tile_count = TILE_IDX_W'((29501 + C_TILE - 1) / C_TILE);
+          o_row_seg_size = ROW_BANK_AW'((29501 + L - 1) / L);
+          o_c_val = CFG_CVAL_W'(5);
+          o_alpha_shift_0 = CFG_ALPHA_SHIFT_W'(3);
+          o_alpha_shift_1 = CFG_ALPHA_SHIFT_W'(4);
+        end
+        PROFILE_BIKE_384: begin
+          o_r = CFG_R_W'(61283);
+          o_w = CFG_W_W'(83);
+          o_tile_count = TILE_IDX_W'((61283 + C_TILE - 1) / C_TILE);
+          o_row_seg_size = ROW_BANK_AW'((61283 + L - 1) / L);
+          o_c_val = CFG_CVAL_W'(5);
+          o_alpha_shift_0 = CFG_ALPHA_SHIFT_W'(3);
+          o_alpha_shift_1 = CFG_ALPHA_SHIFT_W'(6);
+        end
+        PROFILE_BIKE_512: begin
+          o_r = CFG_R_W'(108587);
+          o_w = CFG_W_W'(111);
+          o_tile_count = TILE_IDX_W'((108587 + C_TILE - 1) / C_TILE);
+          o_row_seg_size = ROW_BANK_AW'((108587 + L - 1) / L);
+          o_c_val = CFG_CVAL_W'(7);
+          o_alpha_shift_0 = CFG_ALPHA_SHIFT_W'(4);
+          o_alpha_shift_1 = CFG_ALPHA_SHIFT_W'(0);
+        end
+        default: begin
+          o_r = CFG_R_W'(8117);
+          o_w = CFG_W_W'(27);
+          o_tile_count = TILE_IDX_W'((8117 + C_TILE - 1) / C_TILE);
+          o_row_seg_size = ROW_BANK_AW'((8117 + L - 1) / L);
+          o_c_val = CFG_CVAL_W'(5);
+          o_alpha_shift_0 = CFG_ALPHA_SHIFT_W'(3);
+          o_alpha_shift_1 = CFG_ALPHA_SHIFT_W'(4);
+        end
+      endcase
+    end
   end
 endmodule

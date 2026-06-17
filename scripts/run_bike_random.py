@@ -214,6 +214,7 @@ package bike_pkg;
   localparam logic [PROFILE_ID_W-1:0] PROFILE_BIKE_256 = 3'd2;
   localparam logic [PROFILE_ID_W-1:0] PROFILE_BIKE_384 = 3'd3;
   localparam logic [PROFILE_ID_W-1:0] PROFILE_BIKE_512 = 3'd4;
+  parameter bit PROFILE_RUNTIME_SELECT = 1'b0;
   parameter int CFG_R_W = ROW_IDX_W + 1;
   parameter int CFG_W_W = ONE_IDX_W + 1;
   parameter int CFG_CVAL_W = MSG_W;
@@ -287,9 +288,7 @@ module tb_bike_decoder_random;
   localparam int TEST_W = {test_w};
   localparam int TEST_N = N0 * TEST_R;
   localparam int TEST_ROW_IDX_W = (TEST_R > 1) ? $clog2(TEST_R) : 1;
-`ifdef BIKE_UNIFIED_PARAMS
   localparam logic [PROFILE_ID_W-1:0] TEST_PROFILE_ID = {profile_id};
-`endif
   localparam int TEST_ROW_SEG_SIZE = (TEST_R + L - 1) / L;
   localparam int TEST_TILE_COUNT = (TEST_R + C_TILE - 1) / C_TILE;
   localparam int TEST_DECODE_CYCLES = I_MAX * (
@@ -325,9 +324,7 @@ module tb_bike_decoder_random;
     .i_clk(clk),
     .i_rst_n(rst_n),
     .i_start(start),
-`ifdef BIKE_UNIFIED_PARAMS
     .i_profile_sel(TEST_PROFILE_ID),
-`endif
     .i_syndrome_we(syndrome_we),
     .i_syndrome_addr(syndrome_addr),
     .i_syndrome_wdata(syndrome_wdata),

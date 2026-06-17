@@ -10,7 +10,7 @@ set flatten_hierarchy [expr {[info exists ::env(VIVADO_FLATTEN_HIERARCHY)] ? $::
 set xdc_file [expr {[info exists ::env(VIVADO_XDC)] ? $::env(VIVADO_XDC) : "constraints/decoder_top.xdc"}]
 set parallel_l [expr {[info exists ::env(BIKE_PARALLEL_L)] ? $::env(BIKE_PARALLEL_L) : "16"}]
 set c_tile [expr {[info exists ::env(BIKE_C_TILE)] ? $::env(BIKE_C_TILE) : ""}]
-set param_define [expr {[info exists ::env(BIKE_PARAM_DEFINE)] ? $::env(BIKE_PARAM_DEFINE) : "BIKE_128_PARAMS"}]
+set param_define [expr {[info exists ::env(BIKE_PARAM_DEFINE)] ? $::env(BIKE_PARAM_DEFINE) : ""}]
 set top "decoder_top"
 
 file mkdir $build_dir
@@ -46,7 +46,10 @@ set rtl_files [list \
 ]
 
 run_step "read_verilog" {
-  set define_args [list $param_define "BIKE_PARALLEL_L=$parallel_l"]
+  set define_args [list "BIKE_PARALLEL_L=$parallel_l"]
+  if {$param_define ne ""} {
+    lappend define_args $param_define
+  }
   if {$c_tile ne ""} {
     lappend define_args "BIKE_C_TILE=$c_tile"
   }

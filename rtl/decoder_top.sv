@@ -6,9 +6,7 @@ module decoder_top
     input  logic                    i_clk,
     input  logic                    i_rst_n,
     input  logic                    i_start,
-`ifdef BIKE_UNIFIED_PARAMS
     input  logic [PROFILE_ID_W-1:0] i_profile_sel,
-`endif
     input  logic                    i_syndrome_we,
     input  logic [   ROW_IDX_W-1:0] i_syndrome_addr,
     input  logic                    i_syndrome_wdata,
@@ -296,11 +294,7 @@ module decoder_top
     end
   endfunction
 
-`ifdef BIKE_UNIFIED_PARAMS
-  assign profile_sel_in = i_profile_sel;
-`else
-  assign profile_sel_in = PROFILE_BIKE_128;
-`endif
+  assign profile_sel_in = PROFILE_RUNTIME_SELECT ? i_profile_sel : PROFILE_BIKE_128;
 
   assign decode_start = i_start && o_h_loaded && !o_h_error;
   assign o_done = ctrl_done_p;
