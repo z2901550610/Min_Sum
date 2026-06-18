@@ -10,8 +10,8 @@
 
 - Constant-time decoding is a hard requirement.
 - For a given public parameter level, decode latency must be fixed and independent of the private key, first-column support set, syndrome, error pattern, and decoder convergence behavior.
-- Each parameter level may use its own fixed cycle budget, memory geometry, and parallelism settings.
-- Architecture changes should minimize fixed decode cycles first, then memory footprint, while keeping the implementation hardware-friendly for synthesis and timing closure.
+- Each parameter level may use its own fixed cycle budget, memory geometry, parallelism settings, and timing target.
+- Architecture changes should optimize fixed decode time by evaluating cycle count together with achievable clock frequency and timing margin, then memory footprint, while keeping the implementation hardware-friendly for synthesis and timing closure.
 - Avoid early termination, key-dependent scheduling depth, key-dependent bank counts, and data-dependent memory access counts in the main decode path.
 
 ## Common Commands

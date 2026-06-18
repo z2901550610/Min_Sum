@@ -8,7 +8,7 @@ set threads [expr {[info exists ::env(VIVADO_THREADS)] ? $::env(VIVADO_THREADS) 
 set synth_directive [expr {[info exists ::env(VIVADO_SYNTH_DIRECTIVE)] ? $::env(VIVADO_SYNTH_DIRECTIVE) : "Default"}]
 set flatten_hierarchy [expr {[info exists ::env(VIVADO_FLATTEN_HIERARCHY)] ? $::env(VIVADO_FLATTEN_HIERARCHY) : "rebuilt"}]
 set xdc_file [expr {[info exists ::env(VIVADO_XDC)] ? $::env(VIVADO_XDC) : "constraints/decoder_top.xdc"}]
-set parallel_l [expr {[info exists ::env(BIKE_PARALLEL_L)] ? $::env(BIKE_PARALLEL_L) : "16"}]
+set parallel_l [expr {[info exists ::env(BIKE_PARALLEL_L)] ? $::env(BIKE_PARALLEL_L) : "32"}]
 set c_tile [expr {[info exists ::env(BIKE_C_TILE)] ? $::env(BIKE_C_TILE) : ""}]
 set param_define [expr {[info exists ::env(BIKE_PARAM_DEFINE)] ? $::env(BIKE_PARAM_DEFINE) : ""}]
 set top "decoder_top"

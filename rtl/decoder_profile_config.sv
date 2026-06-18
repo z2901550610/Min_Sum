@@ -27,6 +27,7 @@ module decoder_profile_config
     o_alpha_shift_0 = CFG_ALPHA_SHIFT_W'(ALPHA_SHIFT_0);
     o_alpha_shift_1 = CFG_ALPHA_SHIFT_W'(ALPHA_SHIFT_1);
 
+`ifdef BIKE_UNIFIED_PARAMS
     if (PROFILE_RUNTIME_SELECT) begin
       int idx;
       unique case (i_profile_sel)
@@ -44,5 +45,6 @@ module decoder_profile_config
       o_alpha_shift_0 = CFG_ALPHA_SHIFT_W'(P_ASH0_VALS[idx]);
       o_alpha_shift_1 = CFG_ALPHA_SHIFT_W'(P_ASH1_VALS[idx]);
     end
+`endif
   end
 endmodule

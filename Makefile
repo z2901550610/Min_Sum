@@ -1,11 +1,12 @@
 VERILATOR ?= ./scripts/verilator_quiet.py
 REAL_VERILATOR ?= verilator
 VERILATOR_LOG_DIR ?= build/logs/verilator
-BIKE_PARALLEL_L ?= 16
+BIKE_PARALLEL_L ?= 32
+BIKE_TOY_PARALLEL_L ?= 8
 BIKE_SYNTH_PARAM ?=
-BIKE_SYNTH_PARALLEL_L ?= 16
+BIKE_SYNTH_PARALLEL_L ?= 32
 BIKE_SYNTH_C_TILE ?=
-VERILATOR_FLAGS ?= --binary --sv -DBIKE_TOY_PARAMS -DBIKE_PARALLEL_L=$(BIKE_PARALLEL_L) -DBIKE_SIM_DEBUG -Wall -Wno-fatal -I./tb -I./rtl
+VERILATOR_FLAGS ?= --binary --sv -DBIKE_TOY_PARAMS -DBIKE_PARALLEL_L=$(BIKE_TOY_PARALLEL_L) -DBIKE_SIM_DEBUG -Wall -Wno-fatal -I./tb -I./rtl
 SIM ?= ./scripts/run_quiet.py
 VIVADO ?= vivado
 VIVADO_BUILD_DIR ?= build/vivado

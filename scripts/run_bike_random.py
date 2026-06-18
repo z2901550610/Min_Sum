@@ -17,6 +17,7 @@ RTL_CORE = [
     "rtl/tile_scheduler.sv",
     "rtl/ram_m.sv",
     "rtl/ram_s.sv",
+    "rtl/ram_syndrome.sv",
     "rtl/ram_t_accum.sv",
     "rtl/ram_t.sv",
     "rtl/msg_tc_to_signmag_sat.sv",
