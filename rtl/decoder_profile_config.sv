@@ -29,13 +29,11 @@ module decoder_profile_config
 
 `ifdef BIKE_UNIFIED_PARAMS
     if (PROFILE_RUNTIME_SELECT) begin
-      int idx;
+      logic [PROFILE_ID_W-1:0] idx;
       unique case (i_profile_sel)
-        PROFILE_BIKE_128: idx = 0;
-        PROFILE_BIKE_160: idx = 1;
-        PROFILE_BIKE_256: idx = 2;
-        PROFILE_BIKE_384: idx = 3;
-        default:          idx = 4;
+        PROFILE_BIKE_128: idx = PROFILE_BIKE_128;
+        PROFILE_BIKE_192: idx = PROFILE_BIKE_192;
+        default:          idx = PROFILE_BIKE_256;
       endcase
       o_r = CFG_R_W'(P_R_VALS[idx]);
       o_w = CFG_W_W'(P_W_VALS[idx]);

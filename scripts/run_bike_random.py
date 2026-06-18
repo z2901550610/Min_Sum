@@ -42,21 +42,21 @@ PARAM_SETS = {
         "alpha_shift_1": 3,
     },
     "bike128": {
-        "n0": 3,
-        "r": 8117,
-        "w": 27,
-        "error_count": 201,
+        "n0": 2,
+        "r": 12323,
+        "w": 71,
+        "error_count": 134,
         "i_max": 7,
         "c_val": 5,
         "msg_bits": 5,
         "alpha_shift_0": 3,
         "alpha_shift_1": 4,
     },
-    "bike160": {
-        "n0": 3,
-        "r": 12739,
-        "w": 35,
-        "error_count": 263,
+    "bike192": {
+        "n0": 2,
+        "r": 24659,
+        "w": 103,
+        "error_count": 199,
         "i_max": 7,
         "c_val": 5,
         "msg_bits": 5,
@@ -64,46 +64,22 @@ PARAM_SETS = {
         "alpha_shift_1": 4,
     },
     "bike256": {
-        "n0": 3,
-        "r": 29501,
-        "w": 55,
-        "error_count": 429,
+        "n0": 2,
+        "r": 40973,
+        "w": 137,
+        "error_count": 264,
         "i_max": 7,
         "c_val": 5,
         "msg_bits": 5,
         "alpha_shift_0": 3,
         "alpha_shift_1": 4,
     },
-    "bike384": {
-        "n0": 3,
-        "r": 61283,
-        "w": 83,
-        "error_count": 659,
-        "i_max": 7,
-        "c_val": 5,
-        "msg_bits": 5,
-        "alpha_shift_0": 3,
-        "alpha_shift_1": 6,
-    },
-    "bike512": {
-        "n0": 3,
-        "r": 108587,
-        "w": 111,
-        "error_count": 877,
-        "i_max": 7,
-        "c_val": 7,
-        "msg_bits": 5,
-        "alpha_shift_0": 4,
-        "alpha_shift_1": 0,
-    },
 }
 
 PROFILE_IDS = {
     "bike128": "PROFILE_BIKE_128",
-    "bike160": "PROFILE_BIKE_160",
+    "bike192": "PROFILE_BIKE_192",
     "bike256": "PROFILE_BIKE_256",
-    "bike384": "PROFILE_BIKE_384",
-    "bike512": "PROFILE_BIKE_512",
 }
 
 
@@ -208,13 +184,11 @@ package bike_pkg;
   parameter int L_SHIFT = (L > 1) ? $clog2(L) : 0;
   parameter int ITER_W = $clog2(I_MAX + 1);
 
-  parameter int PROFILE_COUNT = 5;
-  parameter int PROFILE_ID_W = 3;
-  localparam logic [PROFILE_ID_W-1:0] PROFILE_BIKE_128 = 3'd0;
-  localparam logic [PROFILE_ID_W-1:0] PROFILE_BIKE_160 = 3'd1;
-  localparam logic [PROFILE_ID_W-1:0] PROFILE_BIKE_256 = 3'd2;
-  localparam logic [PROFILE_ID_W-1:0] PROFILE_BIKE_384 = 3'd3;
-  localparam logic [PROFILE_ID_W-1:0] PROFILE_BIKE_512 = 3'd4;
+  parameter int PROFILE_COUNT = 3;
+  parameter int PROFILE_ID_W = 2;
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_BIKE_128 = 2'd0;
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_BIKE_192 = 2'd1;
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_BIKE_256 = 2'd2;
   parameter bit PROFILE_RUNTIME_SELECT = 1'b0;
   parameter int CFG_R_W = ROW_IDX_W + 1;
   parameter int CFG_W_W = ONE_IDX_W + 1;
