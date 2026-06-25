@@ -1,5 +1,6 @@
 # Verilator / simulation build outputs
 /obj_dir/
+/build/
 *.o
 *.d
 *.a

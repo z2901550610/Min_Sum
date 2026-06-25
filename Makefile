@@ -10,6 +10,10 @@ VERILATOR_FLAGS ?= --binary --sv -DBIKE_TOY_PARAMS -DBIKE_PARALLEL_L=$(BIKE_TOY_
 SIM ?= ./scripts/run_quiet.py
 VIVADO ?= vivado
 VIVADO_BUILD_DIR ?= build/vivado
+CC ?= cc
+CFLAGS ?= -O3 -std=c11 -Wall -Wextra -Wpedantic -pthread
+MODEL_BUILD_DIR ?= build/model
+MIN_SUM_MODEL ?= $(MODEL_BUILD_DIR)/min_sum_model
 VERIBLE_FORMAT ?= verible-verilog-format
 VERIBLE_FORMAT_FLAGS ?= --port_declarations_alignment=align --module_net_variable_alignment=align --formal_parameters_alignment=align
 VERIBLE_LINT ?= verible-verilog-lint
@@ -37,7 +41,7 @@ BIKE_UNIFIED_RANDOM_PARAM_SETS ?= bike128 bike192 bike256
 BIKE_UNIFIED_RANDOM_C_TILE ?= 576
 BIKE_UNIFIED_RANDOM_TIMEOUT_CYCLES ?= 40000000
 
-.PHONY: all sim test test-unit test-integration test-bike-random test-bike-unified-random format-rtl check-format-rtl lint-rtl vivado-synth FORCE
+.PHONY: all sim test test-unit test-integration test-bike-random test-bike-unified-random model-min-sum run-model-min-sum sweep-min-sum check-model-rtl check-model-rtl-bike128 format-rtl check-format-rtl lint-rtl vivado-synth FORCE
 
 all: test
 
@@ -83,6 +87,24 @@ test-bike-unified-random:
 	@for param_set in $(BIKE_UNIFIED_RANDOM_PARAM_SETS); do \
 		python3 scripts/run_bike_random.py --unified --param-set $$param_set --base-seed $(BIKE_RANDOM_BASE_SEED) --trials $(BIKE_RANDOM_TRIALS) $(BIKE_RANDOM_ERROR_ARG) --parallel-l $(BIKE_RANDOM_PARALLEL_L) --c-tile $(BIKE_UNIFIED_RANDOM_C_TILE) --timeout-cycles $(BIKE_UNIFIED_RANDOM_TIMEOUT_CYCLES) --out-dir tb/generated/bike_unified_random/$$param_set --verilator $(VERILATOR); \
 	done
+
+model-min-sum: $(MIN_SUM_MODEL)
+
+$(MIN_SUM_MODEL): scripts/min_sum_model.c
+	@mkdir -p $(MODEL_BUILD_DIR)
+	@$(CC) $(CFLAGS) $< -o $@
+
+run-model-min-sum: model-min-sum
+	@$(MIN_SUM_MODEL) --profile bike128 --seed 1 --trials 1
+
+sweep-min-sum: model-min-sum
+	@python3 scripts/run_quantization_sweep.py --model $(MIN_SUM_MODEL)
+
+check-model-rtl: model-min-sum
+	@python3 scripts/check_model_rtl.py --model $(MIN_SUM_MODEL) --verilator $(VERILATOR)
+
+check-model-rtl-bike128: model-min-sum
+	@python3 scripts/check_model_rtl.py --model $(MIN_SUM_MODEL) --verilator $(VERILATOR) --seed 1 --r 12323 --w 71 --errors 134 --iterations 7 --msg-bits 5 --c-val 5 --alpha-shift-0 3 --alpha-shift-1 4 --parallel-l 32 --c-tile 576
 
 format-rtl:
 	@$(VERIBLE_FORMAT) $(VERIBLE_FORMAT_FLAGS) --inplace $(MAINTAINED_SV)

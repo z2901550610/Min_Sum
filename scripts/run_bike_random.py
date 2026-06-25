@@ -109,6 +109,118 @@ def calc_syndrome(h_base: list[list[int]], error_bits: list[int], r: int, w: int
     return syndrome
 
 
+def write_fixture(
+    path: Path,
+    *,
+    seed: int,
+    n0: int,
+    r: int,
+    w: int,
+    error_positions: list[int],
+    iterations: int,
+    msg_bits: int,
+    c_val: int,
+    alpha_shift_0: int,
+    alpha_shift_1: int,
+    h_base: list[list[int]],
+    syndrome_positions: list[int],
+) -> None:
+    lines = [
+        "MIN_SUM_FIXTURE_V1",
+        f"seed {seed}",
+        f"n0 {n0}",
+        f"r {r}",
+        f"w {w}",
+        f"error_count {len(error_positions)}",
+        f"iterations {iterations}",
+        f"msg_bits {msg_bits}",
+        f"c_val {c_val}",
+        f"alpha_shift_0 {alpha_shift_0}",
+        f"alpha_shift_1 {alpha_shift_1}",
+    ]
+    for block_idx, rows in enumerate(h_base):
+        lines.append(f"h {block_idx} " + " ".join(str(value) for value in rows))
+    lines.append("error_positions " + " ".join(str(value) for value in error_positions))
+    lines.append(f"syndrome_weight {len(syndrome_positions)}")
+    lines.append("syndrome_positions " + " ".join(str(value) for value in syndrome_positions))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def read_fixture(path: Path) -> dict[str, object]:
+    lines = [
+        line.strip()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    if not lines or lines[0] != "MIN_SUM_FIXTURE_V1":
+        raise ValueError(f"{path}: unsupported fixture header")
+
+    scalar_keys = {
+        "seed",
+        "n0",
+        "r",
+        "w",
+        "error_count",
+        "iterations",
+        "msg_bits",
+        "c_val",
+        "alpha_shift_0",
+        "alpha_shift_1",
+        "syndrome_weight",
+    }
+    values: dict[str, object] = {"h": {}}
+    for line in lines[1:]:
+        fields = line.split()
+        key = fields[0]
+        if key in scalar_keys:
+            if len(fields) != 2:
+                raise ValueError(f"{path}: malformed {key} line")
+            values[key] = int(fields[1])
+        elif key == "h":
+            if len(fields) < 3:
+                raise ValueError(f"{path}: malformed h line")
+            h_rows = values["h"]
+            assert isinstance(h_rows, dict)
+            h_rows[int(fields[1])] = [int(value) for value in fields[2:]]
+        elif key in {"error_positions", "syndrome_positions"}:
+            values[key] = [int(value) for value in fields[1:]]
+        else:
+            raise ValueError(f"{path}: unknown fixture key {key}")
+
+    required = scalar_keys | {"error_positions", "syndrome_positions"}
+    missing = sorted(required - values.keys())
+    if missing:
+        raise ValueError(f"{path}: missing fixture fields: {', '.join(missing)}")
+
+    n0 = int(values["n0"])
+    r = int(values["r"])
+    w = int(values["w"])
+    error_count = int(values["error_count"])
+    syndrome_weight = int(values["syndrome_weight"])
+    h_rows = values["h"]
+    assert isinstance(h_rows, dict)
+    if sorted(h_rows) != list(range(n0)):
+        raise ValueError(f"{path}: h block indices must cover 0..{n0 - 1}")
+    h_base = [h_rows[block_idx] for block_idx in range(n0)]
+    if any(len(rows) != w for rows in h_base):
+        raise ValueError(f"{path}: each h block must contain exactly w rows")
+    error_positions = values["error_positions"]
+    syndrome_positions = values["syndrome_positions"]
+    assert isinstance(error_positions, list)
+    assert isinstance(syndrome_positions, list)
+    if len(error_positions) != error_count:
+        raise ValueError(f"{path}: error position count mismatch")
+    if len(syndrome_positions) != syndrome_weight:
+        raise ValueError(f"{path}: syndrome position count mismatch")
+    if any(position < 0 or position >= n0 * r for position in error_positions):
+        raise ValueError(f"{path}: error position out of range")
+    if any(position < 0 or position >= r for position in syndrome_positions):
+        raise ValueError(f"{path}: syndrome position out of range")
+    values["h_base"] = h_base
+    return values
+
+
 def sv_array(values: list[int]) -> str:
     return "'{" + ", ".join(str(value) for value in values) + "}"
 
@@ -247,10 +359,43 @@ def emit_tb(
     syndrome_positions: list[int],
     error_positions: list[int],
     h_base: list[list[int]],
+    result_path: Path | None,
+    require_success: bool,
 ) -> None:
     h_base_rows = ",\n    ".join(sv_array(row_list) for row_list in h_base)
     syndrome_array_depth = max(1, len(syndrome_positions))
     error_array_depth = max(1, len(error_positions))
+    result_path_sv = str(result_path.resolve()) if result_path is not None else ""
+    result_write = ""
+    if result_path is not None:
+        result_write = f"""
+    begin
+      int result_fd;
+      result_fd = $fopen("{result_path_sv}", "w");
+      if (result_fd == 0) begin
+        $fatal(1, "cannot open result output");
+      end
+      $fdisplay(result_fd, "MIN_SUM_DECISION_V1");
+      for (int col_idx = 0; col_idx < TEST_N; col_idx++) begin
+        if (e_out[col_idx]) begin
+          $fdisplay(result_fd, "%0d", col_idx);
+        end
+      end
+      $fclose(result_fd);
+    end
+"""
+    success_checks = ""
+    if require_success:
+        success_checks = """
+    if (weight_r(residual) != 0) begin
+      $fatal(1, "seed=%0d residual check failed; residual_weight=%0d", TEST_SEED,
+             weight_r(residual));
+    end
+    if (!exact_match) begin
+      $fatal(1, "seed=%0d exact check failed; target_weight=%0d output_weight=%0d", TEST_SEED,
+             ERROR_WEIGHT, weight_n(e_out));
+    end
+"""
     path.write_text(
         f"""`timescale 1ns/1ps
 
@@ -488,6 +633,7 @@ module tb_bike_decoder_random;
 
     residual = residual_of(e_out);
     exact_match = candidate_matches_target(e_out);
+{result_write}
 
     $display(
       "seed=%0d iter=%0d cycles=%0d target_weight=%0d output_weight=%0d residual_weight=%0d exact=%0d",
@@ -499,14 +645,7 @@ module tb_bike_decoder_random;
       weight_r(residual),
       exact_match
     );
-    if (weight_r(residual) != 0) begin
-      $fatal(1, "seed=%0d residual check failed; residual_weight=%0d", TEST_SEED,
-             weight_r(residual));
-    end
-    if (!exact_match) begin
-      $fatal(1, "seed=%0d exact check failed; target_weight=%0d output_weight=%0d", TEST_SEED,
-             ERROR_WEIGHT, weight_n(e_out));
-    end
+{success_checks}
     $finish;
   end
 endmodule
@@ -540,18 +679,61 @@ def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int
     obj_dir = out_dir / "obj_dir"
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    fixture = read_fixture(Path(args.fixture_in)) if args.fixture_in else None
+    if fixture is not None:
+        seed = int(fixture["seed"])
+        args.n0 = int(fixture["n0"])
+        args.r = int(fixture["r"])
+        args.w = int(fixture["w"])
+        args.error_count = int(fixture["error_count"])
+        args.i_max = int(fixture["iterations"])
+        args.msg_bits = int(fixture["msg_bits"])
+        args.c_val = int(fixture["c_val"])
+        args.alpha_shift_0 = int(fixture["alpha_shift_0"])
+        args.alpha_shift_1 = int(fixture["alpha_shift_1"])
+
     n = args.r * args.n0
     if args.error_count < 0 or args.error_count > n:
         raise ValueError(f"--error-count must be between 0 and {n}")
     if args.w < 1 or args.w > args.r:
         raise ValueError("--w must be between 1 and --r")
 
-    h_base = [sample_h_base_rows(rng, args.r, args.w) for _ in range(args.n0)]
-    error_positions = sorted(rng.sample(range(n), args.error_count))
-    error_bits = [0 for _ in range(n)]
-    for pos in error_positions:
-        error_bits[pos] = 1
-    syndrome = calc_syndrome(h_base, error_bits, args.r, args.w)
+    if fixture is not None:
+        h_base = fixture["h_base"]
+        error_positions = fixture["error_positions"]
+        syndrome_positions = fixture["syndrome_positions"]
+        assert isinstance(h_base, list)
+        assert isinstance(error_positions, list)
+        assert isinstance(syndrome_positions, list)
+    else:
+        h_base = [sample_h_base_rows(rng, args.r, args.w) for _ in range(args.n0)]
+        error_positions = sorted(rng.sample(range(n), args.error_count))
+        error_bits = [0 for _ in range(n)]
+        for pos in error_positions:
+            error_bits[pos] = 1
+        syndrome = calc_syndrome(h_base, error_bits, args.r, args.w)
+        syndrome_positions = [idx for idx, bit in enumerate(syndrome) if bit]
+        if args.fixture_out:
+            fixture_out = Path(args.fixture_out)
+            if not fixture_out.is_absolute():
+                fixture_out = repo_root / fixture_out
+            write_fixture(
+                fixture_out,
+                seed=seed,
+                n0=args.n0,
+                r=args.r,
+                w=args.w,
+                error_positions=error_positions,
+                iterations=args.i_max,
+                msg_bits=args.msg_bits,
+                c_val=args.c_val,
+                alpha_shift_0=args.alpha_shift_0,
+                alpha_shift_1=args.alpha_shift_1,
+                h_base=h_base,
+                syndrome_positions=syndrome_positions,
+            )
+        if args.generate_only:
+            return True
 
     pkg_path = out_dir / "bike_pkg.sv"
     tb_path = out_dir / "tb_bike_decoder_random.sv"
@@ -577,9 +759,11 @@ def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int
         test_r=args.r,
         test_w=args.w,
         profile_id=PROFILE_IDS.get(args.param_set or "", "PROFILE_BIKE_128"),
-        syndrome_positions=[idx for idx, bit in enumerate(syndrome) if bit],
+        syndrome_positions=syndrome_positions,
         error_positions=error_positions,
         h_base=h_base,
+        result_path=Path(args.result_out) if args.result_out else None,
+        require_success=not args.allow_decode_failure,
     )
 
     command = [args.verilator, "--binary", "--sv"]
@@ -641,6 +825,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout-cycles", type=int, default=200000)
     parser.add_argument("--out-dir", default="tb/generated/bike_random")
     parser.add_argument("--verilator", default="verilator")
+    parser.add_argument("--fixture-in", default=None)
+    parser.add_argument("--fixture-out", default=None)
+    parser.add_argument("--result-out", default=None)
+    parser.add_argument("--allow-decode-failure", action="store_true")
+    parser.add_argument("--generate-only", action="store_true")
     parser.add_argument(
         "--unified",
         action="store_true",
@@ -685,9 +874,17 @@ def main() -> int:
         raise ValueError("--c-val must fit in the configured sign-magnitude message magnitude")
     if args.unified and (args.param_set not in PROFILE_IDS):
         raise ValueError("--unified requires --param-set to be one of the BIKE profile names")
+    if args.fixture_in and args.trials != 1:
+        raise ValueError("--fixture-in requires --trials 1")
+    if args.fixture_in and args.unified:
+        raise ValueError("--fixture-in is supported by the generated external package flow")
+    if args.generate_only and not args.fixture_out:
+        raise ValueError("--generate-only requires --fixture-out")
 
     for case_idx in range(args.trials):
         seed = args.base_seed + case_idx
+        if args.fixture_in:
+            seed = int(read_fixture(Path(args.fixture_in))["seed"])
         print(f"== BIKE random case {case_idx + 1}/{args.trials}: seed={seed} ==", flush=True)
         run_case(args, repo_root, case_idx, seed)
 
