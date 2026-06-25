@@ -178,3 +178,62 @@ python3 scripts/run_quantization_sweep.py \
 ```
 
 shift pair 只枚举 `shift_0 <= shift_1`，避免交换顺序造成重复配置。扫描结果包含成功数、精确恢复数、平均 residual weight 和运行时间。大规模实验可以先用 20～100 个 trial 粗筛，再对候选配置使用相同 seed 区间扩大 trial 数。
+
+## Linux 服务器一键实验
+
+脚本自动完成构建、3/4/5-bit 全参数粗筛、候选参数验证、压力测试和结果汇总：
+
+```bash
+scripts/run_quantization_campaign.sh \
+  --profile bike128 \
+  --mode quick \
+  --threads 32
+```
+
+使用全部在线 CPU：
+
+```bash
+scripts/run_quantization_campaign.sh --threads 0
+```
+
+三种实验规模：
+
+| Mode | 粗筛 trials/配置 | 目标重量 trials | 每个压力点 trials |
+| --- | ---: | ---: | ---: |
+| `smoke` | 2 | 20 | 20 |
+| `quick` | 20 | 1000 | 500 |
+| `full` | 100 | 10000 | 5000 |
+
+正式服务器实验：
+
+```bash
+mkdir -p results
+
+nohup scripts/run_quantization_campaign.sh \
+  --profile bike128 \
+  --mode full \
+  --threads 32 \
+  --out-dir results/bike128_full \
+  > results/bike128_full.log 2>&1 &
+```
+
+查看进度：
+
+```bash
+tail -f results/bike128_full.log
+```
+
+主要结果：
+
+```text
+results/bike128_full/coarse_sweep.csv
+results/bike128_full/candidate_results.csv
+results/bike128_full/summary.md
+```
+
+也可以通过环境变量一键启动：
+
+```bash
+MODE=full PROFILE=bike128 THREADS=32 \
+  scripts/run_quantization_campaign.sh
+```
