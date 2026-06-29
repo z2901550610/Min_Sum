@@ -144,6 +144,7 @@ module decoder_top
   logic        [        ONE_IDX_W-1:0] c2v_one_idx_p;
   logic        [          Q_SEQ_W-1:0] c2v_q_seq_p;
   logic                                c2v_fill_buf_p;
+  logic        [            MSG_W-1:0] c2v_msg_p[0:L-1];
   logic signed [            ACC_W-1:0] c2v_accum_base_p[0:L-1];
   logic signed [            ACC_W-1:0] c2v_raw_next_p[0:L-1];
   logic signed [            ACC_W-1:0] c2v_accum_next_p[0:L-1];
@@ -152,7 +153,7 @@ module decoder_top
   logic        [        ONE_IDX_W-1:0] c2v_write_one_idx;
   logic        [          Q_SEQ_W-1:0] c2v_write_q_seq;
   logic                                c2v_write_fill_buf;
-  logic signed [            ACC_W-1:0] c2v_write_raw[0:L-1];
+  logic        [            MSG_W-1:0] c2v_write_msg[0:L-1];
   logic signed [            ACC_W-1:0] c2v_write_accum[0:L-1];
 
   logic                                v2c_phase_h;
@@ -261,6 +262,8 @@ module decoder_top
   logic signed [            ACC_W-1:0] c2v_accum_rdata[0:L-1];
   logic signed [            ACC_W-1:0] v2c_raw_sum[0:L-1];
   logic signed [            ACC_W-1:0] v2c_raw_c2v[0:L-1];
+  logic        [            MSG_W-1:0] v2c_c2v_msg[0:L-1];
+  logic signed [            MSG_W-1:0] v2c_c2v_tc[0:L-1];
   logic signed [            ACC_W-1:0] c2v_raw_next[0:L-1];
   logic signed [            ACC_W-1:0] v2c_posterior_next[0:L-1];
   logic        [            MSG_W-1:0] v2c_msg_next[0:L-1];
@@ -324,6 +327,18 @@ module decoder_top
           .o_tc (c2v_tc[lane_idx])
       );
 
+      msg_signmag_to_tc #(
+          .D           (D),
+          .MSG_W       (MSG_W),
+          .MSG_MAG_LSB (MSG_MAG_LSB),
+          .MSG_SIGN_BIT(MSG_SIGN_BIT)
+      ) u_v2c_c2v_msg_to_tc (
+          .i_msg(v2c_c2v_msg[lane_idx]),
+          .o_tc (v2c_c2v_tc[lane_idx])
+      );
+
+      assign v2c_raw_c2v[lane_idx] = ACC_W'($signed(v2c_c2v_tc[lane_idx]));
+
       cnu_a u_cnu_a (
           .i_v2c_msg (v2c_msg_c[lane_idx]),
           .i_edge_id (v2c_edge_id_c[lane_idx]),
@@ -374,12 +389,12 @@ module decoder_top
       if (C2V_WRITE_PIPELINE) begin
         c2v_write_valid[lane_idx] = c2v_valid_p[lane_idx];
         c2v_write_tile_offset[lane_idx] = c2v_tile_offset_p[lane_idx];
-        c2v_write_raw[lane_idx] = c2v_raw_next_p[lane_idx];
+        c2v_write_msg[lane_idx] = c2v_msg_p[lane_idx];
         c2v_write_accum[lane_idx] = c2v_accum_next_p[lane_idx];
       end else begin
         c2v_write_valid[lane_idx] = c2v_valid_c[lane_idx];
         c2v_write_tile_offset[lane_idx] = c2v_tile_offset_c[lane_idx];
-        c2v_write_raw[lane_idx] = c2v_raw_next[lane_idx];
+        c2v_write_msg[lane_idx] = c2v_msg[lane_idx];
         c2v_write_accum[lane_idx] =
             ((c2v_one_idx_c == '0) ? '0 : c2v_accum_rdata_c[lane_idx]) + c2v_raw_next[lane_idx];
       end
@@ -541,12 +556,12 @@ module decoder_top
       .i_c2v_write_valid(c2v_write_valid),
       .i_c2v_write_one_idx(c2v_write_one_idx),
       .i_c2v_write_q_seq(c2v_write_q_seq),
-      .i_c2v_write_data(c2v_write_raw),
+      .i_c2v_write_data(c2v_write_msg),
       .i_active_buf(v2c_active_buf_r),
       .i_v2c_valid(v2c_valid_r),
       .i_v2c_one_idx(v2c_one_idx_r),
       .i_v2c_q_seq(v2c_q_seq_r),
-      .o_v2c_rdata(v2c_raw_c2v)
+      .o_v2c_rdata(v2c_c2v_msg)
   );
 
   vnu_update u_vnu_update (
@@ -706,6 +721,7 @@ module decoder_top
         c2v_syndrome_c[lane_idx] <= 1'b0;
         c2v_valid_p[lane_idx] <= 1'b0;
         c2v_tile_offset_p[lane_idx] <= '0;
+        c2v_msg_p[lane_idx] <= '0;
         c2v_accum_base_p[lane_idx] <= '0;
         c2v_raw_next_p[lane_idx] <= '0;
         v2c_valid_r[lane_idx] <= 1'b0;
@@ -870,6 +886,7 @@ module decoder_top
         c2v_syndrome_c[lane_idx] <= c2v_syndrome_s[lane_idx];
         c2v_valid_p[lane_idx] <= c2v_valid_c[lane_idx];
         c2v_tile_offset_p[lane_idx] <= c2v_tile_offset_c[lane_idx];
+        c2v_msg_p[lane_idx] <= c2v_msg[lane_idx];
         c2v_accum_base_p[lane_idx] <= (c2v_one_idx_c == '0) ? '0 : c2v_accum_rdata_c[lane_idx];
         c2v_raw_next_p[lane_idx] <= c2v_raw_next[lane_idx];
         v2c_valid_r[lane_idx] <= v2c_valid[lane_idx];

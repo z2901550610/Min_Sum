@@ -41,7 +41,7 @@ BIKE_UNIFIED_RANDOM_PARAM_SETS ?= bike128 bike192 bike256
 BIKE_UNIFIED_RANDOM_C_TILE ?= 576
 BIKE_UNIFIED_RANDOM_TIMEOUT_CYCLES ?= 40000000
 
-.PHONY: all sim test test-unit test-integration test-bike-random test-bike-unified-random model-min-sum run-model-min-sum sweep-min-sum campaign-min-sum check-model-rtl check-model-rtl-bike128 format-rtl check-format-rtl lint-rtl vivado-synth FORCE
+.PHONY: all sim test test-unit test-integration test-bike-random test-bike-unified-random model-min-sum run-model-min-sum sweep-min-sum optimum-min-sum campaign-min-sum confirm-min-sum check-model-rtl check-model-rtl-bike128 format-rtl check-format-rtl lint-rtl vivado-synth FORCE
 
 all: test
 
@@ -98,10 +98,16 @@ run-model-min-sum: model-min-sum
 	@$(MIN_SUM_MODEL) --profile bike128 --seed 1 --trials 1
 
 sweep-min-sum: model-min-sum
-	@python3 scripts/run_quantization_sweep.py --model $(MIN_SUM_MODEL)
+	@python3 scripts/run_quantization_experiment.py sweep --model $(MIN_SUM_MODEL)
 
-campaign-min-sum:
-	@scripts/run_quantization_campaign.sh
+optimum-min-sum: model-min-sum
+	@python3 scripts/run_quantization_experiment.py optimum --model $(MIN_SUM_MODEL)
+
+campaign-min-sum: model-min-sum
+	@python3 scripts/run_quantization_experiment.py campaign --model $(MIN_SUM_MODEL)
+
+confirm-min-sum: model-min-sum
+	@python3 scripts/run_quantization_experiment.py confirm --model $(MIN_SUM_MODEL)
 
 check-model-rtl: model-min-sum
 	@python3 scripts/check_model_rtl.py --model $(MIN_SUM_MODEL) --verilator $(VERILATOR)

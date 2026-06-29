@@ -1,0 +1,513 @@
+
+
+===== PAGE 1 =====
+IEEE TRANSACTIONS ON CIRCUITS AND SYSTEMS—II: EXPRESS BRIEFS, VOL. 67, NO. 1, JANUARY 2020 57
+Optimized Trellis-Based Min-Max Decoder
+for NB-LDPC Codes
+Jing Tian , Suwen Song, Jun Lin, Senior Member, IEEE, and Zhongfeng Wang , Fellow, IEEE
+Abstract—Non-binary low-density parity-check (NB-LDPC)
+codes outperform their binary counterparts in many cases.
+However, an NB-LDPC decoder usually requires excessive hard-
+ware resources and memory consumption. The trellis-based
+min-max decoding algorithm (TMMA), a well-known algorithm
+proposed in recent years, achieves good tradeoff between decod-
+ing performance and hardware complexity. Note that the check
+node processing unit (CNU) occupies the most hardware con-
+sumption. Based on the TMMA, many simpliﬁcations for the
+CNU have been developed with slight performance loss. The
+current TMMA with L truncations (L-TMMA) is promising for
+higher hardware efﬁciency than others. In this brief, based on
+the L-TMMA, we propose a new CNU design by incorporat-
+ing algorithmic transformation and architectural optimization to
+further reduce the hardware complexity and thereby the criti-
+cal path without any performance degradation. Synthesis results
+show that the proposed design achieves the lowest hardware con-
+sumption and the highest clock frequency with a small latency
+compared to the state-of-the-arts. Speciﬁcally, it saves more than
+1/3 hardware resources compared with its original one.
+Index Terms—Error correction codes, non-binary LDPC codes,
+iterative decoding, min-max decoding algorithm, low-complexity
+decoding, VLSI.
+I. I NTRODUCTION
+N
+ON-BINARY low-density parity-check (NB-LDPC)
+codes, ﬁrstly proposed by Davey and Mackay in 1998 [1],
+have attracted much attention due to their lower error ﬂoor,
+better error-correcting performance, and greater ability of burst
+error correction than their binary counterparts, especially for
+short and moderate code lengths. Nevertheless, the excessive
+computations in the decoding form the bottleneck all the time
+for their practical applications. The optimal decoding is per-
+formed by the q-ary sum-product algorithm (QSPA) [1] but
+it is unpractical because of the huge computational complex-
+ity and computation instability. In order to deal with these
+problems, many sub-optimal decoding algorithms like the
+extended min-sum algorithm (EMSA) [2] and min-max algo-
+rithm (MMA) [3], are proposed. However, their computational
+Manuscript received December 27, 2018; accepted January 28, 2019. Date
+of publication February 18, 2019; date of current version December 26, 2019.
+This work was supported in part by the National Natural Science Foundation
+of China under Grant 61774082 and Grant 61604068, and in part by
+the Fundamental Research Funds for the Central Universities under Grant
+021014380065. This brief was recommended by Associate Editor C. W. Sham.
+(Corresponding authors: Jun Lin; Zhongfeng Wang.)
+The authors are with the School of Electronic Science and Engineering,
+Nanjing University, Nanjing 210023, China (e-mail: jingtian_nju@sina.com;
+suwsong@sina.com; jlin@nju.edu.cn; zfwang@nju.edu.cn).
+Color versions of one or more of the ﬁgures in this paper are available
+online at http://ieeexplore.ieee.org.
+Digital Object Identiﬁer 10.1109/TCSII.2019.2900088
+complexity is still too high and they suffer a long latency as
+well.
+Recently, the trellis-based decoding algorithms for NB-
+LDPC codes have been widely used since they can greatly
+improve the degree of parallelism with good decoding
+performance and low computational complexity by shift-
+ing operations of the check node processing (CNP) from
+normal domain to delta domain. At the beginning, the simpli-
+ﬁed min-sum algorithm (SMSA) [4] and trellis-based EMSA
+(TEMSA) [5] were proposed. For the SMSA [4], Wang et al.
+presented an approximation for the CNP and conducted the
+CNP by parallelizing d
+c separate conﬁgurations for a check
+node after computing the 1-order conﬁguration (just one devi-
+ation). The TEMSA adds an extra column for the CNP to help
+compute in parallel. For the two algorithms, a trade-off can
+be made between the error performance and computational
+complexity by choosing a suitable number of deviations.
+The trellis-based MMA (TMMA) [6] is generalized from
+the TEMSA by replacing the addition operation with the
+comparison operation and reducing the deviations from three
+to two. Then, many simpliﬁed versions of the TMMA are
+developed [7]–[12]. Lacruz et al. [7] proposed the one
+minimum only TMMA (OMO-TMMA), in which the two-
+minimum ﬁnder is substituted by a one-minimum ﬁnder and
+an estimator for the second minimum. They compressed the
+messages exchanged from the check node to the variable node
+in [8], from q×d
+c×w bits to 2×(q− 1)×(w+⌈log dc⌉)+dc×p
+bits. In [9], they further reduced the exchanged messages
+to 2 × (q − 1) ×⌈ log d
+c⌉+ (q + 1) × w + (dc + 2) × p
+bits. In [10], they greatly compressed these messages to
+L × (w + p + 2 ×⌈ log dc⌉) + (q − 1) × w + dc × p bits, where
+L ≪ q. This new algorithm is simply called L-TMMA. When
+L is chosen appropriately, a good decoding performance can
+be achieved. Thi and Lee [11] processed the check node in
+a different way – by adding two extra columns for the CNP
+and replacing the two-minimum ﬁnder with the one-minimum
+ﬁnder, which could slightly improve the decoding performance
+but still needs the same number of exchanged messages as
+that of [8]. Inspired by the relaxed MMA (RMMA) [13], they
+developed the basic-set TMMA (BS-TMMA) and reduced the
+exchanged messages to p×(w+p+⌈log d
+c⌉)+(q−1)×w+dc×p
+bits while the algorithm suffers an observable performance
+degradation.
+Considering the decoding performance and hardware efﬁ-
+ciency, in this brief, we take the solution of L-TMMA [10]
+as the starting point to develop a new algorithm that utmostly
+reduces the exchanged messages and the hardware complexity
+without any performance loss. Meanwhile, a well-optimized
+1549-7747 c⃝ 2019 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission.
+See http://www.ieee.org/publications_standards/publications/rights/index.html for more information.
+Authorized licensed use limited to: Nanjing University. Downloaded on October 13,2022 at 07:02:58 UTC from IEEE Xplore.  Restrictions apply. 
+
+===== PAGE 2 =====
+58 IEEE TRANSACTIONS ON CIRCUITS AND SYSTEMS—II: EXPRESS BRIEFS, VOL. 67, NO. 1, JANUARY 2020
+check node processing unit (CNU) architecture is devised. In
+this design, several optimization techniques are introduced.
+1) (q − 1) 2-minimum ﬁnders are replaced by the (q − 1)
+1-minimum ﬁnders and L simpliﬁed 2-minimum ﬁnders;
+(q − 1 − L) comparators and multiplexers are saved.
+2) Using the idea of partition, a novel L-minimum ﬁnder
+is presented. The computational complexity of compara-
+tors is reduced from O((q − 1)2) to O((q − 1)L).
+3) When computing the extrinsic and intrinsic messages,
+the control logic and the computation logic modules
+are separately calculated, which signiﬁcantly decreases
+the hardware complexity and shortens the data path.
+By using the information of the control logic, the c2v
+messages are also directly generated.
+With these techniques, the proposed architecture is coded
+with RTL and synthesized under the TSMC 90nm CMOS
+technology. Synthesis results show that the proposed design
+achieves the lowest hardware consumption and the highest
+frequency among the state-of-the-arts.
+II. T
+HE MODIFIED TMM A LGORITHM
+A. Notations
+Consider an ( N, K ) NB-LDPC code over GF ( q)( q = 2p)
+with codeword length N and information length K. The parity
+check matrix H is a matrix over GF( q) with M rows and N
+columns. Each non-zero element of H is denoted as hm,n,f o r
+the m-th row and n-th column with 0 ≤ m < M, and 0 ≤
+n < N. The check node (CN) and variable node (VN) degrees
+are represented as dc and dv, respectively. M(n) is the set of
+CNs connected to the n-th VN (VNn). N(m) is the set of VNs
+related to the m-th CN (CN m). If dv and dc are constant, such
+a code is deﬁned as a ( dv, dc)-regular code. Otherwise, it is an
+irregular code. ⊕ and ⊗ respectively denote the addition and
+multiplication over GF( q).
+Let C = (c0, c1,..., cN−1) be a frame of codewords.
+The received channel probability vector of a codeword cn is
+denoted as Pn = (Pn(0), Pn(1) ,..., Pn(q− 1)), where its cor-
+responding hard decision symbol is zn = arg max
+a∈GF(q)
+Pn(a).
+The channel log-likelihood ratio (LLR) is deﬁned as
+Ln(a) = log P(zn)
+P(a) , (1)
+where a ∈ GF(q). Imax is the maximum number of iterations.
+B. Trellis-Based Min-Max Decoding Algorithm
+Let Qn(a) be the n-th posterior message, where 0 ≤ n < N
+and a ∈ GF(q). A soft message from CN m (or VN n)t o
+VNn (or CN m) is denoted as Rm,n(a) (or Qm,n(a)). Qr
+m,n(a)
+denotes the raw v2c message before the normalized process-
+ing. R
+k
+m,n(a) expresses the c2v message of the k-th iteration,
+where 0 ≤ k ≤ Imax. A hard message of the v2c message (or
+c2v message) is represented as bm,n (or βm,n). z′n stands for
+the tentative hard decision of the posterior message.
+The layered schedule for TMM algorithms is shown in
+Alg. 1. At the beginning, Qn(a) is initialized with the chan-
+nel message Ln(a) and R(0)
+m,n(a) is set to zero. In the iteration,
+Step 5 is to compute the raw v2c messages. The v2c hard mes-
+sage is calculated in Step 6. The v2c messages are normalized
+Algorithm 1: The Layered Schedule
+Input: H, Imax, Ln(a).
+Initialization:
+1: Set Qn(a) = Ln(a) and R(0)
+m,n(a) = 0.
+Iteration:
+2: for 0 < k ≤ Imax do
+3: for 0 ≤ m < M do
+4: for n ∈ N(m) do
+5: Qr
+m,n(a) = Qn(a ⊗ hm,n) − R(k−1)
+m,n (a)
+6: bm,n = arg min
+a∈GF(q)
+Qr
+m,n(a)
+7: Qm,n(a) = Qr
+m,n(a) − Qr
+m,n(bm,n)
+8: R(k)
+m,n(a) = TMMA(Qm,n(a), bm,n)
+9: Qn(a ⊗ h−1
+m,n) = R(k)
+m,n(a) + Qm,n(a)
+10: end for
+11: end for
+12: end for
+13: z
+′
+n = arg mina Qn(a)
+Output: z
+′
+n.
+Algorithm 2: The L-TMMA [10]
+Input: Qm,n(a), bm,n.
+1: /Delta1Qm,n(a) = Qm,n(a ⊕ bm,n)
+2: [m1(a), m1col(a), m2(a)] = 2-min{/Delta1Qm,ni(a)|dc
+i=1}
+3: [m1(a∗), m1col(a∗), a∗] = L-min{m1(a), m1col(a)}
+4: [M, S, P] = L-transfer{m1(a∗), m1col(a∗), a∗}
+5: E(a) =
+⎧
+⎪⎨
+⎪⎩
+m1(a), a ∈ S with two deviations
+m2(a), a ∈ S with one deviation
+F(a), a /∈ S
+6: βm,n = ∑
+n′ ∈N(m)/n
+b⊕
+m,n′
+7: R(k)
+m,n(a) = generator{M, S, P, E(a), βm,n}
+Output: R(k)
+m,n(a).
+by subtracting the minimal value in Step 7. The c2v message
+R(k)
+m,n(a) is computed with a speciﬁc TMMA based on the v2c
+hard and soft messages as shown in Step 8. The TMMA with L
+truncations (called L-TMMA) [10] will be detailed in the later.
+Step 9 is used to update the posterior message. The tentative
+hard decision is computed and output at last.
+The L-TMMA is summarized as in Alg. 2. After the v2c
+messages are transformed from normal domain to delta domain
+in Step 1, the ﬁrst and second minimum values, m1(a) and
+m2(a), and the column index of the ﬁrst minimum value
+m1
+col(a) of each row of a check node are calculated in Step 2.
+Based on these outputs, L minimum values m1(a∗) and their
+corresponding column indexes and symbols, m1col(a∗) and
+a∗, are computed by Step 3. In Step 4, the sets of L mutual
+exclusive symbols and their corresponding conﬁgurations and
+scalars are selected, denoted as S, P, and M, with dimensions
+of L,2 L, and L, respectively. The extrinsic information E(a)
+is computed as in Step 5, where F(a) is an approximate value
+for the extrinsic information calculated as
+F(a) = μ
+1 × m1(a) + μ2 × M(SL), (2)
+Authorized licensed use limited to: Nanjing University. Downloaded on October 13,2022 at 07:02:58 UTC from IEEE Xplore.  Restrictions apply. 
+
+===== PAGE 3 =====
+TIAN et al.: OPTIMIZED TRELLIS-BASED MIN-MAX DECODER FOR NB-LDPC CODES 59
+Algorithm 3: The Modiﬁed L-TMMA
+Input: Qm,n(a), bm,n.
+1: /Delta1Qm,n(a) = Qm,n(a ⊕ bm,n)
+2: m1(a) = 1-min{/Delta1Qm,ni(a)|dc
+i=1}
+3: [m1(a∗), a∗] = L-min{m1(a)}
+4: [m1col(a∗), m2(a∗)] = L-m2-col{/Delta1Qm,ni(a∗)|dc
+i=1}
+5: [M, S, P∗] = L-transfer{m1(a∗), m1col(a∗), a∗}
+6: E(a) =
+⎧
+⎪⎨
+⎪⎩
+m1(a), a ∈ S with two deviations
+m2(a), a ∈ S with one deviation
+F(a), a /∈ S
+7: βm,n = ∑
+n′ ∈N(m)/n
+b⊕
+m,n′
+8: R(k)
+m,n(a) = generator{M, S, P∗, E(a), βm,n}
+Output: R(k)
+m,n(a).
+Fig. 1. Performance comparison of different TMM algorithms for the
+(837, 726) NB-LDPC code over GF(32).
+where μ1 and μ2 are constant scaling factors. Step 6 is
+to compute the c2v hard messages for the inverse domain
+transformation. With these messages, the c2v messages are
+calculated by the function generator.
+C. Modiﬁed L-TMM Algorithm
+Note that Step 2 of Alg. 2 costs the most of computations.
+It can be observed that q values of m2(a) and m1col(a) are
+respectively calculated in Step 2, while only L elements of
+either set are used in the whole decoding, where L ≪ q.
+That means there are many redundant computations involved
+in Steps 2 and 3. Therefore, we reformulate Alg. 2 into Alg. 3,
+in which computing the L values of m1
+col(a∗) and m2(a∗)
+are put behind as shown in Step 4 of Alg. 3. In this way,
+q− L computations are reduced when calculating the two vari-
+ables. Consequently, a signiﬁcant complexity reduction of the
+whole decoding can be obtained without any performance loss.
+Additionally, the dimension of P
+∗ is reduced from 2L to 2L− 2
+as either the ﬁrst or the second minimal value ( M1 or M2) has
+only one deviation.
+The frame error rate (FER) performance of the adopted L-
+TMMA ( L = 4) is compared with other TMM algorithms
+as shown in Fig. 1, where an (837, 726) NB-LDPC code
+over GF(32) [14] is used. The TMMA [6], OMO-TMMA [7],
+Fig. 2. Optimized CNU,w h e r ew1 =⌈ log dc⌉.
+mTMMA [9], TEC-TMMA [11], and BS-TMMA [12] are sim-
+ulated for comparison. The scaling factors are all set to 0.5.
+Though 0.5 is not the optimal scaling factor for some of these
+algorithms, for the sake of hardware simplicity, we choose
+0.5 in this brief. I
+max is set to 15. It can be seen that the
+adopted L-TMMA has the best FER performance among the
+state-of-the-art algorithms.
+III. T
+HE PROPOSED ARCHITECTURE
+A. Proposed Architecture
+Based on the modiﬁed L-TMMA shown in Alg. 3, a well-
+optimized decoder architecture is proposed in this section.
+Figure 2 shows the top-level architecture of the CNU. The
+data ﬂow and data width are illustrated as well. A check node
+is processed in parallel and pipelining. Except the GF addition
+operators, the proposed CNU is composed of six modules: 1)
+N2D;2 ) 1-min ﬁnder ;3 ) L-min ﬁnder ;4 ) L-m2-col ﬁnder ;
+5) L-transfer; and 6) E-I generator.T h e N2D is the same as
+the previous works [5], [10]. The other ﬁve modules will be
+detailed in the following.
+1-min ﬁnder: In this module, the tree structure is adopted
+to reduce the critical path. The total number of either com-
+parators or multiplexers is (d
+c − 1)(q − 1) with a width of
+w bits. However, in the previous decoder [10], it requires
+(2dc − 3)(q − 1) w-bit comparators and (3dc − 3)(q− 1) w-bit
+multiplexers.
+L-min ﬁnder: By using the idea of partition, we propose
+a novel architecture for this module. log 2 L stages of 2-
+min full-ﬁnder unit are used and the inputs of each stage
+(except the ﬁrst stage) are updated by setting the correspond-
+ing inputs of the solved values as the maximum value. An
+example is shown in Fig. 3, where the number of inputs is
+assumed as 8 and L is set to 4. The 2-min full-ﬁnder unit
+is designed by slightly modifying the TS in [15]. The dec
+unit is devised as in Fig. 4 and a 3-8 dec example is illus-
+trated in the dashed box. If x = 3, y[2] = 1 and the other
+bits are zero. In [10] and [12], a full sorting approach is
+adopted and a large number of adders, inverters, and basic
+gates are required to choose the L minimum values and their
+corresponding indexes. They need (q − 1)(q − 2)/2 w-bit
+comparators, (q − 1)⌈log
+2(q − 1)⌉ adders, (q − 1)(q − 2)/2
+inverters, (q − 1)Lp XORs, (q − 1)L(w + 2p +⌈ dc⌉) ANDs,
+and (q − 1)L(w + p +⌈ dc⌉) w-bit ORs, while the proposed
+architecture in this module only needs (q − 1)L − 3L/2 w-bit
+comparators, 5(q − 1)L/2 − (q − 1) − 3Lw -bit multiplexers,
+(L/2− 1)p inverters, (L/2− 1)(q− 1)p ANDs, and (L− 1)(q− 1)
+Authorized licensed use limited to: Nanjing University. Downloaded on October 13,2022 at 07:02:58 UTC from IEEE Xplore.  Restrictions apply. 
+
+===== PAGE 4 =====
+60 IEEE TRANSACTIONS ON CIRCUITS AND SYSTEMS—II: EXPRESS BRIEFS, VOL. 67, NO. 1, JANUARY 2020
+Fig. 3. An example of the L-min ﬁnder , where the number of inputs is 8
+and L is set to 4.
+Fig. 4. The w-N dec module, where N ≤ 2w. A detailed 3-8 dec is illustrated
+in the dashed box. The number of outputs can be reduced by directly removing
+the corresponding AND gates.
+Fig. 5. The L-m2-col ﬁnder module, including two steps: 1) ﬁnding the L
+groups of inputs (shown in the upper dashed box); and 2) computing the L
+second minimum values and indexes of the minimum values (shown in the
+lower dashed box).
+ORs. The computational complexity of comparators is reduced
+from O((q − 1)2) to O((q − 1)L) and adders are completely
+removed in our design.
+L-m2-col ﬁnder: This module is used to compute the L sec-
+ond minimum values and indexes of the minimum values. As
+shown in Fig. 5, the architecture in the upper dashed box is to
+ﬁnd the L groups of inputs and that of the lower dashed box is
+used to compute the L second minimum values and indexes of
+TABLE I
+SYNTHESIS RESULT AND COMPARISONS OF THE CNU A RCHITECTURE
+FOR THE (837, 726) C ODE OVER GF(32) U NDER 90NM
+CMOS T ECHNOLOGY
+the minimum values. It costs L × (2dc − 3) w-bit comparators
+and L × (3dc − 4) + (q − 2) × dc × Lw -bit multiplexers.
+L-transfer: Based on the design in [10], this module is sim-
+pliﬁed in this brief. According to the fact that x⊕ y = xˆy and
+x ˆ y ˆ z = 0 equals x ˆ y = z, two comparators can be saved.
+E-I generator: This module is totally different from that
+in traditional designs, by using an indirect way to reduce the
+critical path and the hardware complexity. It is divided into two
+parts: the control logic and the computation logic. Figure 6
+shows these control logics, where L is set to 4. As shown
+in Figs. 6 (a) and (b), the four symbols are converted into a
+(q−1)-bit value y, where only four bits are 1. Figure 6 (c) saves
+the order of the L minimum values in w[i]f o r0 ≤ i < q − 1,
+where w[S
+0] = 00, w[S1] = 01, w[S2] = 10, w[S3] = 11, and
+w[i] = 00 for i /∈ S. As illustrated in Fig. 6(d), only 2L− 2 path
+messages need to be saved since either the ﬁrst or the second
+path has only one deviation. The control messages based on
+these path messages are denoted as x
+0, x1, x2, and x3.
+Based on these control information, the extrinsic message
+E[i] and intrinsic message I[i] are simultaneously computed as
+in Fig. 7, and the c2v message /Delta1Rm,n[i] can also be directly
+calculated as in Fig. 8. When L is set to 4, this module totally
+costs (23w + 4p + 8)(q − 1) + (6⌈log dc⌉+ 4)dc + 8 equiv-
+alent NAND gates, while in [10], computing the extrinsic
+and intrinsic messages requires (51w + 18p + 54⌈log d
+c⌉)(q −
+1) + 3⌈log dc⌉ equivalent NAND gates. When w = 5, for the
+(837, 726) NB-LDPC code over GF(32), they respectively cor-
+respond to 5359 and 19080 equivalent NAND gates. Nearly
+three quarters of hardware are saved by using our proposed
+architecture in this module.
+Figure 8 is used to compute the c2v message /Delta1R
+m,n[i] based
+on parts of the control information of the E-I generator mod-
+ule, where 0 < i < q and /Delta1Rm,n[0] = 0. It only requires
+(3+dcw)(q− 1) 2-to-1 multiplexers. However, in [10], besides
+the dcw(q − 1) 2-to-1 multiplexers, it extra costs 2 (q − 1)dc
+⌈log dc⌉-bit comparators and (q − 1)dc OR gates.
+B. Implementation Results and Comparisons
+To compare our proposed CNU architecture with conven-
+tional implementations of the TMMA and its variants, the
+proposed one is coded with RTL and synthesized under the
+TSMC 90nm CMOS technology. Five stages of pipeline are
+inserted as marked with red dashed lines shown in Fig. 2,
+which is equal to those in [6]. We implement the design for
+the (837, 726) NB-LDPC code. The critical path exists in the
+L-m2-col ﬁnder module and the clock frequency ( f
+clk) reaches
+Authorized licensed use limited to: Nanjing University. Downloaded on October 13,2022 at 07:02:58 UTC from IEEE Xplore.  Restrictions apply. 
+
+===== PAGE 5 =====
+TIAN et al.: OPTIMIZED TRELLIS-BASED MIN-MAX DECODER FOR NB-LDPC CODES 61
+Fig. 6. The control logic for the E-I generator module, where 0 < i < q and s =⌈ log dc⌉.
+Fig. 7. The computation logic for the E-I generator module.
+Fig. 8. Computing the c2v message /Delta1Rm,n[i] based on the above control
+information, where 0 < i < q.
+400 MHz. The implementation results and comparisons are
+listed in Table I. It can be seen that with a small number
+of pipeline stages, our design consumes the lowest hardware
+resources and achieves the highest clock frequency among
+the state-of-the-arts. Especially, the proposed CNU design
+for the modiﬁed L-TMMA reduces more than 1/3 hardware
+consumption compared to that of the original L-TMMA [10].
+IV . C
+ONCLUSION
+In this brief, we have presented a novel CNU architecture
+for the TMM decoder of NB-LDPC codes. Many optimization
+techniques, specially smart algorithmic transformation and
+novel architectural schemes, have been introduced and applied
+to this design. Synthesis results demonstrate the advantages of
+these techniques, and show that the proposed design is more
+efﬁcient than prior arts.
+R
+EFERENCES
+[1] M. C. Davey and D. Mackay, “Low-density parity check codes over
+GF(q),” IEEE Commun. Lett. , vol. 2, no. 6, pp. 165–167, Jun. 1998.
+[2] D. Declercq and M. Fossorier, “Decoding algorithms for nonbinary
+LDPC codes over GF (q),” IEEE Trans. Commun. , vol. 55, no. 4,
+pp. 633–643, Apr. 2007.
+[3] V . Savin, “Min–max decoding for non binary LDPC codes,” in Proc.
+IEEE Int. Symp. Inf. Theory , Jul. 2008, pp. 960–964.
+[4] C.-L. Wang, X. Chen, Z. Li, and S. Yang, “A simpliﬁed min-sum decod-
+ing algorithm for non-binary LDPC codes,” IEEE Trans. Commun. ,
+vol. 61, no. 1, pp. 24–32, Jan. 2013.
+[5] E. Li, D. Declercq, and K. Gunnam, “Trellis-based extended min-sum
+algorithm for non-binary LDPC codes and its hardware structure,” IEEE
+Trans. Commun., vol. 61, no. 7, pp. 2600–2611, Jul. 2013.
+[6] J. O. Lacruz, F. García-Herrero, D. Declercq, and J. Valls, “Simpliﬁed
+trellis min–max decoder architecture for nonbinary low-density parity-
+check codes,” IEEE Trans. Very Large Scale Integr. (VLSI) Syst., vol. 23,
+no. 9, pp. 1783–1792, Sep. 2015.
+[7] J. O. Lacruz, F. García-Herrero, J. Valls, and D. Declercq, “One
+minimum only trellis decoder for non-binary low-density parity-check
+codes,” IEEE Trans. Circuits Syst. I, Reg. Papers , vol. 62, no. 1,
+pp. 177–184, Jan. 2015.
+[8] J. O. Lacruz, F. García-Herrero, and J. Valls, “Reduction of complexity
+for nonbinary LDPC decoders with compressed messages,” IEEE Trans.
+Very Large Scale Integr. (VLSI) Syst. , vol. 23, no. 11, pp. 2676–2679,
+Nov. 2015.
+[9] J. O. Lacruz, F. García-Herrero, M. J. Canet, and J. Valls, “High-
+performance NB-LDPC decoder with reduction of message exchange,”
+IEEE Trans. Very Large Scale Integr. (VLSI) Syst. , vol. 24, no. 5,
+pp. 1950–1961, May 2016.
+[10] J. O. Lacruz, F. García-Herrero, M. J. Canet, and J. Valls, “Reduced-
+complexity nonbinary LDPC decoder for high-order Galois ﬁelds based
+on trellis min–max algorithm,” IEEE Trans. Very Large Scale Integr.
+(VLSI) Syst., vol. 24, no. 8, pp. 2643–2653, Aug. 2016.
+[11] H. P. Thi and H. Lee, “Two-extra-column trellis min–max decoder archi-
+tecture for nonbinary LDPC codes,”IEEE Trans. Very Large Scale Integr.
+(VLSI) Syst., vol. 25, no. 5, pp. 1787–1791, May 2017.
+[12] H. P. Thi and H. Lee, “Basic-set trellis min–max decoder architecture for
+nonbinary LDPC codes with high-order Galois ﬁelds,” IEEE Trans. Very
+Large Scale Integr. (VLSI) Syst., vol. 26, no. 3, pp. 496–507, Mar. 2018.
+[13] F. Cai and X. Zhang, “Relaxed min–max decoder architectures for non-
+binary low-density parity-check codes,” IEEE Trans. Very Large Scale
+Integr. (VLSI) Syst., vol. 21, no. 11, pp. 2010–2023, Nov. 2013.
+[14] B. Zhou et al. , “Construction of non-binary quasi-cyclic LDPC codes
+by arrays and array dispersions,” IEEE Trans. Commun., vol. 57, no. 6,
+pp. 1652–1662, Jun. 2009.
+[15] C.-L. Wey, M.-D. Shieh, and S.-Y . Lin, “Algorithms of ﬁnding the
+ﬁrst two minimum values and their hardware implementation,” IEEE
+Trans. Circuits Syst. I, Reg. Papers , vol. 55, no. 11, pp. 3430–3437,
+Dec. 2008.
+Authorized licensed use limited to: Nanjing University. Downloaded on October 13,2022 at 07:02:58 UTC from IEEE Xplore.  Restrictions apply. 

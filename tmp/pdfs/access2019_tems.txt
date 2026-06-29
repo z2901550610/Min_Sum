@@ -1,0 +1,1278 @@
+
+
+===== PAGE 1 =====
+Received March 1, 2019, accepted April 3, 2019, date of publication April 11, 2019, date of current version April 26, 2019.
+Digital Object Identifier 10.1 109/ACCESS.2019.2910240
+Efficient T-EMS Based Decoding Algorithms for
+High-Order LDPC Codes
+JING TIAN
+ , (Student Member, IEEE), SUWEN SONG
+ , JUN LIN, (Senior Member, IEEE),
+AND ZHONGFENG WANG
+ , (Fellow, IEEE)
+School of Electronic Science and Engineering, Nanjing University, Nanjing 210023, China
+Corresponding authors: Jun Lin (jlin@nju.edu.cn) and Zhongfeng Wang (zfwang@nju.edu.cn)
+This work was supported in part by the National Natural Science Foundation of China under Grant 61604068, and in part by the
+Fundamental Research Funds for the Central Universities under Grant 021014380065.
+ABSTRACT Non-binary low-density parity-check (NB-LDPC) codes show larger coding gain and lower
+error ﬂoor than their binary counterparts in many cases. However, the existing soft decoding algorithms of
+NB-LDPC codes generally suffer from high computational complexity. Recently, the trellis-based extended
+min-sum (T-EMS) decoding algorithm has attracted much attention since it can achieve good decoding
+performance with high parallelism and low computational complexity. In this paper, we propose two new
+methods to further reduce the computational complexity and enhance the decoding performance. Firstly,
+we introduce, with theoretical justiﬁcation, a universal scheme called threshold-based shrinking (TS)
+scheme, which facilitates signiﬁcant reduction of computational complexity for decoding of NB-LDPC
+codes. Secondly, we present a modiﬁed two-extra-column (TEC) scheme and apply it to the T-EMS. Further-
+more, a high-performance low-complexity decoding algorithm, named TEC-TEMS algorithm, is obtained.
+Combining the TS scheme with the TEC-TEMS, the new algorithm, named TS-TEC-TEMS algorithm,
+achieves much lower computational complexity and has negligible performance loss compared to the TEC-
+TEMS. For a 256-ary (256, 203) example code, compared to the T-EMS, the computational complexities of
+the TEC-TEMS and TS-TEC-TEMS algorithms are reduced by more than 50% and nearly 90%, respectively.
+Moreover, the TEC-TEMS and TS-TEC-TEMS both outperform the T-EMS by about 0.3dB when the frame
+error rate (FER) is around 10−5.
+INDEX TERMS Error correction codes, nonbinary low-density parity-check (NB-LDPC) codes, min-sum
+decoding algorithm, low computational complexity, forward error correction (FEC).
+I. INTRODUCTION
+Non-binary low-density parity-check (NB-LDPC) codes
+over GF( q) were ﬁrst introduced by Davey and Mackay
+in 1998 [1], which have been proved to outperform their
+binary counterparts especially for short and moderate
+block lengths [2]. The q-ary sum-product algorithm (QSPA)
+adopted in [1] is extended from the SPA for binary LDPC
+codes, which can approach the Shannon limit perfor-
+mance. However, its computational complexity is unbear-
+able due to the use of massive multiplications and the vast
+searching space. The complexity is reduced from O(q2) to
+O(q log q) using the Fast Fourier Transform-SPA (FFT-SPA)
+algorithm [3]. However, it still suffers large computational
+complexity from the complicated operations like divisions
+The associate editor coordinating the review of this manuscript and
+approving it for publication was Omer Chughtai.
+and multiplications. In order to remove multiplications from
+the check node processing (CNP) and variable node pro-
+cessing (VNP), the log-SPA [4] was proposed, which ﬁrstly
+changed operations from probability domain to logarithmic
+domain and introduced the max∗ operation for the CNP
+instead. These simpliﬁed algorithms for QSPA bring no per-
+formance loss, but they are still hardware-inefﬁcient.
+To improve the efﬁciency of NB-LDPC decoding, sev-
+eral sub-optimal algorithms [5], [6] are proposed based on
+the logarithmic domain, where only additions and compar-
+isons are involved. Declercq and Fossorier proposed the
+extended min-sum (EMS) algorithm [5]. In this algorithm,
+the conﬁgurations for the CNP are chosen from the nm
+(nm < q) most reliable values of each input vector and at
+most nc entries are different from the order-0 conﬁguration.
+If nm= q and nc= dc, the EMS is degenerated as the min-
+sum (MS) algorithm. Simulation results showed that there is
+50980
+2169-3536 
+ 2019 IEEE. Translations and content mining are permitted for academic research only.
+Personal use is also permitted, but republication/redistribution requires IEEE permission.
+See http://www.ieee.org/publications_standards/publications/rights/index.html for more information.
+VOLUME 7, 2019
+
+===== PAGE 2 =====
+J. Tian et al.: Efficient T-EMS-Based Decoding Algorithms for High-Order LDPC Codes
+an increasing gap of performance loss between the QSPA and
+the EMS as nm and nc decrease. A scaling factor or offset is
+introduced to compensate the performance loss. The min-max
+(MM) algorithm [6] is derived to help prevent the growth of
+the data width, by replacing the accumulation operations in
+the CNP of the EMS with comparison operations. But there
+is an about 0.2dB of bit error rate (BER) loss compared with
+the SPA. Later, quite a few researchers have spent efforts to
+further decrease the redundant conﬁgurations for the EMS
+and extend the methods to the MM [7]–[17], whereas visible
+performance loss is inevitably caused.
+Note that the forward-backward scheme for the CNP
+forms the bottleneck in the EMS and MM algorithms for
+high-speed applications. Recently, a novel scheme, called
+trellis-based scheme, has been proposed to enable a high
+degree of parallelism and low computational complexity with
+small performance loss. The trellis-based EMS (T-EMS)
+algorithm [18] was proposed by applying this scheme to the
+EMS. Then, this scheme is also used for the MM by many
+researchers to reduce the decoding latency and the computa-
+tional complexity [19]–[25]. However, their decoding perfor-
+mance is substantially inferior to the T-EMS.
+Besides, for the soft decoding of NB-LDPC codes, mes-
+sages are processed over a complete Galois ﬁeld GF( q), i.e.,
+to decode a codeword symbol, q candidate symbols require to
+be taken into consideration. Indeed, vast redundant informa-
+tion is involved, especially for a large q. Several works have
+been proposed previously to remove the redundancy of CNP ,
+such as the modiﬁed EMS [7], X-EMS [12], andµ-EMS [13]
+algorithms. Nevertheless, all of the candidate symbols are still
+considered and only the updated metrics are truncated. Addi-
+tionally, they just concentrate on the complexity reduction of
+CNP of the EMS and need to truncate and compensate the
+messages sent to check nodes in each iteration. Meanwhile,
+there is a growing performance loss when decreasing the
+number of remaining values.
+In this paper, based on the analysis above, we take the
+T-EMS as the starting point and propose two methods to
+further reduce the computational complexity and enhance its
+decoding performance. On the one hand, we propose a novel
+scheme, named threshold-based shrinking (TS) scheme, with
+mathematical justiﬁcation, to facilitate large reduction of
+computational complexity for NB-LDPC decoding without
+performance loss in most of the waterfall region. For the
+ﬁrst time, we jointly reduce the candidate symbols and their
+metrics, directly deal with the source messages instead of
+the updated messages, and obtain a large reduction on com-
+plexity. This new scheme can be intuitively shown in Fig. 1.
+For a certain code, two thresholds are employed in the ini-
+tialization step; then two corresponding subsets of a Galois
+ﬁeld are ﬁxed and adopted in the following iterative decod-
+ing. On the other hand, inspired by the idea of the two-
+extra-column (TEC) scheme for the TMM algorithm [24],
+we modify the TEC scheme and apply it to the simpliﬁed
+T-EMS algorithm. The new algorithm, called TEC-TEMS,
+has better decoding performance and lower computational
+FIGURE 1. Decoding flow comparison between the prior art and our work.
+complexity than the T-EMS, which has been preliminar-
+ily presented in our conference paper [26]. Combining the
+TS scheme with the TEC-TEMS algorithm, the proposed
+TS-TEC-TEMS algorithm further reduces the computational
+complexity signiﬁcantly and achieves nearly the same decod-
+ing performance as that of the TEC-TEMS. Generally, more
+than 50% computations can be saved by using this scheme.
+The main contributions of this paper are summarized as
+follows:
+1) A universal complexity-reduced scheme, called TS
+scheme, is proposed with theoretical justiﬁcation,
+to enable drastic reduction of computational complex-
+ity for general NB-LDPC decoding with negligible
+performance loss.
+2) Based on the T-EMS, a new decoding algorithm,
+called TEC-TEMS, is developed, which achieves better
+decoding performance and lower computational com-
+plexity than the original T-EMS.
+3) We incorporate the TS scheme into the TEC-TEMS,
+yielding the TS-TEC-TEMS decoding algorithm,
+which veriﬁes the effectiveness of this scheme. We
+also provide two other example algorithms, i.e., the
+TS-EMS and TS-TEMS to demonstrate the feasibility
+and universality of the TS scheme.
+Simulation results and complexity analysis are also
+included in this paper. The results show that for a (256,
+203) example code over GF(2 8), the TEC-TEMS and
+TS-TEC-TEMS achieve an extra coding gain of about 0.3dB
+compared with the T-EMS at the FER of nearly 10 −5,
+while the computational complexities of the TEC-TEMS and
+TS-TEC-TEMS are reduced by more than 50% and nearly
+90%, respectively.
+The rest of this paper is organized as follows. Section II
+introduces the notations and several typical NB-LDPC decod-
+ing algorithms. The TS scheme for NB-LDPC decoding algo-
+rithms is proposed with theoretical justiﬁcation in Section III.
+In Section IV, the TEC-TEMSA and TS-TEC-TEMSA are
+proposed. Simulation results and complexity analysis are
+presented in Section V. Finally, conclusions are drawn in
+Section VI.
+II. BACKGROUNDS
+In this section, basic notations are introduced ﬁrst. Then,
+a general decoding process for NB-LDPC codes is presented,
+and several mainstream decoding algorithms follow.
+VOLUME 7, 2019 50981
+
+===== PAGE 3 =====
+J. Tian et al.: Efficient T-EMS-Based Decoding Algorithms for High-Order LDPC Codes
+A. NOTATIONS
+Considering an ( N, K) NB-LDPC code over GF( q) (q= 2p)
+with block length N and information length K, parity check
+matrix H is a matrix over GF(q) with M rows and N columns.
+Each element of H is denoted as hi,j, where i and j are the
+row and column indices, 0 ≤ i < M , and 0 ≤ j < N . The
+check node degree and variable node degree are denoted asdc
+and dv, respectively.M(j) is the set of check nodes connected
+to the j-th variable node (VN j). N (i) is the set of variable
+nodes connected to the i-th check node (CN i). If dv and dc
+are constant, such a code is referred to as a ( dv, dc)-regular
+code; otherwise, it is an irregular code.⊕ and⊗ respectively
+denote the addition and multiplication over GF( q).
+Let C = (c0, c1,..., cN−1) denote a codeword. The
+received channel probability vector of a codeword symbol
+cj is q-tuple, denoted as Pj = (Pj(0), Pj(1),..., Pj(q−
+1)), where its corresponding tentative symbol zj =
+arg max
+a∈GF(q)
+Pj(a). Assuming that Xj is a random symbol of the
+j-th variable node, the channel log-likelihood ratio (LLR) is
+deﬁned as
+Lj(a)= log P(Xj= zj)
+P(Xj= a), (1)
+where a∈ GF(q).
+A soft message from CN i (or VN j) to VN j (or CN i) is
+denoted as Ci,j(a) (or Vi,j(a)) for a∈ GF(q), which is also
+called c2v (or v2c) soft message. A soft message is also
+deﬁned as a metric. Let λj(a) be the j-th posterior message.
+Imax is the maximum number of iterations.
+B. DECODING ALGORITHMS FOR NB-LDPC CODES
+Algorithm 1 presents the general decoding ﬂow in the loga-
+rithmic domain for NB-LDPC codes. After the initialization
+step, the iterative step follows, which is decomposed into
+four parts: 1) check node processing (CNP); 2) variable node
+processing (VNP); 3) tentative decision (TD); and 4) post-
+processing (PP).
+In the CNP , steps 2 and 4 are the direct and inverse per-
+mutations, where c denotes the scaling factor. The key oper-
+ation is expressed by the function Φ, whose input variable is
+the permuted v2c message V′
+i,j(a) and output variable is the
+permuted c2v message C′
+i,j(a). Different decoding algorithms
+lead to different expressions of Φ.
+In the VNP , before computing v2c messages, the posterior
+messageλj(a), which is used not only in this part but also in
+the TD, is ﬁrstly updated. Then, Vi,j(a) is calculated in Step 6
+of Alg. 1.
+In the TD, a tentative codeword is ﬁrstly computed with
+updated posterior messages. The decoding process will be
+terminated if the syndrome vector equals zero vector. On the
+other hand, a decoding failure is declared when the maximum
+number of iterations is exceeded.
+The PP will be executed unless the decoding is termi-
+nated. This part is inevitable since the quantized LLR mes-
+sages encounter the overﬂow problem due to the iterative
+Algorithm 1 General Decoding Flow for NB-LDPC
+Codes
+Input: H, Imax, Lj(a), zj.
+Initialization:
+1: Set Vi,j(a)= Lj(a) and k= 0.
+Iteration:
+1) Check node processing:
+2: V′
+i,j(hi,j⊗ a)= Vi,j(a)
+3: C′
+i,j(a)=Φ(V′
+i,j(a))
+4: Ci,j(h−1
+i,j ⊗ a)= c· C′
+i,j(a)
+2) V ariable node processing:
+5: λj(a)= Lj(a)+ ∑
+i∈M(j)
+Ci,j(a)
+6: Vi,j(a)=λj(a)− Ci,j(a)
+3) Tentative decision:
+7: z′
+j= arg min
+a∈GF(q)
+λj(a)
+8: If syndrome s= H· (z′)T= 0, return z′.
+9: If k= Imax, declare a decoding failure.
+4) Post-processing:
+10: Vi,j(a)= Vi,j(a)− min
+a∈GF(q)
+Vi,j(a)
+11: Then, k→ k+ 1 and skip back to Step 2.
+Output: z′
+j.
+accumulation. The v2c messages are offset by subtracting the
+minimum values to deal with this problem.
+The expressions of functionΦ for several typical decoding
+algorithms are outlined as follows:
+• Min-Sum Decoding Algorithm The MS is a kind
+of sub-optimal decoding algorithm evolving from the
+QSPA, where the complex operations like the multipli-
+cations are removed. The Φ function is computed as:
+C′
+i,j(a)= min
+∑
+aj′∈L(i|aj=a),
+j′∈N (i)/j
+V′
+i,j′(aj′), (2)
+where L(i|aj = a) denotes the set of conﬁgurations
+verifying the check node i such that aj = a for a ∈
+GF(q) and j∈ N (i).
+• Extended Min-Sum Decoding AlgorithmBased on the
+MS, the EMS [5] is proposed to reduce the space of
+L(i|aj= a), as:
+C′
+i,j(a)= min
+∑
+aj′∈conf (nm,nc),
+j′∈N (i)/j
+V′
+i,j′(aj′), (3)
+where conf (nm, nc) is a sub-space of L(i|aj = a).
+nm is the number of selected values from each and
+every incoming message vector and nc is the largest
+number of deviations from the order-0 conﬁgura-
+tion. Later, conf (nm, nc) is constantly studied and
+simpliﬁed [8], [14], [16].
+• Min-Max Decoding Algorithm The MM [6] is the vari-
+ant of the EMS, replacing the accumulation operation
+50982 VOLUME 7, 2019
+
+===== PAGE 4 =====
+J. Tian et al.: Efficient T-EMS-Based Decoding Algorithms for High-Order LDPC Codes
+with the comparison operation by using the inﬁnity norm
+theory, shown as:
+C′
+i,j(a)= min max
+aj′∈conf (nm,nc),
+j′∈N (i)/j
+V′
+i,j′(aj′). (4)
+• Trellis-Based Extended Min-Sum Decoding Algo-
+rithm Note that the above presented decoding algo-
+rithms are based on the forward-backward scheme,
+requiring a large number of cycles for the decoding. The
+trellis-based scheme, beneﬁting low-complexity high-
+speed decoder designs, is another kind of schemes,
+whoseΦ function is shown in Alg. 2. For convenience,
+it transfers the operations from normal domain to delta
+domain using the v2c hard message b and realizes the
+inverse transformation using the c2v hard message beta.
+The key computation is temporarily represented by func-
+tion9. For T-EMS [18], an extra column 1W is added
+to realize parallel processing. The formulated process of
+9 has two steps as shown in the following:
+1W (a)= min
+η(a)∈conf (nr,nc)
+dc∑
+t=1
+1V′
+i,jt (ηt (a)),
+(5)
+1C′
+i,jt (ηP
+t (a)⊕ a)= min{1C′
+i,jt (ηP
+t (a)⊕ a),
+1W (a)−1V′
+i,jt (ηP
+t (a))}, (6)
+where the nr most reliable v2c messages of each row
+are chosen, and ηP(a) is the conﬁguration that has the
+metric1W (a). The vacant positions are ﬁlled with either
+the ﬁrst minimum or the second minimum values of the
+corresponding rows. In [18], nr is set to 2 and nc to 3.
+• Trellis-Based Min-Max Decoding Algorithm The
+TMM [19] is an extended version of T-EMS. The main
+difference lies in the way to compute the extra column
+1W , which is shown as follows:
+1W (a)= min
+η(a)∈conf (1,2)
+max
+t
+1V′
+i,jt (ηt (a)). (7)
+In addition, many simpliﬁcations for (7) are proposed
+[20]–[25]. In [24], equation (6) is also modiﬁed by ﬁll-
+ing the vacant positions with a second extra column
+instead of the ﬁrst or second minimum values of rows
+when necessary.
+III. THRESHOLD-BASED SHRINKING METHOD FOR
+NB-LDPC DECODING ALGORITHMS
+In this section, a novel scheme, which can be applied to
+generic decoding algorithms of NB-LDPC codes, is pro-
+posed. This scheme is called as threshold-based shrink-
+ing (TS) scheme, where two thresholds are introduced to
+truncate the channel messages and help build two subsets
+of Galois ﬁelds. By limiting the decoding processing on the
+two subsets, the computations of the whole decoding are
+effectively reduced. We will ﬁrst separately present the two
+thresholds of this scheme with mathematical justiﬁcation, and
+Algorithm 2 Trellis-Based Decoding Scheme
+Input: V′
+i,j(a).
+The v2c hard messages:
+1: for j∈ N (i) do
+2: bj= arg min
+a∈GF(q)
+V′
+i,j(a)
+3: end for
+4: for j∈ N (i) do
+5: The c2v hard messages:
+βj= ∑
+j′∈N (i)/j
+b⊕
+j′
+6: Normal domain to delta domain:
+1V′
+i,j(a⊕ bj)= V′
+i,j(a)
+7: end for
+Computing c2v messages:
+8: 1C′
+i,j(a)=9(1V′
+i,j(a))
+Delta domain to normal domain:
+9: C′
+i,j(a)=1C′
+i,j(a⊕βj)
+Output: C′
+i,j(a).
+then explain how to combine it together with existing soft
+decoding algorithms. Without loss of generality, decoding
+algorithms processing on the logarithmic domain are consid-
+ered in the following discussion.
+A. MATHEMATICAL ANAL YSIS
+1) THE FIRST THRESHOLD
+For decoding algorithms of LDPC codes over GF( q), a code-
+word symbol is selected out of q symbols. A larger q means
+more redundant channel information with respect to a code-
+word symbol.
+The ﬁrst threshold is denoted as TB, to truncate channel
+messages at the initialization step. And then, only the remain-
+ing messages will be used in the iterative step. The purpose
+is to possibly abandon the redundant messages while keeping
+the codeword symbol in. The following deﬁnition is used for
+convenience:
+Deﬁnition 1: Let A be a channel LLR vector of size q.
+A shrunk version B of A is composed of values smaller than
+the threshold TB.
+According to Deﬁnition 1, B is the remaining vector trun-
+cated by TB and its complementary vector B′ is the discarded
+one. The feasibility and validity will be justiﬁed in the fol-
+lowing.
+The representation of B is written as:
+B={ A[a]∈ A| A[a]< TB, a∈ GF(q)}. (8)
+Based on (1), assume there exists a probabilityPTB that makes
+the following equation hold:
+log Pm
+PTB
+= TB, (9)
+VOLUME 7, 2019 50983
+
+===== PAGE 5 =====
+J. Tian et al.: Efficient T-EMS-Based Decoding Algorithms for High-Order LDPC Codes
+where Pm denotes the maximum probability. Equation (9) can
+be rewritten as follows:
+PTB= Pm
+eTB
+. (10)
+Since 0< Pm< 1, we have:
+0< PTB= Pm
+eTB
+< 1
+eTB
+. (11)
+It should be noted that, when q increases, the upper bound
+in (11) is much less possible to be approached. For simplicity,
+we still use this equation to draw a rough conclusion.
+Given that the number of elements inB is nB, the number of
+elements in B′ is q−nB. q−nB can be regarded as a variable to
+characterize the degree of computational complexity reduc-
+tion. The total probability of the discarded symbols (elements
+of B′) satisﬁes the following equation:
+q−nB∑
+PB′≤ (q− nB)· PTB < q− nB
+eTB
+≤ε, (12)
+whereε is an error-tolerant factor, which is expected to be as
+small as possible. To achieve a smaller ε, we can increase
+TB or decrease q− nB. However, larger q− nB is desired
+to reduce more computations. According to Deﬁnition 1,
+the selection of TB directly inﬂuences the vector B. The larger
+TB is, the more elements B may have, i.e., the larger nB might
+be. And then q− nB may be decreased. On the other hand,
+q− nB is also related to the order of a Galois ﬁeld and a
+given channel model which has many variables. Hence,q−nB
+is a function of these variables and we temporarily express
+this function as q− nB= f (TB, q,... ). Then the rightmost
+inequality of (12) can be rewritten as:
+f (TB, q,... )
+eTB
+≤ε. (13)
+Note that the AWGN has been widely used in literatures
+on information theory. Usually, it is true that if a decoding
+algorithm of LDPC codes is good over the AWGN, it will
+also be good over other channels, like the Rayleigh-fading
+channel. To further explore the relationship of TB and the
+function f , without loss of generality, we take the additive
+white Gaussian noise (AWGN) channel with binary phase
+shift keying (BPSK) modulation as an example. We denote
+the j-th received modulated noisy codeword vector as yj=
+(yj,0,..., yj,r,..., yj,p−1) for 0≤ j< N and 0≤ r < p. The
+received channel probability is formulated as:
+P(Xj= a|yj)=
+p−1∏
+r=0
+1√
+2πσ
+exp{− (yj,r− (1− 2ar ))2
+2σ 2 }, (14)
+where ar is the r-th bit of the symbol a andσ 2 is the channel
+noise variance. The corresponding channel LLR of (1) can be
+reformulated as:
+Lj(a)= log P(Xj= zj|yj)
+P(Xj= a|yj)
+= 2
+σ 2·
+p−1∑
+r=0
+yj,r (ar− zj,r ). (15)
+FIGURE 2. The relationships between ¯f and SNR for two high order
+codes, with TB equal to 18, 20, and 22. (a) For the 32-ary (837 , 726) code.
+(b) For the 256-ary (256, 203) code.
+The relationship between the channel noise variance and the
+signal-to-noise ratio (SNR) in dB is as follows:
+SNR= 10 log10( 1
+2Rσ 2 ), (16)
+where R is the code rate. Then, equation (15) is transformed
+as:
+Lj(a)= 4R· 10
+SNR
+10 ·
+p−1∑
+r=0
+yj,r (ar− zj,r ). (17)
+Replacing vector A with vector Lj, function f represents the
+number of LLR values where Lj(a)≥ TB for a∈ GF(q).
+Hence, the variables of f , besides TB and q, also include R,
+SNR, yj,r , and ( ar− zj,r ). Due to the nature of randomness
+of variable yj,r , the value of f for a channel LLR vector is
+also random. There is no point in calculating an individual
+message. Therefore, we use a sufﬁciently large frames of
+codeword samples to get an average value for function f as¯f .
+Let us turn back to (17). Note that the channel LLR Lj(a)
+is in exponential growth with the variable SNR and in lin-
+ear growth with the other variables, which means that Lj(a)
+is more sensitive to SNR. Using Monte-Carlo simulation,
+we ﬁrstly try to study the relationship between¯f and SNR for
+speciﬁc TB. If Lj(a) is not smaller than a TB, these kind of val-
+ues will be counted and averagely calculated for a codeword
+symbol. The statistically counting results are shown in Fig. 2,
+where two high order codes are considered and 10 5 frames of
+either one are simulated.
+From Fig. 2, we can see that if TB= 22 and SNR= 4,
+roughly 50% redundant symbols will be reduced for the (837,
+726) code and more than 70% redundant symbols reduction
+for the (256, 203) code will be obtained, while keeping the
+50984 VOLUME 7, 2019
+
+===== PAGE 6 =====
+J. Tian et al.: Efficient T-EMS-Based Decoding Algorithms for High-Order LDPC Codes
+error-tolerant factor smaller than 10−8. In terms of the trend,¯f
+increases almost linearly with SNR for a given TB. Moreover,
+the curves shown in Fig. 2(a) or 2(b) are nearly in parallel with
+each other and the gaps between adjacent curves are almost
+the same, which inspire us to build two mathematical models
+for the ﬁrst threshold TB as below:
+• Constant Model Considering the simplicity of imple-
+mentation, TB is set as a constant value:
+TB= T0, (18)
+where T0 is a positive value.
+By using this model, equation (13) can be expressed as:
+¯f (SNR)
+eT0
+≤ε, (19)
+where¯f is a linearly increasing function of SNR, which may
+deteriorate the decoding performance as SNR increases. For-
+tunately, as ε decreases exponentially with T0 but increases
+linearly with¯f , it is possible to choose a proper T0 to achieve
+an acceptableε and meanwhile keep a relatively small¯f .
+• Linear Model The linear model is designed for better
+decoding performance, which is presented as follows:
+TB= a· x+ b, (20)
+where a (a> 0) and b are the coefﬁcients, and x denotes
+the variable SNR.
+In this way, the relationships between ¯f and SNR can be
+illustrated as the dashed lines as in Fig. 2. Take the lower
+dashed line of Fig. 2(a) as an example. Using the coordinates
+SNR= 3, TB = 18 and SNR= 3.5, TB = 20, a line as
+TB= 4· SNR+ 6 is constructed. This line almost parallelizes
+the X-axis and ¯f is nearly equal to 15. Meanwhile, we can
+reformulated (13) as follows:
+¯f0
+ea·SNR+b≤ε, (21)
+where ¯f0 can be approximately regarded as a constant.
+It should be noted that when SNR is small, the decoding
+performance of a code is mainly affected by the noise. The
+negative impact introduced by the truncation operation is
+negligible. But when SNR increases, the noise is reduced
+and the small error classiﬁcation probability caused by this
+operation may gradually play a part. However, with this
+model, the upper bound ε can be exponentially reduced as
+SNR grows. It means that the proposed linear model for TB
+has a quite small impact on the decoding performance even
+with a large SNR while achieving a signiﬁcant complexity
+reduction.
+2) THE SECOND THRESHOLD
+It should be noted that the CNP is the most computationally
+complicated step in the whole decoding and the main task
+of this part for a symbol is to ﬁnd a conﬁguration that
+satisﬁes the minimal checksum in a vast searching space
+(qdc−2 conﬁgurations in total) made up of v2c messages.
+Additionally, this process usually shows robustness when
+ﬁnding an optimal conﬁguration, i.e., if a sub-optimal con-
+ﬁguration is used, the decoding performance may not be
+affected. Many simpliﬁcations have been proposed to reduce
+the redundancy as introduced before. All of them require to
+sort the inputs of CNP in each iteration. In this subsection,
+we propose a novel scheme to effectively decrease the compu-
+tational complexity of the CNP without any extra operations
+like sorting or truncating operations in the iteration step. The
+mathematical analysis is as follows.
+Firstly, we reformulate Step 6 of Alg. 1 for the v2c message
+as
+Vi,j(a)= Lj(a)+
+∑
+i′∈M(j)/i
+Ci′,j(a). (22)
+Notice that, Vi,j(a) is dominated by the channel LLR Lj(a)
+and tuned by an iteratively-updated accumulation term∑
+i′∈M(j)/i
+Ci′,j(a), which motivates us to efﬁciently simplify the
+inputs of CNP by directly making a prior truncation based
+on the channel messages at the initialization. As the redun-
+dancy of CNP is much larger than those of the other steps,
+we try to use another smaller threshold to more aggressively
+truncate the channel messages, and denote this new threshold
+as TC , where TC < TB. Then, the following assumption is
+proposed:
+Assumption 1: If a channel LLR L j(a) for a ∈ GF(q)
+satisﬁes the inequality L j(a) ≥ TC , this value and the
+corresponding symbol will be removed at the initialization
+step, and then, those symbols and their corresponding soft
+messages will be no longer involved in the following iterative
+calculations of the CNP .
+According to this assumption, the CNP of the existing
+decoding algorithms can be effectively simpliﬁed. Following
+simulation results will show that the performance has negligi-
+ble degradation when a relatively small TC is adopted. Simi-
+larly, the constant and linear models can be easily constructed
+as:
+• Constant Model
+TC= T1, (23)
+where T1 is an arbitrary positive value.
+• Linear Model
+TC= e· x+ g, (24)
+where e (e> 0) and g are the coefﬁcients, and x denotes
+the variable SNR.
+B. THRESHOLD-BASED SHRINKING SCHEME FOR
+NB-LDPC DECODING ALGORITHMS
+The TS scheme is developed from the two thresholds TB and
+TC introduced above. Based on these two thresholds, two
+subsets of a Galois ﬁeld GF( q) are deﬁned as:
+FB(q) 1={ a∈ GF(q)| Lj(a)< TB},
+FC (q) 1={ a∈ GF(q)| Lj(a)< TC}.
+VOLUME 7, 2019 50985
+
+===== PAGE 7 =====
+J. Tian et al.: Efficient T-EMS-Based Decoding Algorithms for High-Order LDPC Codes
+TABLE 1. Four TS schemes formed by combining different models of TB
+and TC .
+A macroscopic illustration of our scheme for NB-LDPC
+decoding is shown in Fig. 1. More precisely, let us employ the
+two ﬁelds in Alg. 1. At the initialization step, the two ﬁelds
+are ﬁrstly obtained. Then, in the CNP step, the c2v messages
+over ﬁeld FB(q) are computed by using the v2c messages
+over ﬁeld FC (q). In the rest steps, the posterior messages and
+tentative decisions are updated only when the corresponding
+symbols are in ﬁeld FB(q), and the v2c messages are updated
+and normalized on ﬁeld FC (q). It should be noted that, for the
+CNP , the conﬁgurations containing abandoned elements are
+ignored. Particularly, if all of the conﬁgurations of a symbol
+are ignored, an approximate value will be chosen, where this
+kind of symbol is usually not the ﬁnal codeword symbol.
+According to the mathematical models for TB and TC , four
+TS schemes (the CC, LC, CL, LL schemes) can be obtained
+as shown in Table 1. The results by using the constant combi-
+nation (namely, the CC scheme, TB= T0 and TC= T1) have
+been presented in our conference paper [27]. They show a
+large complexity reduction with negligible performance loss
+at the FER of about above 10−5 (corresponding to the BER of
+about 10−7), which conforms to our aforementioned analysis.
+A further discussion for these schemes will be given later.
+Compared with the conventional truncation (CT) scheme
+used like in the EMS [7], the essential difference is that the TS
+based algorithm has irregular number of kept messages after
+the initialization processing while the CT based algorithm
+has a regular structure all the time. This irregularity helps the
+proposed TS scheme have the following advantages:
+• The TS scheme consumes fewer computations than the
+CT scheme. The TS scheme only truncates the channel
+LLR messages using two thresholds at the initialization
+step and then two subsets of Galois ﬁeld are built and
+ﬁxed for the iterative step, whereas the CT scheme has to
+sort the v2c and c2v messages in the initial and iterative
+steps to keep the regularity.
+• To reduce the computational complexity, the CT scheme
+only considers the CNP , but in the TS scheme, besides
+the CNP , the other parts are also covered.
+• There is no performance gap between the algorithm
+with the TS scheme and the original algorithm in most
+of the waterfall region, but the algorithm with the CT
+scheme suffers from an increasing decoding gap when
+the parameter nm is decreased.
+IV. PROPOSED NB-LDPC DECODING ALGORITHMS
+A. TEC-TEMS ALGORITHM
+The TEC-TEMS is developed based on the T-EMS [18],
+inspired by the idea of the TEC-TMM [24]. As the min-max
+operation of the TMM itself reduces the accuracy of metrics,
+Algorithm 3 Two-Extra-Column T-EMS Algorithm
+Input :1V′
+i,j(a)
+1{m1(a), I (a)}= Min{1V′
+i,jk (a)|dc
+k=1}
+2{1W1(a),1 W2(a), p1(a), p2(a)}=
+2_min{ ∑
+ηk (a)∈conf (1,2)
+(m1(ηk (a)|k=1,2))}
+3 1W2(a)= min{1W2(a), TTEC}
+4 for k= 1 to dc do
+5 if k̸= p1(a) && k̸= p2(a) then
+6
+7 1C′
+i,jk (a)=1W1(a)
+8 else
+9 1C′
+i,jk (a)=1W2(a)
+10
+11 end if
+Output:1C′
+i,j(a)
+the performance improvement is limited in [24]. Note that the
+original motivation to replace the min-sum operation with the
+min-max operation is to help prevent the growth of the data
+width, which works well in the forward-backward scheme
+that requires recursive accumulation operations. Neverthe-
+less, in the trellis scheme, these conﬁgurations are simul-
+taneously calculated and usually no more than three terms
+are included. There is no need to use this kind of approx-
+imation for the trellis scheme considering the performance
+degeneration.
+Therefore, we here use the T-EMS as the baseline to
+increase the precision of the reliable metrics to improve the
+decoding performance. On the other hand, since the met-
+rics are nonnegative numbers and the reliability of a metric
+decreases along with the increase of the metric, we modify the
+TEC scheme by suppressing the precision of the large metrics
+to prevent the growth of the data width. We can simply
+use a threshold to truncate a metric to fulﬁll it. To achieve
+a lower computational complexity, we apply the modiﬁed
+TEC to a simpliﬁed T-EMS where nr = 1 and nc = 2
+and denote the new algorithm as TEC-TEMS. The detailed
+process of 9 function for the TEC-TEMS is presented
+in Alg. 3.
+In Step 1, as we set nr to 1, function Min only needs
+to ﬁnd the minimal value and its corresponding index in
+each row. conf (1, 2) in Step 2 covers conﬁgurations with at
+most 2 deviations based on these minimum values. Then,
+function 2_ min is used to compute the two extra columns
+(1W1 and 1W2) and the corresponding positions of 1W1
+(p1 and p2). The min operation in Step 3 is used to truncate
+the second extra column, where TTEC denotes the thresh-
+old, set as TC in our simulations. Steps 3-10 are to obtain
+the c2v messages by using the two extra columns and the
+positions.
+As the original T-EMS (nr= 2 and nc= 3) in [18] is well-
+known for its good decoding performance and high degree
+50986 VOLUME 7, 2019
+
+===== PAGE 8 =====
+J. Tian et al.: Efficient T-EMS-Based Decoding Algorithms for High-Order LDPC Codes
+FIGURE 3. An example to compute two extra columns by the T-EMS, with
+dc= 5 over GF(4).
+FIGURE 4. An example to compute two extra columns by the TEC-TEMS,
+with dc= 5 over GF(4).
+of parallelism, to better demonstrate the effectiveness of the
+proposed TEC-TEMS, we will further discuss the difference
+between the T-EMS and the TEC-TEMS. Assume the second
+minimum value vector computed by the T-EMS as a second
+extra column m2. We can illustrate a CN processed by the
+T-EMS and TEC-TEMS as shown in Figs. 3 and 4, where the
+CN has a check node degree of 5 over GF(4) and η denotes
+the symbol in delta domain ranging from 0 to q− 1.
+We can see that the ﬁrst extra columns vector1W and vec-
+tor1W1, computed by the T-EMS and TEC-TEMS respec-
+tively, are equal to each other, either of which represents the
+most reliable metrics of the leftmost corresponding symbols.
+The second extra columns are used to approximate the second
+most reliable metrics. It shows that vectorm2 and vector1W2
+are almost the same except the circled location where η= 2.
+The conﬁguration set ofη= 2 of this CN equals {9 (0⊕2), 17
+(1⊕3), 18 (0⊕2), 18 (1⊕3), 19 (1⊕3), . . . }, where the values
+in the parenthesis are the conﬁguration symbols for η= 2.
+Hence, the second most reliable metric of η= 2 equals 17,
+and the TEC-TEMS ﬁnds the correct values. The statistical
+data in [24] also shows that the values selected by the TEC
+scheme are closer to the real second most reliable values than
+directly using the ﬁrst or the second minimum v2c values of
+rows. We set the threshold TTEC to 15 so 1W2(2) is equal
+to 15 instead of 17, which could effectively reduce the data
+width while keeping the ﬁrst and second most reliable metrics
+distinguished. It is generally true that the error performance is
+heavily inﬂuenced by the choices of the second most reliable
+metrics for the vacant positions ( p1 and p2). We can see from
+the simulation results in the next section that though nr is set
+to 1 and nc to 2 in our proposed algorithm, the TEC-TEMS
+Algorithm 4 Threshold-Based Shrinking TEC-TEMS
+Algorithm
+Input :1V′
+i,j(a), a∈ F′
+C (q)
+1 for a∈ GF(q) do
+2 I (a)= 0
+3 {m1(a), I (a)}= min{1V′
+i,jk (a)|dc
+k=1, a∈ F′
+C (q)}
+4 1W1(a)= TTS, 1W2(a)= TTS, p1(a)=
+0, p2(a)= 0
+5 {1W1(a),1 W2(a), p1(a), p2(a)}=
+2_min{ ∑
+ηk (a)∈conf′(1,2)
+(m1(ηk (a)|k=1,2))}
+6 for k= 1 to dc do
+7 for a∈ F′
+B(q) do
+8 if k̸= p1(a) && k̸= p2(a) then
+9
+10 1C′
+i,jk (a)=1W1(a)
+11 else
+12 1C′
+i,jk (a)=1W2(a)
+13
+14 end if
+Output:1C′
+i,j(a), a∈ F′
+B(q)
+still shows better decoding performance than the original
+T-EMS (nr= 2 and nc= 3) due to the use of the modiﬁed
+TEC scheme, especially for high-order NB-LDPC codes.
+B. TS-TEC-TEMS ALGORITHM
+As mentioned before, the proposed TS scheme can be
+applied to almost all of the NB-LDPC decoding algorithms.
+In this subsection, we employ this scheme in the proposed
+TEC-TEMS as an example and get a new algorithm named
+TS-TEC-TEMS algorithm as shown in Alg. 4, where F′
+B(q)
+and F′
+C (q) are the ﬁelds of FB(q) and FC (q) after permutation
+and transformation, respectively. Step 2 is to initialize I (a) to
+zero as a ﬂag signal, which will be used in Step 5. If I (a)= 0,
+a conﬁgurationηk (a) containing the corresponding a will be
+ignored; conﬁgurations not involving such elements make up
+the set conf′(1, 2). If the case where there is no conﬁguration
+remained for a symbol happens, an approximation will be
+given as in Step 4, where TTS is an undetermined value and
+can be optimized by Monte-Carlo simulation. In the follow-
+ing simulations, TTS is set as TC . At last, the c2v messages
+over ﬁeld FB(q) are computed and output.
+Note that the TS scheme used in CNP directly affects the
+choice of m1(a) and I (a) (Step 3 of Alg. 4). If none of the
+values in vectors 1W1 and1W2 are approximately chosen,
+the decoding performance will be the same as that of the
+TEC-TEMS. Additionally, because the conﬁgurations with
+large metrics are removed by the TS scheme, the proposed
+TS-TEC-TEMS owns good decoding performance and mean-
+while effectively suppresses the growth of the data width
+without consuming extra comparisons.
+VOLUME 7, 2019 50987
+
+===== PAGE 9 =====
+J. Tian et al.: Efficient T-EMS-Based Decoding Algorithms for High-Order LDPC Codes
+FIGURE 5. The decoding performance of NB-LDPC decoding algorithms for three codes. (a) For the (256, 203) code C1 over GF(2 8). (b) For the
+(64, 41) code C2 over GF(2 6). (c) For the (837 , 726) code C3 over GF(2 5).
+FIGURE 6. Performance comparisons of decoding algorithms applied with the four TS schemes (i.e., the CC, LC, CL, LL schemes) for the three codes.
+(a) The TS-TEC-TEMS. (b) The TS-EMS. (c) The TS-TEMS.
+V. SIMULATION RESULTS AND COMPLEXITY ANALYSIS
+A. SIMULATION RESUL TS
+In this subsection, the simulation results of the proposed
+decoding algorithms will be given. We have done exten-
+sive experiments. In these results, we have selected three
+NB-LDPC codes with different code rates over different
+Galois ﬁelds. The ﬁrst code C1 is a (4, 16)-regular (256, 203)
+NB-LDPC code over GF(2 8) with a rate of 0.79. The second
+code C2 is a rate-0.64 (4, 8)-regular (64, 41) NB-LDPC
+code over GF(2 6). The third code C3 is a (4, 27)-regular
+(837, 726) NB-LDPC code over GF(2 5) with a rate of 0.87.
+The ﬁrst two codes are constructed based on the parallel
+bundles of lines in Euclidean geometries by using geometry
+decomposition [28], and the last code is structured by array
+dispersion [29]. The characteristics of these codes, like the
+Shannon limit, can also be referred to in the corresponding
+references. As the proposed two algorithms are modiﬁcations
+to the T-EMS with theoretical justiﬁcation given in the paper,
+we think these examples are sufﬁcient to explain the effec-
+tiveness of the proposed algorithms. We take the BPSK over
+the AWGN channel into account. The maximum number of
+iterations Imax is set to 50.
+As shown in Fig. 5, the proposed TEC-TEMS and
+TS-TEC-TEMS algorithms are simulated for the three
+codes. The EMS [5], T-EMS [18], MM [6], and TMM [19]
+algorithms are also simulated for performance comparisons.
+The scaling factors ( c) are also appended in the ﬁgures.
+The adopted parameters for the TS-TEC-TEMS for the three
+codes are the same, namely, ( a = 4, b = 4) for TB and
+(e = 3, g = 2) for TC , which can be well tuned to
+achieve a good tradeoff between the decoding performance
+and computational complexity. The results show that the
+code rate mainly decides the waterfall region of a code as
+usual. The EMS has the best decoding performance among
+them, which is also very close to that of the QSPA and the
+Shannon limit shown in [5]. For the proposed TEC-TEMS
+and TS-TEC-TEMS in each sub-ﬁgure, we can see that their
+decoding performances are almost the same, comparable to
+that of the MM, slightly inferior to that of the EMS, and better
+than those of the T-EMS and TMM, especially for NB-LDPC
+codes over high-order Galois ﬁelds. For example, both of
+them obtain an about 0.3dB extra coding gain compared to
+the T-EMS for the (256, 203) code.
+To practically verify the universality of the proposed TS
+schemes, two other TS based example algorithms, i.e. the
+TS-EMS and TS-TEMS, are also designed and simulated.
+The performance comparisons of three decoding algorithms
+applied with the four TS schemes for the three codes are
+shown in Fig. 6. The adopted parameters of different schemes
+for different algorithms with different codes are presented
+in Table 2. The simulation results show that the decoding per-
+formances of the TS based decoding algorithms are strictly
+50988 VOLUME 7, 2019
+
+===== PAGE 10 =====
+J. Tian et al.: Efficient T-EMS-Based Decoding Algorithms for High-Order LDPC Codes
+TABLE 2. Parameters and coefficients used for simulations in Fig. 6.
+FIGURE 7. The decoding performance of TEC-TEMS and TS-TEC-TEMS for three NB-LDPC codes. (a) For the (256, 203) code over GF(2 8). (b) For the
+(64, 41) code over GF(2 6). (c) For the (837 , 726) code over GF(2 5).
+the same as those of the original ones even when the FER is
+about 10−5. Then, usually, the LL based algorithms still per-
+form well even in a much lower error rate. However, the CC
+based algorithms show slight error ﬂoors in most cases. And
+the LC and CL based algorithms have performances between
+the LL and CC based algorithms. These performance degra-
+dations indicate that the small error classiﬁcation probability
+plays a non-trivial role in these regions, just as analyzed in
+Section III. Note that there is no performance gap between the
+original algorithms and the new ones in most of the waterfall
+regions, different from the EMS in [7].
+As the LL scheme is more practical than other schemes,
+we are going to introduce the way we use to select its param-
+eters. As explained in Section III-A, when setting the param-
+eter¯f as constant, the linear model for TB is obtained based
+on the dashed lines parallelizing to the X axis shown in Fig. 2.
+In those cases, the parameter a is ﬁxed. For the two example
+codes in Fig. 2, a is equal to 4. And b is used to shift the curve
+up and down. Based on the constraint shown in (21), when a
+speciﬁc upper bound for the error classiﬁcation probability
+is chosen, b can be decided correspondingly. Different from
+TB, TC cannot be directly deduced. Of course, any effective
+methods can be used to optimize this parameter. However,
+the Monte Carlo method is usually widely used and very
+suitable to optimize the parameters of NB-LDPC decoding
+algorithms, and the compared algorithms in the literatures
+were only optimized by using the Monte Carlo method. Thus,
+we adopt the estimated density evolution simulated by means
+of Monte Carlo estimations of densities to determine e and
+g of its linear model, using a sufﬁciently large number of
+samples. In order to discuss the separate effectiveness of TB
+and TC for the decoding performance, ﬁve sets of parame-
+ters for the TS-TEC-TEMS are given for the three different
+NB-LDPC codes shown as in Fig. 7. The TEC-TEMS curve
+is also provided as a baseline. Generally, these curves in each
+sub-ﬁgure show consistent performances with the original
+ones when the FER is not too low in the waterfall regions.
+As the SNR continuously increases, the divergence gradually
+occurs. These differences are highlighted in these partial
+enlargements. To further detail the inﬂuence caused by the
+two thresholds, the ﬁve sets, marked as TS 1, TS 2, TS 3,
+TS 4, and TS 5, can be classiﬁed into two groups. The ﬁrst
+group including the TS 1, TS 2, and TS 5, is used to verify the
+effect of the ﬁrst threshold TB. The second group, covering
+the TS 3, TS 4, and TS 5, is designed to test the impact of TC .
+For fair comparisons, only the constant coefﬁcients, i.e. the
+parameters b and g, are changed with an interval of 2. We can
+see that a signiﬁcant performance improvement appears in
+the ﬁrst group when increasing the value of b. But this kind
+of improvement is not obvious in the second group as g
+increases. In contrast, we notice that there is a better decoding
+performance with a smaller g in some cases, such as the TS
+3 curve versus the TS 5 curve in Fig. 7(b) and the TS 4 curve
+versus the TS 3 curve in Fig. 7(c). It means that the proposed
+approximation related to TC has a compensation for the
+cases with overestimation caused by the original estima-
+tion method. It can also explain the phenomenon where
+the TS based algorithms perform slightly better than the
+original ones in some cases. In other words, there is a
+robustness when choosing the coefﬁcients of TC . In brief,
+in order to effectively reduce the computational complexity
+and achieve a comparable decoding performance, the ﬁrst
+threshold TB cannot be too small, but the second threshold
+TC can be aggressively reduced. A tradeoff can be made
+between the complexity and performance based on the two
+thresholds.
+VOLUME 7, 2019 50989
+
+===== PAGE 11 =====
+J. Tian et al.: Efficient T-EMS-Based Decoding Algorithms for High-Order LDPC Codes
+TABLE 3. Analysis of computational complexity per iteration for the proposed algorithms and the T-EMS.
+B. COMPLEXITY ANAL YSIS
+Note that the T-EMS is the starting point of the TEC-TEMS
+and TS-TEC-TEMS. We will analyze and compare the com-
+putational complexity of them in the following.
+According to Algs. 1-4 and the description for T-EMS
+in [18], the computational operations of the three algorithms
+can be summarized into ﬁve categories: the ﬁnite-ﬁeld addi-
+tion (FA), ﬁnite-ﬁeld multiplication (FM), real multiplication
+(RM), real addition (RA), and comparison and selection (CS).
+Because the proposed two methods have an impact on the
+whole decoding, we will take the computation complexity of
+the complete decoding process into consideration and count
+the number of operations by per iteration. The computational
+complexity of the initialization step is averagely distributed
+to each iteration. The number of nonzero values in H matrix
+is denoted asδ= dcM= dvN .
+For the TEC-TEMS, we can ﬁrst focus on Alg. 1. It can be
+easily calculated that, except the Φ function, the other parts
+take (dc− 1)M FAs, (2q+ 1)δ FMs, qδ RMs, 3qδ RAs, and
+(q− 1)(N+δ) CSs per iteration. In Alg. 2, Step 2 can be
+divided into two sub-steps as:
+b′
+j= arg min
+a∈GF(q)
+Vi,j(a), (25)
+bj= b′
+j⊗ hi,j. (26)
+Note that the ﬁrst sub-step has been computed in Step 10
+of Alg. 1. Therefore, the trellis-based decoding for the Φ
+function costs (2dc− 1)M+ 2qδ FAs andδ FMs to compute
+the v2c and c2v hard messages, and the direct and inverse
+domain transformations. The TEC-TEMS for the 9 function
+is shown in Alg. 3. Step 1 requires ( dc− 1)(q− 1)M CSs
+and Steps 3-10 need ( q− 1)(2δ+ M ) CSs. Back to Step 2,
+the worst case is that the q/2− 1 pairs of conﬁgurations for
+a symbol have different column indexes and all need to be
+computed. Considering that case, it takes ( q/2− 1)(q− 1)M
+RAs and ( q− 3)(q− 1)M CSs. In addition, comparing the
+column indexes requires ( q/2− 1)(q− 1)M CSs.
+For the proposed TS-TEC-TEMS, according to the intro-
+duction in Section III, the initial step averagely takes ( q+
+nB)N/Imax CSs per iteration. Thanks to the use of the two
+ﬁelds FB(q) and FC (q), in the iterative step, except the 9
+TABLE 4. Numerical analysis of the computational complexity.
+function, the complexity of the other parts can be computed
+by replacing the parameter q with nB or nC . Algorithm 4
+shows the computing process of the 9 function. In Step 3,
+the number of the v2c messages of a row for a symbol is
+averagely computed as nr
+C = nC· dc
+q . Then, this step costs
+(nr
+C− 1)(q− 1)M CSs. Steps 6-14 take 2( nB− 1)δ CSs.
+For Step 5, we assume t as the average number of remaining
+pairs of conﬁgurations for a symbol, which can be statistically
+obtained by the Monte-Carlo simulation. The complexity of
+this step can be formulated as ( x− 1)(q− 1)M RAs and
+(3x− 4)(q− 1)M CSs.
+Computing the computational complexity of the T-EMS is
+referred to [18], where nr is 2 and nc is 3. The computations
+per iteration of the three algorithms are concluded in Table 3.
+Obviously, the complexity of the TEC-TEMS is less than that
+of the T-EMS, and that of the TS-TEC-TEMS is also signif-
+icantly reduced. To be more precise, the numerical analyses
+for C1 and C3 codes are presented in Table 4. The parameters
+nB, nC , and t for the TS-TEC-TEMS with the LL scheme
+(TS 5) are statistically counted with 105 frames of either code
+when the FER is about 10−5, as shown in Table 5.
+The total numbers of operations are also listed in Table 4
+as a reference. Based on the normalization in the brackets,
+compared with the T-EMS, the complexity of the proposed
+50990 VOLUME 7, 2019
+
+===== PAGE 12 =====
+J. Tian et al.: Efficient T-EMS-Based Decoding Algorithms for High-Order LDPC Codes
+TABLE 5. The statistical values of the parameters for NB-LDPC codes at
+the FER of lower than 10−4.
+TABLE 6. The extra coding gains between the proposed algorithms and
+the T-EMS.
+TEC-TEMS is reduced by more than 50% for C1 and by
+about 35% for C3. The complexity of the proposed TS-TEC-
+TEMS is further signiﬁcantly reduced. Generally, more than
+half of computations can be saved by the introduced TS
+scheme. Compared to the T-EMS, nearly 90% complexity
+is reduced for code C1 and more than 70% complexity for
+code C3. Meanwhile, the proposed algorithms achieve better
+FER performance than the T-EMS. For example, as listed
+in Table 6, an extra coding gain of about 0.3dB is obtained for
+C1 and that of about 0.03dB for C3 at the FER of about 10−5.
+VI. CONCLUSION
+In this paper, we have proposed two methods to reduce the
+computational complexity and enhance the decoding perfor-
+mance for the T-EMS algorithm of NB-LDPC codes. At ﬁrst,
+the TS scheme is presented with theoretical justiﬁcations,
+which facilitates large complexity reduction for the decoding
+of NB-LDPC codes. Then, the TEC scheme is modiﬁed and
+applied to the T-EMS algorithm. The proposed two new algo-
+rithms, the TEC-TEMS and TS-TEC-TEMS, both achieve
+better decoding performance and lower computational com-
+plexity than the T-EMS that is well-known in achieving good
+decoding performance with low computation complexity.
+Considering a 256-ary (256, 203) example code, compared
+to the T-EMS, both the TEC-TEMS and TS-TEC-TEMS
+achieve an extra coding gain of about 0.3dB. In addition,
+the computational complexity of the TEC-TEMS is reduced
+by more than 50% and the TS-TEC-TEMS has almost 90%
+computational complexity reduction.
+REFERENCES
+[1] M. C. Davey and D. MacKay, ‘‘Low-density parity check codes over
+GF(q),’’ IEEE Commun. Lett., vol. 2, no. 6, pp. 165–167, Jun. 1998.
+[2] D. J. C. MacKay, ‘‘Good error-correcting codes based on very sparse
+matrices,’’IEEE Trans. Inf. Theory, vol. 45, no. 2, pp. 399–431, Mar. 1999.
+[3] L. Barnault and D. Declercq, ‘‘Fast decoding algorithm for LDPC over
+GF(2q),’’ inProc. IEEE Inf. Theory Workshop, Mar./Apr. 2003, pp. 70–73.
+[4] H. Wymeersch, H. Steendam, and M. Moeneclaey, ‘‘Log-domain decoding
+of LDPC codes over GF(q),’’ in Proc. IEEE Int. Conf. Commun. , vol. 2,
+Jun. 2004, pp. 772–776.
+[5] D. Declercq and M. Fossorier, ‘‘Decoding algorithms for nonbinary LDPC
+codes over GF (q),’’ IEEE Trans. Commun. , vol. 55, no. 4, pp. 633–643,
+Apr. 2007.
+[6] V . Savin, ‘‘Min-max decoding for non binary LDPC codes,’’ in Proc. IEEE
+Int. Symp. Inf. Theory , Jul. 2008, pp. 960–964.
+[7] A. V oicila, D. Declercq, F. V erdier, M. Fossorier, and P . Urard, ‘‘Low-
+complexity decoding for non-binary LDPC codes in high order ﬁelds,’’
+IEEE Trans. Commun., vol. 58, no. 5, pp. 1365–1375, May 2010.
+[8] E. Boutillon and L. C. Canencia, ‘‘Bubble check: A simpliﬁed algo-
+rithm for elementary check node processing in extended min-sum non-
+binary LDPC decoders,’’ IEEE Electron. Lett., vol. 46, no. 9, pp. 633–634,
+Apr. 2010.
+[9] J. Lin, J. Sha, Z. Wang, and L. Li, ‘‘Efﬁcient decoder design for nonbinary
+quasicyclic LDPC codes,’’ IEEE Trans. Circuits Syst. I, Reg. Papers ,
+vol. 57, no. 5, pp. 1071–1082, May 2010.
+[10] J. Lin, J. Sha, Z. Wang, and L. Li, ‘‘An efﬁcient VLSI architecture for
+nonbinary LDPC decoders,’’ IEEE Trans. Circuits Syst. II, Exp. Briefs ,
+vol. 57, no. 1, pp. 51–55, Jan. 2010.
+[11] K. He, J. Sha, and Z. Wang, ‘‘Nonbinary LDPC code decoder architecture
+with efﬁcient check node processing,’’ IEEE Trans. Circuits Syst. II, Exp.
+Briefs, vol. 59, no. 6, pp. 381–385, Jun. 2012.
+[12] X. Ma, K. Zhang, H. Chen, and B. Bai, ‘‘Low complexity X-EMS algo-
+rithms for nonbinary LDPC codes,’’ IEEE Trans. Commun., vol. 60, no. 1,
+pp. 9–13, Jan. 2012.
+[13] S. Zhao, Z. Lu, X. Ma, and B. Bai, ‘‘A variant of the EMS decoding
+algorithm for nonbinary LDPC codes,’’IEEE Commun. Lett., vol. 17, no. 8,
+pp. 1640–1643, Aug. 2013.
+[14] E. Boutillon, L. Conde-Canencia, and A. A. Ghouwayel, ‘‘Design of a
+GF(64)-LDPC decoder based on the EMS algorithm,’’ IEEE Trans. Cir-
+cuits Syst. I, Reg. Papers, vol. 60, no. 10, pp. 2644–2656, Oct. 2013.
+[15] F. Cai and X. Zhang, ‘‘Relaxed min-max decoder architectures for non-
+binary low-density parity-check codes,’’ IEEE Trans. V ery Large Scale
+Integr . (VLSI) Syst., vol. 21, no. 11, pp. 2010–2023, Nov. 2013.
+[16] P . Schläfer, N. Wehn, M. Alles, T. Lehnigk-Emden, and E. Boutillon, ‘‘Syn-
+drome based check node processing of high order NB-LDPC decoders,’’
+in Proc. 22nd Int. Conf. Telecommun. (ICT), Apr. 2015, pp. 156–162.
+[17] Q. Huang, L. Song, and Z. Wang, ‘‘Set message-passing decoding algo-
+rithms for regular non-binary LDPC codes,’’ IEEE Trans. Commun. ,
+vol. 65, no. 12, pp. 5110–5122, Dec. 2017.
+[18] E. Li, D. Declercq, and K. Gunnam, ‘‘Trellis-based extended min-sum
+algorithm for non-binary LDPC codes and its hardware structure,’’ IEEE
+Trans. Commun., vol. 61, no. 7, pp. 2600–2611, Jul. 2013.
+[19] J. O. Lacruz, F. García-Herrero, D. Declercq, and J. V alls, ‘‘Simpliﬁed
+trellis min–max decoder architecture for nonbinary low-density parity-
+check codes,’’ IEEE Trans. V ery Large Scale Integr . (VLSI) Syst., vol. 23,
+no. 9, pp. 1783–1792, Sep. 2015.
+[20] J. O. Lacruz, F. Garcia-Herrero, J. V alls, and D. Declercq, ‘‘One minimum
+only trellis decoder for non-binary low-density parity-check codes,’’ IEEE
+Trans. Circuits Syst. I, Reg. Papers, vol. 62, no. 1, pp. 177–184, Jan. 2015.
+[21] J. O. Lacruz, F. Garcia-Herrero, and J. V alls, ‘‘Reduction of complexity for
+nonbinary LDPC decoders with compressed messages,’’ IEEE Trans. V ery
+Large Scale Integr . (VLSI) Syst., vol. 23, no. 11, pp. 2676–2679, Nov. 2015.
+[22] J. O. Lacruz, F. G. Herrero, M. J. Canet, and J. V alls, ‘‘High-performance
+NB-LDPC decoder with reduction of message exchange,’’ IEEE Trans.
+V ery Large Scale Integr . (VLSI) Syst. , vol. 24, no. 5, pp. 1950–1961,
+May 2016.
+[23] J. O. Lacruz, F. G. Herrero, M. J. Canet, and J. V alls, ‘‘Reduced-complexity
+nonbinary LDPC decoder for high-order Galois ﬁelds based on trellis min-
+max algorithm,’’IEEE Trans. V ery Large Scale Integr . (VLSI) Syst., vol. 24,
+no. 8, pp. 2643–2653, Aug. 2016.
+[24] H. P . Thi and H. Lee, ‘‘Two-extra-column trellis min–max decoder archi-
+tecture for nonbinary LDPC codes,’’ IEEE Trans. V ery Large Scale Integr .
+(VLSI) Syst., vol. 25, no. 5, pp. 1787–1791, May 2017.
+[25] H. P . Thi and H. Lee, ‘‘Basic-set trellis Min–Max decoder architecture for
+nonbinary LDPC codes with high-order Galois ﬁelds,’’ IEEE Trans. V ery
+Large Scale Integr . (VLSI) Syst., vol. 26, no. 3, pp. 496–507, Mar. 2018.
+[26] S. Song, J. Lin, J. Tian, and Z. Wang, ‘‘A reduced complexity decoding
+algorithm for NB-LDPC codes,’’ in Proc. IEEE 17th Int. Conf. Commun.
+Technol. (ICCT), Oct. 2017, pp. 127–131.
+[27] J. Tian, J. Lin, and Z. Wang, ‘‘An efﬁcient NB-LDPC decoding algo-
+rithm for next-generation memories,’’ in Proc. IEEE Int. Symp. Circuits
+Syst. (ISCAS), May 2018, pp. 1–5.
+[28] L. Zeng, L. Lan, Y . Y . Tai, B. Zhou, S. Lin, and K. A. S. Abdel-Ghaffar,
+‘‘Construction of nonbinary cyclic, quasi-cyclic and regular LDPC codes:
+A ﬁnite geometry approach,’’ IEEE Trans. Commun. , vol. 56, no. 3,
+pp. 378–387, Mar. 2008.
+[29] B. Zhou, J. Kang, S. Song, S. Lin, K. Abdel-Ghaffar, and M. Xu, ‘‘Con-
+struction of non-binary quasi-cyclic LDPC codes by arrays and array dis-
+persions,’’IEEE Trans. Commun., vol. 57, no. 6, pp. 1652–1662, Jun. 2009.
+VOLUME 7, 2019 50991
+
+===== PAGE 13 =====
+J. Tian et al.: Efficient T-EMS-Based Decoding Algorithms for High-Order LDPC Codes
+JING TIAN (S’18) received the B.S. degree
+in microelectronics from Nanjing University,
+Nanjing, China, in 2015, where she is currently
+pursuing the M.S. and Ph.D. integrated degrees in
+information and communication engineering. Her
+research interests include forward error correction
+decoding algorithm and VLSI design for digital
+signal processing.
+SUWEN SONG received the B.S. degree in elec-
+tronic information science and technology from
+Nanjing University, Nanjing, China, in 2017,
+where she is currently pursuing the M.S. and Ph.D.
+integrated degrees. Her research interests include
+error correction coding and decoding algorithms,
+especially for LDPC codes. Moreover, she also
+has interest in their efﬁcient VLSI designs and
+implementations.
+JUN LIN (S’14–SM’18) received the B.S. degree
+in physics and the M.S. degree in microelec-
+tronics from Nanjing University, Nanjing, China,
+in 2007 and 2010, respectively, and the Ph.D.
+degree in electrical engineering from Lehigh Uni-
+versity, Bethlehem, in 2015.
+From 2010 to 2011, he was an ASIC Design
+Engineer with AMD. In summer 2013, he was an
+Intern with Qualcomm Research, Bridgewater, NJ,
+USA. In 2015, he joined the School of Electronic
+Science and Engineering, Nanjing University, where he is currently an
+Associate Professor. His current research interest includes low-power high-
+speed VLSI design, speciﬁcally the VLSI design for digital signal processing
+and cryptography. He is a member of the Design and Implementation of
+Signal Processing Systems (DISPS) Technical Committee of the IEEE Signal
+Processing Society. He was a co-recipient of the Merit Student Paper Award
+at the IEEE Asia Paciﬁc Conference on Circuits and Systems, in 2008.
+He was a recipient of the 2014 IEEE Circuits and Systems Society (CAS)
+Student Travel Award.
+ZHONGFENG WANG (M’00–SM’05–F’16)
+received the B.E. and M.S. degrees from Tsinghua
+University, Beijing, China, and the Ph.D. degree
+from the Department of Electrical and Computer
+Engineering, University of Minnesota, Minneapo-
+lis, MN, USA, in 2000.
+He joined Nanjing University as a Distinguished
+Professor in 2016, after serving Broadcom Corp.,
+as a leading VLSI Architect, for nine years. From
+2003 to 2007, he was an Assistant Professor with
+the School of EECS, Oregon State University, Corvallis, OR, USA. Pre-
+viously, he was with National Semiconductor Corporation. He is a world-
+recognized expert on VLSI for Forward Error Correction Codes. He has
+published nearly two hundreds of technical papers, has edited one book
+(VLSI), and has ﬁled tens of U.S. patent applications and disclosures.
+He was a recipient of the IEEE Circuits and Systems (CAS) Society VLSI
+Transactions Best Paper Award, in 2007. In the current record, he had
+ﬁve papers ranked among top twenty most downloaded manuscripts in the
+IEEE T RANSACTIONS ON VLSI S YSTEMS, since 2007. During his tenure at
+Broadcom, he has contributed signiﬁcantly on 10Gbps and beyond high-
+speed networking products. In addition, he has made critical contributions in
+deﬁning FEC coding schemes for 100Gbps and 400Gbps Ethernet standards.
+So far, his technical proposals have been adopted by many networking
+standard specs. His current research interests are in the area of VLSI for
+High-Speed Signal Processing Systems.
+Dr. Wang has served as a Technical Program Committee Member, the Ses-
+sion Chair, the Track Chair, and a Review Committee Member for many
+IEEE and ACM conferences. In 2013, he has served in the Best Paper Award
+Selection Committee for the IEEE Circuits and System Society. Since 2004,
+he has been serving as an Associate Editor for the IEEE T RANSACTIONS ON
+CIRCUITS AND SYSTEMS I (TCAS-I), TCAS-II, and the IEEE T RANSACTIONS ON
+VLSI SYSTEMS for many terms.
+50992 VOLUME 7, 2019

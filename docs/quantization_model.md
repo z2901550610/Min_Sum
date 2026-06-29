@@ -31,6 +31,22 @@ cc -O3 -std=c11 -Wall -Wextra -Wpedantic \
 build/model/min_sum_model --profile bike128 --seed 1 --trials 1
 ```
 
+运行一个 TRIKE-128 case：
+
+```bash
+build/model/min_sum_model --profile trike128 --seed 1 --trials 1
+```
+
+TRIKE profile：
+
+| Profile | n0 | r | w | t | Iterations |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `trike128` | 3 | 7200 | 27 | 201 | 7 |
+| `trike160` | 3 | 9446 | 35 | 263 | 7 |
+| `trike256` | 3 | 15344 | 55 | 429 | 7 |
+| `trike384` | 3 | 23526 | 83 | 659 | 7 |
+| `trike512` | 3 | 32746 | 111 | 877 | 7 |
+
 输出逐轮消息统计：
 
 ```bash
@@ -165,27 +181,40 @@ build/model/min_sum_model \
 
 ## 参数扫描
 
-`scripts/run_quantization_sweep.py` 逐个枚举消息位宽、`C` 和两个 alpha shift。每个候选配置内部使用 C 模型的多线程 trial：
+`scripts/run_quantization_experiment.py` 是量化实验入口。`sweep` 子命令逐个枚举消息位宽、`C` 和两个 alpha shift。每个候选配置内部使用 C 模型的多线程 trial：
 
 ```bash
-python3 scripts/run_quantization_sweep.py \
-  --profile bike128 \
+python3 scripts/run_quantization_experiment.py sweep \
+  --profile trike128 \
   --msg-bits 3,4,5 \
   --seed 1 \
   --trials 1000 \
   --threads 32 \
-  --output build/model/bike128_sweep.csv
+  --output build/model/trike128_sweep.csv
 ```
 
 shift pair 只枚举 `shift_0 <= shift_1`，避免交换顺序造成重复配置。扫描结果包含成功数、精确恢复数、平均 residual weight 和运行时间。大规模实验可以先用 20～100 个 trial 粗筛，再对候选配置使用相同 seed 区间扩大 trial 数。
 
+当前 C 模型扫描使用 profile 定义的固定 `r` 单点。TRIKE-128 使用：
+
+```text
+n0 = 3
+r  = 7200
+w  = 27
+t  = 201
+```
+
+量化参数搜索不枚举 r 区间。r 区间曲线和 DFR 估计使用 myTRIKE Monte Carlo 流程。
+
 ## Linux 服务器一键实验
 
-脚本自动完成构建、3/4/5-bit 全参数粗筛、候选参数验证、压力测试和结果汇总：
+`campaign` 子命令自动完成 3/4/5-bit 全参数粗筛、候选参数验证、压力测试和结果汇总：
 
 ```bash
-scripts/run_quantization_campaign.sh \
-  --profile bike128 \
+make model-min-sum
+
+python3 scripts/run_quantization_experiment.py campaign \
+  --profile trike128 \
   --mode quick \
   --threads 32
 ```
@@ -193,7 +222,7 @@ scripts/run_quantization_campaign.sh \
 使用全部在线 CPU：
 
 ```bash
-scripts/run_quantization_campaign.sh --threads 0
+python3 scripts/run_quantization_experiment.py campaign --profile trike128 --threads 0
 ```
 
 三种实验规模：
@@ -209,31 +238,118 @@ scripts/run_quantization_campaign.sh --threads 0
 ```bash
 mkdir -p results
 
-nohup scripts/run_quantization_campaign.sh \
-  --profile bike128 \
+nohup python3 scripts/run_quantization_experiment.py campaign \
+  --profile trike128 \
   --mode full \
   --threads 32 \
-  --out-dir results/bike128_full \
-  > results/bike128_full.log 2>&1 &
+  --out-dir results/trike128_full \
+  > results/trike128_full.log 2>&1 &
 ```
 
 查看进度：
 
 ```bash
-tail -f results/bike128_full.log
+tail -f results/trike128_full.log
 ```
 
 主要结果：
 
 ```text
-results/bike128_full/coarse_sweep.csv
-results/bike128_full/candidate_results.csv
-results/bike128_full/summary.md
+results/trike128_full/coarse_sweep.csv
+results/trike128_full/candidate_results.csv
+results/trike128_full/summary.md
 ```
 
-也可以通过环境变量一键启动：
+## 完整网格最优参数
+
+`optimum` 子命令枚举完整均匀量化网格并排序。搜索范围为：
+
+```text
+msg_bits = 3, 4, 5
+C        = 1 .. 2^(msg_bits-1)-1
+shift    = 1 .. 6, shift_0 <= shift_1
+```
+
+TRIKE-128 完整网格：
 
 ```bash
-MODE=full PROFILE=bike128 THREADS=32 \
-  scripts/run_quantization_campaign.sh
+make model-min-sum
+
+python3 scripts/run_quantization_experiment.py optimum \
+  --profile trike128 \
+  --trials 10000 \
+  --threads 32 \
+  --out-dir results/trike128_optimum_10k
+```
+
+结果文件：
+
+```text
+results/trike128_optimum_10k/exhaustive_sweep.csv
+results/trike128_optimum_10k/summary.md
+```
+
+`summary.md` 给出每个位宽的最优候选和 top 排名。该结论对应当前均匀量化网格和有限 seed 区间。DFR 估计使用 myTRIKE Monte Carlo 流程扩大试验规模。
+
+TRIKE-128 参数使用 `n0=3, r=7200, w=27, t=201, iterations=7`。切换到
+TRIKE-128：
+
+```bash
+nohup python3 scripts/run_quantization_experiment.py campaign \
+  --profile trike128 \
+  --mode full \
+  --threads 32 \
+  --out-dir results/trike128_full \
+  > results/trike128_full.log 2>&1 &
+```
+
+## 候选参数复核
+
+`confirm` 子命令用于比较少量近邻候选。默认候选为：
+
+```text
+3-bit: C = 2, 3
+4-bit: C = 5, 6, 7
+5-bit: C = 5, 13, 15
+alpha = 2^-3 + 2^-4
+```
+
+本地 smoke：
+
+```bash
+make model-min-sum
+
+python3 scripts/run_quantization_experiment.py confirm \
+  --profile trike128 \
+  --mode smoke \
+  --threads 4 \
+  --out-dir build/model/confirm/trike128_smoke
+```
+
+服务器复核：
+
+```bash
+python3 scripts/run_quantization_experiment.py confirm \
+  --profile trike128 \
+  --mode full \
+  --threads 32 \
+  --out-dir results/trike128_confirm_full
+```
+
+输出文件：
+
+```text
+results/trike128_confirm_full/candidate_results.csv
+results/trike128_confirm_full/summary.md
+```
+
+也可以指定候选：
+
+```bash
+python3 scripts/run_quantization_experiment.py confirm \
+  --profile trike128 \
+  --mode full \
+  --candidate 4:6:3:4 \
+  --candidate 4:7:3:4 \
+  --threads 32
 ```
