@@ -23,7 +23,6 @@ export REAL_VERILATOR
 export VERILATOR_LOG_DIR
 export BIKE_PARALLEL_L
 
-VECTOR_SVH := tb/generated/bike_demo_vectors.svh
 TOY_CASE_SVH := tb/generated/bike_toy_case.svh
 RTL_PKG := rtl/bike_pkg.sv
 RTL_CORE := rtl/reset_sync.sv rtl/decoder_profile_config.sv rtl/ram_i.sv rtl/edge_addr_gen.sv rtl/tile_scheduler.sv rtl/ram_m.sv rtl/ram_s.sv rtl/ram_syndrome.sv rtl/ram_t_accum.sv rtl/ram_t.sv rtl/msg_tc_to_signmag_sat.sv rtl/vnu_update.sv rtl/ram_c1.sv rtl/cnu_a.sv rtl/cnu_b.sv rtl/msg_signmag_to_tc.sv rtl/decoder_top.sv
@@ -50,7 +49,7 @@ $(TOY_CASE_SVH): FORCE scripts/gen_toy_case_fixture.py scripts/run_bike_random.p
 
 test: test-unit test-integration
 
-test-unit: $(VECTOR_SVH)
+test-unit:
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_reset_sync rtl/reset_sync.sv tb/tb_reset_sync.sv
 	@$(SIM) ./obj_dir/Vtb_reset_sync +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_msg_codec rtl/bike_pkg.sv rtl/msg_signmag_to_tc.sv rtl/msg_tc_to_signmag_sat.sv tb/tb_msg_codec.sv

@@ -285,7 +285,7 @@ module decoder_top
   logic                                ctrl_done_s;
   logic                                ctrl_done_p;
 
-  assign profile_sel_in = PROFILE_RUNTIME_SELECT ? i_profile_sel : PROFILE_BIKE_128;
+  assign profile_sel_in = PROFILE_RUNTIME_SELECT ? i_profile_sel : PROFILE_DEFAULT;
 
   assign decode_start = i_start && o_h_loaded && !o_h_error;
   assign o_done = ctrl_done_p;
@@ -603,7 +603,7 @@ module decoder_top
 
   always_ff @(posedge i_clk or negedge rst_n_sync) begin
     if (!rst_n_sync) begin
-      profile_sel <= PROFILE_BIKE_128;
+      profile_sel <= PROFILE_DEFAULT;
       c2v_one_idx_q <= '0;
       c2v_q_seq_q <= '0;
       c2v_fill_buf_q <= 1'b0;

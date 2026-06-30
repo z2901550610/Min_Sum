@@ -51,6 +51,7 @@ PARAM_SETS = {
         "msg_bits": 5,
         "alpha_shift_0": 3,
         "alpha_shift_1": 4,
+        "c_tile": 256,
     },
     "bike192": {
         "n0": 2,
@@ -62,6 +63,7 @@ PARAM_SETS = {
         "msg_bits": 5,
         "alpha_shift_0": 3,
         "alpha_shift_1": 4,
+        "c_tile": 512,
     },
     "bike256": {
         "n0": 2,
@@ -73,6 +75,67 @@ PARAM_SETS = {
         "msg_bits": 5,
         "alpha_shift_0": 3,
         "alpha_shift_1": 4,
+        "c_tile": 576,
+    },
+    "trike128": {
+        "n0": 3,
+        "r": 8117,
+        "w": 27,
+        "error_count": 201,
+        "i_max": 7,
+        "c_val": 5,
+        "msg_bits": 5,
+        "alpha_shift_0": 3,
+        "alpha_shift_1": 4,
+        "c_tile": 256,
+    },
+    "trike160": {
+        "n0": 3,
+        "r": 12739,
+        "w": 35,
+        "error_count": 263,
+        "i_max": 7,
+        "c_val": 5,
+        "msg_bits": 5,
+        "alpha_shift_0": 3,
+        "alpha_shift_1": 4,
+        "c_tile": 256,
+    },
+    "trike256": {
+        "n0": 3,
+        "r": 29501,
+        "w": 55,
+        "error_count": 429,
+        "i_max": 7,
+        "c_val": 5,
+        "msg_bits": 5,
+        "alpha_shift_0": 3,
+        "alpha_shift_1": 4,
+        "c_tile": 288,
+    },
+    "trike384": {
+        "n0": 3,
+        "r": 61283,
+        "w": 83,
+        "error_count": 659,
+        "i_max": 7,
+        "c_val": 5,
+        "msg_bits": 5,
+        "alpha_shift_0": 3,
+        "alpha_shift_1": 6,
+        "c_tile": 464,
+    },
+    "trike512": {
+        "n0": 3,
+        "r": 108587,
+        "w": 111,
+        "error_count": 877,
+        "i_max": 7,
+        "c_val": 7,
+        "msg_bits": 5,
+        "alpha_shift_0": 4,
+        "alpha_shift_1": 0,
+        "c_tile": 1168,
     },
 }
 
@@ -80,7 +143,25 @@ PROFILE_IDS = {
     "bike128": "PROFILE_BIKE_128",
     "bike192": "PROFILE_BIKE_192",
     "bike256": "PROFILE_BIKE_256",
+    "trike128": "PROFILE_TRIKE_128",
+    "trike160": "PROFILE_TRIKE_160",
+    "trike256": "PROFILE_TRIKE_256",
+    "trike384": "PROFILE_TRIKE_384",
+    "trike512": "PROFILE_TRIKE_512",
 }
+
+UNIFIED_PROFILE_IDS = {
+    "bike128": "PROFILE_BIKE_128",
+    "bike192": "PROFILE_BIKE_192",
+    "bike256": "PROFILE_BIKE_256",
+    "trike128": "PROFILE_TRIKE_128",
+    "trike160": "PROFILE_TRIKE_160",
+    "trike256": "PROFILE_TRIKE_256",
+    "trike384": "PROFILE_TRIKE_384",
+    "trike512": "PROFILE_TRIKE_512",
+}
+
+TRIKE_PARAM_SETS = {"trike128", "trike160", "trike256", "trike384", "trike512"}
 
 
 def bit_vector_hex(bits: list[int], width: int) -> str:
@@ -249,6 +330,23 @@ def emit_pkg(
     c_tile: int,
     t: int,
 ) -> None:
+    if n0 == 3:
+        profile_constants = """  parameter int PROFILE_COUNT = 5;
+  parameter int PROFILE_ID_W = 3;
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_TRIKE_128 = 3'd0;
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_TRIKE_160 = 3'd1;
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_TRIKE_256 = 3'd2;
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_TRIKE_384 = 3'd3;
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_TRIKE_512 = 3'd4;
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_DEFAULT = PROFILE_TRIKE_128;"""
+    else:
+        profile_constants = """  parameter int PROFILE_COUNT = 3;
+  parameter int PROFILE_ID_W = 2;
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_BIKE_128 = 2'd0;
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_BIKE_192 = 2'd1;
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_BIKE_256 = 2'd2;
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_DEFAULT = PROFILE_BIKE_128;"""
+
     path.write_text(
         f"""`timescale 1ns/1ps
 package bike_pkg;
@@ -296,11 +394,7 @@ package bike_pkg;
   parameter int L_SHIFT = (L > 1) ? $clog2(L) : 0;
   parameter int ITER_W = $clog2(I_MAX + 1);
 
-  parameter int PROFILE_COUNT = 3;
-  parameter int PROFILE_ID_W = 2;
-  localparam logic [PROFILE_ID_W-1:0] PROFILE_BIKE_128 = 2'd0;
-  localparam logic [PROFILE_ID_W-1:0] PROFILE_BIKE_192 = 2'd1;
-  localparam logic [PROFILE_ID_W-1:0] PROFILE_BIKE_256 = 2'd2;
+{profile_constants}
   parameter bit PROFILE_RUNTIME_SELECT = 1'b0;
   parameter int CFG_R_W = ROW_IDX_W + 1;
   parameter int CFG_W_W = ONE_IDX_W + 1;
@@ -768,9 +862,10 @@ def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int
 
     command = [args.verilator, "--binary", "--sv"]
     if args.unified:
+        unified_define = "-DTRIKE_UNIFIED_PARAMS" if args.param_set in TRIKE_PARAM_SETS else "-DBIKE_UNIFIED_PARAMS"
         command.extend(
             [
-                "-DBIKE_UNIFIED_PARAMS",
+                unified_define,
                 f"-DBIKE_PARALLEL_L={args.parallel_l}",
                 f"-DBIKE_C_TILE={args.c_tile}",
                 f"-DBIKE_MSG_BITS={args.msg_bits}",
@@ -833,7 +928,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--unified",
         action="store_true",
-        help="Compile the shared BIKE_UNIFIED_PARAMS RTL package and select the named public profile.",
+        help="Compile the shared BIKE or TRIKE unified RTL package and select the named public profile.",
     )
     parser.add_argument("--n0", type=int, default=None)
     parser.add_argument("--r", type=int, default=None)
@@ -844,7 +939,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--alpha-shift-0", type=int, default=None)
     parser.add_argument("--alpha-shift-1", type=int, default=None)
     parser.add_argument("--parallel-l", type=int, default=8)
-    parser.add_argument("--c-tile", type=int, default=256)
+    parser.add_argument("--c-tile", type=int, default=None)
     return parser.parse_args()
 
 
@@ -852,9 +947,16 @@ def main() -> int:
     args = parse_args()
     defaults = PARAM_SETS[args.param_set or "toy"]
     for key, value in defaults.items():
+        if key == "c_tile":
+            continue
         attr = key.replace("-", "_")
         if getattr(args, attr) is None:
             setattr(args, attr, value)
+    if args.c_tile is None:
+        if args.unified:
+            args.c_tile = 1168 if args.param_set in TRIKE_PARAM_SETS else 576
+        else:
+            args.c_tile = defaults.get("c_tile", 256)
     repo_root = Path(__file__).resolve().parents[1]
     if args.trials < 1:
         raise ValueError("--trials must be positive")
@@ -872,8 +974,8 @@ def main() -> int:
         raise ValueError("--msg-bits must be at least 2")
     if args.c_val < 0 or args.c_val > ((1 << (args.msg_bits - 1)) - 1):
         raise ValueError("--c-val must fit in the configured sign-magnitude message magnitude")
-    if args.unified and (args.param_set not in PROFILE_IDS):
-        raise ValueError("--unified requires --param-set to be one of the BIKE profile names")
+    if args.unified and (args.param_set not in UNIFIED_PROFILE_IDS):
+        raise ValueError("--unified requires --param-set to be one of the public profile names")
     if args.fixture_in and args.trials != 1:
         raise ValueError("--fixture-in requires --trials 1")
     if args.fixture_in and args.unified:
@@ -885,10 +987,10 @@ def main() -> int:
         seed = args.base_seed + case_idx
         if args.fixture_in:
             seed = int(read_fixture(Path(args.fixture_in))["seed"])
-        print(f"== BIKE random case {case_idx + 1}/{args.trials}: seed={seed} ==", flush=True)
+        print(f"== decoder random case {case_idx + 1}/{args.trials}: seed={seed} ==", flush=True)
         run_case(args, repo_root, case_idx, seed)
 
-    print(f"PASS: ran {args.trials} BIKE random decoder testbench(es) one at a time")
+    print(f"PASS: ran {args.trials} random decoder testbench(es) one at a time")
     return 0
 
 

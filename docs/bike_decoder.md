@@ -38,21 +38,27 @@ edge_id = b * W + k
 | `BIKE_128_PARAMS` | `N0=2`, `R=12323`, `W=71`, `T=134`, `I_MAX=7` |
 | `BIKE_192_PARAMS` | `N0=2`, `R=24659`, `W=103`, `T=199`, `I_MAX=7` |
 | `BIKE_256_PARAMS` | `N0=2`, `R=40973`, `W=137`, `T=264`, `I_MAX=7` |
+| `TRIKE_128_PARAMS` | `N0=3`, `R=8117`, `W=27`, `T=201`, `I_MAX=7` |
+| `TRIKE_160_PARAMS` | `N0=3`, `R=12739`, `W=35`, `T=263`, `I_MAX=7` |
+| `TRIKE_256_PARAMS` | `N0=3`, `R=29501`, `W=55`, `T=429`, `I_MAX=7` |
+| `TRIKE_384_PARAMS` | `N0=3`, `R=61283`, `W=83`, `T=659`, `I_MAX=7` |
+| `TRIKE_512_PARAMS` | `N0=3`, `R=108587`, `W=111`, `T=877`, `I_MAX=7` |
 | `BIKE_UNIFIED_PARAMS` | 最大几何为 `N0=2`, `R=40973`, `W=137`, `T=264`, `I_MAX=7` |
+| `TRIKE_UNIFIED_PARAMS` | 最大几何为 `N0=3`, `R=108587`, `W=111`, `T=877`, `I_MAX=7` |
 
 覆盖宏：
 
 - `BIKE_PARALLEL_L`：每周期 lane 数，默认 `32`
-- `BIKE_C_TILE`：每个 tile 的本地变量列数；`BIKE_UNIFIED_PARAMS` 默认 `576`
+- `BIKE_C_TILE`：每个 tile 的本地变量列数；`BIKE_UNIFIED_PARAMS` 默认 `576`，`TRIKE_UNIFIED_PARAMS` 默认 `1168`
 - `BIKE_MSG_BITS`：sign-magnitude 消息总位宽，默认 `5`
 
 Vivado GUI 工程可直接添加 RTL 源文件并使用默认 Verilog define 设置。该配置生成统一参数硬件。
 
-顶层包含公开 profile 选择端口 `i_profile_sel`。统一参数配置使用该端口选择 profile。配置表为每个 profile 输出 `R`、`W`、tile 数、row bank 深度、`C_VAL` 和 `alpha` 参数。存储和 datapath 按最大几何定宽，调度器按选中 profile 的公开边界执行固定窗口。
+顶层包含公开 profile 选择端口 `i_profile_sel`。`BIKE_UNIFIED_PARAMS` 配置使用该端口选择 BIKE-128/192/256 profile，`TRIKE_UNIFIED_PARAMS` 配置使用该端口选择 TRIKE-128/160/256/384/512 profile。配置表为选中 profile 输出 `R`、`W`、tile 数、row bank 深度、`C_VAL` 和 `alpha` 参数。存储和 datapath 按所选 family 的最大几何定宽，调度器按选中 profile 的公开边界执行固定窗口。
 
-BIKE 官方参数表中的 `w` 为整行权重；RTL 中 `W` 表示每个 circulant block 的第一列非零数，三档 profile 的整行权重为 `N0*W = 142/206/274`。
+BIKE 官方参数表中的 `w` 为整行权重；RTL 中 `W` 表示每个 circulant block 的第一列非零数。BIKE 三档 profile 的整行权重为 `N0*W = 142/206/274`，TRIKE 五档 profile 的整行权重为 `N0*W = 81/105/165/249/333`。
 
-128/192/256 参数使用 `C_VAL=5`、`alpha=0.1875`。
+BIKE profile 和 TRIKE-128/160/256 使用 `C_VAL=5`、`alpha=0.1875`。TRIKE-384 使用 `C_VAL=5`、`alpha=0.140625`。TRIKE-512 使用 `C_VAL=7`、`alpha=0.0625`。
 
 ## 顶层输入输出
 

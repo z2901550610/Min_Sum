@@ -1,6 +1,8 @@
 # Verilator / simulation build outputs
 /obj_dir/
 /build/
+/tmp/
+/outputs/
 *.o
 *.d
 *.a
@@ -22,6 +24,10 @@
 *.fst
 *.wlf
 *.log
+*.aux
+*.fls
+*.fdb_latexmk
+*.synctex.gz
 *.jou
 
 # Temporary files
