@@ -16,6 +16,7 @@
 # Generated simulation binaries and support files
 /golden/*_golden
 /tb/generated/
+/rtl/generated/**/*.hex
 /rtl/generated/.ram_i_hex.stamp
 /rtl/generated/**/.ram_i_hex.stamp
 
@@ -29,6 +30,9 @@
 *.fdb_latexmk
 *.synctex.gz
 *.jou
+
+# Quantization / experiment plot outputs
+/trike*_ksign_vs_fullsign*.png
 
 # Temporary files
 *.tmp

@@ -309,13 +309,16 @@ logic is represented only by labeled input lines.
       tallproc/.style={archbox, minimum width=18mm, minimum height=18mm},
       flow/.style={-{Latex[length=1.6mm,width=1.2mm]}, line width=0.55pt},
       wire/.style={line width=0.55pt},
+      ctrlwire/.style={-{Latex[length=1.2mm,width=0.9mm]}, line width=0.45pt, densely dashed},
       tap/.style={circle, fill=black, inner sep=0.95pt},
       label/.style={font=\tiny, inner sep=1pt, align=center}
     ]
-    \node[mem, minimum width=20mm] (rami) at (1.15,7.50) {RAM I\\$H$ support};
-    \node[proc, minimum width=21mm] (addr) at (3.85,7.50) {edge addr.\\generation};
-    \node[proc, minimum width=20mm] (shift) at (6.55,7.50) {$H$ matrix\\shifting};
-    \node[mem, minimum width=18mm] (ramiwr) at (9.05,7.50) {RAM I\\writeback};
+    \node[proc, minimum width=25mm, minimum height=7mm] (sched) at (6.35,8.12)
+      {tile scheduler};
+    \node[mem, minimum width=20mm] (rami) at (1.15,7.22) {RAM I\\$H$ support};
+    \node[proc, minimum width=21mm] (addr) at (3.85,7.22) {edge addr.\\generation};
+    \node[proc, minimum width=26mm] (shiftwr) at (6.85,7.22)
+      {$H$ matrix shifting\\RAM I writeback};
 
     \node[mem, minimum width=19mm] (synd) at (1.15,6.05) {syndrome\\RAM};
     \node[mem, minimum width=19mm] (mread) at (1.15,5.25) {RAM M\\read pair\\M0/M1};
@@ -343,13 +346,20 @@ logic is represented only by labeled input lines.
     \coordinate (wbus) at (14.15,5.25);
     \coordinate (wbusTop) at (14.15,6.35);
     \coordinate (wbusBot) at (14.15,4.15);
+    \coordinate (ctrlbusL) at (0.70,8.74);
+    \coordinate (ctrlbusR) at (15.85,8.74);
 
-    \node[label, anchor=south] at (5.10,8.55) {public control: support set, tile, row, edge, buffer};
+    \node[label, anchor=south] at (10.70,8.98)
+      {public control: support set, tile, row, edge, buffer};
+    \draw[ctrlwire] (ctrlbusL) -- (ctrlbusR);
+    \draw[ctrlwire] (6.35,8.74) -- (sched.north);
+    \draw[ctrlwire] (sched.south west) -- ++(-0.12,-0.18) -| (rami.north);
+    \draw[ctrlwire] (sched.south) -- ++(0,-0.18) -| (addr.north);
+    \draw[ctrlwire] (sched.south east) -- ++(0.12,-0.18) -| (shiftwr.north);
+    \draw[ctrlwire] (sched.east) -- ++(7.80,0) |- (wbusTop);
+    \node[tap] at (6.35,8.74) {};
     \draw[flow] (rami.east) -- (addr.west);
-    \draw[flow] (addr.east) -- node[label, above] {addr} (shift.west);
-    \draw[flow] (shift.east) -- node[label, above] {index} (ramiwr.west);
-    \draw[wire] (ramiwr.north) -- ++(0,0.42) -| (rami.north);
-    \node[tap] at (ramiwr.north) {};
+    \draw[flow] (addr.east) -- node[label, above] {addr} (shiftwr.west);
     \node[tap] at (rami.north) {};
     \draw[flow] (addr.south) -- (cnub.north);
 

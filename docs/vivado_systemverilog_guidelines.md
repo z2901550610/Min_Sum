@@ -14,7 +14,7 @@
 - 可综合 RTL 放在 `rtl/`，testbench 放在 `tb/`，Vivado 约束放在 `constraints/`，脚本放在 `scripts/`。
 - 公共参数、类型、打包布局和几何尺寸放在 [bike_pkg.sv](/Users/z2901550610/Documents/Min_Sum/rtl/bike_pkg.sv:1)。
 - 主要模块文件名与模块名保持一致。
-- 生成文件保留在 `rtl/generated/` 和 `tb/generated/` 的既有位置。修改生成流程时同时更新生成脚本和验证入口。
+- 随机仿真 fixture 目录为 `tb/generated/`，本地生成产物由 `.gitignore` 管理。修改生成流程时同时更新生成脚本和验证入口。
 - 新增设计文档只描述目标架构和当前行为，不写迁移叙述。
 
 ## 命名和格式
