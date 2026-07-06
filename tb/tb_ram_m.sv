@@ -20,6 +20,9 @@ module tb_ram_m;
   logic                   v2c_write_valid[0:L-1];
   logic [ROW_BANK_AW-1:0] v2c_write_row_addr[0:L-1];
   logic [ COMP_C2V_W-1:0] v2c_write_data[0:L-1];
+  logic                   flip_pair_sel;
+  logic                   flip_valid[0:L-1];
+  logic [ROW_BANK_AW-1:0] flip_row_addr[0:L-1];
 
   localparam logic [COMP_C2V_W-1:0] TEST_COMP = {1'b1, EDGE_ID_W'(2), D'(7), D'(3)};
 
@@ -40,7 +43,10 @@ module tb_ram_m;
       .i_v2c_write_pair_sel(v2c_write_pair_sel),
       .i_v2c_write_valid(v2c_write_valid),
       .i_v2c_write_row_addr(v2c_write_row_addr),
-      .i_v2c_write_data(v2c_write_data)
+      .i_v2c_write_data(v2c_write_data),
+      .i_flip_pair_sel(flip_pair_sel),
+      .i_flip_valid(flip_valid),
+      .i_flip_row_addr(flip_row_addr)
   );
 
   initial clk = 1'b0;
@@ -59,6 +65,7 @@ module tb_ram_m;
       c2v_pair_sel = 1'b0;
       v2c_pair_sel = 1'b0;
       v2c_write_pair_sel = 1'b0;
+      flip_pair_sel = 1'b0;
       for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
         c2v_valid[lane_idx] = 1'b0;
         c2v_row_addr[lane_idx] = '0;
@@ -67,6 +74,8 @@ module tb_ram_m;
         v2c_write_valid[lane_idx] = 1'b0;
         v2c_write_row_addr[lane_idx] = '0;
         v2c_write_data[lane_idx] = COMP_C2V_INIT;
+        flip_valid[lane_idx] = 1'b0;
+        flip_row_addr[lane_idx] = '0;
       end
     end
   endtask

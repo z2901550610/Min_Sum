@@ -3,17 +3,17 @@
 module ram_t
   import bike_pkg::*;
 (
-    input  logic                 i_clk,
-    input  logic                 i_fill_buf,
-    input  logic                 i_c2v_write_valid[0:L-1],
-    input  logic [ONE_IDX_W-1:0] i_c2v_write_one_idx,
-    input  logic [  Q_SEQ_W-1:0] i_c2v_write_q_seq,
-    input  logic [    MSG_W-1:0] i_c2v_write_data[0:L-1],
-    input  logic                 i_active_buf,
-    input  logic                 i_v2c_valid[0:L-1],
-    input  logic [ONE_IDX_W-1:0] i_v2c_one_idx,
-    input  logic [  Q_SEQ_W-1:0] i_v2c_q_seq,
-    output logic [    MSG_W-1:0] o_v2c_rdata[0:L-1]
+    input  logic                  i_clk,
+    input  logic                  i_fill_buf,
+    input  logic                  i_c2v_write_valid[0:L-1],
+    input  logic [DIAG_IDX_W-1:0] i_c2v_write_diag_idx,
+    input  logic [   Q_SEQ_W-1:0] i_c2v_write_q_seq,
+    input  logic [     MSG_W-1:0] i_c2v_write_data[0:L-1],
+    input  logic                  i_active_buf,
+    input  logic                  i_v2c_valid[0:L-1],
+    input  logic [DIAG_IDX_W-1:0] i_v2c_diag_idx,
+    input  logic [   Q_SEQ_W-1:0] i_v2c_q_seq,
+    output logic [     MSG_W-1:0] o_v2c_rdata[0:L-1]
 );
 
   localparam int T_DEPTH = W * Q_TILE;
@@ -21,10 +21,10 @@ module ram_t
 
   logic [MSG_W-1:0] bank_rdata[0:1][0:L-1];
 
-  function automatic logic [T_ADDR_W-1:0] t_addr(input  logic [ONE_IDX_W-1:0] one_idx,
+  function automatic logic [T_ADDR_W-1:0] t_addr(input  logic [DIAG_IDX_W-1:0] diag_idx,
                                                  input  logic [Q_SEQ_W-1:0] q_seq);
     begin
-      t_addr = T_ADDR_W'((int'(one_idx) * Q_TILE) + int'(q_seq));
+      t_addr = T_ADDR_W'((int'(diag_idx) * Q_TILE) + int'(q_seq));
     end
   endfunction
 
@@ -39,9 +39,9 @@ module ram_t
 
         always_comb begin
           bank_re = i_v2c_valid[lane_idx] && (int'(i_active_buf) == buf_idx);
-          bank_raddr = t_addr(i_v2c_one_idx, i_v2c_q_seq);
+          bank_raddr = t_addr(i_v2c_diag_idx, i_v2c_q_seq);
           bank_we = i_c2v_write_valid[lane_idx] && (int'(i_fill_buf) == buf_idx);
-          bank_waddr = t_addr(i_c2v_write_one_idx, i_c2v_write_q_seq);
+          bank_waddr = t_addr(i_c2v_write_diag_idx, i_c2v_write_q_seq);
         end
 
         always_ff @(posedge i_clk) begin

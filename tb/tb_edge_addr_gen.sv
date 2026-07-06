@@ -79,28 +79,28 @@ module tb_edge_addr_gen;
 
   function automatic int first_group_cols(input int tile_value);
     int tile_base;
-    int tile_cols;
+    int cols_per_tile;
     begin
-      tile_base = tile_value * C_TILE;
-      tile_cols = ((tile_base + C_TILE) > R) ? (R - tile_base) : C_TILE;
-      first_group_cols = (tile_cols < L) ? tile_cols : L;
+      tile_base = tile_value * COLS_PER_TILE;
+      cols_per_tile = ((tile_base + COLS_PER_TILE) > R) ? (R - tile_base) : COLS_PER_TILE;
+      first_group_cols = (cols_per_tile < L) ? cols_per_tile : L;
     end
   endfunction
 
   task automatic check_tile_coverage(input int block_value, input int tile_value,
                                      input int base_value);
-    bit                   seen             [0:C_TILE-1];
+    bit                   seen             [0:COLS_PER_TILE-1];
     int                   tile_base;
-    int                   tile_cols;
+    int                   cols_per_tile;
     int                   seen_total;
     logic [EDGE_ID_W-1:0] expected_edge_id;
     begin
-      tile_base = tile_value * C_TILE;
-      tile_cols = ((tile_base + C_TILE) > R) ? (R - tile_base) : C_TILE;
+      tile_base = tile_value * COLS_PER_TILE;
+      cols_per_tile = ((tile_base + COLS_PER_TILE) > R) ? (R - tile_base) : COLS_PER_TILE;
       expected_edge_id = EDGE_ID_W'(block_value * W);
       seen_total = 0;
 
-      for (int offset_idx = 0; offset_idx < C_TILE; offset_idx++) begin
+      for (int offset_idx = 0; offset_idx < COLS_PER_TILE; offset_idx++) begin
         seen[offset_idx] = 1'b0;
       end
 
@@ -122,10 +122,10 @@ module tb_edge_addr_gen;
             int expected_row;
 
             offset_value = int'(tile_offset[lane_idx]);
-            if ((offset_value < 0) || (offset_value >= tile_cols)) begin
+            if ((offset_value < 0) || (offset_value >= cols_per_tile)) begin
               $fatal(1,
                      "coverage offset range base=%0d tile=%0d q=%0d lane=%0d offset=%0d cols=%0d",
-                     base_value, tile_value, q_seq_idx, lane_idx, offset_value, tile_cols);
+                     base_value, tile_value, q_seq_idx, lane_idx, offset_value, cols_per_tile);
             end
             if (seen[offset_value]) begin
               $fatal(1, "coverage duplicate base=%0d tile=%0d q=%0d lane=%0d offset=%0d",
@@ -165,11 +165,11 @@ module tb_edge_addr_gen;
         end
       end
 
-      if (seen_total != tile_cols) begin
+      if (seen_total != cols_per_tile) begin
         $fatal(1, "coverage count mismatch base=%0d tile=%0d got=%0d exp=%0d", base_value,
-               tile_value, seen_total, tile_cols);
+               tile_value, seen_total, cols_per_tile);
       end
-      for (int offset_idx = 0; offset_idx < tile_cols; offset_idx++) begin
+      for (int offset_idx = 0; offset_idx < cols_per_tile; offset_idx++) begin
         if (!seen[offset_idx]) begin
           $fatal(1, "coverage missing base=%0d tile=%0d offset=%0d", base_value, tile_value,
                  offset_idx);
@@ -188,7 +188,7 @@ module tb_edge_addr_gen;
       base_samples[4] = (R > L) ? (R - L) : 0;
       base_samples[5] = R - 1;
       base_samples[6] = R / 2;
-      base_samples[7] = (R > C_TILE) ? (R - C_TILE) : 0;
+      base_samples[7] = (R > COLS_PER_TILE) ? (R - COLS_PER_TILE) : 0;
 
       for (int block_idx = 0; block_idx < N0; block_idx++) begin
         for (int tile_value = 0; tile_value < TILE_COUNT; tile_value++) begin

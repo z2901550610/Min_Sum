@@ -17,6 +17,9 @@ RTL_CORE = [
     "rtl/tile_scheduler.sv",
     "rtl/ram_m.sv",
     "rtl/ram_s.sv",
+    "rtl/k_sign_update.sv",
+    "rtl/k_sign_reconstruct.sv",
+    "rtl/ram_k_sign.sv",
     "rtl/ram_syndrome.sv",
     "rtl/ram_t_accum.sv",
     "rtl/ram_t.sv",
@@ -51,7 +54,7 @@ PARAM_SETS = {
         "msg_bits": 5,
         "alpha_shift_0": 3,
         "alpha_shift_1": 4,
-        "c_tile": 256,
+        "cols_per_tile": 256,
     },
     "bike192": {
         "n0": 2,
@@ -63,7 +66,7 @@ PARAM_SETS = {
         "msg_bits": 5,
         "alpha_shift_0": 3,
         "alpha_shift_1": 4,
-        "c_tile": 512,
+        "cols_per_tile": 512,
     },
     "bike256": {
         "n0": 2,
@@ -75,7 +78,7 @@ PARAM_SETS = {
         "msg_bits": 5,
         "alpha_shift_0": 3,
         "alpha_shift_1": 4,
-        "c_tile": 576,
+        "cols_per_tile": 576,
     },
     "trike128": {
         "n0": 3,
@@ -87,7 +90,7 @@ PARAM_SETS = {
         "msg_bits": 5,
         "alpha_shift_0": 3,
         "alpha_shift_1": 4,
-        "c_tile": 256,
+        "cols_per_tile": 256,
     },
     "trike160": {
         "n0": 3,
@@ -99,7 +102,7 @@ PARAM_SETS = {
         "msg_bits": 5,
         "alpha_shift_0": 3,
         "alpha_shift_1": 4,
-        "c_tile": 256,
+        "cols_per_tile": 256,
     },
     "trike256": {
         "n0": 3,
@@ -111,7 +114,7 @@ PARAM_SETS = {
         "msg_bits": 5,
         "alpha_shift_0": 3,
         "alpha_shift_1": 4,
-        "c_tile": 288,
+        "cols_per_tile": 288,
     },
     "trike384": {
         "n0": 3,
@@ -123,7 +126,7 @@ PARAM_SETS = {
         "msg_bits": 5,
         "alpha_shift_0": 3,
         "alpha_shift_1": 6,
-        "c_tile": 464,
+        "cols_per_tile": 464,
     },
     "trike512": {
         "n0": 3,
@@ -135,7 +138,7 @@ PARAM_SETS = {
         "msg_bits": 5,
         "alpha_shift_0": 4,
         "alpha_shift_1": 0,
-        "c_tile": 1168,
+        "cols_per_tile": 1168,
     },
 }
 
@@ -327,7 +330,7 @@ def emit_pkg(
     alpha_shift_0: int,
     alpha_shift_1: int,
     l: int,
-    c_tile: int,
+    cols_per_tile: int,
     t: int,
 ) -> None:
     if n0 == 3:
@@ -360,6 +363,8 @@ package bike_pkg;
   parameter int I_MAX = {i_max};
   parameter int C_VAL = {c_val};
   parameter int MSG_BITS_CONFIG = {msg_bits};
+  parameter int K_SIGN_K_CONFIG = 6;
+  parameter bit K_SIGN_ENABLE = {1 if n0 == 3 else 0};
   parameter int ALPHA_SHIFT_0 = {alpha_shift_0};
   parameter int ALPHA_SHIFT_1 = {alpha_shift_1};
 
@@ -371,15 +376,15 @@ package bike_pkg;
   parameter int MSG_W = D + 1;
   parameter int ROW_SEG_SIZE = (R + L - 1) / L;
   parameter int VNU_TC_W = MSG_W + ((W > 1) ? $clog2(W + 1) : 1);
-  parameter int C_TILE_CONFIG = {c_tile};
-  parameter int C_TILE = (C_TILE_CONFIG > R) ? R : C_TILE_CONFIG;
-  parameter int Q_BASE = (C_TILE + L - 1) / L;
+  parameter int COLS_PER_TILE_CONFIG = {cols_per_tile};
+  parameter int COLS_PER_TILE = (COLS_PER_TILE_CONFIG > R) ? R : COLS_PER_TILE_CONFIG;
+  parameter int Q_BASE = (COLS_PER_TILE + L - 1) / L;
   parameter int Q_TILE = Q_BASE + 3;
-  parameter int TILE_COUNT = (R + C_TILE - 1) / C_TILE;
+  parameter int TILE_COUNT = (R + COLS_PER_TILE - 1) / COLS_PER_TILE;
   parameter int TILES_TOTAL = N0 * TILE_COUNT;
   parameter int TILE_ID_W = (TILES_TOTAL > 1) ? $clog2(TILES_TOTAL + 1) : 1;
   parameter int TILE_IDX_W = (TILE_COUNT > 1) ? $clog2(TILE_COUNT + 1) : 1;
-  parameter int TILE_OFF_W = (C_TILE > 1) ? $clog2(C_TILE) : 1;
+  parameter int TILE_OFF_W = (COLS_PER_TILE > 1) ? $clog2(COLS_PER_TILE) : 1;
   parameter int Q_SEQ_W = (Q_TILE > 1) ? $clog2(Q_TILE) : 1;
   parameter int ROW_BANK_AW = (ROW_SEG_SIZE > 1) ? $clog2(ROW_SEG_SIZE) : 1;
   parameter int ACC_W = VNU_TC_W;
@@ -387,7 +392,11 @@ package bike_pkg;
   parameter int H_BLOCK_W = (N0 > 1) ? $clog2(N0) : 1;
   parameter int ROW_EDGE_COUNT = N0 * W;
 
-  parameter int ONE_IDX_W = (W > 1) ? $clog2(W) : 1;
+  parameter int DIAG_IDX_W = (W > 1) ? $clog2(W) : 1;
+  parameter int K_SIGN_K = K_SIGN_K_CONFIG;
+  parameter int K_SIGN_SLOT_W = DIAG_IDX_W + D;
+  parameter int K_SIGN_RECORD_W = 1 + (K_SIGN_K * K_SIGN_SLOT_W);
+  localparam logic [DIAG_IDX_W-1:0] K_SIGN_DIAG_INVALID = '1;
   parameter int EDGE_ID_W = (ROW_EDGE_COUNT > 1) ? $clog2(ROW_EDGE_COUNT) : 1;
   parameter int ROW_IDX_W = (R > 1) ? $clog2(R) : 1;
   parameter int LANE_IDX_W = (L > 1) ? $clog2(L) : 1;
@@ -397,7 +406,7 @@ package bike_pkg;
 {profile_constants}
   parameter bit PROFILE_RUNTIME_SELECT = 1'b0;
   parameter int CFG_R_W = ROW_IDX_W + 1;
-  parameter int CFG_W_W = ONE_IDX_W + 1;
+  parameter int CFG_W_W = DIAG_IDX_W + 1;
   parameter int CFG_CVAL_W = MSG_W;
   parameter int CFG_ALPHA_SHIFT_W = 3;
 
@@ -407,6 +416,7 @@ package bike_pkg;
   localparam logic [DEC_STATE_W-1:0] DEC_ITER_C2V_PRIME   = 4'd4;
   localparam logic [DEC_STATE_W-1:0] DEC_ITER_OVERLAP     = 4'd5;
   localparam logic [DEC_STATE_W-1:0] DEC_ITER_V2C_DRAIN   = 4'd6;
+  localparam logic [DEC_STATE_W-1:0] DEC_ITER_KSIGN_CORR  = 4'd7;
   localparam logic [DEC_STATE_W-1:0] DEC_ITER_CHECK       = 4'd8;
   localparam logic [DEC_STATE_W-1:0] DEC_DONE             = 4'd9;
 
@@ -504,9 +514,10 @@ module tb_bike_decoder_random;
   localparam int TEST_ROW_IDX_W = (TEST_R > 1) ? $clog2(TEST_R) : 1;
   localparam logic [PROFILE_ID_W-1:0] TEST_PROFILE_ID = {profile_id};
   localparam int TEST_ROW_SEG_SIZE = (TEST_R + L - 1) / L;
-  localparam int TEST_TILE_COUNT = (TEST_R + C_TILE - 1) / C_TILE;
+  localparam int TEST_TILE_COUNT = (TEST_R + COLS_PER_TILE - 1) / COLS_PER_TILE;
   localparam int TEST_DECODE_CYCLES = I_MAX * (
       TEST_ROW_SEG_SIZE + (((N0 * TEST_TILE_COUNT) + 1) * TEST_W * Q_TILE)
+      + (K_SIGN_ENABLE ? (8 + ((N0 * TEST_TILE_COUNT) * TEST_W * Q_TILE)) : 0)
   ) + 4;
   localparam int SYNDROME_WEIGHT = {len(syndrome_positions)};
   localparam int ERROR_WEIGHT = {len(error_positions)};
@@ -525,7 +536,7 @@ module tb_bike_decoder_random;
   logic syndrome_wdata;
   logic h_we;
   logic [H_BLOCK_W-1:0] h_load_block_idx;
-  logic [ONE_IDX_W-1:0] h_load_one_idx;
+  logic [DIAG_IDX_W-1:0] h_load_diag_idx;
   logic [ROW_IDX_W-1:0] h_base_row;
   logic h_loaded;
   logic h_error;
@@ -544,7 +555,7 @@ module tb_bike_decoder_random;
     .i_syndrome_wdata(syndrome_wdata),
     .i_h_we(h_we),
     .i_h_block_idx(h_load_block_idx),
-    .i_h_one_idx(h_load_one_idx),
+    .i_h_diag_idx(h_load_diag_idx),
     .i_h_base_row(h_base_row),
     .i_e_read_col_idx(e_read_col_idx),
     .o_h_loaded(h_loaded),
@@ -608,11 +619,11 @@ module tb_bike_decoder_random;
   task automatic load_h_matrix;
     begin
       for (int h_block_idx = 0; h_block_idx < N0; h_block_idx++) begin
-        for (int one_idx = 0; one_idx < TEST_W; one_idx++) begin
+        for (int diag_idx = 0; diag_idx < TEST_W; diag_idx++) begin
           h_we = 1'b1;
           h_load_block_idx = H_BLOCK_W'(h_block_idx);
-          h_load_one_idx = ONE_IDX_W'(one_idx);
-          h_base_row = ROW_IDX_W'(TEST_H_BASE_ROWS[h_block_idx][one_idx]);
+          h_load_diag_idx = DIAG_IDX_W'(diag_idx);
+          h_base_row = ROW_IDX_W'(TEST_H_BASE_ROWS[h_block_idx][diag_idx]);
           @(posedge clk);
         end
       end
@@ -684,7 +695,7 @@ module tb_bike_decoder_random;
     start = 1'b0;
     h_we = 1'b0;
     h_load_block_idx = '0;
-    h_load_one_idx = '0;
+    h_load_diag_idx = '0;
     h_base_row = '0;
     syndrome_we = 1'b0;
     syndrome_addr = '0;
@@ -843,7 +854,7 @@ def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int
             alpha_shift_0=args.alpha_shift_0,
             alpha_shift_1=args.alpha_shift_1,
             l=args.parallel_l,
-            c_tile=args.c_tile,
+            cols_per_tile=args.cols_per_tile,
             t=args.error_count,
         )
     emit_tb(
@@ -867,7 +878,7 @@ def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int
             [
                 unified_define,
                 f"-DBIKE_PARALLEL_L={args.parallel_l}",
-                f"-DBIKE_C_TILE={args.c_tile}",
+                f"-DBIKE_COLS_PER_TILE={args.cols_per_tile}",
                 f"-DBIKE_MSG_BITS={args.msg_bits}",
                 "-DBIKE_SIM_DEBUG",
                 "-Wall",
@@ -939,7 +950,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--alpha-shift-0", type=int, default=None)
     parser.add_argument("--alpha-shift-1", type=int, default=None)
     parser.add_argument("--parallel-l", type=int, default=8)
-    parser.add_argument("--c-tile", type=int, default=None)
+    parser.add_argument("--cols-per-tile", type=int, default=None)
     return parser.parse_args()
 
 
@@ -947,16 +958,16 @@ def main() -> int:
     args = parse_args()
     defaults = PARAM_SETS[args.param_set or "toy"]
     for key, value in defaults.items():
-        if key == "c_tile":
+        if key == "cols_per_tile":
             continue
         attr = key.replace("-", "_")
         if getattr(args, attr) is None:
             setattr(args, attr, value)
-    if args.c_tile is None:
+    if args.cols_per_tile is None:
         if args.unified:
-            args.c_tile = 1168 if args.param_set in TRIKE_PARAM_SETS else 576
+            args.cols_per_tile = 1168 if args.param_set in TRIKE_PARAM_SETS else 576
         else:
-            args.c_tile = defaults.get("c_tile", 256)
+            args.cols_per_tile = defaults.get("cols_per_tile", 256)
     repo_root = Path(__file__).resolve().parents[1]
     if args.trials < 1:
         raise ValueError("--trials must be positive")
@@ -966,10 +977,10 @@ def main() -> int:
         raise ValueError("--n0 must be positive")
     if not is_power_of_two(args.parallel_l):
         raise ValueError("--parallel-l must be a power of two")
-    if args.c_tile < 1:
-        raise ValueError("--c-tile must be positive")
-    if args.c_tile % args.parallel_l != 0:
-        raise ValueError("--c-tile must be a multiple of --parallel-l")
+    if args.cols_per_tile < 1:
+        raise ValueError("--cols-per-tile must be positive")
+    if args.cols_per_tile % args.parallel_l != 0:
+        raise ValueError("--cols-per-tile must be a multiple of --parallel-l")
     if args.msg_bits < 2:
         raise ValueError("--msg-bits must be at least 2")
     if args.c_val < 0 or args.c_val > ((1 << (args.msg_bits - 1)) - 1):

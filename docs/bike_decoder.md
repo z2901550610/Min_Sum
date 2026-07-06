@@ -49,7 +49,7 @@ edge_id = b * W + k
 覆盖宏：
 
 - `BIKE_PARALLEL_L`：每周期 lane 数，默认 `32`
-- `BIKE_C_TILE`：每个 tile 的本地变量列数；`BIKE_UNIFIED_PARAMS` 默认 `576`，`TRIKE_UNIFIED_PARAMS` 默认 `1168`
+- `BIKE_COLS_PER_TILE`：每个 tile 的本地变量列数；`BIKE_UNIFIED_PARAMS` 默认 `576`，`TRIKE_UNIFIED_PARAMS` 默认 `1168`
 - `BIKE_MSG_BITS`：sign-magnitude 消息总位宽，默认 `5`
 
 Vivado GUI 工程可直接添加 RTL 源文件并使用默认 Verilog define 设置。该配置生成统一参数硬件。
@@ -68,7 +68,7 @@ H 加载接口：
 | --- | --- |
 | `i_h_we` | 写入一个 H 第一列项 |
 | `i_h_block_idx` | circulant block 编号 |
-| `i_h_one_idx` | block 第一列中第几个非零项 |
+| `i_h_diag_idx` | block 内对角线编号，对应第一列支撑项编号 |
 | `i_h_base_row` | 第一列非零项行号 |
 | `o_h_loaded` | 全部 H 第一列项已加载且未检测到错误 |
 | `o_h_error` | H 第一列项越界或重复 |

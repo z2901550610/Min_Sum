@@ -37,7 +37,7 @@ module decoder_profile_config
       endcase
       o_r = CFG_R_W'(P_R_VALS[idx]);
       o_w = CFG_W_W'(P_W_VALS[idx]);
-      o_tile_count = TILE_IDX_W'((P_R_VALS[idx] + C_TILE - 1) / C_TILE);
+      o_tile_count = TILE_IDX_W'((P_R_VALS[idx] + COLS_PER_TILE - 1) / COLS_PER_TILE);
       o_row_seg_size = ROW_BANK_AW'((P_R_VALS[idx] + L - 1) / L);
       o_c_val = CFG_CVAL_W'(P_C_VALS[idx]);
       o_alpha_shift_0 = CFG_ALPHA_SHIFT_W'(P_ASH0_VALS[idx]);
@@ -55,7 +55,7 @@ module decoder_profile_config
       endcase
       o_r = CFG_R_W'(P_R_VALS[idx]);
       o_w = CFG_W_W'(P_W_VALS[idx]);
-      o_tile_count = TILE_IDX_W'((P_R_VALS[idx] + C_TILE - 1) / C_TILE);
+      o_tile_count = TILE_IDX_W'((P_R_VALS[idx] + COLS_PER_TILE - 1) / COLS_PER_TILE);
       o_row_seg_size = ROW_BANK_AW'((P_R_VALS[idx] + L - 1) / L);
       o_c_val = CFG_CVAL_W'(P_C_VALS[idx]);
       o_alpha_shift_0 = CFG_ALPHA_SHIFT_W'(P_ASH0_VALS[idx]);

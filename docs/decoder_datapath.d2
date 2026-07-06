@@ -1,0 +1,153 @@
+# Render with: d2 --layout elk docs/decoder_datapath.d2 docs/decoder_datapath.svg
+direction: right
+
+classes: {
+  io: {
+    style.fill: "#f8fafc"
+    style.stroke: "#475569"
+  }
+  core: {
+    style.fill: "#f8fafc"
+    style.stroke: "#94a3b8"
+  }
+  ctrl: {
+    style.fill: "#eef2ff"
+    style.stroke: "#4f46e5"
+  }
+  mem: {
+    style.fill: "#ecfdf5"
+    style.stroke: "#059669"
+  }
+  pipe: {
+    style.fill: "#fff7ed"
+    style.stroke: "#ea580c"
+  }
+  note: {
+    style.fill: "#fefce8"
+    style.stroke: "#ca8a04"
+  }
+  optional: {
+    style.fill: "#fdf2f8"
+    style.stroke: "#db2777"
+    style.stroke-dash: 4
+  }
+}
+
+in: {
+  label: "起始输入\nsyndrome\nH base_row\nprofile_sel\nstart"
+  class: io
+}
+
+core: {
+  label: "decoder_top 数据通路核心"
+  class: core
+
+  cfg: {
+    label: "profile config\nR W COLS_PER_TILE\nLLR_C alpha"
+    class: ctrl
+  }
+
+  sched: {
+    label: "tile_scheduler\n固定 iter/tile/edge/q_seq\nbuf 与 pair 选择"
+    class: ctrl
+  }
+
+  fixed_time: {
+    label: "固定时间\nROW_SEG_SIZE 清空\n(TILES_TOTAL+1)*W*Q_TILE 主窗口\nguard 周期保留"
+    class: note
+  }
+
+  addr: {
+    label: "ram_i + edge_addr_gen\nbase_row -> row_addr\nedge_id / col_idx / tile_offset"
+    class: ctrl
+  }
+
+  syndrome: {
+    label: "ram_syndrome\nsyndrome[row]"
+    class: mem
+  }
+
+  comp: {
+    label: "ram_m\n压缩校验状态双 pair\nmin1/min2/min_id/sign_xor"
+    class: mem
+  }
+
+  sign: {
+    label: "ram_s\nV2C sign 缓存"
+    class: mem
+  }
+
+  c2v: {
+    label: "C2V 流水线\nCNU B 重建消息\nsignmag -> raw\n累加 tile sum"
+    class: pipe
+  }
+
+  tilebuf: {
+    label: "tile 双缓冲\nram_t_accum: raw_sum\nram_t: raw_edge"
+    class: mem
+  }
+
+  v2c: {
+    label: "V2C 流水线\nvnu_update\nLLR_C + alpha*sum\nLLR_C + alpha*(sum-edge)"
+    class: pipe
+  }
+
+  cnu_a: {
+    label: "CNU A\n更新 min1/min2\nmin_id/sign_xor"
+    class: pipe
+  }
+
+  bypass: {
+    label: "row 相关旁路\n给 CNU A 最新 comp"
+    class: pipe
+  }
+
+  ksign: {
+    label: "ram_k_sign\nK_SIGN_ENABLE 路径\nsign 覆盖 / flip"
+    class: optional
+  }
+}
+
+out: {
+  label: "最终输出\no_done / o_iter_count\no_e_rdata\n错误估计 bit"
+  class: io
+}
+
+in -> core.cfg: "profile_sel"
+in -> core.syndrome: "写 syndrome"
+in -> core.addr: "写 H"
+in -> core.sched: "start"
+in -> out: {
+  label: "i_e_read_col_idx"
+  style.stroke-dash: 3
+}
+
+core.cfg -> core.sched: "公开参数"
+core.sched -> core.fixed_time
+core.sched -> core.addr: "phase / diag_idx / q_seq"
+
+core.addr -> core.syndrome: "C2V row"
+core.addr -> core.comp: "C2V read pair"
+core.addr -> core.sign: "edge/tile"
+core.addr -> core.tilebuf: "tile_offset / diag_idx / q_seq"
+core.addr -> core.comp: "V2C write pair"
+
+core.syndrome -> core.c2v: "s"
+core.comp -> core.c2v: "comp"
+core.sign -> core.c2v: "sign"
+core.ksign -> core.c2v: "sign 覆盖"
+
+core.c2v -> core.tilebuf: "写 fill_buf"
+core.tilebuf -> core.v2c: "读 active_buf"
+
+core.v2c -> core.cnu_a: "V2C msg"
+core.comp -> core.bypass: "写 pair 读值"
+core.bypass -> core.cnu_a: "comp effective"
+core.cnu_a -> core.comp: "写下一轮 comp"
+core.cnu_a -> core.sign: "写 sign"
+
+core.v2c -> core.ksign: "候选 sign"
+core.ksign -> core.comp: "flip 修正"
+
+core.v2c -> out: "final_iter posterior sign"
+core.sched -> out: "done / iter_count"

@@ -22,7 +22,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--alpha-shift-0", type=int, default=1)
     parser.add_argument("--alpha-shift-1", type=int, default=3)
     parser.add_argument("--parallel-l", type=int, default=8)
-    parser.add_argument("--c-tile", type=int, default=8)
+    parser.add_argument("--cols-per-tile", type=int, default=8)
     parser.add_argument("--verilator", default="./scripts/verilator_quiet.py")
     parser.add_argument("--keep-dir", default=None)
     return parser.parse_args()
@@ -66,8 +66,8 @@ def execute(args: argparse.Namespace, work_dir: Path, repo_root: Path) -> None:
         str(args.alpha_shift_1),
         "--parallel-l",
         str(args.parallel_l),
-        "--c-tile",
-        str(args.c_tile),
+        "--cols-per-tile",
+        str(args.cols_per_tile),
     ]
     run(
         [
@@ -105,8 +105,8 @@ def execute(args: argparse.Namespace, work_dir: Path, repo_root: Path) -> None:
             args.verilator,
             "--parallel-l",
             str(args.parallel_l),
-            "--c-tile",
-            str(args.c_tile),
+            "--cols-per-tile",
+            str(args.cols_per_tile),
         ],
         repo_root,
     )

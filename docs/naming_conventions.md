@@ -5,16 +5,16 @@
 | 名称 | 范围 | 含义 |
 | --- | --- | --- |
 | `h_block_idx` | `0..N0-1` | circulant block 编号 |
-| `one_idx` | `0..W-1` | 一个 block 第一列中的非零项编号 |
+| `diag_idx` | `0..W-1` | 一个 block 内的对角线编号，对应第一列支撑项编号 |
 | `base_row` | `0..R-1` | H 第一列行索引 |
-| `edge_id` | `0..N0*W-1` | row-local edge 编号，`h_block_idx * W + one_idx` |
+| `edge_id` | `0..N0*W-1` | row-local edge 编号，`h_block_idx * W + diag_idx` |
 | `tile_idx` | `0..TILE_COUNT-1` | block 内 tile 编号 |
 | `tile_linear` | `0..TILES_TOTAL-1` | 全局 tile 编号 |
 | `q_seq` | `0..Q_TILE-1` | tile 内固定向量周期编号 |
 | `lane_idx` | `0..L-1` | 并行 lane 编号 |
 | `row_idx` | `0..R-1` | 校验行号 |
 | `col_idx` | `0..N-1` | 全局变量列号 |
-| `tile_offset` | `0..C_TILE-1` | tile 内本地列 offset |
+| `tile_offset` | `0..COLS_PER_TILE-1` | tile 内本地列 offset |
 
 ## 后缀
 

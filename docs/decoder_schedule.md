@@ -6,7 +6,7 @@
 
 ```text
 tile_linear = h_block_idx * TILE_COUNT + tile_idx
-tile_base   = tile_idx * C_TILE
+tile_base   = tile_idx * COLS_PER_TILE
 ```
 
 每个迭代先执行 `ROW_SEG_SIZE` 个 check-state 写 pair 清空周期。每个 tile 固定执行：
@@ -50,11 +50,11 @@ T_DECODE = I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE)
 | --- | --- |
 | `clear_addr` | `0 .. ROW_SEG_SIZE-1` |
 | `window_idx` | `0 .. TILES_TOTAL` |
-| `one_idx` | `0 .. W-1` |
+| `diag_idx` | `0 .. W-1` |
 | `q_seq` | `0 .. Q_TILE-1` |
 | `iter_count` | `0 .. I_MAX` |
 
-`clear_addr` 在迭代开始递增；清空完成后进入 tile 窗口。`q_seq` 最内层递增；`q_seq` 到达 `Q_TILE-1` 后推进 `one_idx`；`one_idx` 到达 `W-1` 后推进 `window_idx`；最后一个窗口结束后推进迭代。
+`clear_addr` 在迭代开始递增；清空完成后进入 tile 窗口。`q_seq` 最内层递增；`q_seq` 到达 `Q_TILE-1` 后推进 `diag_idx`；`diag_idx` 到达 `W-1` 后推进 `window_idx`；最后一个窗口结束后推进迭代。
 
 ## 调度输出
 

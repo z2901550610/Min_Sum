@@ -23,12 +23,12 @@ module edge_addr_gen
   localparam int ROW_CALC_W = ROW_IDX_W + 1;
   localparam int OFF_CNT_W = TILE_OFF_W + 1;
   localparam int LANE_SUM_W = LANE_IDX_W + 2;
-  localparam logic [OFF_CNT_W-1:0] C_TILE_OFF = OFF_CNT_W'(C_TILE);
+  localparam logic [OFF_CNT_W-1:0] COLS_PER_TILE_OFF = OFF_CNT_W'(COLS_PER_TILE);
 
   always_comb begin
     logic [ ROW_CALC_W-1:0] tile_base;
     logic [ ROW_CALC_W-1:0] tile_end;
-    logic [  OFF_CNT_W-1:0] tile_cols;
+    logic [  OFF_CNT_W-1:0] cols_per_tile;
     logic [ ROW_CALC_W-1:0] wrap_col;
     logic [ ROW_CALC_W-1:0] wrap_offset;
     logic [    Q_SEQ_W-1:0] wrap_q;
@@ -50,10 +50,10 @@ module edge_addr_gen
     cfg_r_low = LANE_IDX_W'(int'(i_cfg_r) & (L - 1));
     cfg_r_borrow_min = (cfg_r_low == '0) ? '0 : LANE_IDX_W'(L - int'(cfg_r_low));
     cfg_r_addr = ROW_BANK_AW'(i_cfg_r >> L_SHIFT);
-    tile_base = ROW_CALC_W'(i_tile_idx) * ROW_CALC_W'(C_TILE);
-    tile_cols = ((tile_base + ROW_CALC_W'(C_TILE)) > cfg_r_calc) ?
-                OFF_CNT_W'(cfg_r_calc - tile_base) : C_TILE_OFF;
-    tile_end = tile_base + ROW_CALC_W'(tile_cols);
+    tile_base = ROW_CALC_W'(i_tile_idx) * ROW_CALC_W'(COLS_PER_TILE);
+    cols_per_tile = ((tile_base + ROW_CALC_W'(COLS_PER_TILE)) > cfg_r_calc) ?
+                OFF_CNT_W'(cfg_r_calc - tile_base) : COLS_PER_TILE_OFF;
+    tile_end = tile_base + ROW_CALC_W'(cols_per_tile);
     wrap_col = cfg_r_calc - ROW_CALC_W'(i_base_row);
     wrap_offset = (wrap_col >= tile_base) ? (wrap_col - tile_base) : '0;
     wrap_q = Q_SEQ_W'(wrap_offset >> L_SHIFT);
@@ -114,7 +114,7 @@ module edge_addr_gen
           raw_row_addr;
       row_idx = ROW_IDX_W'(({row_addr, {L_SHIFT{1'b0}}}) + ROW_IDX_W'(bank_idx));
       lane_valid = i_phase_valid && (q_idx < Q_SEQ_W'(Q_BASE)) && !offset_sum[OFF_CNT_W] &&
-          (offset < tile_cols);
+          (offset < cols_per_tile);
 
       if (split_en && (i_q_seq == wrap_q)) begin
         lane_valid &= lane_idx < wrap_lane;

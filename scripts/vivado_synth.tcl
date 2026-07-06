@@ -9,7 +9,7 @@ set synth_directive [expr {[info exists ::env(VIVADO_SYNTH_DIRECTIVE)] ? $::env(
 set flatten_hierarchy [expr {[info exists ::env(VIVADO_FLATTEN_HIERARCHY)] ? $::env(VIVADO_FLATTEN_HIERARCHY) : "rebuilt"}]
 set xdc_file [expr {[info exists ::env(VIVADO_XDC)] ? $::env(VIVADO_XDC) : "constraints/decoder_top.xdc"}]
 set parallel_l [expr {[info exists ::env(BIKE_PARALLEL_L)] ? $::env(BIKE_PARALLEL_L) : "32"}]
-set c_tile [expr {[info exists ::env(BIKE_C_TILE)] ? $::env(BIKE_C_TILE) : ""}]
+set cols_per_tile [expr {[info exists ::env(BIKE_COLS_PER_TILE)] ? $::env(BIKE_COLS_PER_TILE) : ""}]
 set param_define [expr {[info exists ::env(BIKE_PARAM_DEFINE)] ? $::env(BIKE_PARAM_DEFINE) : ""}]
 set top "decoder_top"
 
@@ -39,6 +39,9 @@ set rtl_files [list \
   rtl/tile_scheduler.sv \
   rtl/ram_m.sv \
   rtl/ram_s.sv \
+  rtl/k_sign_update.sv \
+  rtl/k_sign_reconstruct.sv \
+  rtl/ram_k_sign.sv \
   rtl/ram_syndrome.sv \
   rtl/ram_t_accum.sv \
   rtl/ram_t.sv \
@@ -56,8 +59,8 @@ run_step "read_verilog" {
   if {$param_define ne ""} {
     lappend define_args $param_define
   }
-  if {$c_tile ne ""} {
-    lappend define_args "BIKE_C_TILE=$c_tile"
+  if {$cols_per_tile ne ""} {
+    lappend define_args "BIKE_COLS_PER_TILE=$cols_per_tile"
   }
   puts "Vivado defines: $define_args"
   read_verilog -sv -define $define_args $rtl_files

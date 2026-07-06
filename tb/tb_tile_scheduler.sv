@@ -10,13 +10,14 @@ module tb_tile_scheduler;
   logic [DEC_STATE_W-1:0] state;
   logic                   c2v_valid;
   logic                   v2c_valid;
+  logic                   ksign_corr_valid;
   logic [  TILE_ID_W-1:0] c2v_tile_linear;
   logic [  TILE_ID_W-1:0] v2c_tile_linear;
   logic [  H_BLOCK_W-1:0] c2v_h_block_idx;
   logic [ TILE_IDX_W-1:0] c2v_tile_idx;
   logic [  H_BLOCK_W-1:0] v2c_h_block_idx;
   logic [ TILE_IDX_W-1:0] v2c_tile_idx;
-  logic [  ONE_IDX_W-1:0] one_idx;
+  logic [ DIAG_IDX_W-1:0] diag_idx;
   logic [    Q_SEQ_W-1:0] q_seq;
   logic                   clear_valid;
   logic [ROW_BANK_AW-1:0] clear_addr;
@@ -38,13 +39,14 @@ module tb_tile_scheduler;
   logic [ TILE_IDX_W-1:0] observed_c2v_tile_idx;
   logic [  H_BLOCK_W-1:0] observed_v2c_h_block_idx;
   logic [ TILE_IDX_W-1:0] observed_v2c_tile_idx;
-  logic [  ONE_IDX_W-1:0] observed_one_idx;
+  logic [ DIAG_IDX_W-1:0] observed_diag_idx;
   logic [    Q_SEQ_W-1:0] observed_q_seq;
   logic                   observed_fill_buf;
   logic                   observed_active_buf;
   logic                   observed_final_iter;
   logic                   observed_iter_first_cycle;
   logic                   observed_iter_last_cycle;
+  logic                   observed_ksign_corr_valid;
   /* verilator lint_on UNUSEDSIGNAL */
 
   tile_scheduler dut (
@@ -57,13 +59,14 @@ module tb_tile_scheduler;
       .o_state(state),
       .o_c2v_valid(c2v_valid),
       .o_v2c_valid(v2c_valid),
+      .o_ksign_corr_valid(ksign_corr_valid),
       .o_c2v_tile_linear(c2v_tile_linear),
       .o_v2c_tile_linear(v2c_tile_linear),
       .o_c2v_h_block_idx(c2v_h_block_idx),
       .o_c2v_tile_idx(c2v_tile_idx),
       .o_v2c_h_block_idx(v2c_h_block_idx),
       .o_v2c_tile_idx(v2c_tile_idx),
-      .o_one_idx(one_idx),
+      .o_diag_idx(diag_idx),
       .o_q_seq(q_seq),
       .o_clear_valid(clear_valid),
       .o_clear_addr(clear_addr),
@@ -89,25 +92,27 @@ module tb_tile_scheduler;
       observed_c2v_tile_idx <= '0;
       observed_v2c_h_block_idx <= '0;
       observed_v2c_tile_idx <= '0;
-      observed_one_idx <= '0;
+      observed_diag_idx <= '0;
       observed_q_seq <= '0;
       observed_fill_buf <= 1'b0;
       observed_active_buf <= 1'b0;
       observed_final_iter <= 1'b0;
       observed_iter_first_cycle <= 1'b0;
       observed_iter_last_cycle <= 1'b0;
+      observed_ksign_corr_valid <= 1'b0;
     end else if (done !== 1'b1) begin
       observed_c2v_h_block_idx <= c2v_h_block_idx;
       observed_c2v_tile_idx <= c2v_tile_idx;
       observed_v2c_h_block_idx <= v2c_h_block_idx;
       observed_v2c_tile_idx <= v2c_tile_idx;
-      observed_one_idx <= one_idx;
+      observed_diag_idx <= diag_idx;
       observed_q_seq <= q_seq;
       observed_fill_buf <= fill_buf;
       observed_active_buf <= active_buf;
       observed_final_iter <= final_iter;
       observed_iter_first_cycle <= iter_first_cycle;
       observed_iter_last_cycle <= iter_last_cycle;
+      observed_ksign_corr_valid <= ksign_corr_valid;
       if (clear_valid) begin
         clear_count <= clear_count + 1;
         if (c2v_valid || v2c_valid) $fatal(1, "scheduler clear overlap with main phase");

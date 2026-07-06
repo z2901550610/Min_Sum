@@ -11,7 +11,7 @@
 | Command | `make test-bike-unified-random BIKE_RANDOM_TRIALS=1` |
 | Random seed | 1 |
 | Message width | `BIKE_MSG_BITS=5` |
-| Tile columns | `BIKE_UNIFIED_RANDOM_C_TILE=576` |
+| Tile columns | `BIKE_UNIFIED_RANDOM_COLS_PER_TILE=576` |
 | Lane parallelism | `BIKE_PARALLEL_L=32` |
 | Decode iterations | `I_MAX=7` |
 
@@ -34,7 +34,7 @@
 | `W` | 71 |
 | Official row weight | 142 |
 | `T` | 134 |
-| `C_TILE` | 576 |
+| `COLS_PER_TILE` | 576 |
 | `ROW_SEG_SIZE` | 386 |
 | `TILE_COUNT` | 22 |
 | `TILES_TOTAL` | 44 |
@@ -74,7 +74,7 @@ I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE) + 4
 | `W` | 103 |
 | Official row weight | 206 |
 | `T` | 199 |
-| `C_TILE` | 576 |
+| `COLS_PER_TILE` | 576 |
 | `ROW_SEG_SIZE` | 771 |
 | `TILE_COUNT` | 43 |
 | `TILES_TOTAL` | 86 |
@@ -114,7 +114,7 @@ I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE) + 4
 | `W` | 137 |
 | Official row weight | 274 |
 | `T` | 264 |
-| `C_TILE` | 576 |
+| `COLS_PER_TILE` | 576 |
 | `ROW_SEG_SIZE` | 1281 |
 | `TILE_COUNT` | 72 |
 | `TILES_TOTAL` | 144 |
@@ -150,7 +150,7 @@ I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE) + 4
 | Field | Value |
 | --- | --- |
 | Date |  |
-| Defines | `BIKE_XXX_PARAMS BIKE_MSG_BITS=5 BIKE_PARALLEL_L=32 BIKE_C_TILE=576` |
+| Defines | `BIKE_XXX_PARAMS BIKE_MSG_BITS=5 BIKE_PARALLEL_L=32 BIKE_COLS_PER_TILE=576` |
 | Seed |  |
 | Decode cycles |  |
 | LUT |  |

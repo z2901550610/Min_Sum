@@ -3,7 +3,7 @@
 module tb_ram_t_accum;
   import bike_pkg::*;
 
-  localparam int TEST_LANES = (C_TILE < L) ? C_TILE : L;
+  localparam int TEST_LANES = (COLS_PER_TILE < L) ? COLS_PER_TILE : L;
 
   logic                         clk;
   logic                         c2v_read_buf;

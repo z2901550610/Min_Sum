@@ -55,7 +55,7 @@ package bike_pkg;
   localparam int P_C_VALS[0:4] = '{5, 5, 5, 5, 7};
   localparam int P_ASH0_VALS[0:4] = '{3, 3, 3, 3, 4};
   localparam int P_ASH1_VALS[0:4] = '{4, 4, 4, 6, 0};
-  localparam int P_CTILE_VALS[0:4] = '{256, 256, 288, 464, 1168};
+  localparam int P_COLS_PER_TILE_VALS[0:4] = '{256, 256, 288, 464, 1168};
 `else
   // BIKE profile values indexed [0:2] = {128, 192, 256}.
   localparam int P_R_VALS[0:2] = '{12323, 24659, 40973};
@@ -64,7 +64,7 @@ package bike_pkg;
   localparam int P_C_VALS[0:2] = '{5, 5, 5};
   localparam int P_ASH0_VALS[0:2] = '{3, 3, 3};
   localparam int P_ASH1_VALS[0:2] = '{4, 4, 4};
-  localparam int P_CTILE_VALS[0:2] = '{256, 512, 576};
+  localparam int P_COLS_PER_TILE_VALS[0:2] = '{256, 512, 576};
 `endif
 
 `ifndef BIKE_TOY_PARAMS
@@ -125,6 +125,16 @@ package bike_pkg;
 `else
   localparam int MSG_BITS_CONFIG = `BIKE_MSG_BITS;
 `endif
+`ifndef BIKE_K_SIGN_K
+  localparam int K_SIGN_K_CONFIG = 6;
+`else
+  localparam int K_SIGN_K_CONFIG = `BIKE_K_SIGN_K;
+`endif
+`ifdef DECODER_TRIKE_FAMILY
+  localparam bit K_SIGN_ENABLE = 1'b1;
+`else
+  localparam bit K_SIGN_ENABLE = 1'b0;
+`endif
   localparam int D = (MSG_BITS_CONFIG > 1) ? (MSG_BITS_CONFIG - 1) : 1;
   // L is constrained to a power of two so lane-local tile windows map cleanly
   // to row banks.
@@ -133,25 +143,25 @@ package bike_pkg;
   localparam int MSG_W = D + 1;
   localparam int ROW_SEG_SIZE = (R + L - 1) / L;
   localparam int VNU_TC_W = MSG_W + ((W > 1) ? $clog2(W + 1) : 1);
-`ifdef BIKE_C_TILE
-  localparam int C_TILE_CONFIG = `BIKE_C_TILE;
+`ifdef BIKE_COLS_PER_TILE
+  localparam int COLS_PER_TILE_CONFIG = `BIKE_COLS_PER_TILE;
 `elsif BIKE_UNIFIED_PARAMS
-  localparam int C_TILE_CONFIG = 576;
+  localparam int COLS_PER_TILE_CONFIG = 576;
 `elsif TRIKE_UNIFIED_PARAMS
-  localparam int C_TILE_CONFIG = 1168;
+  localparam int COLS_PER_TILE_CONFIG = 1168;
 `elsif BIKE_TOY_PARAMS
-  localparam int C_TILE_CONFIG = 288;
+  localparam int COLS_PER_TILE_CONFIG = 288;
 `else
-  localparam int C_TILE_CONFIG = P_CTILE_VALS[PROF_IDX];
+  localparam int COLS_PER_TILE_CONFIG = P_COLS_PER_TILE_VALS[PROF_IDX];
 `endif
-  localparam int C_TILE = (C_TILE_CONFIG > R) ? R : C_TILE_CONFIG;
-  localparam int Q_BASE = (C_TILE + L - 1) / L;
+  localparam int COLS_PER_TILE = (COLS_PER_TILE_CONFIG > R) ? R : COLS_PER_TILE_CONFIG;
+  localparam int Q_BASE = (COLS_PER_TILE + L - 1) / L;
   localparam int Q_TILE = Q_BASE + 3;
-  localparam int TILE_COUNT = (R + C_TILE - 1) / C_TILE;
+  localparam int TILE_COUNT = (R + COLS_PER_TILE - 1) / COLS_PER_TILE;
   localparam int TILES_TOTAL = N0 * TILE_COUNT;
   localparam int TILE_ID_W = (TILES_TOTAL > 1) ? $clog2(TILES_TOTAL + 1) : 1;
   localparam int TILE_IDX_W = (TILE_COUNT > 1) ? $clog2(TILE_COUNT + 1) : 1;
-  localparam int TILE_OFF_W = (C_TILE > 1) ? $clog2(C_TILE) : 1;
+  localparam int TILE_OFF_W = (COLS_PER_TILE > 1) ? $clog2(COLS_PER_TILE) : 1;
   localparam int Q_SEQ_W = (Q_TILE > 1) ? $clog2(Q_TILE) : 1;
   localparam int ROW_BANK_AW = (ROW_SEG_SIZE > 1) ? $clog2(ROW_SEG_SIZE) : 1;
   localparam int ACC_W = VNU_TC_W;
@@ -159,7 +169,11 @@ package bike_pkg;
   localparam int H_BLOCK_W = (N0 > 1) ? $clog2(N0) : 1;
   localparam int ROW_EDGE_COUNT = N0 * W;
 
-  localparam int ONE_IDX_W = (W > 1) ? $clog2(W) : 1;
+  localparam int DIAG_IDX_W = (W > 1) ? $clog2(W) : 1;
+  localparam int K_SIGN_K = K_SIGN_K_CONFIG;
+  localparam int K_SIGN_SLOT_W = DIAG_IDX_W + D;
+  localparam int K_SIGN_RECORD_W = 1 + (K_SIGN_K * K_SIGN_SLOT_W);
+  localparam logic [DIAG_IDX_W-1:0] K_SIGN_DIAG_INVALID = '1;
   localparam int EDGE_ID_W = (ROW_EDGE_COUNT > 1) ? $clog2(ROW_EDGE_COUNT) : 1;
   localparam int ROW_IDX_W = (R > 1) ? $clog2(R) : 1;
   localparam int LANE_IDX_W = (L > 1) ? $clog2(L) : 1;
@@ -191,7 +205,7 @@ package bike_pkg;
   localparam bit PROFILE_RUNTIME_SELECT = 1'b0;
 `endif
   localparam int CFG_R_W = ROW_IDX_W + 1;
-  localparam int CFG_W_W = ONE_IDX_W + 1;
+  localparam int CFG_W_W = DIAG_IDX_W + 1;
   localparam int CFG_CVAL_W = MSG_W;
   localparam int CFG_ALPHA_SHIFT_W = 3;
 
@@ -201,6 +215,7 @@ package bike_pkg;
   localparam logic [DEC_STATE_W-1:0] DEC_ITER_C2V_PRIME = 4'd4;
   localparam logic [DEC_STATE_W-1:0] DEC_ITER_OVERLAP = 4'd5;
   localparam logic [DEC_STATE_W-1:0] DEC_ITER_V2C_DRAIN = 4'd6;
+  localparam logic [DEC_STATE_W-1:0] DEC_ITER_KSIGN_CORR = 4'd7;
   localparam logic [DEC_STATE_W-1:0] DEC_ITER_CHECK = 4'd8;
   localparam logic [DEC_STATE_W-1:0] DEC_DONE = 4'd9;
 

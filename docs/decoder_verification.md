@@ -29,7 +29,7 @@ python3 scripts/run_bike_random.py \
   --trials 1 \
   --base-seed 1 \
   --parallel-l 8 \
-  --c-tile 256 \
+  --cols-per-tile 256 \
   --timeout-cycles 900000 \
   --verilator ./scripts/verilator_quiet.py
 ```

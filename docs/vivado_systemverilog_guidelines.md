@@ -241,7 +241,7 @@ make vivado-synth
 - unconstrained paths、setup/hold violation、过长组合路径。
 - RAM/DSP/SRL 是否按预期推断。
 - `report_cdc` 中的 unsafe、unrecognized 或需 waiver 项。
-- 资源利用率与公开参数级别、`BIKE_PARALLEL_L`、`BIKE_C_TILE` 的关系。
+- 资源利用率与公开参数级别、`BIKE_PARALLEL_L`、`BIKE_COLS_PER_TILE` 的关系。
 
 ## 综合属性
 

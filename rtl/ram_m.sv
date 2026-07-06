@@ -19,7 +19,10 @@ module ram_m
     input  logic                   i_v2c_write_pair_sel,
     input  logic                   i_v2c_write_valid[0:L-1],
     input  logic [ROW_BANK_AW-1:0] i_v2c_write_row_addr[0:L-1],
-    input  logic [ COMP_C2V_W-1:0] i_v2c_write_data[0:L-1]
+    input  logic [ COMP_C2V_W-1:0] i_v2c_write_data[0:L-1],
+    input  logic                   i_flip_pair_sel,
+    input  logic                   i_flip_valid[0:L-1],
+    input  logic [ROW_BANK_AW-1:0] i_flip_row_addr[0:L-1]
 );
 
   logic [COMP_C2V_W-1:0] c2v_bank_rdata[0:1][0:L-1];
@@ -67,6 +70,11 @@ module ram_m
             bank_we = 1'b1;
             bank_waddr = i_v2c_write_row_addr[bank_idx];
             bank_wdata = i_v2c_write_data[bank_idx];
+          end else if (i_flip_valid[bank_idx] && (int'(i_flip_pair_sel) == pair_idx)) begin
+            bank_we = 1'b1;
+            bank_waddr = i_flip_row_addr[bank_idx];
+            bank_wdata = mem[i_flip_row_addr[bank_idx]];
+            bank_wdata[COMP_C2V_SIGN_XOR_BIT] = ~mem[i_flip_row_addr[bank_idx]][COMP_C2V_SIGN_XOR_BIT];
           end
         end
 
