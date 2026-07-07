@@ -19,7 +19,7 @@ module tile_scheduler
     output logic [ TILE_IDX_W-1:0] o_c2v_tile_idx,
     output logic [  H_BLOCK_W-1:0] o_v2c_h_block_idx,
     output logic [ TILE_IDX_W-1:0] o_v2c_tile_idx,
-    output logic [ DIAG_IDX_W-1:0] o_diag_idx,
+    output logic [ DIAG_IDX_W-1:0] o_diag_idx_local,
     output logic [    Q_SEQ_W-1:0] o_q_seq,
     output logic                   o_clear_valid,
     output logic [ROW_BANK_AW-1:0] o_clear_addr,
@@ -43,7 +43,7 @@ module tile_scheduler
   logic [KSIGN_CORR_GUARD_W-1:0] ksign_corr_guard_q;
   logic [       ROW_BANK_AW-1:0] clear_addr_q;
   logic [      WINDOW_IDX_W-1:0] window_idx_q;
-  logic [        DIAG_IDX_W-1:0] diag_idx_q;
+  logic [        DIAG_IDX_W-1:0] diag_idx_local_q;
   logic [           Q_SEQ_W-1:0] q_seq_q;
   logic [            ITER_W-1:0] iter_count_q;
   logic                          c2v_tile_active_q;
@@ -62,7 +62,7 @@ module tile_scheduler
   logic [KSIGN_CORR_GUARD_W-1:0] ksign_corr_guard_d;
   logic [       ROW_BANK_AW-1:0] clear_addr_d;
   logic [      WINDOW_IDX_W-1:0] window_idx_d;
-  logic [        DIAG_IDX_W-1:0] diag_idx_d;
+  logic [        DIAG_IDX_W-1:0] diag_idx_local_d;
   logic [           Q_SEQ_W-1:0] q_seq_d;
   logic [            ITER_W-1:0] iter_count_d;
   logic                          c2v_tile_active_d;
@@ -102,7 +102,7 @@ module tile_scheduler
 
   always_comb begin
     logic current_last_cycle;
-    logic last_diag_idx;
+    logic last_diag_idx_local;
     logic last_q_seq;
     logic last_clear_addr;
     logic last_tile_idx;
@@ -114,7 +114,7 @@ module tile_scheduler
     ksign_corr_guard_d = ksign_corr_guard_q;
     clear_addr_d = clear_addr_q;
     window_idx_d = window_idx_q;
-    diag_idx_d = diag_idx_q;
+    diag_idx_local_d = diag_idx_local_q;
     q_seq_d = q_seq_q;
     iter_count_d = iter_count_q;
     c2v_tile_active_d = c2v_tile_active_q;
@@ -127,13 +127,13 @@ module tile_scheduler
     v2c_tile_idx_state_d = v2c_tile_idx_state_q;
     done_d = done_q;
 
-    last_diag_idx = int'(diag_idx_q) == (int'(i_cfg_w) - 1);
+    last_diag_idx_local = int'(diag_idx_local_q) == (int'(i_cfg_w) - 1);
     last_q_seq = int'(q_seq_q) == (Q_TILE - 1);
     last_clear_addr = int'(clear_addr_q) == (int'(i_cfg_row_seg_size) - 1);
     last_tile_idx = int'(c2v_tile_idx_state_q) == (int'(i_cfg_tile_count) - 1);
     last_tile_linear = int'(c2v_tile_linear_state_q) == ((N0 * int'(i_cfg_tile_count)) - 1);
     current_last_cycle = running_q && !clear_q && !c2v_tile_active_q && v2c_tile_active_q &&
-                         last_diag_idx && last_q_seq;
+                         last_diag_idx_local && last_q_seq;
 
     if (i_start) begin
       running_d = 1'b1;
@@ -142,7 +142,7 @@ module tile_scheduler
       ksign_corr_guard_d = '0;
       clear_addr_d = '0;
       window_idx_d = '0;
-      diag_idx_d = '0;
+      diag_idx_local_d = '0;
       q_seq_d = '0;
       iter_count_d = '0;
       c2v_tile_active_d = 1'b1;
@@ -164,7 +164,7 @@ module tile_scheduler
         end
       end else if (ksign_corr_q && (ksign_corr_guard_q != '0)) begin
         ksign_corr_guard_d = ksign_corr_guard_q - KSIGN_CORR_GUARD_W'(1);
-      end else if (ksign_corr_q && last_tile_linear && last_diag_idx && last_q_seq) begin
+      end else if (ksign_corr_q && last_tile_linear && last_diag_idx_local && last_q_seq) begin
         ksign_corr_d = 1'b0;
         if (int'(iter_count_q) == (I_MAX - 1)) begin
           running_d = 1'b0;
@@ -174,7 +174,7 @@ module tile_scheduler
           clear_d = 1'b1;
           clear_addr_d = '0;
           window_idx_d = '0;
-          diag_idx_d = '0;
+          diag_idx_local_d = '0;
           q_seq_d = '0;
           iter_count_d = iter_count_q + ITER_W'(1);
           c2v_tile_active_d = 1'b1;
@@ -189,14 +189,14 @@ module tile_scheduler
       end else if (ksign_corr_q) begin
         if (last_q_seq) begin
           q_seq_d = '0;
-          if (last_diag_idx) begin
-            diag_idx_d = '0;
+          if (last_diag_idx_local) begin
+            diag_idx_local_d = '0;
             c2v_tile_linear_state_d = next_tile_linear(c2v_tile_linear_state_q);
             c2v_h_block_state_d = last_tile_idx ? c2v_h_block_state_q + H_BLOCK_W'(1) :
                 c2v_h_block_state_q;
             c2v_tile_idx_state_d = last_tile_idx ? '0 : c2v_tile_idx_state_q + TILE_IDX_W'(1);
           end else begin
-            diag_idx_d = diag_idx_q + DIAG_IDX_W'(1);
+            diag_idx_local_d = diag_idx_local_q + DIAG_IDX_W'(1);
           end
         end else begin
           q_seq_d = q_seq_q + Q_SEQ_W'(1);
@@ -206,7 +206,7 @@ module tile_scheduler
           ksign_corr_d = 1'b1;
           ksign_corr_guard_d = KSIGN_CORR_GUARD_W'(KSIGN_CORR_GUARD_CYCLES);
           window_idx_d = '0;
-          diag_idx_d = '0;
+          diag_idx_local_d = '0;
           q_seq_d = '0;
           c2v_tile_active_d = 1'b0;
           v2c_tile_active_d = 1'b0;
@@ -221,7 +221,7 @@ module tile_scheduler
           clear_d = 1'b1;
           clear_addr_d = '0;
           window_idx_d = '0;
-          diag_idx_d = '0;
+          diag_idx_local_d = '0;
           q_seq_d = '0;
           iter_count_d = iter_count_q + ITER_W'(1);
           c2v_tile_active_d = 1'b1;
@@ -235,8 +235,8 @@ module tile_scheduler
         end
       end else if (last_q_seq) begin
         q_seq_d = '0;
-        if (last_diag_idx) begin
-          diag_idx_d = '0;
+        if (last_diag_idx_local) begin
+          diag_idx_local_d = '0;
           window_idx_d = window_idx_q + WINDOW_IDX_W'(1);
           c2v_tile_active_d = c2v_tile_active_q && !last_tile_linear;
           v2c_tile_active_d = c2v_tile_active_q;
@@ -248,7 +248,7 @@ module tile_scheduler
               c2v_h_block_state_q;
           c2v_tile_idx_state_d = last_tile_idx ? '0 : c2v_tile_idx_state_q + TILE_IDX_W'(1);
         end else begin
-          diag_idx_d = diag_idx_q + DIAG_IDX_W'(1);
+          diag_idx_local_d = diag_idx_local_q + DIAG_IDX_W'(1);
         end
       end else begin
         q_seq_d = q_seq_q + Q_SEQ_W'(1);
@@ -264,7 +264,7 @@ module tile_scheduler
     ksign_corr_last_active = K_SIGN_ENABLE && running_q && ksign_corr_q &&
         (ksign_corr_guard_q == '0) &&
         (int'(c2v_tile_linear_state_q) == ((N0 * int'(i_cfg_tile_count)) - 1)) &&
-        (int'(diag_idx_q) == (int'(i_cfg_w) - 1)) && (int'(q_seq_q) == (Q_TILE - 1));
+        (int'(diag_idx_local_q) == (int'(i_cfg_w) - 1)) && (int'(q_seq_q) == (Q_TILE - 1));
     ksign_corr_valid_d = running_d && !i_start && !clear_active_d && ksign_corr_d &&
         (ksign_corr_guard_d == '0);
     c2v_valid_d = running_d && !i_start && !clear_active_d && !ksign_corr_valid_d &&
@@ -283,10 +283,10 @@ module tile_scheduler
     active_buf_d = ~window_idx_d[0];
     final_iter_d = running_d && !clear_active_d && (int'(iter_count_d) == (I_MAX - 1));
     iter_first_cycle_d = running_d && !i_start && !clear_active_d && c2v_tile_active_d &&
-                         !v2c_tile_active_d && (diag_idx_d == '0) && (q_seq_d == '0);
+                         !v2c_tile_active_d && (diag_idx_local_d == '0) && (q_seq_d == '0);
     iter_last_cycle_d = running_d && !clear_active_d &&
         ((!K_SIGN_ENABLE && !c2v_tile_active_d && v2c_tile_active_d &&
-          (int'(diag_idx_d) == (int'(i_cfg_w) - 1)) && (int'(q_seq_d) == (Q_TILE - 1))) ||
+          (int'(diag_idx_local_d) == (int'(i_cfg_w) - 1)) && (int'(q_seq_d) == (Q_TILE - 1))) ||
          ksign_corr_last_active);
 
     if (!running_d) begin
@@ -312,7 +312,7 @@ module tile_scheduler
       ksign_corr_guard_q <= '0;
       clear_addr_q <= '0;
       window_idx_q <= '0;
-      diag_idx_q <= '0;
+      diag_idx_local_q <= '0;
       q_seq_q <= '0;
       iter_count_q <= '0;
       c2v_tile_active_q <= 1'b0;
@@ -334,7 +334,7 @@ module tile_scheduler
       o_c2v_tile_idx <= '0;
       o_v2c_h_block_idx <= '0;
       o_v2c_tile_idx <= '0;
-      o_diag_idx <= '0;
+      o_diag_idx_local <= '0;
       o_q_seq <= '0;
       o_clear_valid <= 1'b0;
       o_clear_addr <= '0;
@@ -352,7 +352,7 @@ module tile_scheduler
       ksign_corr_guard_q <= ksign_corr_guard_d;
       clear_addr_q <= clear_addr_d;
       window_idx_q <= window_idx_d;
-      diag_idx_q <= diag_idx_d;
+      diag_idx_local_q <= diag_idx_local_d;
       q_seq_q <= q_seq_d;
       iter_count_q <= iter_count_d;
       c2v_tile_active_q <= c2v_tile_active_d;
@@ -374,7 +374,7 @@ module tile_scheduler
       o_c2v_tile_idx <= c2v_tile_idx_d;
       o_v2c_h_block_idx <= v2c_h_block_idx_d;
       o_v2c_tile_idx <= v2c_tile_idx_d;
-      o_diag_idx <= diag_idx_d;
+      o_diag_idx_local <= diag_idx_local_d;
       o_q_seq <= q_seq_d;
       o_clear_valid <= clear_valid_d;
       o_clear_addr <= clear_addr_out_d;

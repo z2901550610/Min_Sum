@@ -8,11 +8,12 @@
 H = [H0 | H1 | ... | H(N0-1)]
 ```
 
-每个 block 只通过第一列支撑集描述。第 `b` 个 block 的第 `k` 个支撑项为 `ram_i[b][k]`，本地变量列 `j` 对应的校验行为：
+每个 block 只通过第一列支撑集描述。第 `b` 个 block 的第 `k` 个支撑项使用线性 entry `b * W + k` 访问，本地变量列 `j` 对应的校验行为：
 
 ```text
-row = (j + ram_i[b][k]) mod R
-edge_id = b * W + k
+base_row_idx = ram_i[b * W + k]
+row = (j + base_row_idx) mod R
+diag_idx_global = b * W + k
 ```
 
 顶层接口包含 syndrome 写入、H 第一列写入、启动、错误估计读出和完成状态。译码主循环固定执行 `I_MAX` 轮，不使用收敛提前停止。
@@ -54,7 +55,7 @@ edge_id = b * W + k
 
 Vivado GUI 工程可直接添加 RTL 源文件并使用默认 Verilog define 设置。该配置生成统一参数硬件。
 
-顶层包含公开 profile 选择端口 `i_profile_sel`。`BIKE_UNIFIED_PARAMS` 配置使用该端口选择 BIKE-128/192/256 profile，`TRIKE_UNIFIED_PARAMS` 配置使用该端口选择 TRIKE-128/160/256/384/512 profile。配置表为选中 profile 输出 `R`、`W`、tile 数、row bank 深度、`C_VAL` 和 `alpha` 参数。存储和 datapath 按所选 family 的最大几何定宽，调度器按选中 profile 的公开边界执行固定窗口。
+顶层包含公开 profile 选择端口 `i_param_level`。`BIKE_UNIFIED_PARAMS` 配置使用该端口选择 BIKE-128/192/256 profile，`TRIKE_UNIFIED_PARAMS` 配置使用该端口选择 TRIKE-128/160/256/384/512 profile。配置表为选中 profile 输出 `R`、`W`、tile 数、row bank 深度、`C_VAL` 和 `alpha` 参数。存储和 datapath 按所选 family 的最大几何定宽，调度器按选中 profile 的公开边界执行固定窗口。
 
 BIKE 官方参数表中的 `w` 为整行权重；RTL 中 `W` 表示每个 circulant block 的第一列非零数。BIKE 三档 profile 的整行权重为 `N0*W = 142/206/274`，TRIKE 五档 profile 的整行权重为 `N0*W = 81/105/165/249/333`。
 
@@ -68,8 +69,8 @@ H 加载接口：
 | --- | --- |
 | `i_h_we` | 写入一个 H 第一列项 |
 | `i_h_block_idx` | circulant block 编号 |
-| `i_h_diag_idx` | block 内对角线编号，对应第一列支撑项编号 |
-| `i_h_base_row` | 第一列非零项行号 |
+| `i_h_diag_idx_local` | block 内对角线编号，对应第一列支撑项编号 |
+| `i_h_base_row_idx` | 第一列非零项行号 |
 | `o_h_loaded` | 全部 H 第一列项已加载且未检测到错误 |
 | `o_h_error` | H 第一列项越界或重复 |
 
@@ -91,7 +92,7 @@ CNU_B 根据压缩 check state、边 sign 和 syndrome 生成 C2V：
 
 ```text
 c2v_sign = sign_xor ^ v2c_sign ^ syndrome[row]
-c2v_mag  = min2_mag if edge_id == min_edge_id else min1_mag
+c2v_mag  = min2_mag if diag_idx_global == min_diag_idx_global else min1_mag
 ```
 
 变量节点更新公式使用 raw C2V 求和并整体缩放：
@@ -104,7 +105,7 @@ v2c_edge  = C_VAL + scale(sum(c2v_raw) - c2v_edge_raw)
 V2C 写回更新下一轮压缩 check state：
 
 ```text
-min1_mag, min2_mag, min_edge_id, sign_xor
+min1_mag, min2_mag, min_diag_idx_global, sign_xor
 ```
 
 最后一轮的 posterior sign 写入错误估计存储。验证环境导出 `e_hat` 后计算：

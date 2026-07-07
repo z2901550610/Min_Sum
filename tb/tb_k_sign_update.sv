@@ -9,7 +9,7 @@ module tb_k_sign_update;
   logic [K_SIGN_RECORD_W-1:0] record_next;
   logic                       clear;
   logic                       valid;
-  logic [     DIAG_IDX_W-1:0] diag_idx;
+  logic [     DIAG_IDX_W-1:0] diag_idx_local;
   logic [          MSG_W-1:0] v2c_msg;
   logic                       base_sign;
   logic                       recon_sign;
@@ -24,36 +24,36 @@ module tb_k_sign_update;
   logic                       v2c_base_sign[0:L-1];
 
   k_sign_update u_k_sign_update (
-      .i_record   (record_q),
-      .i_clear    (clear),
-      .i_valid    (valid),
-      .i_diag_idx (diag_idx),
-      .i_v2c_msg  (v2c_msg),
-      .i_base_sign(base_sign),
-      .o_record   (record_next)
+      .i_record        (record_q),
+      .i_clear         (clear),
+      .i_valid         (valid),
+      .i_diag_idx_local(diag_idx_local),
+      .i_v2c_msg       (v2c_msg),
+      .i_base_sign     (base_sign),
+      .o_record        (record_next)
   );
 
   k_sign_reconstruct u_k_sign_reconstruct (
       .i_record (record_q),
-      .i_diag_idx(diag_idx),
+      .i_diag_idx_local(diag_idx_local),
       .o_sign   (recon_sign)
   );
 
   ram_k_sign u_ram_k_sign (
-      .i_clk          (clk),
-      .i_rst_n        (rst_n),
-      .i_c2v_pair_sel (1'b0),
-      .i_c2v_valid    (c2v_valid),
-      .i_c2v_col_idx  (c2v_col_idx),
-      .i_c2v_diag_idx (diag_idx),
-      .o_c2v_sign     (c2v_sign),
-      .o_c2v_hit      (c2v_hit),
-      .i_v2c_pair_sel (1'b0),
-      .i_v2c_valid    (v2c_valid),
-      .i_v2c_col_idx  (v2c_col_idx),
-      .i_v2c_diag_idx (diag_idx),
-      .i_v2c_msg      (v2c_msg_lane),
-      .i_v2c_base_sign(v2c_base_sign)
+      .i_clk               (clk),
+      .i_rst_n             (rst_n),
+      .i_c2v_pair_sel      (1'b0),
+      .i_c2v_valid         (c2v_valid),
+      .i_c2v_col_idx       (c2v_col_idx),
+      .i_c2v_diag_idx_local(diag_idx_local),
+      .o_c2v_sign          (c2v_sign),
+      .o_c2v_hit           (c2v_hit),
+      .i_v2c_pair_sel      (1'b0),
+      .i_v2c_valid         (v2c_valid),
+      .i_v2c_col_idx       (v2c_col_idx),
+      .i_v2c_diag_idx_local(diag_idx_local),
+      .i_v2c_msg           (v2c_msg_lane),
+      .i_v2c_base_sign     (v2c_base_sign)
   );
 
   initial clk = 1'b0;
@@ -64,7 +64,7 @@ module tb_k_sign_update;
     begin
       clear = clr;
       valid = 1'b1;
-      diag_idx = pos;
+      diag_idx_local = pos;
       v2c_msg = {sign, mag};
       #1;
       record_q = record_next;
@@ -83,7 +83,7 @@ module tb_k_sign_update;
         v2c_msg_lane[lane_idx] = '0;
         v2c_base_sign[lane_idx] = 1'b0;
       end
-      diag_idx = pos;
+      diag_idx_local = pos;
       v2c_valid[0] = 1'b1;
       v2c_col_idx[0] = '0;
       v2c_msg_lane[0] = {sign, mag};
@@ -100,8 +100,8 @@ module tb_k_sign_update;
         c2v_valid[lane_idx]   = 1'b0;
         c2v_col_idx[lane_idx] = COL_W'(lane_idx);
       end
-      diag_idx = pos;
-      c2v_valid[0] = 1'b1;
+      diag_idx_local = pos;
+      c2v_valid[0]   = 1'b1;
       c2v_col_idx[0] = '0;
       @(posedge clk);
       #1;
@@ -117,7 +117,7 @@ module tb_k_sign_update;
     record_q = '0;
     clear = 1'b0;
     valid = 1'b0;
-    diag_idx = '0;
+    diag_idx_local = '0;
     v2c_msg = '0;
     base_sign = 1'b0;
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
@@ -139,15 +139,15 @@ module tb_k_sign_update;
     commit_update(1'b0, 2, 1'b1, 7);
     commit_update(1'b0, 0, 1'b0, 15);
 
-    diag_idx = DIAG_IDX_W'(1);
+    diag_idx_local = DIAG_IDX_W'(1);
     #1;
-    if (recon_sign !== 1'b1) $fatal(1, "expected hit at diag_idx=1");
-    diag_idx = DIAG_IDX_W'(2);
+    if (recon_sign !== 1'b1) $fatal(1, "expected hit at diag_idx_local=1");
+    diag_idx_local = DIAG_IDX_W'(2);
     #1;
-    if (recon_sign !== 1'b1) $fatal(1, "expected hit at diag_idx=2");
-    diag_idx = DIAG_IDX_W'(0);
+    if (recon_sign !== 1'b1) $fatal(1, "expected hit at diag_idx_local=2");
+    diag_idx_local = DIAG_IDX_W'(0);
     #1;
-    if (recon_sign !== 1'b0) $fatal(1, "expected base sign at diag_idx=0");
+    if (recon_sign !== 1'b0) $fatal(1, "expected base sign at diag_idx_local=0");
 
     write_ram_edge(0, 1'b1, 3);
     write_ram_edge(1, 1'b0, 9);

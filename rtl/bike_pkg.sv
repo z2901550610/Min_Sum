@@ -167,14 +167,14 @@ package bike_pkg;
   localparam int ACC_W = VNU_TC_W;
   localparam int COL_W = (N > 1) ? $clog2(N) : 1;
   localparam int H_BLOCK_W = (N0 > 1) ? $clog2(N0) : 1;
-  localparam int ROW_EDGE_COUNT = N0 * W;
+  localparam int DIAG_GLOBAL_COUNT = N0 * W;
 
   localparam int DIAG_IDX_W = (W > 1) ? $clog2(W) : 1;
   localparam int K_SIGN_K = K_SIGN_K_CONFIG;
   localparam int K_SIGN_SLOT_W = DIAG_IDX_W + D;
   localparam int K_SIGN_RECORD_W = 1 + (K_SIGN_K * K_SIGN_SLOT_W);
   localparam logic [DIAG_IDX_W-1:0] K_SIGN_DIAG_INVALID = '1;
-  localparam int EDGE_ID_W = (ROW_EDGE_COUNT > 1) ? $clog2(ROW_EDGE_COUNT) : 1;
+  localparam int DIAG_GLOBAL_W = (DIAG_GLOBAL_COUNT > 1) ? $clog2(DIAG_GLOBAL_COUNT) : 1;
   localparam int ROW_IDX_W = (R > 1) ? $clog2(R) : 1;
   localparam int LANE_IDX_W = (L > 1) ? $clog2(L) : 1;
   localparam int L_SHIFT = (L > 1) ? $clog2(L) : 0;
@@ -224,12 +224,14 @@ package bike_pkg;
 
   localparam int COMP_C2V_MIN1_LSB = 0;
   localparam int COMP_C2V_MIN2_LSB = COMP_C2V_MIN1_LSB + D;
-  localparam int COMP_C2V_MIN_ID_LSB = COMP_C2V_MIN2_LSB + D;
-  localparam int COMP_C2V_SIGN_XOR_BIT = COMP_C2V_MIN_ID_LSB + EDGE_ID_W;
+  localparam int COMP_C2V_MIN_DIAG_GLOBAL_LSB = COMP_C2V_MIN2_LSB + D;
+  localparam int COMP_C2V_SIGN_XOR_BIT = COMP_C2V_MIN_DIAG_GLOBAL_LSB + DIAG_GLOBAL_W;
   localparam int COMP_C2V_W = COMP_C2V_SIGN_XOR_BIT + 1;
-  localparam logic [COMP_C2V_W-1:0] COMP_C2V_INIT = {1'b0, EDGE_ID_W'(0), D'(MAG_MAX), D'(MAG_MAX)};
+  localparam logic [COMP_C2V_W-1:0] COMP_C2V_INIT = {
+    1'b0, DIAG_GLOBAL_W'(0), D'(MAG_MAX), D'(MAG_MAX)
+  };
   localparam logic [COMP_C2V_W-1:0] FIRST_ITER_C2V_COMP = {
-    1'b0, EDGE_ID_W'(0), D'(C_VAL), D'(C_VAL)
+    1'b0, DIAG_GLOBAL_W'(0), D'(C_VAL), D'(C_VAL)
   };
 
   /* verilator lint_on UNUSEDPARAM */

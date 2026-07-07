@@ -4,7 +4,7 @@ module k_sign_reconstruct
   import bike_pkg::*;
 (
     input  logic [K_SIGN_RECORD_W-1:0] i_record,
-    input  logic [     DIAG_IDX_W-1:0] i_diag_idx,
+    input  logic [     DIAG_IDX_W-1:0] i_diag_idx_local,
     output logic                       o_sign
 );
 
@@ -26,7 +26,7 @@ module k_sign_reconstruct
               slot_idx
           )+:DIAG_IDX_W] != K_SIGN_DIAG_INVALID) && (i_record[slot_lsb(
               slot_idx
-          )+:DIAG_IDX_W] == i_diag_idx)) begin
+          )+:DIAG_IDX_W] == i_diag_idx_local)) begin
         hit = 1'b1;
       end
     end

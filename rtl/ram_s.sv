@@ -3,26 +3,26 @@
 module ram_s
   import bike_pkg::*;
 (
-    input  logic                  i_clk,
-    input  logic                  i_rst_n,
-    input  logic                  i_c2v_valid[0:L-1],
-    input  logic [TILE_IDX_W-1:0] i_c2v_tile_idx,
-    input  logic [TILE_OFF_W-1:0] i_c2v_tile_offset[0:L-1],
-    input  logic [ EDGE_ID_W-1:0] i_c2v_edge_id[0:L-1],
-    output logic                  o_c2v_sign[0:L-1],
-    input  logic                  i_v2c_phase_valid,
-    input  logic [TILE_IDX_W-1:0] i_v2c_tile_idx,
-    input  logic [   Q_SEQ_W-1:0] i_v2c_q_seq,
-    input  logic [ EDGE_ID_W-1:0] i_v2c_edge_id,
-    input  logic                  i_v2c_write_valid[0:L-1],
-    input  logic [TILE_OFF_W-1:0] i_v2c_tile_offset[0:L-1],
-    input  logic                  i_v2c_sign[0:L-1]
+    input  logic                     i_clk,
+    input  logic                     i_rst_n,
+    input  logic                     i_c2v_valid[0:L-1],
+    input  logic [   TILE_IDX_W-1:0] i_c2v_tile_idx,
+    input  logic [   TILE_OFF_W-1:0] i_c2v_tile_offset[0:L-1],
+    input  logic [DIAG_GLOBAL_W-1:0] i_c2v_diag_idx_global[0:L-1],
+    output logic                     o_c2v_sign[0:L-1],
+    input  logic                     i_v2c_phase_valid,
+    input  logic [   TILE_IDX_W-1:0] i_v2c_tile_idx,
+    input  logic [      Q_SEQ_W-1:0] i_v2c_q_seq,
+    input  logic [DIAG_GLOBAL_W-1:0] i_v2c_diag_idx_global,
+    input  logic                     i_v2c_write_valid[0:L-1],
+    input  logic [   TILE_OFF_W-1:0] i_v2c_tile_offset[0:L-1],
+    input  logic                     i_v2c_sign[0:L-1]
 );
 
   localparam int SIGN_WORD_W = Q_BASE;
   localparam int SIGN_FRAME_W = L * SIGN_WORD_W;
   localparam int SIGN_WORD_AW = (SIGN_WORD_W > 1) ? $clog2(SIGN_WORD_W) : 1;
-  localparam int SIGN_BANK_DEPTH = ROW_EDGE_COUNT * TILE_COUNT;
+  localparam int SIGN_BANK_DEPTH = DIAG_GLOBAL_COUNT * TILE_COUNT;
   localparam int SIGN_BANK_AW = (SIGN_BANK_DEPTH > 1) ? $clog2(SIGN_BANK_DEPTH) : 1;
   localparam int SIGN_CHUNK_DEPTH = 4096;
   localparam int SIGN_CHUNK_COUNT = (SIGN_BANK_DEPTH + SIGN_CHUNK_DEPTH - 1) / SIGN_CHUNK_DEPTH;
@@ -33,23 +33,24 @@ module ram_s
   typedef logic [SIGN_WORD_W-1:0] sign_word_t;
   typedef logic [SIGN_FRAME_W-1:0] sign_frame_t;
 
-  function automatic logic [SIGN_BANK_AW-1:0] edge_base(input  logic [EDGE_ID_W-1:0] edge_id);
+  function automatic logic [SIGN_BANK_AW-1:0] diag_global_base(
+      input  logic [DIAG_GLOBAL_W-1:0] diag_idx_global);
     logic [SIGN_BANK_AW-1:0] acc;
     begin
       acc = '0;
       for (int bit_idx = 0; bit_idx < SIGN_BANK_AW; bit_idx++) begin
         if (((TILE_COUNT >> bit_idx) & 1) != 0) begin
-          acc = acc + (SIGN_BANK_AW'(edge_id) << bit_idx);
+          acc = acc + (SIGN_BANK_AW'(diag_idx_global) << bit_idx);
         end
       end
-      edge_base = acc;
+      diag_global_base = acc;
     end
   endfunction
 
-  function automatic logic [SIGN_BANK_AW-1:0] bank_addr(input  logic [EDGE_ID_W-1:0] edge_id,
-                                                        input  logic [TILE_IDX_W-1:0] tile_idx);
+  function automatic logic [SIGN_BANK_AW-1:0] bank_addr(
+      input  logic [DIAG_GLOBAL_W-1:0] diag_idx_global, input  logic [TILE_IDX_W-1:0] tile_idx);
     begin
-      bank_addr = edge_base(edge_id) + SIGN_BANK_AW'(tile_idx);
+      bank_addr = diag_global_base(diag_idx_global) + SIGN_BANK_AW'(tile_idx);
     end
   endfunction
 
@@ -96,22 +97,22 @@ module ram_s
   sign_frame_t                           chunk_rframe_q   [0:SIGN_CHUNK_COUNT-1];
 
   always_comb begin
-    logic [EDGE_ID_W-1:0] read_edge_id;
+    logic [DIAG_GLOBAL_W-1:0] read_diag_idx_global;
 
-    read_valid   = 1'b0;
-    read_edge_id = '0;
+    read_valid = 1'b0;
+    read_diag_idx_global = '0;
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
       lane_rbit[lane_idx] = '0;
       if (i_c2v_valid[lane_idx]) begin
         if (!read_valid) begin
-          read_edge_id = i_c2v_edge_id[lane_idx];
+          read_diag_idx_global = i_c2v_diag_idx_global[lane_idx];
         end
         read_valid = 1'b1;
         lane_rbit[lane_idx] = word_bit(i_c2v_tile_offset[lane_idx]);
       end
     end
 
-    read_addr = bank_addr(read_edge_id, i_c2v_tile_idx);
+    read_addr = bank_addr(read_diag_idx_global, i_c2v_tile_idx);
     read_chunk = sign_chunk_idx(read_addr);
     read_addr_local = sign_chunk_addr(read_addr);
   end
@@ -119,7 +120,7 @@ module ram_s
   always_comb begin
     word_start = i_v2c_phase_valid && (i_v2c_q_seq == '0);
     word_flush = i_v2c_phase_valid && (i_v2c_q_seq == Q_SEQ_W'(Q_TILE - 1));
-    write_addr = bank_addr(i_v2c_edge_id, i_v2c_tile_idx);
+    write_addr = bank_addr(i_v2c_diag_idx_global, i_v2c_tile_idx);
     write_chunk = sign_chunk_idx(write_addr);
     write_addr_local = sign_chunk_addr(write_addr);
     write_frame_next = '0;

@@ -78,7 +78,7 @@
         <mxCell id="tap_bus" value="" style="ellipse;html=1;shape=ellipse;fillColor=#000000;strokeColor=#000000;" vertex="1" parent="1">
           <mxGeometry x="676" y="372" width="10" height="10" as="geometry" />
         </mxCell>
-        <mxCell id="note" value="&lt;i&gt;L&lt;/i&gt; lanes process one tile window; RAM M stores (min&lt;sub&gt;1&lt;/sub&gt;, min&lt;sub&gt;2&lt;/sub&gt;, min_id, sign_xor).&lt;br&gt;RAM T&lt;sub&gt;&amp;Sigma;&lt;/sub&gt;/T&lt;sub&gt;e&lt;/sub&gt; hold the active tile C2V sums and edge messages." style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontFamily=Courier New;fontSize=16;" vertex="1" parent="1">
+        <mxCell id="note" value="&lt;i&gt;L&lt;/i&gt; lanes process one tile window; RAM M stores (min&lt;sub&gt;1&lt;/sub&gt;, min&lt;sub&gt;2&lt;/sub&gt;, min_diag_idx_global, sign_xor).&lt;br&gt;RAM T&lt;sub&gt;&amp;Sigma;&lt;/sub&gt;/T&lt;sub&gt;e&lt;/sub&gt; hold the active tile C2V sums and edge messages." style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontFamily=Courier New;fontSize=16;" vertex="1" parent="1">
           <mxGeometry x="130" y="918" width="940" height="44" as="geometry" />
         </mxCell>
         <mxCell id="caption" value="Figure 2: Top-level hardware architecture of the tile-based BIKE min-sum decoder." style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontFamily=Courier New;fontSize=15;" vertex="1" parent="1">

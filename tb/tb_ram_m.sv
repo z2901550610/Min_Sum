@@ -24,7 +24,7 @@ module tb_ram_m;
   logic                   flip_valid[0:L-1];
   logic [ROW_BANK_AW-1:0] flip_row_addr[0:L-1];
 
-  localparam logic [COMP_C2V_W-1:0] TEST_COMP = {1'b1, EDGE_ID_W'(2), D'(7), D'(3)};
+  localparam logic [COMP_C2V_W-1:0] TEST_COMP = {1'b1, DIAG_GLOBAL_W'(2), D'(7), D'(3)};
 
   ram_m dut (
       .i_clk(clk),

@@ -59,7 +59,7 @@ typedef struct {
   int32_t *variable_sum;
   uint16_t *min1;
   uint16_t *min2;
-  uint16_t *min_id;
+  uint16_t *min_diag_idx_global;
   uint8_t *sign_xor;
   uint8_t *decision;
   uint8_t *residual;
@@ -210,9 +210,9 @@ static bool read_fixture(const char *path, fixture_case_t *fixture) {
       fclose(file);
       return false;
     }
-    for (uint32_t diag_idx = 0; diag_idx < fixture->config.w; ++diag_idx) {
+    for (uint32_t diag_idx_local = 0; diag_idx_local < fixture->config.w; ++diag_idx_local) {
       if (fscanf(file, "%" SCNu32,
-                 &fixture->h_base[(size_t)block * fixture->config.w + diag_idx]) != 1) {
+                 &fixture->h_base[(size_t)block * fixture->config.w + diag_idx_local]) != 1) {
         fprintf(stderr, "fixture parse error in H block %u\n", block);
         fclose(file);
         return false;
@@ -348,7 +348,7 @@ static bool allocate_buffers(const decoder_config_t *config, decoder_buffers_t *
       checked_calloc((size_t)n64, sizeof(*buffers->variable_sum), "variable sums");
   buffers->min1 = checked_calloc(config->r, sizeof(*buffers->min1), "check min1");
   buffers->min2 = checked_calloc(config->r, sizeof(*buffers->min2), "check min2");
-  buffers->min_id = checked_calloc(config->r, sizeof(*buffers->min_id), "check min id");
+  buffers->min_diag_idx_global = checked_calloc(config->r, sizeof(*buffers->min_diag_idx_global), "check min id");
   buffers->sign_xor = checked_calloc(config->r, sizeof(*buffers->sign_xor), "check sign");
   buffers->decision = checked_calloc((size_t)n64, sizeof(*buffers->decision), "decision");
   buffers->residual = checked_calloc(config->r, sizeof(*buffers->residual), "residual");
@@ -376,7 +376,7 @@ static void free_buffers(decoder_buffers_t *buffers) {
   free(buffers->variable_sum);
   free(buffers->min1);
   free(buffers->min2);
-  free(buffers->min_id);
+  free(buffers->min_diag_idx_global);
   free(buffers->sign_xor);
   free(buffers->decision);
   free(buffers->residual);
@@ -384,14 +384,14 @@ static void free_buffers(decoder_buffers_t *buffers) {
 }
 
 static uint32_t edge_row(const decoder_config_t *config, const decoder_buffers_t *buffers,
-                         uint32_t block, uint32_t column, uint32_t diag_idx) {
-  uint32_t base = buffers->h_base[(size_t)block * config->w + diag_idx];
+                         uint32_t block, uint32_t column, uint32_t diag_idx_local) {
+  uint32_t base = buffers->h_base[(size_t)block * config->w + diag_idx_local];
   uint32_t sum = base + column;
   return (sum >= config->r) ? (sum - config->r) : sum;
 }
 
-static size_t edge_offset(const decoder_config_t *config, uint32_t variable, uint32_t diag_idx) {
-  return (size_t)variable * config->w + diag_idx;
+static size_t edge_offset(const decoder_config_t *config, uint32_t variable, uint32_t diag_idx_local) {
+  return (size_t)variable * config->w + diag_idx_local;
 }
 
 static void generate_case(const decoder_config_t *config, uint64_t seed,
@@ -422,8 +422,8 @@ static void generate_case(const decoder_config_t *config, uint64_t seed,
     }
     block = variable / config->r;
     column = variable % config->r;
-    for (uint32_t diag_idx = 0; diag_idx < config->w; ++diag_idx) {
-      uint32_t row = edge_row(config, buffers, block, column, diag_idx);
+    for (uint32_t diag_idx_local = 0; diag_idx_local < config->w; ++diag_idx_local) {
+      uint32_t row = edge_row(config, buffers, block, column, diag_idx_local);
       buffers->syndrome[row] ^= 1U;
     }
   }
@@ -455,9 +455,9 @@ static bool load_fixture_case(const fixture_case_t *fixture, decoder_buffers_t *
   }
   for (uint32_t block = 0; block < fixture->config.n0; ++block) {
     uint32_t previous = 0;
-    for (uint32_t diag_idx = 0; diag_idx < fixture->config.w; ++diag_idx) {
-      uint32_t row = buffers->h_base[(size_t)block * fixture->config.w + diag_idx];
-      if ((row >= fixture->config.r) || ((diag_idx != 0) && (row <= previous))) {
+    for (uint32_t diag_idx_local = 0; diag_idx_local < fixture->config.w; ++diag_idx_local) {
+      uint32_t row = buffers->h_base[(size_t)block * fixture->config.w + diag_idx_local];
+      if ((row >= fixture->config.r) || ((diag_idx_local != 0) && (row <= previous))) {
         fprintf(stderr, "fixture H block %u must contain sorted unique rows in range\n", block);
         return false;
       }
@@ -551,8 +551,8 @@ static void calculate_residual(const decoder_config_t *config, decoder_buffers_t
     }
     block = variable / config->r;
     column = variable % config->r;
-    for (uint32_t diag_idx = 0; diag_idx < config->w; ++diag_idx) {
-      uint32_t row = edge_row(config, buffers, block, column, diag_idx);
+    for (uint32_t diag_idx_local = 0; diag_idx_local < config->w; ++diag_idx_local) {
+      uint32_t row = edge_row(config, buffers, block, column, diag_idx_local);
       buffers->residual[row] ^= 1U;
     }
   }
@@ -609,7 +609,7 @@ static void run_decoder(const decoder_config_t *config, decoder_buffers_t *buffe
     for (uint32_t row = 0; row < config->r; ++row) {
       buffers->min1[row] = (uint16_t)magnitude_max;
       buffers->min2[row] = (uint16_t)magnitude_max;
-      buffers->min_id[row] = 0;
+      buffers->min_diag_idx_global[row] = 0;
       buffers->sign_xor[row] = 0;
     }
 
@@ -617,12 +617,12 @@ static void run_decoder(const decoder_config_t *config, decoder_buffers_t *buffe
       uint32_t block = variable / config->r;
       uint32_t column = variable % config->r;
 
-      for (uint32_t diag_idx = 0; diag_idx < config->w; ++diag_idx) {
-        size_t offset = edge_offset(config, variable, diag_idx);
+      for (uint32_t diag_idx_local = 0; diag_idx_local < config->w; ++diag_idx_local) {
+        size_t offset = edge_offset(config, variable, diag_idx_local);
         int16_t message = buffers->v2c[offset];
         uint32_t magnitude = magnitude_i16(message);
-        uint32_t row = edge_row(config, buffers, block, column, diag_idx);
-        uint16_t edge_id = (uint16_t)(block * config->w + diag_idx);
+        uint32_t row = edge_row(config, buffers, block, column, diag_idx_local);
+        uint16_t diag_idx_global = (uint16_t)(block * config->w + diag_idx_local);
 
         if (print_stats) {
           ++stats.v2c_hist[magnitude];
@@ -635,7 +635,7 @@ static void run_decoder(const decoder_config_t *config, decoder_buffers_t *buffe
         if (magnitude <= buffers->min1[row]) {
           buffers->min2[row] = buffers->min1[row];
           buffers->min1[row] = (uint16_t)magnitude;
-          buffers->min_id[row] = edge_id;
+          buffers->min_diag_idx_global[row] = diag_idx_global;
         } else if (magnitude < buffers->min2[row]) {
           buffers->min2[row] = (uint16_t)magnitude;
         }
@@ -653,12 +653,12 @@ static void run_decoder(const decoder_config_t *config, decoder_buffers_t *buffe
       uint32_t block = variable / config->r;
       uint32_t column = variable % config->r;
 
-      for (uint32_t diag_idx = 0; diag_idx < config->w; ++diag_idx) {
-        size_t offset = edge_offset(config, variable, diag_idx);
+      for (uint32_t diag_idx_local = 0; diag_idx_local < config->w; ++diag_idx_local) {
+        size_t offset = edge_offset(config, variable, diag_idx_local);
         int16_t input = buffers->v2c[offset];
-        uint32_t row = edge_row(config, buffers, block, column, diag_idx);
-        uint16_t edge_id = (uint16_t)(block * config->w + diag_idx);
-        uint32_t magnitude = (edge_id == buffers->min_id[row]) ? buffers->min2[row]
+        uint32_t row = edge_row(config, buffers, block, column, diag_idx_local);
+        uint16_t diag_idx_global = (uint16_t)(block * config->w + diag_idx_local);
+        uint32_t magnitude = (diag_idx_global == buffers->min_diag_idx_global[row]) ? buffers->min2[row]
                                                                : buffers->min1[row];
         uint8_t sign =
             buffers->sign_xor[row] ^ (input < 0) ^ (buffers->syndrome[row] != 0);
@@ -682,8 +682,8 @@ static void run_decoder(const decoder_config_t *config, decoder_buffers_t *buffe
                       config->alpha_shift_1);
       buffers->decision[variable] = posterior < 0;
 
-      for (uint32_t diag_idx = 0; diag_idx < config->w; ++diag_idx) {
-        size_t offset = edge_offset(config, variable, diag_idx);
+      for (uint32_t diag_idx_local = 0; diag_idx_local < config->w; ++diag_idx_local) {
+        size_t offset = edge_offset(config, variable, diag_idx_local);
         int32_t extrinsic = buffers->variable_sum[variable] - buffers->c2v[offset];
         int32_t updated =
             (int32_t)config->c_val +
@@ -806,7 +806,7 @@ static bool validate_config(const decoder_config_t *config) {
     return false;
   }
   if ((uint64_t)config->n0 * config->w > UINT16_MAX) {
-    fprintf(stderr, "n0*w must fit in the model's 16-bit edge id\n");
+    fprintf(stderr, "n0*w must fit in the model's 16-bit global diagonal index\n");
     return false;
   }
   return true;

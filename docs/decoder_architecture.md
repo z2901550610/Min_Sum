@@ -100,7 +100,7 @@ $$\gamma_j = \begin{cases} +C & x_j = 0 \\ -C & x_j = 1 \end{cases}$$
 | --- | --- | --- |
 | min1 | $D$ bit | 最小 V2C 幅度 |
 | min2 | $D$ bit | 次小 V2C 幅度 |
-| min_id | $\lceil \log_2(n_0 w) \rceil$ bit | 贡献最小值的变量节点编号 |
+| min_diag_idx_global | $\lceil \log_2(n_0 w) \rceil$ bit | 贡献最小值的全局对角线编号 |
 | sign_xor | 1 bit | 所有 V2C 符号的异或累积 |
 
 其中 $D$ 是消息幅度的量化位宽（默认 4 bit）。这个压缩表示足以重建任意一条 C2V 消息：
@@ -123,7 +123,7 @@ CNU A 是一个纯组合逻辑模块，在 V2C 阶段运行。每当一条新的
 
 CNU B 同样是纯组合逻辑模块，在 C2V 阶段运行。给定压缩状态和请求节点的编号，CNU B 输出对应的 C2V 消息：
 
-- **幅度**：若请求节点的编号等于 min_id，取 min2；否则取 min1。
+- **幅度**：若请求消息的全局对角线编号等于 min_diag_idx_global，取 min2；否则取 min1。
 - **符号**：sign_xor $\oplus$ 该节点存储的 V2C 符号 $\oplus$ syndrome 比特。
 
 ## 5. 变量节点处理
@@ -174,7 +174,7 @@ $\mathbf{H}$ 矩阵的结构信息以 $n_0 \times w$ 个基行索引的形式存
 
 ### 6.2 压缩 C2V 状态存储
 
-每个校验节点的压缩状态（min1、min2、min_id、sign_xor）存储在双端口 block RAM 中。存储按 $L$ 路分 bank，每个 bank 深度为 $\lceil r / L \rceil$。
+每个校验节点的压缩状态（min1、min2、min_diag_idx_global、sign_xor）存储在双端口 block RAM 中。存储按 $L$ 路分 bank，每个 bank 深度为 $\lceil r / L \rceil$。
 
 双缓冲通过两对 buffer 实现：C2V 阶段从一对读取，V2C 阶段向另一对写入，迭代结束时交换。
 
@@ -219,7 +219,7 @@ Syndrome 向量（$r$ 个比特）存储在分布式 RAM 中，按 $L$ 路分 ba
 外部逻辑在启动译码前写入两类信息：
 
 1. **Syndrome**：通过 `i_syndrome_we`、`i_syndrome_addr` 和 `i_syndrome_wdata` 写入 $s_0,\dots,s_{r-1}$。这些比特表示每个校验方程的目标奇偶值。
-2. **H 第一列支撑集**：通过 `i_h_we`、`i_h_block_idx`、`i_h_diag_idx` 和 `i_h_base_row` 写入每个循环块第一列中 1 的行号。`i_h_diag_idx` 表示该支撑项对应的循环对角线编号。`ram_i` 会检查 block/diagonal 索引是否在范围内、行号是否小于 $r$，以及同一 block 内是否出现重复行号。
+2. **H 第一列支撑集**：通过 `i_h_we`、`i_h_block_idx`、`i_h_diag_idx_local` 和 `i_h_base_row_idx` 写入每个循环块第一列中 1 的行号。`i_h_diag_idx_local` 表示该支撑项对应的循环对角线编号。`ram_i` 会检查 block/diagonal 索引是否在范围内、行号是否小于 $r$，以及同一 block 内是否出现重复行号。
 
 当所有 $n_0 w$ 个 H 项写入完成且没有检测到错误时，`o_h_loaded=1`、`o_h_error=0`。顶层使用
 
@@ -235,14 +235,14 @@ decode_start = i_start && o_h_loaded && !o_h_error
 
 ```text
 sign_xor = 0
-min_id   = 0
+min_diag_idx_global   = 0
 min1     = MAG_MAX
 min2     = MAG_MAX
 ```
 
 这个初始化的含义是：下一轮 V2C 消息开始进入 CNU A 前，校验节点状态中还没有接收任何本轮 V2C 消息，因此最小值和次小值都设置为最大幅度。清空只作用于 V2C 将要写入的 pair；C2V 读取的 pair 保持稳定，用于生成本轮 C2V 消息。
 
-部分和累加器不需要整块清空。C2V 流水线在每个 tile 的 `diag_idx==0` 时把该变量列的部分和基值视为 0，然后从第一条 C2V 消息开始累加。这样清零动作被并入固定扫描流程。
+部分和累加器不需要整块清空。C2V 流水线在每个 tile 的 `diag_idx_local==0` 时把该变量列的部分和基值视为 0，然后从第一条 C2V 消息开始累加。这样清零动作被并入固定扫描流程。
 
 首次迭代的 C2V 输入使用 `FIRST_ITER_C2V_COMP`，其 `min1=min2=C_VAL`、`sign_xor=0`。这相当于在没有上一轮 V2C 历史的情况下，为每条边提供一致的初始可靠度。后续迭代从压缩校验状态 RAM 读取上一轮 V2C 形成的 min-sum 状态。
 
@@ -250,18 +250,18 @@ min2     = MAG_MAX
 
 C2V 阶段的任务是“从校验节点向变量节点发消息”。对每个有效 lane，流水线执行以下操作：
 
-1. 根据当前 `h_block_idx`、`tile_idx`、`diag_idx` 和 `q_seq` 生成变量列号 `col_idx`、校验行号 `row_idx`、边编号 `edge_id` 和 tile 内偏移 `tile_offset`。
-2. 从 syndrome RAM 读出 `syndrome[row_idx]`。
-3. 从压缩校验状态 RAM 读出该校验行的 `min1/min2/min_id/sign_xor`。首次迭代使用固定初值。
+1. 根据当前 `h_block_idx`、`tile_idx`、`diag_idx_local` 和 `q_seq` 生成变量列号 `col_idx`、校验行号 `check_row_idx`、全局对角线编号 `diag_idx_global` 和 tile 内偏移 `tile_offset`。
+2. 从 syndrome RAM 读出 `syndrome[check_row_idx]`。
+3. 从压缩校验状态 RAM 读出该校验行的 `min1/min2/min_diag_idx_global/sign_xor`。首次迭代使用固定初值。
 4. CNU B 重建当前边的 C2V 消息：
 
 ```text
-mag  = (edge_id == min_id) ? min2 : min1
-sign = sign_xor ^ v2c_sign(edge_id, row_idx) ^ syndrome(row_idx)
+mag  = (diag_idx_global == min_diag_idx_global) ? min2 : min1
+sign = sign_xor ^ v2c_sign(diag_idx_global, check_row_idx) ^ syndrome(check_row_idx)
 ```
 
 5. 将符号-幅度格式的 C2V 转成二进制补码 `raw`。
-6. 把 `raw` 加到当前变量列的 tile 部分和中，写入 `ram_t_accum[fill_buf][tile_offset]`。
+6. 把 `raw` 加到当前变量列的 tile 部分和中，写入 `ram_accum[fill_buf][tile_offset]`。
 7. 同时把单条边的 `raw` 写入 `ram_t[fill_buf]`，供 V2C 阶段执行“排除自身”时读取。
 
 从算法角度看，C2V 的输出是校验方程给变量比特的建议。若某条边本身贡献了校验节点最小幅度，发回给它的幅度要使用次小值；这样可以避免一个变量节点把自己的信息直接绕一圈又收到回来。
@@ -272,7 +272,7 @@ V2C 阶段的任务是“变量节点综合所有校验建议，再把新消息�
 
 对每个有效 lane，流水线执行以下操作：
 
-1. 从 `ram_t_accum[active_buf][tile_offset]` 读取该变量列的 raw C2V 总和 `raw_sum`。
+1. 从 `ram_accum[active_buf][tile_offset]` 读取该变量列的 raw C2V 总和 `raw_sum`。
 2. 从 `ram_t[active_buf]` 读取当前边的 raw C2V 值 `raw_edge`。
 3. 计算后验值：
 
@@ -289,7 +289,7 @@ v2c = C_VAL + alpha_scale(raw_sum - raw_edge)
 `raw_sum - raw_edge` 对应 min-sum 算法中的“排除自身”规则。后验值用于最终硬判决，V2C 用于更新下一轮的校验节点状态。
 
 5. 将 V2C 补码值饱和转换为符号-幅度格式。
-6. CNU A 用该 V2C 消息更新写 pair 中的压缩校验状态：符号进入异或累积，幅度参与 `min1/min2/min_id` 比较。
+6. CNU A 用该 V2C 消息更新写 pair 中的压缩校验状态：符号进入异或累积，幅度参与 `min1/min2/min_diag_idx_global` 比较。
 7. 将 V2C 符号写入符号 RAM，供下一次 C2V 重建消息时使用。
 
 当同一校验行的压缩状态在相邻流水级中存在读写相关时，顶层使用旁路路径提供最新的 `v2c_comp_p`，使 CNU A 在固定节拍内看到已经更新的状态。
@@ -308,7 +308,7 @@ v2c = C_VAL + alpha_scale(raw_sum - raw_edge)
 
 ### 7.6 最后一轮判决与输出
 
-译码器固定执行 `I_MAX` 轮。最后一轮的 V2C 阶段会为每个变量列计算 `posterior`。由于同一个变量列在 `diag_idx=0..W-1` 中会被访问 $w$ 次，而后验值只和 `raw_sum` 有关，硬件只在 `diag_idx==0` 时把该列判决写入 `ram_c1`：
+译码器固定执行 `I_MAX` 轮。最后一轮的 V2C 阶段会为每个变量列计算 `posterior`。由于同一个变量列在 `diag_idx_local=0..W-1` 中会被访问 $w$ 次，而后验值只和 `raw_sum` 有关，硬件只在 `diag_idx_local==0` 时把该列判决写入 `ram_decision`：
 
 ```text
 decision_bit = sign(posterior)
@@ -322,7 +322,7 @@ decision_bit = sign(posterior)
 
 **最后一个 tile 不满 `COLS_PER_TILE` 列**：`edge_addr_gen` 计算 `cols_per_tile = min(COLS_PER_TILE, r - tile_base)`。当 `offset >= cols_per_tile` 时，该 lane 的 `valid` 置 0。无效 lane 不读写状态，不改变部分和，也不写判决；调度器仍执行完整 `W * Q_TILE` 个周期。
 
-**循环行号跨越 $r-1 \rightarrow 0$**：BIKE 循环块的行号为 `(base_row + col_local) mod r`。若某个 L-wide 访问组跨过模 $r$ 边界，并且跨越点落在 lane 中间，`edge_addr_gen` 把该组拆成两个 micro-cycle：前半周期处理跨越前的 lane，后半周期处理跨越后的 lane。`Q_TILE = Q_BASE + 3` 中的 guard 周期为跨模拆分、C2V 输入寄存和写回对齐预留固定预算。
+**循环行号跨越 $r-1 \rightarrow 0$**：BIKE 循环块的行号为 `(base_row_idx + col_local) mod r`。若某个 L-wide 访问组跨过模 $r$ 边界，并且跨越点落在 lane 中间，`edge_addr_gen` 把该组拆成两个 micro-cycle：前半周期处理跨越前的 lane，后半周期处理跨越后的 lane。`Q_TILE = Q_BASE + 3` 中的 guard 周期为跨模拆分、C2V 输入寄存和写回对齐预留固定预算。
 
 **没有发生跨越拆分**：guard 周期仍然存在，但所有 lane 无效。这样 H 第一列行号只影响 lane mask 和地址，不影响周期数。
 
@@ -334,7 +334,7 @@ decision_bit = sign(posterior)
 
 **无效 lane 的存储输出**：RAM 读无效时输出 `COMP_C2V_INIT` 或 0，组合计算结果被 valid 屏蔽，不参与写回。该规则让流水线保持固定形状，同时避免无效 lane 污染状态。
 
-**复位与启动对齐**：异步输入复位先经过 `reset_sync`。合法启动时调度器、pair 选择和流水控制从迭代 0、窗口 0、`diag_idx=0`、`q_seq=0` 开始，已寄存的 `done` 状态被清除。
+**复位与启动对齐**：异步输入复位先经过 `reset_sync`。合法启动时调度器、pair 选择和流水控制从迭代 0、窗口 0、`diag_idx_local=0`、`q_seq=0` 开始，已寄存的 `done` 状态被清除。
 
 ## 8. 调度与流水线
 

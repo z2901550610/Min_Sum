@@ -1,21 +1,21 @@
 `timescale 1ns / 1ps
-// VNU tile accumulator storage for raw C2V sums.
-module ram_t_accum
+// VNU tile accumulator storage for C2V sums.
+module ram_accum
   import bike_pkg::*;
 (
     input  logic                         i_clk,
     input  logic                         i_c2v_read_buf,
     input  logic                         i_c2v_read_valid[0:L-1],
     input  logic        [TILE_OFF_W-1:0] i_c2v_read_tile_offset[0:L-1],
-    output logic signed [     ACC_W-1:0] o_c2v_rdata[0:L-1],
+    output logic signed [     ACC_W-1:0] o_old_c2v_sum[0:L-1],
     input  logic                         i_c2v_write_buf,
     input  logic                         i_c2v_write_valid[0:L-1],
     input  logic        [TILE_OFF_W-1:0] i_c2v_write_tile_offset[0:L-1],
-    input  logic signed [     ACC_W-1:0] i_c2v_wdata[0:L-1],
+    input  logic signed [     ACC_W-1:0] i_updated_c2v_sum[0:L-1],
     input  logic                         i_active_buf,
     input  logic                         i_v2c_valid[0:L-1],
     input  logic        [TILE_OFF_W-1:0] i_v2c_tile_offset[0:L-1],
-    output logic signed [     ACC_W-1:0] o_v2c_rdata[0:L-1]
+    output logic signed [     ACC_W-1:0] o_c2v_sum[0:L-1]
 );
 
   localparam int ACCUM_BANK_DEPTH = Q_BASE;
@@ -69,7 +69,7 @@ module ram_t_accum
                 )) == bank_idx)) begin
               c2v_bank_we = 1'b1;
               c2v_bank_waddr = offset_addr(i_c2v_write_tile_offset[lane_idx]);
-              c2v_bank_wdata = i_c2v_wdata[lane_idx];
+              c2v_bank_wdata = i_updated_c2v_sum[lane_idx];
             end
             if (i_v2c_valid[lane_idx] && (int'(i_active_buf) == buf_idx) && (int'(offset_bank(
                     i_v2c_tile_offset[lane_idx]
@@ -96,18 +96,18 @@ module ram_t_accum
 
   always_comb begin
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-      o_c2v_rdata[lane_idx] = '0;
-      o_v2c_rdata[lane_idx] = '0;
+      o_old_c2v_sum[lane_idx] = '0;
+      o_c2v_sum[lane_idx] = '0;
       for (int bank_idx = 0; bank_idx < L; bank_idx++) begin
         if (i_c2v_read_valid[lane_idx] && (int'(offset_bank(
                 i_c2v_read_tile_offset[lane_idx]
             )) == bank_idx)) begin
-          o_c2v_rdata[lane_idx] = c2v_bank_rdata[int'(i_c2v_read_buf)][bank_idx];
+          o_old_c2v_sum[lane_idx] = c2v_bank_rdata[int'(i_c2v_read_buf)][bank_idx];
         end
         if (i_v2c_valid[lane_idx] && (int'(offset_bank(
                 i_v2c_tile_offset[lane_idx]
             )) == bank_idx)) begin
-          o_v2c_rdata[lane_idx] = v2c_bank_rdata[int'(i_active_buf)][bank_idx];
+          o_c2v_sum[lane_idx] = v2c_bank_rdata[int'(i_active_buf)][bank_idx];
         end
       end
     end

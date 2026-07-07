@@ -114,7 +114,7 @@ alpha = 2^(-alpha_shift_0) + 2^(-alpha_shift_1)
 
 每轮执行：
 
-1. 由全部 V2C 消息计算每个 check 的 `min1`、`min2`、`min_id` 和 `sign_xor`。
+1. 由全部 V2C 消息计算每个 check 的 `min1`、`min2`、`min_diag_idx_global` 和 `sign_xor`。
 2. 根据 syndrome 和 extrinsic sign 重建全部 C2V 消息。
 3. 累加每个 variable 的 C2V 总和。
 4. 计算 posterior 和下一轮 V2C 消息。

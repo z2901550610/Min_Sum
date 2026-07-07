@@ -3,21 +3,22 @@
 module tb_edge_addr_gen;
   import bike_pkg::*;
 
-  logic                   phase_valid;
-  logic [  H_BLOCK_W-1:0] h_block_idx;
-  logic [ TILE_IDX_W-1:0] tile_idx;
-  logic [    Q_SEQ_W-1:0] q_seq;
-  logic [  ROW_IDX_W-1:0] base_row;
-  logic [  EDGE_ID_W-1:0] edge_id;
-  logic                   valid[0:L-1];
-  logic [  ROW_IDX_W-1:0] row_idx[0:L-1];
-  logic [      COL_W-1:0] col_idx[0:L-1];
-  logic [  EDGE_ID_W-1:0] lane_edge_id[0:L-1];
-  logic [ LANE_IDX_W-1:0] row_bank[0:L-1];
-  logic [ROW_BANK_AW-1:0] row_addr[0:L-1];
-  logic [ TILE_OFF_W-1:0] tile_offset[0:L-1];
+  logic                     phase_valid;
+  logic [    H_BLOCK_W-1:0] h_block_idx;
+  logic [   TILE_IDX_W-1:0] tile_idx;
+  logic [      Q_SEQ_W-1:0] q_seq;
+  logic [    ROW_IDX_W-1:0] base_row_idx;
+  logic [   DIAG_IDX_W-1:0] diag_idx_local;
+  logic [DIAG_GLOBAL_W-1:0] diag_idx_global_base;
+  logic                     valid[0:L-1];
+  logic [    ROW_IDX_W-1:0] check_row_idx[0:L-1];
+  logic [        COL_W-1:0] col_idx[0:L-1];
+  logic [DIAG_GLOBAL_W-1:0] lane_diag_idx_global[0:L-1];
+  logic [   LANE_IDX_W-1:0] row_bank[0:L-1];
+  logic [  ROW_BANK_AW-1:0] row_addr[0:L-1];
+  logic [   TILE_OFF_W-1:0] tile_offset[0:L-1];
   /* verilator lint_off UNUSEDSIGNAL */
-  logic [  EDGE_ID_W-1:0] observed_lane_edge_id[0:L-1];
+  logic [DIAG_GLOBAL_W-1:0] observed_lane_diag_idx_global[0:L-1];
   /* verilator lint_on UNUSEDSIGNAL */
 
   edge_addr_gen dut (
@@ -25,13 +26,15 @@ module tb_edge_addr_gen;
       .i_h_block_idx(h_block_idx),
       .i_tile_idx(tile_idx),
       .i_q_seq(q_seq),
-      .i_base_row(base_row),
-      .i_edge_id(edge_id),
+      .i_base_row_idx(base_row_idx),
+      .i_diag_idx_local(diag_idx_local),
       .i_cfg_r(CFG_R_W'(R)),
+      .i_cfg_w(CFG_W_W'(W)),
       .o_valid(valid),
-      .o_row_idx(row_idx),
+      .o_check_row_idx(check_row_idx),
       .o_col_idx(col_idx),
-      .o_edge_id(lane_edge_id),
+      .o_diag_idx_global_base(diag_idx_global_base),
+      .o_diag_idx_global(lane_diag_idx_global),
       .o_row_bank(row_bank),
       .o_row_addr(row_addr),
       .o_tile_offset(tile_offset)
@@ -45,7 +48,7 @@ module tb_edge_addr_gen;
   task automatic check_no_bank_conflict;
     begin
       for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-        observed_lane_edge_id[lane_idx] = lane_edge_id[lane_idx];
+        observed_lane_diag_idx_global[lane_idx] = lane_diag_idx_global[lane_idx];
       end
       for (int lhs = 0; lhs < L; lhs++) begin
         for (int rhs = lhs + 1; rhs < L; rhs++) begin
@@ -89,15 +92,15 @@ module tb_edge_addr_gen;
 
   task automatic check_tile_coverage(input int block_value, input int tile_value,
                                      input int base_value);
-    bit                   seen             [0:COLS_PER_TILE-1];
-    int                   tile_base;
-    int                   cols_per_tile;
-    int                   seen_total;
-    logic [EDGE_ID_W-1:0] expected_edge_id;
+    bit                       seen                     [0:COLS_PER_TILE-1];
+    int                       tile_base;
+    int                       cols_per_tile;
+    int                       seen_total;
+    logic [DIAG_GLOBAL_W-1:0] expected_diag_idx_global;
     begin
       tile_base = tile_value * COLS_PER_TILE;
       cols_per_tile = ((tile_base + COLS_PER_TILE) > R) ? (R - tile_base) : COLS_PER_TILE;
-      expected_edge_id = EDGE_ID_W'(block_value * W);
+      expected_diag_idx_global = DIAG_GLOBAL_W'((block_value * W) + 2);
       seen_total = 0;
 
       for (int offset_idx = 0; offset_idx < COLS_PER_TILE; offset_idx++) begin
@@ -106,13 +109,17 @@ module tb_edge_addr_gen;
 
       h_block_idx = H_BLOCK_W'(block_value);
       tile_idx = TILE_IDX_W'(tile_value);
-      base_row = ROW_IDX_W'(base_value);
-      edge_id = expected_edge_id;
+      base_row_idx = ROW_IDX_W'(base_value);
+      diag_idx_local = DIAG_IDX_W'(2);
 
       for (int q_seq_idx = 0; q_seq_idx < Q_TILE; q_seq_idx++) begin
         q_seq = Q_SEQ_W'(q_seq_idx);
         #1;
         check_no_bank_conflict();
+        if (diag_idx_global_base != expected_diag_idx_global) begin
+          $fatal(1, "global diagonal base mismatch block=%0d got=%0d exp=%0d", block_value,
+                 int'(diag_idx_global_base), int'(expected_diag_idx_global));
+        end
 
         for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
           if (valid[lane_idx]) begin
@@ -144,9 +151,9 @@ module tb_edge_addr_gen;
                      base_value, tile_value, q_seq_idx, lane_idx, int'(col_idx[lane_idx]),
                      expected_col);
             end
-            if (int'(row_idx[lane_idx]) != expected_row) begin
+            if (int'(check_row_idx[lane_idx]) != expected_row) begin
               $fatal(1, "coverage row mismatch base=%0d tile=%0d q=%0d lane=%0d got=%0d exp=%0d",
-                     base_value, tile_value, q_seq_idx, lane_idx, int'(row_idx[lane_idx]),
+                     base_value, tile_value, q_seq_idx, lane_idx, int'(check_row_idx[lane_idx]),
                      expected_row);
             end
             if (int'(row_bank[lane_idx]) != (expected_row % L)) begin
@@ -157,9 +164,9 @@ module tb_edge_addr_gen;
               $fatal(1, "coverage row addr mismatch base=%0d tile=%0d q=%0d lane=%0d", base_value,
                      tile_value, q_seq_idx, lane_idx);
             end
-            if (lane_edge_id[lane_idx] != expected_edge_id) begin
-              $fatal(1, "coverage edge id mismatch base=%0d tile=%0d q=%0d lane=%0d", base_value,
-                     tile_value, q_seq_idx, lane_idx);
+            if (lane_diag_idx_global[lane_idx] != expected_diag_idx_global) begin
+              $fatal(1, "coverage global diagonal index mismatch base=%0d tile=%0d q=%0d lane=%0d",
+                     base_value, tile_value, q_seq_idx, lane_idx);
             end
           end
         end
@@ -215,28 +222,29 @@ module tb_edge_addr_gen;
     h_block_idx = '0;
     tile_idx = '0;
     q_seq = '0;
-    base_row = '0;
-    edge_id = '0;
+    base_row_idx = '0;
+    diag_idx_local = '0;
     #1;
     if (valid_count() != first_group_cols(0)) begin
-      $fatal(1, "base_row=0 valid count mismatch got=%0d exp=%0d", valid_count(), first_group_cols(
-             0));
+      $fatal(1, "base_row_idx=0 valid count mismatch got=%0d exp=%0d", valid_count(),
+             first_group_cols(0));
     end
     for (int bank_idx = 0; bank_idx < L; bank_idx++) begin
       if (bank_idx < first_group_cols(0)) begin
-        if (!valid[bank_idx]) $fatal(1, "base_row=0 bank %0d should be valid", bank_idx);
-        if (row_idx[bank_idx] != ROW_IDX_W'(bank_idx)) $fatal(1, "base_row=0 row mismatch");
-        if (col_idx[bank_idx] != COL_W'(bank_idx)) $fatal(1, "base_row=0 col mismatch");
-        if (row_addr[bank_idx] != '0) $fatal(1, "base_row=0 row addr mismatch");
+        if (!valid[bank_idx]) $fatal(1, "base_row_idx=0 bank %0d should be valid", bank_idx);
+        if (check_row_idx[bank_idx] != ROW_IDX_W'(bank_idx))
+          $fatal(1, "base_row_idx=0 row mismatch");
+        if (col_idx[bank_idx] != COL_W'(bank_idx)) $fatal(1, "base_row_idx=0 col mismatch");
+        if (row_addr[bank_idx] != '0) $fatal(1, "base_row_idx=0 row addr mismatch");
         if (row_bank[bank_idx] != LANE_IDX_W'(bank_idx)) $fatal(1, "row bank mismatch");
         if (tile_offset[bank_idx] != TILE_OFF_W'(bank_idx)) $fatal(1, "tile offset mismatch");
       end else if (valid[bank_idx]) begin
-        $fatal(1, "base_row=0 bank %0d should be invalid", bank_idx);
+        $fatal(1, "base_row_idx=0 bank %0d should be invalid", bank_idx);
       end
     end
     check_no_bank_conflict();
 
-    base_row = ROW_IDX_W'(R - 1);
+    base_row_idx = ROW_IDX_W'(R - 1);
     q_seq = '0;
     #1;
     if (valid_count() != 1) $fatal(1, "pre-wrap should have one valid lane");
@@ -256,7 +264,7 @@ module tb_edge_addr_gen;
     end
     check_no_bank_conflict();
 
-    base_row = '0;
+    base_row_idx = '0;
     q_seq = Q_SEQ_W'(Q_TILE - 1);
     #1;
     if (valid_count() != 0) $fatal(1, "guard dummy should have no valid lanes");

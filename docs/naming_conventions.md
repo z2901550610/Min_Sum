@@ -5,14 +5,15 @@
 | 名称 | 范围 | 含义 |
 | --- | --- | --- |
 | `h_block_idx` | `0..N0-1` | circulant block 编号 |
-| `diag_idx` | `0..W-1` | 一个 block 内的对角线编号，对应第一列支撑项编号 |
-| `base_row` | `0..R-1` | H 第一列行索引 |
-| `edge_id` | `0..N0*W-1` | row-local edge 编号，`h_block_idx * W + diag_idx` |
+| `diag_idx_local` | `0..W-1` | 一个 block 内的对角线编号，对应第一列支撑项编号 |
+| `base_row_idx` | `0..R-1` | H 第一列行索引 |
+| `diag_idx_global` | `0..N0*W-1` | 全局对角线编号，`h_block_idx * W + diag_idx_local` |
 | `tile_idx` | `0..TILE_COUNT-1` | block 内 tile 编号 |
 | `tile_linear` | `0..TILES_TOTAL-1` | 全局 tile 编号 |
 | `q_seq` | `0..Q_TILE-1` | tile 内固定向量周期编号 |
 | `lane_idx` | `0..L-1` | 并行 lane 编号 |
-| `row_idx` | `0..R-1` | 校验行号 |
+| `check_row_idx` | `0..R-1` | 由 H 第一列行索引和变量列偏移得到的校验行号 |
+| `row_idx` | `0..R-1` | 通用校验行索引 |
 | `col_idx` | `0..N-1` | 全局变量列号 |
 | `tile_offset` | `0..COLS_PER_TILE-1` | tile 内本地列 offset |
 
@@ -38,9 +39,9 @@
 | `ram_i` | H 第一列行索引存储 |
 | `ram_m` | compressed check-state 双 pair RAM |
 | `ram_s` | edge sign RAM |
-| `ram_t_accum` | raw C2V tile 累加 RAM |
+| `ram_accum` | raw C2V tile 累加 RAM |
 | `ram_t` | raw C2V tile 边缓存 RAM |
-| `ram_c1` | 最终错误估计 bit |
+| `ram_decision` | 最终错误估计 bit |
 | `syndrome_mem` | 输入 syndrome bit |
 
 ## Pair 和 Buffer
@@ -72,7 +73,7 @@ tile-local 状态使用双 buffer：
 ## 推荐写法
 
 ```systemverilog
-logic [ROW_IDX_W-1:0] c2v_row_idx[0:L-1];
+logic [ROW_IDX_W-1:0] c2v_check_row_idx[0:L-1];
 logic [TILE_OFF_W-1:0] v2c_tile_offset[0:L-1];
 logic signed [ACC_W-1:0] c2v_raw_next[0:L-1];
 ```

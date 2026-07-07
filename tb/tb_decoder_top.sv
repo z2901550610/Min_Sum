@@ -15,8 +15,8 @@ module tb_decoder_top;
   logic                  syndrome_wdata;
   logic                  h_we;
   logic [ H_BLOCK_W-1:0] h_load_block_idx;
-  logic [DIAG_IDX_W-1:0] h_load_diag_idx;
-  logic [ ROW_IDX_W-1:0] h_base_row;
+  logic [DIAG_IDX_W-1:0] h_load_diag_idx_local;
+  logic [ ROW_IDX_W-1:0] h_base_row_idx;
   logic                  h_loaded;
   logic                  h_error;
   logic                  done;
@@ -34,14 +34,14 @@ module tb_decoder_top;
       .i_clk(clk),
       .i_rst_n(rst_n),
       .i_start(start),
-      .i_profile_sel(PROFILE_BIKE_128),
+      .i_param_level(PROFILE_BIKE_128),
       .i_syndrome_we(syndrome_we),
       .i_syndrome_addr(syndrome_addr),
       .i_syndrome_wdata(syndrome_wdata),
       .i_h_we(h_we),
       .i_h_block_idx(h_load_block_idx),
-      .i_h_diag_idx(h_load_diag_idx),
-      .i_h_base_row(h_base_row),
+      .i_h_diag_idx_local(h_load_diag_idx_local),
+      .i_h_base_row_idx(h_base_row_idx),
       .i_e_read_col_idx(e_read_col_idx),
       .o_h_loaded(h_loaded),
       .o_h_error(h_error),
@@ -62,8 +62,8 @@ module tb_decoder_top;
       syndrome_wdata = 1'b0;
       h_we = 1'b0;
       h_load_block_idx = '0;
-      h_load_diag_idx = '0;
-      h_base_row = '0;
+      h_load_diag_idx_local = '0;
+      h_base_row_idx = '0;
       e_read_col_idx = '0;
       saw_overlap = 1'b0;
       saw_guard_dummy = 1'b0;
@@ -79,11 +79,11 @@ module tb_decoder_top;
   task automatic load_h_matrix;
     begin
       for (int h_block_idx = 0; h_block_idx < N0; h_block_idx++) begin
-        for (int diag_idx = 0; diag_idx < W; diag_idx++) begin
+        for (int diag_idx_local = 0; diag_idx_local < W; diag_idx_local++) begin
           h_we = 1'b1;
           h_load_block_idx = H_BLOCK_W'(h_block_idx);
-          h_load_diag_idx = DIAG_IDX_W'(diag_idx);
-          h_base_row = ROW_IDX_W'(TOY_CASE_H_BASE_ROWS[h_block_idx][diag_idx]);
+          h_load_diag_idx_local = DIAG_IDX_W'(diag_idx_local);
+          h_base_row_idx = ROW_IDX_W'(TOY_CASE_H_BASE_ROWS[h_block_idx][diag_idx_local]);
           @(posedge clk);
         end
       end
@@ -137,8 +137,8 @@ module tb_decoder_top;
         if (candidate[var_idx]) begin
           h_block_idx = var_idx / R;
           col_idx_i   = var_idx % R;
-          for (int diag_idx = 0; diag_idx < W; diag_idx++) begin
-            row_idx_i = (TOY_CASE_H_BASE_ROWS[h_block_idx][diag_idx] + col_idx_i) % R;
+          for (int diag_idx_local = 0; diag_idx_local < W; diag_idx_local++) begin
+            row_idx_i = (TOY_CASE_H_BASE_ROWS[h_block_idx][diag_idx_local] + col_idx_i) % R;
             residual[row_idx_i] = residual[row_idx_i] ^ 1'b1;
           end
         end

@@ -7,7 +7,7 @@ K-sign 方案用于压缩 V2C 符号状态。设计目标：
 - 译码周期由公开参数和固定调度决定。
 - C2V 使用近似 V2C 符号重建 min-sum 符号项。
 - 每个变量节点保存少量偏离位置，避免保存全部 `W` 条边的 V2C 符号。
-- CNU 幅度路径保持 min1/min2/min_id 更新规则。
+- CNU 幅度路径保持 min1/min2/min_diag_idx_global 更新规则。
 - K 值、位置位宽、tile 大小、并行度均为公开配置。
 
 本文档描述 `high_mag_dev` 规则：每个变量节点选择幅值最大的 K 条符号偏离边。
@@ -67,7 +67,7 @@ Algorithm: K-sign Scaled Min-Sum Decoding Algorithm
 6:      for each edge (i, j) do
 7:          hit_j,i = 1 if edge index of (i, j) is in P_j, otherwise 0
 8:          sign(u_i,j) = base_j XOR hit_j,i
-9:          |v_i,j| = min2_i if idx_i = edge_id(i,j), otherwise min1_i
+9:          |v_i,j| = min2_i if idx_i = diag_idx_global(i,j), otherwise min1_i
 10:         sign(v_i,j) = sxor_i XOR sign(u_i,j) XOR s_i
 11:     end for
 12:
@@ -87,7 +87,7 @@ Algorithm: K-sign Scaled Min-Sum Decoding Algorithm
 26:         sxor'_i = XOR_{j in M(i)} approx_sign(u'_i,j, base'_j, P'_j)
 27:         min1'_i = min_{j in M(i)} |u'_i,j|
 28:         idx'_i  = arg min_{j in M(i)} |u'_i,j|
-29:         min2'_i = min_{j in M(i), edge_id(i,j) != idx'_i} |u'_i,j|
+29:         min2'_i = min_{j in M(i), diag_idx_global(i,j) != idx'_i} |u'_i,j|
 30:     end for
 31:
 32:     S_j = {base'_j, P'_j}, for all j
@@ -142,7 +142,7 @@ K-sign selector 放在 VNU 后。该位置同时具备：
 - `posterior` 符号，用于生成 `base_sign`。
 - `v2c_msg` 符号，用于判断 `dev`。
 - `v2c_msg` 幅值，用于 high-mag top-K 选择。
-- `tile_offset` 和 `diag_idx`，用于记录变量列和边位置。
+- `tile_offset` 和 `diag_idx_local`，用于记录变量列和边位置。
 
 数据路径：
 
@@ -150,7 +150,7 @@ K-sign selector 放在 VNU 后。该位置同时具备：
 C2V read -> CNU B -> tile accumulation -> VNU -> K-sign selector -> CNU A / sign update
 ```
 
-CNU A 幅度路径使用真实 `v2c_mag` 更新 min1/min2/min_id。符号路径使用 K-sign 定义的近似符号规则。
+CNU A 幅度路径使用真实 `v2c_mag` 更新 min1/min2/min_diag_idx_global。符号路径使用 K-sign 定义的近似符号规则。
 
 ## Tile 内候选选择器
 
@@ -167,7 +167,7 @@ valid[tile_offset][0..K-1]
 
 1. 计算 `dev = v2c_sign XOR base_sign`。
 2. `dev=0` 时候选输入被 mask。
-3. `dev=1` 时将 `(diag_idx, mag)` 插入该 `tile_offset` 的 K 个候选槽。
+3. `dev=1` 时将 `(diag_idx_local, mag)` 插入该 `tile_offset` 的 K 个候选槽。
 4. 比较和移动槽位的逻辑数量固定，不因候选数量提前结束。
 
 K 较小时可以使用插入式 top-K 网络。K=4 或 K=6 时，每个 lane 每拍执行 K 级比较和选择。比较对象是 4 bit 幅值和固定 tie-break 字段。
@@ -176,7 +176,7 @@ K 较小时可以使用插入式 top-K 网络。K=4 或 K=6 时，每个 lane �
 
 ```text
 mag 更大者优先
-mag 相同则 diag_idx 更小者优先
+mag 相同则 diag_idx_local 更小者优先
 ```
 
 该规则完全确定，便于 C/RTL 对齐。
@@ -190,7 +190,7 @@ K-sign 的关键约束是 `sign_xor_approx` 必须和 C2V 读取的近似 V2C �
 第一遍 V2C 只计算 VNU 输出并完成 K-sign 选择。第二遍 V2C 使用已确定的 K-sign 记录更新 CNU A：
 
 ```text
-v2c_sign_approx = base_sign XOR hit(dev_pos == diag_idx)
+v2c_sign_approx = base_sign XOR hit(dev_pos == diag_idx_local)
 CNU A sign_xor  = sign_xor XOR v2c_sign_approx
 ```
 
@@ -223,7 +223,7 @@ for slot in 0..K-1:
     for lane in 0..L-1:
       column = q * L + lane
       if valid[column][slot]:
-        flip sign_xor at row(base_row[dev_pos] + column)
+        flip sign_xor at row(base_row_idx[dev_pos] + column)
 ```
 
 无效槽执行 mask，不改变状态。窗口长度由公开参数决定。
@@ -353,7 +353,7 @@ TRIKE512：
 
 1. 添加 K-sign 存储模块，接口按变量列读写 `base_sign` 和 K 个 `dev_pos`。
 2. 添加 VNU 后 selector，先支持 K=4，参数化扩展到 K=6。
-3. 添加 C2V 符号重构逻辑：`base_sign XOR hit(dev_pos == diag_idx)`。
+3. 添加 C2V 符号重构逻辑：`base_sign XOR hit(dev_pos == diag_idx_local)`。
 4. 添加 sign_xor 一致性实现。
    - 功能优先版本使用双遍 V2C 更新。
    - 性能版本使用 base-sign 主更新和固定 correction window。
@@ -382,7 +382,7 @@ K = 4 或 K = 6
 POS_W = 7
 base_sign 保存在 K-sign 记录中
 selector 规则 = high_mag_dev
-tie-break = mag 大优先，diag_idx 小优先
+tie-break = mag 大优先，diag_idx_local 小优先
 ```
 
 硬件第一版可选择 K=4 作为资源优先配置，K=6 作为性能余量配置。最终 K 值由多 seed DFR、BRAM 预算、correction 写入时序共同决定。

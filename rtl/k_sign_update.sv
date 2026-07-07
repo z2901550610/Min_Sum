@@ -6,7 +6,7 @@ module k_sign_update
     input  logic [K_SIGN_RECORD_W-1:0] i_record,
     input  logic                       i_clear,
     input  logic                       i_valid,
-    input  logic [     DIAG_IDX_W-1:0] i_diag_idx,
+    input  logic [     DIAG_IDX_W-1:0] i_diag_idx_local,
     input  logic [          MSG_W-1:0] i_v2c_msg,
     input  logic                       i_base_sign,
     output logic [K_SIGN_RECORD_W-1:0] o_record
@@ -45,7 +45,7 @@ module k_sign_update
   endfunction
 
   always_comb begin
-    cand_pos = i_diag_idx;
+    cand_pos = i_diag_idx_local;
     cand_mag = i_v2c_msg[MSG_MAG_LSB+:D];
     cand_valid = i_valid && (i_v2c_msg[MSG_SIGN_BIT] ^ i_base_sign);
     inserted = 1'b0;

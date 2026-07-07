@@ -1,18 +1,18 @@
 `timescale 1ns / 1ps
-// Variable-node update for raw C2V tile sums.
-module vnu_update
+// Variable-node update for two's-complement C2V tile sums.
+module vnu
   import bike_pkg::*;
 (
     input  logic                                i_clk,
     input  logic                                i_rst_n,
     input  logic                                i_valid[0:L-1],
-    input  logic signed [            ACC_W-1:0] i_raw_sum[0:L-1],
-    input  logic signed [            ACC_W-1:0] i_raw_c2v[0:L-1],
+    input  logic signed [            ACC_W-1:0] i_c2v_sum[0:L-1],
+    input  logic signed [            ACC_W-1:0] i_c2v_edge[0:L-1],
     input  logic        [       CFG_CVAL_W-1:0] i_cfg_c_val,
     input  logic        [CFG_ALPHA_SHIFT_W-1:0] i_cfg_alpha_shift_0,
     input  logic        [CFG_ALPHA_SHIFT_W-1:0] i_cfg_alpha_shift_1,
     output logic signed [            ACC_W-1:0] o_posterior[0:L-1],
-    output logic        [            MSG_W-1:0] o_v2c_msg[0:L-1]
+    output logic signed [            ACC_W-1:0] o_v2c_tc[0:L-1]
 );
 
   localparam int SCALE_W = ACC_W + ALPHA_FRAC_W;
@@ -21,9 +21,6 @@ module vnu_update
   logic signed [SCALE_W-1:0] posterior_scaled_q[0:L-1];
   logic signed [SCALE_W-1:0] v2c_scaled_q[0:L-1];
   logic signed [  ACC_W-1:0] posterior_tc[0:L-1];
-  logic signed [  ACC_W-1:0] v2c_tc[0:L-1];
-  logic        [  MSG_W-1:0] v2c_msg_sat[0:L-1];
-
   function automatic logic signed [SCALE_W-1:0] alpha_accum(
       input  logic signed [ACC_W-1:0] tc_value, input  logic [CFG_ALPHA_SHIFT_W-1:0] shift_0,
       input  logic [CFG_ALPHA_SHIFT_W-1:0] shift_1);
@@ -67,32 +64,15 @@ module vnu_update
     end
   endfunction
 
-  generate
-    for (genvar lane_idx = 0; lane_idx < L; lane_idx++) begin : g_msg_tc_to_signmag
-      msg_tc_to_signmag_sat #(
-          .W       (W),
-          .D       (D),
-          .MSG_W   (MSG_W),
-          .VNU_TC_W(ACC_W),
-          .MAG_MAX (MAG_MAX)
-      ) u_msg_tc_to_signmag_sat (
-          .i_tc (v2c_tc[lane_idx]),
-          .o_msg(v2c_msg_sat[lane_idx])
-      );
-
-      assign o_v2c_msg[lane_idx] = scale_valid_q[lane_idx] ? v2c_msg_sat[lane_idx] : '0;
-    end
-  endgenerate
-
   always_comb begin
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
       o_posterior[lane_idx] = '0;
       posterior_tc[lane_idx] = '0;
-      v2c_tc[lane_idx] = '0;
+      o_v2c_tc[lane_idx] = '0;
       if (scale_valid_q[lane_idx]) begin
         posterior_tc[lane_idx] = ACC_W'($signed(i_cfg_c_val)) +
             alpha_round(posterior_scaled_q[lane_idx]);
-        v2c_tc[lane_idx] = ACC_W'($signed(i_cfg_c_val)) + alpha_round(v2c_scaled_q[lane_idx]);
+        o_v2c_tc[lane_idx] = ACC_W'($signed(i_cfg_c_val)) + alpha_round(v2c_scaled_q[lane_idx]);
         o_posterior[lane_idx] = posterior_tc[lane_idx];
       end
     end
@@ -110,10 +90,10 @@ module vnu_update
         scale_valid_q[lane_idx] <= i_valid[lane_idx];
         if (i_valid[lane_idx]) begin
           posterior_scaled_q[lane_idx] <= alpha_accum(
-              i_raw_sum[lane_idx], i_cfg_alpha_shift_0, i_cfg_alpha_shift_1
+              i_c2v_sum[lane_idx], i_cfg_alpha_shift_0, i_cfg_alpha_shift_1
           );
           v2c_scaled_q[lane_idx] <= alpha_accum(
-              i_raw_sum[lane_idx] - i_raw_c2v[lane_idx], i_cfg_alpha_shift_0, i_cfg_alpha_shift_1
+              i_c2v_sum[lane_idx] - i_c2v_edge[lane_idx], i_cfg_alpha_shift_0, i_cfg_alpha_shift_1
           );
         end else begin
           posterior_scaled_q[lane_idx] <= '0;

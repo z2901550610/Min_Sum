@@ -25,7 +25,7 @@ export BIKE_PARALLEL_L
 
 TOY_CASE_SVH := tb/generated/bike_toy_case.svh
 RTL_PKG := rtl/bike_pkg.sv
-RTL_CORE := rtl/reset_sync.sv rtl/decoder_profile_config.sv rtl/ram_i.sv rtl/edge_addr_gen.sv rtl/tile_scheduler.sv rtl/ram_m.sv rtl/ram_s.sv rtl/k_sign_update.sv rtl/k_sign_reconstruct.sv rtl/ram_k_sign.sv rtl/ram_syndrome.sv rtl/ram_t_accum.sv rtl/ram_t.sv rtl/msg_tc_to_signmag_sat.sv rtl/vnu_update.sv rtl/ram_c1.sv rtl/cnu_a.sv rtl/cnu_b.sv rtl/msg_signmag_to_tc.sv rtl/decoder_top.sv
+RTL_CORE := rtl/reset_sync.sv rtl/decoder_profile_config.sv rtl/ram_i.sv rtl/edge_addr_gen.sv rtl/tile_scheduler.sv rtl/ram_m.sv rtl/ram_s.sv rtl/k_sign_update.sv rtl/k_sign_reconstruct.sv rtl/ram_k_sign.sv rtl/ram_syndrome.sv rtl/ram_accum.sv rtl/ram_t.sv rtl/msg_tc_to_signmag_sat.sv rtl/vnu.sv rtl/ram_decision.sv rtl/cnu_a.sv rtl/cnu_b.sv rtl/msg_signmag_to_tc.sv rtl/decoder_top.sv
 RTL := $(RTL_PKG) $(RTL_CORE)
 MAINTAINED_SV := $(sort $(wildcard rtl/*.sv) $(wildcard tb/*.sv))
 BIKE_RANDOM_BASE_SEED ?= 1
@@ -64,12 +64,12 @@ test-unit:
 	@$(SIM) ./obj_dir/Vtb_ram_m +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_k_sign_update rtl/bike_pkg.sv rtl/k_sign_update.sv rtl/k_sign_reconstruct.sv rtl/ram_k_sign.sv tb/tb_k_sign_update.sv
 	@$(SIM) ./obj_dir/Vtb_k_sign_update +verilator+quiet
-	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_t_accum rtl/bike_pkg.sv rtl/ram_t_accum.sv tb/tb_ram_t_accum.sv
-	@$(SIM) ./obj_dir/Vtb_ram_t_accum +verilator+quiet
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_accum rtl/bike_pkg.sv rtl/ram_accum.sv tb/tb_ram_accum.sv
+	@$(SIM) ./obj_dir/Vtb_ram_accum +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_t rtl/bike_pkg.sv rtl/ram_t.sv tb/tb_ram_t.sv
 	@$(SIM) ./obj_dir/Vtb_ram_t +verilator+quiet
-	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_c1 rtl/bike_pkg.sv rtl/ram_c1.sv tb/tb_ram_c1.sv
-	@$(SIM) ./obj_dir/Vtb_ram_c1 +verilator+quiet
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_decision rtl/bike_pkg.sv rtl/ram_decision.sv tb/tb_ram_decision.sv
+	@$(SIM) ./obj_dir/Vtb_ram_decision +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_syndrome rtl/bike_pkg.sv rtl/ram_syndrome.sv tb/tb_ram_syndrome.sv
 	@$(SIM) ./obj_dir/Vtb_ram_syndrome +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_cnu_a rtl/bike_pkg.sv rtl/cnu_a.sv tb/tb_cnu_a.sv

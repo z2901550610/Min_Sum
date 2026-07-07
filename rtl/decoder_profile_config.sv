@@ -3,7 +3,7 @@
 module decoder_profile_config
   import bike_pkg::*;
 (
-    input  logic [     PROFILE_ID_W-1:0] i_profile_sel,
+    input  logic [     PROFILE_ID_W-1:0] i_param_level,
     output logic [          CFG_R_W-1:0] o_r,
     output logic [          CFG_W_W-1:0] o_w,
     output logic [       TILE_IDX_W-1:0] o_tile_count,
@@ -14,8 +14,8 @@ module decoder_profile_config
 );
 
   /* verilator lint_off UNUSEDSIGNAL */
-  logic unused_profile_sel;
-  assign unused_profile_sel = PROFILE_RUNTIME_SELECT ? 1'b0 : ^i_profile_sel;
+  logic unused_param_level;
+  assign unused_param_level = PROFILE_RUNTIME_SELECT ? 1'b0 : ^i_param_level;
   /* verilator lint_on UNUSEDSIGNAL */
 
   always_comb begin
@@ -30,7 +30,7 @@ module decoder_profile_config
 `ifdef BIKE_UNIFIED_PARAMS
     if (PROFILE_RUNTIME_SELECT) begin
       logic [PROFILE_ID_W-1:0] idx;
-      unique case (i_profile_sel)
+      unique case (i_param_level)
         PROFILE_BIKE_128: idx = PROFILE_BIKE_128;
         PROFILE_BIKE_192: idx = PROFILE_BIKE_192;
         default:          idx = PROFILE_BIKE_256;
@@ -46,7 +46,7 @@ module decoder_profile_config
 `elsif TRIKE_UNIFIED_PARAMS
     if (PROFILE_RUNTIME_SELECT) begin
       logic [PROFILE_ID_W-1:0] idx;
-      unique case (i_profile_sel)
+      unique case (i_param_level)
         PROFILE_TRIKE_128: idx = PROFILE_TRIKE_128;
         PROFILE_TRIKE_160: idx = PROFILE_TRIKE_160;
         PROFILE_TRIKE_256: idx = PROFILE_TRIKE_256;

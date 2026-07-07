@@ -43,11 +43,11 @@ set rtl_files [list \
   rtl/k_sign_reconstruct.sv \
   rtl/ram_k_sign.sv \
   rtl/ram_syndrome.sv \
-  rtl/ram_t_accum.sv \
+  rtl/ram_accum.sv \
   rtl/ram_t.sv \
   rtl/msg_tc_to_signmag_sat.sv \
-  rtl/vnu_update.sv \
-  rtl/ram_c1.sv \
+  rtl/vnu.sv \
+  rtl/ram_decision.sv \
   rtl/cnu_a.sv \
   rtl/cnu_b.sv \
   rtl/msg_signmag_to_tc.sv \

@@ -17,7 +17,7 @@ module tb_tile_scheduler;
   logic [ TILE_IDX_W-1:0] c2v_tile_idx;
   logic [  H_BLOCK_W-1:0] v2c_h_block_idx;
   logic [ TILE_IDX_W-1:0] v2c_tile_idx;
-  logic [ DIAG_IDX_W-1:0] diag_idx;
+  logic [ DIAG_IDX_W-1:0] diag_idx_local;
   logic [    Q_SEQ_W-1:0] q_seq;
   logic                   clear_valid;
   logic [ROW_BANK_AW-1:0] clear_addr;
@@ -39,7 +39,7 @@ module tb_tile_scheduler;
   logic [ TILE_IDX_W-1:0] observed_c2v_tile_idx;
   logic [  H_BLOCK_W-1:0] observed_v2c_h_block_idx;
   logic [ TILE_IDX_W-1:0] observed_v2c_tile_idx;
-  logic [ DIAG_IDX_W-1:0] observed_diag_idx;
+  logic [ DIAG_IDX_W-1:0] observed_diag_idx_local;
   logic [    Q_SEQ_W-1:0] observed_q_seq;
   logic                   observed_fill_buf;
   logic                   observed_active_buf;
@@ -66,7 +66,7 @@ module tb_tile_scheduler;
       .o_c2v_tile_idx(c2v_tile_idx),
       .o_v2c_h_block_idx(v2c_h_block_idx),
       .o_v2c_tile_idx(v2c_tile_idx),
-      .o_diag_idx(diag_idx),
+      .o_diag_idx_local(diag_idx_local),
       .o_q_seq(q_seq),
       .o_clear_valid(clear_valid),
       .o_clear_addr(clear_addr),
@@ -92,7 +92,7 @@ module tb_tile_scheduler;
       observed_c2v_tile_idx <= '0;
       observed_v2c_h_block_idx <= '0;
       observed_v2c_tile_idx <= '0;
-      observed_diag_idx <= '0;
+      observed_diag_idx_local <= '0;
       observed_q_seq <= '0;
       observed_fill_buf <= 1'b0;
       observed_active_buf <= 1'b0;
@@ -105,7 +105,7 @@ module tb_tile_scheduler;
       observed_c2v_tile_idx <= c2v_tile_idx;
       observed_v2c_h_block_idx <= v2c_h_block_idx;
       observed_v2c_tile_idx <= v2c_tile_idx;
-      observed_diag_idx <= diag_idx;
+      observed_diag_idx_local <= diag_idx_local;
       observed_q_seq <= q_seq;
       observed_fill_buf <= fill_buf;
       observed_active_buf <= active_buf;

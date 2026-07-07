@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
-// RAM C1: banked final decision RAM with L write lanes and one async read port.
-module ram_c1
+// Final decision RAM with L write lanes and one async read port.
+module ram_decision
   import bike_pkg::*;
 (
     input  logic             i_clk,

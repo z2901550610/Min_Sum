@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 
-module tb_ram_c1;
+module tb_ram_decision;
   import bike_pkg::*;
 
   logic             clk;
@@ -10,7 +10,7 @@ module tb_ram_c1;
   logic [COL_W-1:0] read_col_idx;
   logic             rdata;
 
-  ram_c1 dut (
+  ram_decision dut (
       .i_clk(clk),
       .i_we(we),
       .i_write_col_idx(write_col_idx),
@@ -24,7 +24,7 @@ module tb_ram_c1;
 
   initial begin
     #10000;
-    $fatal(1, "tb_ram_c1 timeout");
+    $fatal(1, "tb_ram_decision timeout");
   end
 
   task automatic clear_inputs;
@@ -66,7 +66,7 @@ module tb_ram_c1;
       if (rdata !== 1'b0) $fatal(1, "same-bank write priority mismatch");
     end
 
-    $display("tb_ram_c1 PASS");
+    $display("tb_ram_decision PASS");
     $finish;
   end
 endmodule

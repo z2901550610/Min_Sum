@@ -21,11 +21,11 @@ RTL_CORE = [
     "rtl/k_sign_reconstruct.sv",
     "rtl/ram_k_sign.sv",
     "rtl/ram_syndrome.sv",
-    "rtl/ram_t_accum.sv",
+    "rtl/ram_accum.sv",
     "rtl/ram_t.sv",
     "rtl/msg_tc_to_signmag_sat.sv",
-    "rtl/vnu_update.sv",
-    "rtl/ram_c1.sv",
+    "rtl/vnu.sv",
+    "rtl/ram_decision.sv",
     "rtl/cnu_a.sv",
     "rtl/cnu_b.sv",
     "rtl/msg_signmag_to_tc.sv",
@@ -187,8 +187,8 @@ def calc_syndrome(h_base: list[list[int]], error_bits: list[int], r: int, w: int
             continue
         h_block_idx = var_idx // r
         col = var_idx % r
-        for edge_idx in range(w):
-            row_idx = (h_base[h_block_idx][edge_idx] + col) % r
+        for diag_idx_local in range(w):
+            row_idx = (h_base[h_block_idx][diag_idx_local] + col) % r
             syndrome[row_idx] ^= 1
     return syndrome
 
@@ -390,14 +390,14 @@ package bike_pkg;
   parameter int ACC_W = VNU_TC_W;
   parameter int COL_W = (N > 1) ? $clog2(N) : 1;
   parameter int H_BLOCK_W = (N0 > 1) ? $clog2(N0) : 1;
-  parameter int ROW_EDGE_COUNT = N0 * W;
+  parameter int DIAG_GLOBAL_COUNT = N0 * W;
 
   parameter int DIAG_IDX_W = (W > 1) ? $clog2(W) : 1;
   parameter int K_SIGN_K = K_SIGN_K_CONFIG;
   parameter int K_SIGN_SLOT_W = DIAG_IDX_W + D;
   parameter int K_SIGN_RECORD_W = 1 + (K_SIGN_K * K_SIGN_SLOT_W);
   localparam logic [DIAG_IDX_W-1:0] K_SIGN_DIAG_INVALID = '1;
-  parameter int EDGE_ID_W = (ROW_EDGE_COUNT > 1) ? $clog2(ROW_EDGE_COUNT) : 1;
+  parameter int DIAG_GLOBAL_W = (DIAG_GLOBAL_COUNT > 1) ? $clog2(DIAG_GLOBAL_COUNT) : 1;
   parameter int ROW_IDX_W = (R > 1) ? $clog2(R) : 1;
   parameter int LANE_IDX_W = (L > 1) ? $clog2(L) : 1;
   parameter int L_SHIFT = (L > 1) ? $clog2(L) : 0;
@@ -425,18 +425,18 @@ package bike_pkg;
 
   localparam int COMP_C2V_MIN1_LSB = 0;
   localparam int COMP_C2V_MIN2_LSB = COMP_C2V_MIN1_LSB + D;
-  localparam int COMP_C2V_MIN_ID_LSB = COMP_C2V_MIN2_LSB + D;
-  localparam int COMP_C2V_SIGN_XOR_BIT = COMP_C2V_MIN_ID_LSB + EDGE_ID_W;
+  localparam int COMP_C2V_MIN_DIAG_GLOBAL_LSB = COMP_C2V_MIN2_LSB + D;
+  localparam int COMP_C2V_SIGN_XOR_BIT = COMP_C2V_MIN_DIAG_GLOBAL_LSB + DIAG_GLOBAL_W;
   localparam int COMP_C2V_W = COMP_C2V_SIGN_XOR_BIT + 1;
   localparam logic [COMP_C2V_W-1:0] COMP_C2V_INIT = {{
     1'b0,
-    EDGE_ID_W'(0),
+    DIAG_GLOBAL_W'(0),
     D'(MAG_MAX),
     D'(MAG_MAX)
   }};
   localparam logic [COMP_C2V_W-1:0] FIRST_ITER_C2V_COMP = {{
     1'b0,
-    EDGE_ID_W'(0),
+    DIAG_GLOBAL_W'(0),
     D'(C_VAL),
     D'(C_VAL)
   }};
@@ -523,7 +523,7 @@ module tb_bike_decoder_random;
   localparam int ERROR_WEIGHT = {len(error_positions)};
   localparam int unsigned SYNDROME_POS [0:{syndrome_array_depth - 1}] = {sv_int_array(syndrome_positions)};
   localparam int unsigned ERROR_POS [0:{error_array_depth - 1}] = {sv_int_array(error_positions)};
-  localparam int unsigned TEST_H_BASE_ROWS [0:N0-1][0:TEST_W-1] = '{{
+  localparam int unsigned TEST_H_BASE_ROW_IDXS [0:N0-1][0:TEST_W-1] = '{{
     {h_base_rows}
   }};
 
@@ -536,8 +536,8 @@ module tb_bike_decoder_random;
   logic syndrome_wdata;
   logic h_we;
   logic [H_BLOCK_W-1:0] h_load_block_idx;
-  logic [DIAG_IDX_W-1:0] h_load_diag_idx;
-  logic [ROW_IDX_W-1:0] h_base_row;
+  logic [DIAG_IDX_W-1:0] h_load_diag_idx_local;
+  logic [ROW_IDX_W-1:0] h_base_row_idx;
   logic h_loaded;
   logic h_error;
   logic [COL_W-1:0] e_read_col_idx;
@@ -549,14 +549,14 @@ module tb_bike_decoder_random;
     .i_clk(clk),
     .i_rst_n(rst_n),
     .i_start(start),
-    .i_profile_sel(TEST_PROFILE_ID),
+    .i_param_level(TEST_PROFILE_ID),
     .i_syndrome_we(syndrome_we),
     .i_syndrome_addr(syndrome_addr),
     .i_syndrome_wdata(syndrome_wdata),
     .i_h_we(h_we),
     .i_h_block_idx(h_load_block_idx),
-    .i_h_diag_idx(h_load_diag_idx),
-    .i_h_base_row(h_base_row),
+    .i_h_diag_idx_local(h_load_diag_idx_local),
+    .i_h_base_row_idx(h_base_row_idx),
     .i_e_read_col_idx(e_read_col_idx),
     .o_h_loaded(h_loaded),
     .o_h_error(h_error),
@@ -619,11 +619,11 @@ module tb_bike_decoder_random;
   task automatic load_h_matrix;
     begin
       for (int h_block_idx = 0; h_block_idx < N0; h_block_idx++) begin
-        for (int diag_idx = 0; diag_idx < TEST_W; diag_idx++) begin
+        for (int diag_idx_local = 0; diag_idx_local < TEST_W; diag_idx_local++) begin
           h_we = 1'b1;
           h_load_block_idx = H_BLOCK_W'(h_block_idx);
-          h_load_diag_idx = DIAG_IDX_W'(diag_idx);
-          h_base_row = ROW_IDX_W'(TEST_H_BASE_ROWS[h_block_idx][diag_idx]);
+          h_load_diag_idx_local = DIAG_IDX_W'(diag_idx_local);
+          h_base_row_idx = ROW_IDX_W'(TEST_H_BASE_ROW_IDXS[h_block_idx][diag_idx_local]);
           @(posedge clk);
         end
       end
@@ -642,7 +642,7 @@ module tb_bike_decoder_random;
     int var_idx;
     logic [H_BLOCK_W-1:0] h_block_idx;
     int col_idx;
-    int edge_idx;
+    int diag_idx_local;
     logic [TEST_ROW_IDX_W-1:0] row_idx;
     begin
       for (int row_clear_idx = 0; row_clear_idx < TEST_R; row_clear_idx++) begin
@@ -655,8 +655,8 @@ module tb_bike_decoder_random;
         if (candidate[var_idx]) begin
           h_block_idx = H_BLOCK_W'(var_idx / TEST_R);
           col_idx = var_idx % TEST_R;
-          for (edge_idx = 0; edge_idx < TEST_W; edge_idx++) begin
-            row_idx = TEST_ROW_IDX_W'((TEST_H_BASE_ROWS[h_block_idx][edge_idx] + col_idx) %
+          for (diag_idx_local = 0; diag_idx_local < TEST_W; diag_idx_local++) begin
+            row_idx = TEST_ROW_IDX_W'((TEST_H_BASE_ROW_IDXS[h_block_idx][diag_idx_local] + col_idx) %
                                       TEST_R);
             residual[row_idx] = residual[row_idx] ^ 1'b1;
           end
@@ -695,8 +695,8 @@ module tb_bike_decoder_random;
     start = 1'b0;
     h_we = 1'b0;
     h_load_block_idx = '0;
-    h_load_diag_idx = '0;
-    h_base_row = '0;
+    h_load_diag_idx_local = '0;
+    h_base_row_idx = '0;
     syndrome_we = 1'b0;
     syndrome_addr = '0;
     syndrome_wdata = 1'b0;

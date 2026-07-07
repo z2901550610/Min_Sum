@@ -22,11 +22,11 @@
 - 遵守 [naming_conventions.md](/Users/z2901550610/Documents/Min_Sum/docs/naming_conventions.md:1)。
 - 模块输入使用 `i_` 前缀，输出使用 `o_` 前缀，子模块实例使用 `u_` 前缀。
 - 时钟使用 `i_clk`。顶层外部复位端口使用 `i_rst_n`，含义是异步置位、同步释放的低有效复位源。
-- lane、tile、row、col、edge、pair、buffer 相关名称使用项目术语：`lane_idx`、`tile_idx`、`row_idx`、`col_idx`、`edge_id`、`comp_clear_addr`、`fill_buf`、`active_buf`。
+- lane、tile、row、col、diagonal、pair、buffer 相关名称使用项目术语：`lane_idx`、`tile_idx`、`base_row_idx`、`check_row_idx`、`row_idx`、`col_idx`、`diag_idx_local`、`diag_idx_global`、`comp_clear_addr`、`fill_buf`、`active_buf`。
 - unpacked 数组维度紧贴信号名，例如：
 
 ```systemverilog
-logic [ROW_IDX_W-1:0] c2v_row_idx[0:L-1];
+logic [ROW_IDX_W-1:0] c2v_check_row_idx[0:L-1];
 logic signed [ACC_W-1:0] c2v_raw_next[0:L-1];
 ```
 

@@ -50,11 +50,11 @@ T_DECODE = I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE)
 | --- | --- |
 | `clear_addr` | `0 .. ROW_SEG_SIZE-1` |
 | `window_idx` | `0 .. TILES_TOTAL` |
-| `diag_idx` | `0 .. W-1` |
+| `diag_idx_local` | `0 .. W-1` |
 | `q_seq` | `0 .. Q_TILE-1` |
 | `iter_count` | `0 .. I_MAX` |
 
-`clear_addr` 在迭代开始递增；清空完成后进入 tile 窗口。`q_seq` 最内层递增；`q_seq` 到达 `Q_TILE-1` 后推进 `diag_idx`；`diag_idx` 到达 `W-1` 后推进 `window_idx`；最后一个窗口结束后推进迭代。
+`clear_addr` 在迭代开始递增；清空完成后进入 tile 窗口。`q_seq` 最内层递增；`q_seq` 到达 `Q_TILE-1` 后推进 `diag_idx_local`；`diag_idx_local` 到达 `W-1` 后推进 `window_idx`；最后一个窗口结束后推进迭代。
 
 ## 调度输出
 

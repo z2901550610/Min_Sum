@@ -8,13 +8,13 @@ module ram_k_sign
     input  logic                  i_c2v_pair_sel,
     input  logic                  i_c2v_valid[0:L-1],
     input  logic [     COL_W-1:0] i_c2v_col_idx[0:L-1],
-    input  logic [DIAG_IDX_W-1:0] i_c2v_diag_idx,
+    input  logic [DIAG_IDX_W-1:0] i_c2v_diag_idx_local,
     output logic                  o_c2v_sign[0:L-1],
     output logic                  o_c2v_hit[0:L-1],
     input  logic                  i_v2c_pair_sel,
     input  logic                  i_v2c_valid[0:L-1],
     input  logic [     COL_W-1:0] i_v2c_col_idx[0:L-1],
-    input  logic [DIAG_IDX_W-1:0] i_v2c_diag_idx,
+    input  logic [DIAG_IDX_W-1:0] i_v2c_diag_idx_local,
     input  logic [     MSG_W-1:0] i_v2c_msg[0:L-1],
     input  logic                  i_v2c_base_sign[0:L-1]
 );
@@ -28,10 +28,10 @@ module ram_k_sign
   logic                       v2c_read_valid[  0:1][0:L-1];
   logic                       c2v_pair_sel_q;
   logic                       v2c_pair_sel_q;
-  logic [     DIAG_IDX_W-1:0] c2v_diag_idx_q;
+  logic [     DIAG_IDX_W-1:0] c2v_diag_idx_local_q;
   logic [     LANE_IDX_W-1:0] c2v_lane_bank_q[0:L-1];
   logic                       c2v_lane_valid_q[0:L-1];
-  logic [     DIAG_IDX_W-1:0] v2c_diag_idx_q[  0:1][0:L-1];
+  logic [     DIAG_IDX_W-1:0] v2c_diag_idx_local_q[  0:1][0:L-1];
   logic [          MSG_W-1:0] v2c_msg_q[  0:1][0:L-1];
   logic                       v2c_base_sign_q[  0:1][0:L-1];
   logic [  KSIGN_BANK_AW-1:0] v2c_waddr_q[  0:1][0:L-1];
@@ -99,25 +99,25 @@ module ram_k_sign
         end
 
         k_sign_update u_k_sign_update (
-            .i_record   (v2c_bank_rdata[pair_idx][bank_idx]),
-            .i_clear    (v2c_diag_idx_q[pair_idx][bank_idx] == '0),
-            .i_valid    (v2c_read_valid[pair_idx][bank_idx]),
-            .i_diag_idx (v2c_diag_idx_q[pair_idx][bank_idx]),
-            .i_v2c_msg  (v2c_msg_q[pair_idx][bank_idx]),
-            .i_base_sign(v2c_base_sign_q[pair_idx][bank_idx]),
-            .o_record   (v2c_record_next[pair_idx][bank_idx])
+            .i_record        (v2c_bank_rdata[pair_idx][bank_idx]),
+            .i_clear         (v2c_diag_idx_local_q[pair_idx][bank_idx] == '0),
+            .i_valid         (v2c_read_valid[pair_idx][bank_idx]),
+            .i_diag_idx_local(v2c_diag_idx_local_q[pair_idx][bank_idx]),
+            .i_v2c_msg       (v2c_msg_q[pair_idx][bank_idx]),
+            .i_base_sign     (v2c_base_sign_q[pair_idx][bank_idx]),
+            .o_record        (v2c_record_next[pair_idx][bank_idx])
         );
 
         always_ff @(posedge i_clk or negedge i_rst_n) begin
           if (!i_rst_n) begin
             v2c_read_valid[pair_idx][bank_idx] <= 1'b0;
-            v2c_diag_idx_q[pair_idx][bank_idx] <= '0;
+            v2c_diag_idx_local_q[pair_idx][bank_idx] <= '0;
             v2c_msg_q[pair_idx][bank_idx] <= '0;
             v2c_base_sign_q[pair_idx][bank_idx] <= 1'b0;
             v2c_waddr_q[pair_idx][bank_idx] <= '0;
           end else begin
             v2c_read_valid[pair_idx][bank_idx] <= v2c_bank_re;
-            v2c_diag_idx_q[pair_idx][bank_idx] <= i_v2c_diag_idx;
+            v2c_diag_idx_local_q[pair_idx][bank_idx] <= i_v2c_diag_idx_local;
             v2c_msg_q[pair_idx][bank_idx] <= v2c_bank_msg;
             v2c_base_sign_q[pair_idx][bank_idx] <= v2c_bank_base_sign;
             v2c_waddr_q[pair_idx][bank_idx] <= v2c_bank_raddr;
@@ -143,7 +143,7 @@ module ram_k_sign
     if (!i_rst_n) begin
       c2v_pair_sel_q <= 1'b0;
       v2c_pair_sel_q <= 1'b0;
-      c2v_diag_idx_q <= '0;
+      c2v_diag_idx_local_q <= '0;
       for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
         c2v_lane_bank_q[lane_idx]  <= '0;
         c2v_lane_valid_q[lane_idx] <= 1'b0;
@@ -151,7 +151,7 @@ module ram_k_sign
     end else begin
       c2v_pair_sel_q <= i_c2v_pair_sel;
       v2c_pair_sel_q <= i_v2c_pair_sel;
-      c2v_diag_idx_q <= i_c2v_diag_idx;
+      c2v_diag_idx_local_q <= i_c2v_diag_idx_local;
       for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
         c2v_lane_bank_q[lane_idx]  <= col_bank(i_c2v_col_idx[lane_idx]);
         c2v_lane_valid_q[lane_idx] <= i_c2v_valid[lane_idx];
@@ -171,7 +171,7 @@ module ram_k_sign
             )+:DIAG_IDX_W] != K_SIGN_DIAG_INVALID) &&
                 (c2v_bank_rdata[pair_idx][c2v_lane_bank_q[lane_idx]][slot_lsb(
                 slot_idx
-            )+:DIAG_IDX_W] == c2v_diag_idx_q)) begin
+            )+:DIAG_IDX_W] == c2v_diag_idx_local_q)) begin
           sign_hit = 1'b1;
         end
       end
