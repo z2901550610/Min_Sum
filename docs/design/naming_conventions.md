@@ -10,7 +10,7 @@
 | `diag_idx_global` | `0..N0*W-1` | 全局对角线编号，`h_block_idx * W + diag_idx_local` |
 | `tile_idx` | `0..TILE_COUNT-1` | block 内 tile 编号 |
 | `tile_linear` | `0..TILES_TOTAL-1` | 全局 tile 编号 |
-| `q_seq` | `0..Q_TILE-1` | tile 内固定向量周期编号 |
+| `lane_group_idx` | `0..Q_TILE-1` | tile 内固定向量周期编号 |
 | `lane_idx` | `0..L-1` | 并行 lane 编号 |
 | `check_row_idx` | `0..R-1` | 由 H 第一列行索引和变量列偏移得到的校验行号 |
 | `row_idx` | `0..R-1` | 通用校验行索引 |

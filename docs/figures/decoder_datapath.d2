@@ -1,4 +1,4 @@
-# Render with: d2 --layout dagre --pad 40 docs/decoder_datapath.d2 docs/decoder_datapath.svg
+# Render with: d2 --layout dagre --pad 40 docs/figures/decoder_datapath.d2 docs/figures/decoder_datapath.svg
 direction: right
 
 classes: {
@@ -50,7 +50,7 @@ core: {
     }
 
     sched: {
-      label: "tile_scheduler\n固定扫描\niter / tile / diag_idx_local / q_seq\nbuf 选择"
+      label: "tile_scheduler\n固定扫描\niter / tile / diag_idx_local / lane_group_idx\nbuf 选择"
       class: ctrl
     }
 
@@ -158,7 +158,7 @@ core: {
 core.control.start -> core.control.sched
 core.control.h_load -> core.control.ram_i: "写 H"
 core.control.sched -> core.control.ram_i: "h_block / diag_idx_local"
-core.control.sched -> core.control.addr: "phase / h_block / diag_idx_local / tile / q_seq"
+core.control.sched -> core.control.addr: "phase / h_block / diag_idx_local / tile / lane_group_idx"
 core.control.ram_i -> core.control.addr: "base_row_idx"
 core.control.sched -> core.control.o_done
 

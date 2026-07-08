@@ -3,29 +3,29 @@
 module tb_ram_t;
   import bike_pkg::*;
 
-  logic                         clk;
-  logic                         fill_buf;
-  logic                         c2v_write_valid[0:L-1];
-  logic        [DIAG_IDX_W-1:0] c2v_write_diag_idx_local;
-  logic        [   Q_SEQ_W-1:0] c2v_write_q_seq;
-  logic signed [     MSG_W-1:0] c2v_tc[0:L-1];
-  logic                         active_buf;
-  logic                         v2c_valid[0:L-1];
-  logic        [DIAG_IDX_W-1:0] v2c_diag_idx_local;
-  logic        [   Q_SEQ_W-1:0] v2c_q_seq;
-  logic signed [     MSG_W-1:0] c2v_edge[0:L-1];
+  logic                               clk;
+  logic                               fill_buf;
+  logic                               c2v_write_valid[0:L-1];
+  logic        [      DIAG_IDX_W-1:0] c2v_write_diag_idx_local;
+  logic        [LANE_GROUP_IDX_W-1:0] c2v_write_lane_group_idx;
+  logic signed [           MSG_W-1:0] c2v_tc[0:L-1];
+  logic                               active_buf;
+  logic                               v2c_valid[0:L-1];
+  logic        [      DIAG_IDX_W-1:0] v2c_diag_idx_local;
+  logic        [LANE_GROUP_IDX_W-1:0] v2c_lane_group_idx;
+  logic signed [           MSG_W-1:0] c2v_edge[0:L-1];
 
   ram_t dut (
       .i_clk(clk),
       .i_fill_buf(fill_buf),
       .i_c2v_write_valid(c2v_write_valid),
       .i_c2v_write_diag_idx_local(c2v_write_diag_idx_local),
-      .i_c2v_write_q_seq(c2v_write_q_seq),
+      .i_c2v_write_lane_group_idx(c2v_write_lane_group_idx),
       .i_c2v_tc(c2v_tc),
       .i_active_buf(active_buf),
       .i_v2c_valid(v2c_valid),
       .i_v2c_diag_idx_local(v2c_diag_idx_local),
-      .i_v2c_q_seq(v2c_q_seq),
+      .i_v2c_lane_group_idx(v2c_lane_group_idx),
       .o_c2v_edge(c2v_edge)
   );
 
@@ -42,9 +42,9 @@ module tb_ram_t;
       fill_buf = 1'b0;
       active_buf = 1'b0;
       c2v_write_diag_idx_local = '0;
-      c2v_write_q_seq = '0;
+      c2v_write_lane_group_idx = '0;
       v2c_diag_idx_local = '0;
-      v2c_q_seq = '0;
+      v2c_lane_group_idx = '0;
       for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
         c2v_write_valid[lane_idx] = 1'b0;
         c2v_tc[lane_idx] = '0;
@@ -65,7 +65,7 @@ module tb_ram_t;
     begin
       active_buf = buf_sel;
       v2c_diag_idx_local = DIAG_IDX_W'(1);
-      v2c_q_seq = '0;
+      v2c_lane_group_idx = '0;
       for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
         v2c_valid[lane_idx] = 1'b1;
       end
@@ -84,7 +84,7 @@ module tb_ram_t;
 
     fill_buf = 1'b0;
     c2v_write_diag_idx_local = DIAG_IDX_W'(1);
-    c2v_write_q_seq = '0;
+    c2v_write_lane_group_idx = '0;
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
       c2v_write_valid[lane_idx] = 1'b1;
       c2v_tc[lane_idx]          = test_tc(lane_idx, 3);
@@ -97,7 +97,7 @@ module tb_ram_t;
     clear_inputs();
     fill_buf = 1'b1;
     c2v_write_diag_idx_local = DIAG_IDX_W'(1);
-    c2v_write_q_seq = '0;
+    c2v_write_lane_group_idx = '0;
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
       c2v_write_valid[lane_idx] = 1'b1;
       c2v_tc[lane_idx]          = test_tc(lane_idx, 9);

@@ -5,7 +5,7 @@
 <tspan x="850" dy="0">固定窗口调度流水</tspan>
 </text>
 <text x="850" y="82.0" text-anchor="middle" class="sub">
-<tspan x="850" dy="0">每个 tile 窗口内部固定扫描 diag_idx_local × q_seq；窗口边界推进 C2V/V2C tile，形成 prime/overlap/drain</tspan>
+<tspan x="850" dy="0">每个 tile 窗口内部固定扫描 diag_idx_local × lane_group_idx；窗口边界推进 C2V/V2C tile，形成 prime/overlap/drain</tspan>
 </text>
 <rect x="120" y="160" width="230" height="70" rx="7" fill="#fefce8" stroke="#ca8a04" stroke-width="1.5"/>
 <text x="235.0" y="191.0" text-anchor="middle" class="tiny">
@@ -69,12 +69,12 @@
 <line x1="1120" y1="445" x2="1180" y2="445" stroke="#64748b" stroke-width="1.8" fill="none" marker-end="url(#arr)"/>
 <rect x="360" y="550" width="300" height="55" rx="7" fill="#fefce8" stroke="#ca8a04" stroke-width="1.5"/>
 <text x="510.0" y="573.5" text-anchor="middle" class="tiny">
-<tspan x="510.0" dy="0">last_q_seq: q_seq clears</tspan>
+<tspan x="510.0" dy="0">last_lane_group_idx: lane_group_idx clears</tspan>
 <tspan x="510.0" dy="18">else diag_idx_local++</tspan>
 </text>
 <rect x="800" y="550" width="360" height="55" rx="7" fill="#fefce8" stroke="#ca8a04" stroke-width="1.5"/>
 <text x="980.0" y="573.5" text-anchor="middle" class="tiny">
-<tspan x="980.0" dy="0">last_diag_idx &amp;&amp; last_q_seq</tspan>
+<tspan x="980.0" dy="0">last_diag_idx &amp;&amp; last_lane_group_idx</tspan>
 <tspan x="980.0" dy="18">advance tile/window_idx</tspan>
 </text>
 <rect x="1190" y="550" width="220" height="55" rx="7" fill="#fefce8" stroke="#ca8a04" stroke-width="1.5"/>

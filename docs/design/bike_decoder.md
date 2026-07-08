@@ -20,11 +20,11 @@ diag_idx_global = b * W + k
 
 ## 文档导航
 
-- [decoder_architecture.md](decoder_architecture.md)：模块划分、状态数组和数据通路
-- [decoder_schedule.md](decoder_schedule.md)：tile 固定窗口调度
-- [tile_decoder_design.md](tile_decoder_design.md)：tile 几何、guard 规则和存储组织
-- [decoder_verification.md](decoder_verification.md)：回归入口、随机用例和残差检查
-- [naming_conventions.md](naming_conventions.md)：当前 RTL 命名规则
+- [decoder_architecture.md](decoder_architecture.md)：模块划分、数据通路、存储职责和控制边界
+- [tile_decoder_design.md](tile_decoder_design.md)：tile 几何、guard 规则、状态组织和 C2V/V2C 公式
+- [decoder_schedule.md](decoder_schedule.md)：固定窗口调度、状态、计数器和周期预算
+- [decoder_verification.md](../verification/decoder_verification.md)：回归入口、随机用例和残差检查
+- [naming_conventions.md](naming_conventions.md)：RTL 命名规则
 
 ## 参数
 
@@ -108,7 +108,7 @@ V2C 写回更新下一轮压缩 check state：
 min1_mag, min2_mag, min_diag_idx_global, sign_xor
 ```
 
-最后一轮的 posterior sign 写入错误估计存储。验证环境导出 `e_hat` 后计算：
+最后一轮的 posterior sign 写入错误估计存储。验证环境导出 `e_hat` 后计算 residual：
 
 ```text
 residual = syndrome ^ H * e_hat

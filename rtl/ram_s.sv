@@ -3,20 +3,20 @@
 module ram_s
   import bike_pkg::*;
 (
-    input  logic                     i_clk,
-    input  logic                     i_rst_n,
-    input  logic                     i_c2v_valid[0:L-1],
-    input  logic [   TILE_IDX_W-1:0] i_c2v_tile_idx,
-    input  logic [   TILE_OFF_W-1:0] i_c2v_tile_offset[0:L-1],
-    input  logic [DIAG_GLOBAL_W-1:0] i_c2v_diag_idx_global[0:L-1],
-    output logic                     o_c2v_sign[0:L-1],
-    input  logic                     i_v2c_phase_valid,
-    input  logic [   TILE_IDX_W-1:0] i_v2c_tile_idx,
-    input  logic [      Q_SEQ_W-1:0] i_v2c_q_seq,
-    input  logic [DIAG_GLOBAL_W-1:0] i_v2c_diag_idx_global,
-    input  logic                     i_v2c_write_valid[0:L-1],
-    input  logic [   TILE_OFF_W-1:0] i_v2c_tile_offset[0:L-1],
-    input  logic                     i_v2c_sign[0:L-1]
+    input  logic                        i_clk,
+    input  logic                        i_rst_n,
+    input  logic                        i_c2v_valid[0:L-1],
+    input  logic [      TILE_IDX_W-1:0] i_c2v_tile_idx,
+    input  logic [      TILE_OFF_W-1:0] i_c2v_tile_offset[0:L-1],
+    input  logic [   DIAG_GLOBAL_W-1:0] i_c2v_diag_idx_global[0:L-1],
+    output logic                        o_c2v_sign[0:L-1],
+    input  logic                        i_v2c_phase_valid,
+    input  logic [      TILE_IDX_W-1:0] i_v2c_tile_idx,
+    input  logic [LANE_GROUP_IDX_W-1:0] i_v2c_lane_group_idx,
+    input  logic [   DIAG_GLOBAL_W-1:0] i_v2c_diag_idx_global,
+    input  logic                        i_v2c_write_valid[0:L-1],
+    input  logic [      TILE_OFF_W-1:0] i_v2c_tile_offset[0:L-1],
+    input  logic                        i_v2c_sign[0:L-1]
 );
 
   localparam int SIGN_WORD_W = Q_BASE;
@@ -118,8 +118,8 @@ module ram_s
   end
 
   always_comb begin
-    word_start = i_v2c_phase_valid && (i_v2c_q_seq == '0);
-    word_flush = i_v2c_phase_valid && (i_v2c_q_seq == Q_SEQ_W'(Q_TILE - 1));
+    word_start = i_v2c_phase_valid && (i_v2c_lane_group_idx == '0);
+    word_flush = i_v2c_phase_valid && (i_v2c_lane_group_idx == LANE_GROUP_IDX_W'(Q_TILE - 1));
     write_addr = bank_addr(i_v2c_diag_idx_global, i_v2c_tile_idx);
     write_chunk = sign_chunk_idx(write_addr);
     write_addr_local = sign_chunk_addr(write_addr);

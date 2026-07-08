@@ -158,7 +158,7 @@ module tb_decoder_top;
     if (checks_active && dut.c2v_phase_active && dut.v2c_phase_active) begin
       saw_overlap <= 1'b1;
     end
-    if (checks_active && (dut.active_q_seq == Q_SEQ_W'(Q_TILE - 1))) begin
+    if (checks_active && (dut.active_lane_group_idx == LANE_GROUP_IDX_W'(Q_TILE - 1))) begin
       if (!guard_any_valid) begin
         saw_guard_dummy <= 1'b1;
       end

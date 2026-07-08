@@ -38,7 +38,7 @@ tile 内变量列：
 
 ```text
 tile_base = tile_idx * COLS_PER_TILE
-offset    = q_idx * L + lane
+offset    = lane_group_idx_eff * L + lane
 col_local = tile_base + offset
 col_idx   = b * R + col_local
 row_raw       = col_local + base_row_idx
@@ -48,7 +48,7 @@ check_row_idx = row_raw - R if row_raw >= R else row_raw
 lane 有效条件：
 
 ```text
-phase_valid && q_idx < Q_BASE && offset < cols_per_tile
+phase_valid && lane_group_idx_eff < Q_BASE && offset < cols_per_tile
 ```
 
 ## Guard 规则
@@ -59,7 +59,7 @@ phase_valid && q_idx < Q_BASE && offset < cols_per_tile
 wrap_col    = R - base_row_idx
 has_wrap    = tile_base < wrap_col && wrap_col < tile_end
 wrap_offset = wrap_col - tile_base
-wrap_q      = wrap_offset / L
+wrap_lane_group_idx = wrap_offset / L
 wrap_lane   = wrap_offset % L
 split_en    = has_wrap && wrap_lane != 0
 ```
@@ -67,40 +67,20 @@ split_en    = has_wrap && wrap_lane != 0
 `split_en=0`：
 
 ```text
-q_seq < Q_BASE : q_idx = q_seq
-q_seq >= Q_BASE : invalid guard
+lane_group_idx < Q_BASE : lane_group_idx_eff = lane_group_idx
+lane_group_idx >= Q_BASE : invalid guard
 ```
 
 `split_en=1`：
 
 ```text
-q_seq < wrap_q     : q_idx = q_seq
-q_seq = wrap_q     : q_idx = wrap_q, lane <  wrap_lane
-q_seq = wrap_q + 1 : q_idx = wrap_q, lane >= wrap_lane
-q_seq > wrap_q + 1 : q_idx = q_seq - 1
+lane_group_idx < wrap_lane_group_idx     : lane_group_idx_eff = lane_group_idx
+lane_group_idx = wrap_lane_group_idx     : lane_group_idx_eff = wrap_lane_group_idx, lane <  wrap_lane
+lane_group_idx = wrap_lane_group_idx + 1 : lane_group_idx_eff = wrap_lane_group_idx, lane >= wrap_lane
+lane_group_idx > wrap_lane_group_idx + 1 : lane_group_idx_eff = lane_group_idx - 1
 ```
 
-所有支撑项固定执行 `Q_TILE` 个 `q_seq`。guard 周期为跨模拆分、C2V 输入寄存和写回对齐提供固定预算。
-
-## 迭代窗口
-
-一个 tile 的固定窗口周期：
-
-```text
-T_TILE = W * Q_TILE
-```
-
-一个迭代的固定窗口周期：
-
-```text
-T_ITER = ROW_SEG_SIZE + (TILES_TOTAL + 1) * T_TILE
-```
-
-完整译码：
-
-```text
-T_DECODE = I_MAX * T_ITER
-```
+所有支撑项固定执行 `Q_TILE` 个 `lane_group_idx`。guard 周期为跨模拆分、C2V 输入寄存和写回对齐提供固定预算。
 
 ## 状态组织
 
@@ -109,7 +89,7 @@ T_DECODE = I_MAX * T_ITER
 | compressed check state | `comp_pair[pair][check_row_idx]` |
 | V2C sign | `sign_mem[diag_idx_global][check_row_idx]` |
 | tile raw C2V sum | `ram_accum[buf][tile_offset]` |
-| tile raw C2V edge | `ram_t[buf][lane][diag_idx_local * Q_TILE + q_seq]` |
+| tile raw C2V edge | `ram_t[buf][lane][diag_idx_local * Q_TILE + lane_group_idx]` |
 | decision bit | `ram_decision[col_idx]` |
 
 `ram_accum` 和 `ram_t` 使用 `fill_buf/active_buf` 双缓冲。compressed check state 使用 `comp_read_pair_sel/comp_write_pair_sel` 双 pair。每轮写 pair 按固定地址序列初始化为 `COMP_C2V_INIT`。

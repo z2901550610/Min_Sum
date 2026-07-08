@@ -162,7 +162,7 @@ package bike_pkg;
   localparam int TILE_ID_W = (TILES_TOTAL > 1) ? $clog2(TILES_TOTAL + 1) : 1;
   localparam int TILE_IDX_W = (TILE_COUNT > 1) ? $clog2(TILE_COUNT + 1) : 1;
   localparam int TILE_OFF_W = (COLS_PER_TILE > 1) ? $clog2(COLS_PER_TILE) : 1;
-  localparam int Q_SEQ_W = (Q_TILE > 1) ? $clog2(Q_TILE) : 1;
+  localparam int LANE_GROUP_IDX_W = (Q_TILE > 1) ? $clog2(Q_TILE) : 1;
   localparam int ROW_BANK_AW = (ROW_SEG_SIZE > 1) ? $clog2(ROW_SEG_SIZE) : 1;
   localparam int ACC_W = VNU_TC_W;
   localparam int COL_W = (N > 1) ? $clog2(N) : 1;

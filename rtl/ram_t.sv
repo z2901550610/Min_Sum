@@ -3,17 +3,17 @@
 module ram_t
   import bike_pkg::*;
 (
-    input  logic                         i_clk,
-    input  logic                         i_fill_buf,
-    input  logic                         i_c2v_write_valid[0:L-1],
-    input  logic        [DIAG_IDX_W-1:0] i_c2v_write_diag_idx_local,
-    input  logic        [   Q_SEQ_W-1:0] i_c2v_write_q_seq,
-    input  logic signed [     MSG_W-1:0] i_c2v_tc[0:L-1],
-    input  logic                         i_active_buf,
-    input  logic                         i_v2c_valid[0:L-1],
-    input  logic        [DIAG_IDX_W-1:0] i_v2c_diag_idx_local,
-    input  logic        [   Q_SEQ_W-1:0] i_v2c_q_seq,
-    output logic signed [     MSG_W-1:0] o_c2v_edge[0:L-1]
+    input  logic                               i_clk,
+    input  logic                               i_fill_buf,
+    input  logic                               i_c2v_write_valid[0:L-1],
+    input  logic        [      DIAG_IDX_W-1:0] i_c2v_write_diag_idx_local,
+    input  logic        [LANE_GROUP_IDX_W-1:0] i_c2v_write_lane_group_idx,
+    input  logic signed [           MSG_W-1:0] i_c2v_tc[0:L-1],
+    input  logic                               i_active_buf,
+    input  logic                               i_v2c_valid[0:L-1],
+    input  logic        [      DIAG_IDX_W-1:0] i_v2c_diag_idx_local,
+    input  logic        [LANE_GROUP_IDX_W-1:0] i_v2c_lane_group_idx,
+    output logic signed [           MSG_W-1:0] o_c2v_edge[0:L-1]
 );
 
   localparam int T_DEPTH = W * Q_TILE;
@@ -22,9 +22,9 @@ module ram_t
   logic signed [MSG_W-1:0] bank_rdata[0:1][0:L-1];
 
   function automatic logic [T_ADDR_W-1:0] t_addr(input  logic [DIAG_IDX_W-1:0] diag_idx_local,
-                                                 input  logic [Q_SEQ_W-1:0] q_seq);
+                                                 input  logic [LANE_GROUP_IDX_W-1:0] lane_group_idx);
     begin
-      t_addr = T_ADDR_W'((int'(diag_idx_local) * Q_TILE) + int'(q_seq));
+      t_addr = T_ADDR_W'((int'(diag_idx_local) * Q_TILE) + int'(lane_group_idx));
     end
   endfunction
 
@@ -39,9 +39,9 @@ module ram_t
 
         always_comb begin
           bank_re = i_v2c_valid[lane_idx] && (int'(i_active_buf) == buf_idx);
-          bank_raddr = t_addr(i_v2c_diag_idx_local, i_v2c_q_seq);
+          bank_raddr = t_addr(i_v2c_diag_idx_local, i_v2c_lane_group_idx);
           bank_we = i_c2v_write_valid[lane_idx] && (int'(i_fill_buf) == buf_idx);
-          bank_waddr = t_addr(i_c2v_write_diag_idx_local, i_c2v_write_q_seq);
+          bank_waddr = t_addr(i_c2v_write_diag_idx_local, i_c2v_write_lane_group_idx);
         end
 
         always_ff @(posedge i_clk) begin
