@@ -39,8 +39,12 @@ BIKE_RANDOM_ERROR_ARG := $(if $(BIKE_RANDOM_ERROR_COUNT),--error-count $(BIKE_RA
 BIKE_UNIFIED_RANDOM_PARAM_SETS ?= bike128 bike192 bike256
 BIKE_UNIFIED_RANDOM_COLS_PER_TILE ?= 576
 BIKE_UNIFIED_RANDOM_TIMEOUT_CYCLES ?= 40000000
+TRIKE_UNIFIED_KSIGN_PARALLEL_L ?= 16
+TRIKE_UNIFIED_KSIGN_COLS_PER_TILE ?= 1168
+TRIKE_UNIFIED_KSIGN_PARAM_SETS ?= trike128 trike160 trike256 trike384 trike512
+TRIKE_UNIFIED_KSIGN_TIMEOUT_CYCLES ?= 40000000
 
-.PHONY: all sim test test-unit test-integration test-bike-random test-bike-unified-random model-min-sum run-model-min-sum sweep-min-sum optimum-min-sum campaign-min-sum confirm-min-sum check-model-rtl check-model-rtl-bike128 format-rtl check-format-rtl lint-rtl vivado-synth FORCE
+.PHONY: all sim test test-unit test-integration test-bike-random test-bike-unified-random test-trike-unified-ksign-random model-min-sum run-model-min-sum sweep-min-sum optimum-min-sum campaign-min-sum confirm-min-sum check-model-rtl check-model-rtl-bike128 format-rtl check-format-rtl lint-rtl vivado-synth vivado-synth-trike-unified-ksign FORCE
 
 all: test
 
@@ -89,6 +93,11 @@ test-bike-unified-random:
 		python3 scripts/run_bike_random.py --unified --param-set $$param_set --base-seed $(BIKE_RANDOM_BASE_SEED) --trials $(BIKE_RANDOM_TRIALS) $(BIKE_RANDOM_ERROR_ARG) --parallel-l $(BIKE_RANDOM_PARALLEL_L) --cols-per-tile $(BIKE_UNIFIED_RANDOM_COLS_PER_TILE) --timeout-cycles $(BIKE_UNIFIED_RANDOM_TIMEOUT_CYCLES) --out-dir tb/generated/bike_unified_random/$$param_set --verilator $(VERILATOR); \
 	done
 
+test-trike-unified-ksign-random:
+	@for param_set in $(TRIKE_UNIFIED_KSIGN_PARAM_SETS); do \
+		python3 scripts/run_bike_random.py --unified --param-set $$param_set --base-seed $(BIKE_RANDOM_BASE_SEED) --trials $(BIKE_RANDOM_TRIALS) $(BIKE_RANDOM_ERROR_ARG) --parallel-l $(TRIKE_UNIFIED_KSIGN_PARALLEL_L) --cols-per-tile $(TRIKE_UNIFIED_KSIGN_COLS_PER_TILE) --timeout-cycles $(TRIKE_UNIFIED_KSIGN_TIMEOUT_CYCLES) --out-dir tb/generated/trike_unified_ksign/$$param_set --verilator $(VERILATOR); \
+	done
+
 model-min-sum: $(MIN_SUM_MODEL)
 
 $(MIN_SUM_MODEL): scripts/min_sum_model.c
@@ -129,5 +138,8 @@ lint-rtl:
 vivado-synth:
 	@mkdir -p $(VIVADO_BUILD_DIR)
 	@BIKE_PARAM_DEFINE=$(BIKE_SYNTH_PARAM) BIKE_PARALLEL_L=$(BIKE_SYNTH_PARALLEL_L) $(if $(BIKE_SYNTH_COLS_PER_TILE),BIKE_COLS_PER_TILE=$(BIKE_SYNTH_COLS_PER_TILE),) $(VIVADO) -mode batch -source scripts/vivado_synth.tcl -tclargs $(VIVADO_BUILD_DIR)
+
+vivado-synth-trike-unified-ksign:
+	@$(MAKE) vivado-synth BIKE_SYNTH_PARAM=TRIKE_UNIFIED_PARAMS BIKE_SYNTH_PARALLEL_L=$(TRIKE_UNIFIED_KSIGN_PARALLEL_L) BIKE_SYNTH_COLS_PER_TILE=$(TRIKE_UNIFIED_KSIGN_COLS_PER_TILE) VIVADO_BUILD_DIR=$(VIVADO_BUILD_DIR)/trike_unified_ksign_l$(TRIKE_UNIFIED_KSIGN_PARALLEL_L)
 
 sim: test
