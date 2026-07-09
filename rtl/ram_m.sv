@@ -37,30 +37,43 @@ module ram_m
       for (genvar bank_idx = 0; bank_idx < L; bank_idx++) begin : g_bank
         (* ram_style = "block" *) logic [ COMP_C2V_W-1:0] mem[0:ROW_SEG_SIZE-1];
         logic                   bank_re;
-        logic                   bank_read_is_c2v;
-        logic [ROW_BANK_AW-1:0] c2v_bank_raddr;
-        logic [ROW_BANK_AW-1:0] v2c_bank_raddr;
+        logic [            1:0] bank_read_kind;
+        logic [ROW_BANK_AW-1:0] bank_raddr;
         logic                   bank_we;
         logic [ROW_BANK_AW-1:0] bank_waddr;
         logic [ COMP_C2V_W-1:0] bank_wdata;
+        logic                   flip_we_q;
+        logic [ROW_BANK_AW-1:0] flip_waddr_q;
+        logic [ COMP_C2V_W-1:0] flip_rdata_q;
+        logic [ COMP_C2V_W-1:0] flip_wdata;
+
+        localparam logic [1:0] RAM_M_READ_NONE = 2'd0;
+        localparam logic [1:0] RAM_M_READ_C2V = 2'd1;
+        localparam logic [1:0] RAM_M_READ_V2C = 2'd2;
+        localparam logic [1:0] RAM_M_READ_FLIP = 2'd3;
 
         always_comb begin
           bank_re = 1'b0;
-          bank_read_is_c2v = 1'b0;
-          c2v_bank_raddr = '0;
-          v2c_bank_raddr = '0;
+          bank_read_kind = RAM_M_READ_NONE;
+          bank_raddr = '0;
           bank_we = 1'b0;
           bank_waddr = '0;
           bank_wdata = '0;
+          flip_wdata = flip_rdata_q;
+          flip_wdata[COMP_C2V_SIGN_XOR_BIT] = ~flip_rdata_q[COMP_C2V_SIGN_XOR_BIT];
           // Scheduler presents one read intent per pair bank; c2v priority is a deterministic guard.
           if (i_c2v_valid[bank_idx] && (int'(i_c2v_pair_sel) == pair_idx)) begin
             bank_re = 1'b1;
-            bank_read_is_c2v = 1'b1;
-            c2v_bank_raddr = i_c2v_row_addr[bank_idx];
+            bank_read_kind = RAM_M_READ_C2V;
+            bank_raddr = i_c2v_row_addr[bank_idx];
           end else if (i_v2c_valid[bank_idx] && (int'(i_v2c_pair_sel) == pair_idx)) begin
             bank_re = 1'b1;
-            bank_read_is_c2v = 1'b0;
-            v2c_bank_raddr = i_v2c_row_addr[bank_idx];
+            bank_read_kind = RAM_M_READ_V2C;
+            bank_raddr = i_v2c_row_addr[bank_idx];
+          end else if (i_flip_valid[bank_idx] && (int'(i_flip_pair_sel) == pair_idx)) begin
+            bank_re = 1'b1;
+            bank_read_kind = RAM_M_READ_FLIP;
+            bank_raddr = i_flip_row_addr[bank_idx];
           end
           if (i_clear_valid && (int'(i_clear_pair_sel) == pair_idx)) begin
             bank_we = 1'b1;
@@ -70,11 +83,6 @@ module ram_m
             bank_we = 1'b1;
             bank_waddr = i_v2c_write_row_addr[bank_idx];
             bank_wdata = i_v2c_write_data[bank_idx];
-          end else if (i_flip_valid[bank_idx] && (int'(i_flip_pair_sel) == pair_idx)) begin
-            bank_we = 1'b1;
-            bank_waddr = i_flip_row_addr[bank_idx];
-            bank_wdata = mem[i_flip_row_addr[bank_idx]];
-            bank_wdata[COMP_C2V_SIGN_XOR_BIT] = ~mem[i_flip_row_addr[bank_idx]][COMP_C2V_SIGN_XOR_BIT];
           end
         end
 
@@ -82,21 +90,38 @@ module ram_m
           if (!i_rst_n) begin
             c2v_bank_read_valid[pair_idx][bank_idx] <= 1'b0;
             v2c_bank_read_valid[pair_idx][bank_idx] <= 1'b0;
+            flip_we_q <= 1'b0;
+            flip_waddr_q <= '0;
           end else begin
-            c2v_bank_read_valid[pair_idx][bank_idx] <= bank_re && bank_read_is_c2v;
-            v2c_bank_read_valid[pair_idx][bank_idx] <= bank_re && !bank_read_is_c2v;
+            c2v_bank_read_valid[pair_idx][bank_idx] <= bank_re &&
+                (bank_read_kind == RAM_M_READ_C2V);
+            v2c_bank_read_valid[pair_idx][bank_idx] <= bank_re &&
+                (bank_read_kind == RAM_M_READ_V2C);
+            flip_we_q <= bank_re && (bank_read_kind == RAM_M_READ_FLIP);
+            flip_waddr_q <= bank_raddr;
           end
         end
 
         always_ff @(posedge i_clk) begin
-          if (bank_re && bank_read_is_c2v) begin
-            c2v_bank_rdata[pair_idx][bank_idx] <= mem[c2v_bank_raddr];
-          end
-          if (bank_re && !bank_read_is_c2v) begin
-            v2c_bank_rdata[pair_idx][bank_idx] <= mem[v2c_bank_raddr];
+          if (bank_re) begin
+            unique case (bank_read_kind)
+              RAM_M_READ_C2V: c2v_bank_rdata[pair_idx][bank_idx] <= mem[bank_raddr];
+              RAM_M_READ_V2C: v2c_bank_rdata[pair_idx][bank_idx] <= mem[bank_raddr];
+              RAM_M_READ_FLIP: begin
+                if (flip_we_q && (flip_waddr_q == bank_raddr)) begin
+                  flip_rdata_q <= flip_wdata;
+                end else begin
+                  flip_rdata_q <= mem[bank_raddr];
+                end
+              end
+              default: begin
+              end
+            endcase
           end
           if (bank_we) begin
             mem[bank_waddr] <= bank_wdata;
+          end else if (flip_we_q) begin
+            mem[flip_waddr_q] <= flip_wdata;
           end
         end
       end
