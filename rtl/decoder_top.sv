@@ -599,39 +599,52 @@ module decoder_top
       .i_flip_row_addr(comp_flip_row_addr)
   );
 
-  ram_s u_ram_s (
-      .i_clk(i_clk),
-      .i_rst_n(rst_n_sync),
-      .i_c2v_valid(c2v_valid_r),
-      .i_c2v_tile_idx(c2v_tile_idx_r),
-      .i_c2v_tile_offset(c2v_tile_offset_r),
-      .i_c2v_diag_idx_global(c2v_diag_idx_global_r),
-      .o_c2v_sign(c2v_sign_mem),
-      .i_v2c_phase_valid(v2c_write_phase_p),
-      .i_v2c_tile_idx(v2c_write_tile_idx_p),
-      .i_v2c_lane_group_idx(v2c_write_lane_group_idx_p),
-      .i_v2c_diag_idx_global(v2c_write_diag_idx_global_base_p),
-      .i_v2c_write_valid(v2c_valid_p),
-      .i_v2c_tile_offset(v2c_tile_offset_p),
-      .i_v2c_sign(v2c_sign_p)
-  );
+  generate
+    if (K_SIGN_ENABLE) begin : g_sign_k
+      ram_k_sign u_ram_k_sign (
+          .i_clk               (i_clk),
+          .i_rst_n             (rst_n_sync),
+          .i_c2v_pair_sel      (ksign_read_pair_sel),
+          .i_c2v_valid         (ksign_read_valid),
+          .i_c2v_col_idx       (ksign_read_col_idx),
+          .i_c2v_diag_idx_local(ksign_read_diag_idx_local),
+          .o_c2v_sign          (c2v_ksign_sign_mem),
+          .o_c2v_hit           (c2v_ksign_hit_mem),
+          .i_v2c_pair_sel      (v2c_write_pair_sel_c),
+          .i_v2c_valid         (v2c_valid_c),
+          .i_v2c_col_idx       (v2c_col_idx_c),
+          .i_v2c_diag_idx_local(v2c_diag_idx_local_c),
+          .i_v2c_msg           (v2c_msg_c),
+          .i_v2c_base_sign     (v2c_ksign_base_sign)
+      );
 
-  ram_k_sign u_ram_k_sign (
-      .i_clk               (i_clk),
-      .i_rst_n             (rst_n_sync),
-      .i_c2v_pair_sel      (ksign_read_pair_sel),
-      .i_c2v_valid         (ksign_read_valid),
-      .i_c2v_col_idx       (ksign_read_col_idx),
-      .i_c2v_diag_idx_local(ksign_read_diag_idx_local),
-      .o_c2v_sign          (c2v_ksign_sign_mem),
-      .o_c2v_hit           (c2v_ksign_hit_mem),
-      .i_v2c_pair_sel      (v2c_write_pair_sel_c),
-      .i_v2c_valid         (v2c_valid_c),
-      .i_v2c_col_idx       (v2c_col_idx_c),
-      .i_v2c_diag_idx_local(v2c_diag_idx_local_c),
-      .i_v2c_msg           (v2c_msg_c),
-      .i_v2c_base_sign     (v2c_ksign_base_sign)
-  );
+      for (genvar lane_idx = 0; lane_idx < L; lane_idx++) begin : g_full_sign_const
+        assign c2v_sign_mem[lane_idx] = 1'b0;
+      end
+    end else begin : g_sign_full
+      ram_s u_ram_s (
+          .i_clk(i_clk),
+          .i_rst_n(rst_n_sync),
+          .i_c2v_valid(c2v_valid_r),
+          .i_c2v_tile_idx(c2v_tile_idx_r),
+          .i_c2v_tile_offset(c2v_tile_offset_r),
+          .i_c2v_diag_idx_global(c2v_diag_idx_global_r),
+          .o_c2v_sign(c2v_sign_mem),
+          .i_v2c_phase_valid(v2c_write_phase_p),
+          .i_v2c_tile_idx(v2c_write_tile_idx_p),
+          .i_v2c_lane_group_idx(v2c_write_lane_group_idx_p),
+          .i_v2c_diag_idx_global(v2c_write_diag_idx_global_base_p),
+          .i_v2c_write_valid(v2c_valid_p),
+          .i_v2c_tile_offset(v2c_tile_offset_p),
+          .i_v2c_sign(v2c_sign_p)
+      );
+
+      for (genvar lane_idx = 0; lane_idx < L; lane_idx++) begin : g_ksign_const
+        assign c2v_ksign_sign_mem[lane_idx] = 1'b0;
+        assign c2v_ksign_hit_mem[lane_idx]  = 1'b0;
+      end
+    end
+  endgenerate
 
   ram_accum u_ram_accum (
       .i_clk(i_clk),
