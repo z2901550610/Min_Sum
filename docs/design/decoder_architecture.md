@@ -93,9 +93,10 @@ V2C 阶段综合变量节点收到的校验建议，并更新下一轮 check-sta
 | `ram_syndrome` | check row syndrome bit BRAM | 启动前写入 | C2V 同步读 |
 | `ram_accum` | tile 内变量列 raw C2V sum | 每个 tile window 交换 buffer | C2V 写 buffer，V2C 读 buffer |
 | `ram_t` | tile 内单条 raw C2V edge | 每个 tile window 交换 buffer | C2V 写 buffer，V2C 读 buffer |
+| `ram_k_global` | 每变量 K-sign 压缩记录 | tile 读取完成后原地提交 | C2V/correction 读，V2C 写 |
 | `ram_decision` | 变量列错误估计 bit BRAM | final iteration 写入 | 外部同步读 |
 
-`ram_m` 的 pair 选择由 `decoder_top` 保存，并由 `tile_scheduler` 的 `iter_last_cycle` 触发交换。`ram_accum` 和 `ram_t` 的 buffer 选择由窗口编号奇偶性生成。
+`ram_m` 的 pair 选择由 `decoder_top` 保存，并由 `tile_scheduler` 的每个 `iter_last_cycle` 触发交换。`ram_accum` 和 `ram_t` 的 buffer 选择由窗口编号奇偶性生成。K-sign 的 V2C 写回落后同一 tile 的 C2V 读取一个窗口，全局记录在旧值消费完成后原地更新。
 
 ## 控制边界
 

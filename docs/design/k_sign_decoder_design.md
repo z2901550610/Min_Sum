@@ -141,7 +141,7 @@ V2C 扫描期间使用 tile 局部工作记录：
 KSIGN_WORK_W = 1 + K * (POS_W + D)
 ```
 
-工作记录保存 `base_sign` 和 K 个无序 `(dev_pos, magnitude)` 槽。变量列的最后一个 `diag_idx_local` 完成后，硬件将 `base_sign` 和 K 个位置提交到下一轮全局 K-sign RAM。幅值状态只覆盖活动 tile。
+工作记录保存 `base_sign` 和 K 个无序 `(dev_pos, magnitude)` 槽。变量列的最后一个 `diag_idx_local` 完成后，硬件将 `base_sign` 和 K 个位置原地提交到全局 K-sign RAM。幅值状态只覆盖活动 tile。
 
 ## 流水线位置
 
@@ -299,8 +299,8 @@ BRAM36 粗估按 banked variable storage：
 
 | 并行度 | K=4 | K=6 |
 | ---: | ---: | ---: |
-| L=16 | 约 320 BRAM36 | 约 400 BRAM36 |
-| L=32 | 约 320 BRAM36 | 约 416 BRAM36 |
+| L=16 | 约 272 BRAM36 | 约 400 BRAM36 |
+| L=32 | 约 288 BRAM36 | 约 416 BRAM36 |
 
 完整符号存储参考约为 1.0k BRAM36。K-sign 长期存储的主收益来自把每变量 `W_MAX=111` 个符号位压缩为 `1+K*7` bit。
 
@@ -311,7 +311,7 @@ Tile 内 selector 工作状态按 `COLS_PER_TILE=1168`、`D=4` 估算：
 | 4 | 45 bit | 52,560 bit |
 | 6 | 67 bit | 78,256 bit |
 
-该状态由按变量列 bank 化的 tile 工作 RAM 保存，并在 tile 间复用。全局双缓冲 K-sign RAM 保存 `1+K*POS_W` bit 的长期记录。
+该状态由按变量列 bank 化的 tile 工作 RAM 保存，并在 tile 间复用。全局 K-sign RAM 保存一份 `1+K*POS_W` bit 的长期记录。C2V 完成一个 tile 的旧记录读取后，落后一窗口的 V2C 对同一 tile 原地提交新记录。
 
 ## 仿真观察
 
@@ -361,13 +361,13 @@ TRIKE512：
 
 K-sign 数据通路由以下模块组成：
 
-1. `ram_k_global`：每个变量列的全局双缓冲记录，字段为 `base_sign` 和 K 个 `dev_pos`。
+1. `ram_k_global`：每个变量列的一份全局原地更新记录，字段为 `base_sign` 和 K 个 `dev_pos`。
 2. `ram_k_tile`：活动 tile 的幅值工作 RAM，字段为 `base_sign` 和 K 个无序 `(dev_pos, magnitude)` 槽。
 3. `k_sign_update`：无序候选槽的最差项归约树和单槽更新组合逻辑。
 4. `k_sign_selector`：变量列 bank 路由、工作 RAM 读改写控制和压缩记录提交。
 5. `k_sign_reconstruct`：根据全局压缩记录和 `diag_idx_local` 重建近似符号及命中标志。
 
-最后一个对角线将压缩记录写入全局目标 pair。C2V 和 correction 读取全局记录，通过 `base_sign XOR hit(dev_pos == diag_idx_local)` 重建符号。主 V2C 使用 base-sign 更新，固定 correction 扫描对命中位置翻转对应 check row 的 `sign_xor`。
+最后一个对角线在该变量列的全部旧记录读取完成后，将压缩记录写回原地址。C2V 和 correction 读取全局记录，通过 `base_sign XOR hit(dev_pos == diag_idx_local)` 重建符号。主 V2C 使用 base-sign 更新，固定 correction 扫描对命中位置翻转对应 check row 的 `sign_xor`。
 
 ## 主要风险
 

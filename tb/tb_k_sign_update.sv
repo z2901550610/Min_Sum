@@ -26,7 +26,6 @@ module tb_k_sign_update;
   logic [          TILE_OFF_W-1:0] v2c_tile_offset[0:L-1];
   logic [               MSG_W-1:0] v2c_msg_lane[0:L-1];
   logic                            v2c_base_sign[0:L-1];
-  logic                            commit_pair_sel;
   logic                            commit_valid[0:L-1];
   logic [               COL_W-1:0] commit_col_idx[0:L-1];
   logic [     K_SIGN_RECORD_W-1:0] commit_record[0:L-1];
@@ -49,33 +48,29 @@ module tb_k_sign_update;
   );
 
   k_sign_selector u_k_sign_selector (
-      .i_clk            (clk),
-      .i_rst_n          (rst_n),
-      .i_cfg_w          (CFG_W_W'(W)),
-      .i_pair_sel       (1'b0),
-      .i_valid          (v2c_valid),
-      .i_col_idx        (v2c_col_idx),
-      .i_tile_offset    (v2c_tile_offset),
-      .i_diag_idx_local (diag_idx_local),
-      .i_v2c_msg        (v2c_msg_lane),
-      .i_base_sign      (v2c_base_sign),
-      .o_commit_pair_sel(commit_pair_sel),
-      .o_commit_valid   (commit_valid),
-      .o_commit_col_idx (commit_col_idx),
-      .o_commit_record  (commit_record)
+      .i_clk           (clk),
+      .i_rst_n         (rst_n),
+      .i_cfg_w         (CFG_W_W'(W)),
+      .i_valid         (v2c_valid),
+      .i_col_idx       (v2c_col_idx),
+      .i_tile_offset   (v2c_tile_offset),
+      .i_diag_idx_local(diag_idx_local),
+      .i_v2c_msg       (v2c_msg_lane),
+      .i_base_sign     (v2c_base_sign),
+      .o_commit_valid  (commit_valid),
+      .o_commit_col_idx(commit_col_idx),
+      .o_commit_record (commit_record)
   );
 
   ram_k_global u_ram_k_global (
-      .i_clk           (clk),
-      .i_rst_n         (rst_n),
-      .i_read_pair_sel (1'b0),
-      .i_read_valid    (c2v_valid),
-      .i_read_col_idx  (c2v_col_idx),
-      .o_read_record   (c2v_record),
-      .i_write_pair_sel(commit_pair_sel),
-      .i_write_valid   (commit_valid),
-      .i_write_col_idx (commit_col_idx),
-      .i_write_record  (commit_record)
+      .i_clk          (clk),
+      .i_rst_n        (rst_n),
+      .i_read_valid   (c2v_valid),
+      .i_read_col_idx (c2v_col_idx),
+      .o_read_record  (c2v_record),
+      .i_write_valid  (commit_valid),
+      .i_write_col_idx(commit_col_idx),
+      .i_write_record (commit_record)
   );
 
   generate

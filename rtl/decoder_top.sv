@@ -295,12 +295,10 @@ module decoder_top
   logic                                c2v_ksign_sign_mem[0:L-1];
   logic                                c2v_ksign_hit_mem[0:L-1];
   logic                                c2v_ksign_sign_q[0:L-1];
-  logic                                ksign_read_pair_sel;
   logic                                ksign_read_valid[0:L-1];
   logic        [            COL_W-1:0] ksign_read_col_idx[0:L-1];
   logic        [       DIAG_IDX_W-1:0] ksign_read_diag_idx_local;
   logic        [       DIAG_IDX_W-1:0] ksign_read_diag_idx_local_q;
-  logic                                ksign_commit_pair_sel;
   logic                                ksign_commit_valid[0:L-1];
   logic        [            COL_W-1:0] ksign_commit_col_idx[0:L-1];
   logic        [  K_SIGN_RECORD_W-1:0] ksign_commit_record[0:L-1];
@@ -400,7 +398,6 @@ module decoder_top
 
   always_comb begin
     first_iter_c2v_comp = {1'b0, DIAG_GLOBAL_W'(0), D'(cfg_c_val), D'(cfg_c_val)};
-    ksign_read_pair_sel = ksign_corr_phase_r ? comp_write_pair_sel : comp_read_pair_sel_r;
     ksign_read_diag_idx_local = ksign_corr_phase_r ? ksign_corr_diag_idx_local_r : c2v_diag_idx_local_r;
 
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
@@ -608,33 +605,29 @@ module decoder_top
   generate
     if (K_SIGN_ENABLE) begin : g_sign_k
       k_sign_selector u_k_sign_selector (
-          .i_clk            (i_clk),
-          .i_rst_n          (rst_n_sync),
-          .i_cfg_w          (cfg_w),
-          .i_pair_sel       (v2c_write_pair_sel_c),
-          .i_valid          (v2c_valid_c),
-          .i_col_idx        (v2c_col_idx_c),
-          .i_tile_offset    (v2c_tile_offset_c),
-          .i_diag_idx_local (v2c_diag_idx_local_c),
-          .i_v2c_msg        (v2c_msg_c),
-          .i_base_sign      (v2c_ksign_base_sign),
-          .o_commit_pair_sel(ksign_commit_pair_sel),
-          .o_commit_valid   (ksign_commit_valid),
-          .o_commit_col_idx (ksign_commit_col_idx),
-          .o_commit_record  (ksign_commit_record)
+          .i_clk           (i_clk),
+          .i_rst_n         (rst_n_sync),
+          .i_cfg_w         (cfg_w),
+          .i_valid         (v2c_valid_c),
+          .i_col_idx       (v2c_col_idx_c),
+          .i_tile_offset   (v2c_tile_offset_c),
+          .i_diag_idx_local(v2c_diag_idx_local_c),
+          .i_v2c_msg       (v2c_msg_c),
+          .i_base_sign     (v2c_ksign_base_sign),
+          .o_commit_valid  (ksign_commit_valid),
+          .o_commit_col_idx(ksign_commit_col_idx),
+          .o_commit_record (ksign_commit_record)
       );
 
       ram_k_global u_ram_k_global (
-          .i_clk           (i_clk),
-          .i_rst_n         (rst_n_sync),
-          .i_read_pair_sel (ksign_read_pair_sel),
-          .i_read_valid    (ksign_read_valid),
-          .i_read_col_idx  (ksign_read_col_idx),
-          .o_read_record   (c2v_ksign_record_mem),
-          .i_write_pair_sel(ksign_commit_pair_sel),
-          .i_write_valid   (ksign_commit_valid),
-          .i_write_col_idx (ksign_commit_col_idx),
-          .i_write_record  (ksign_commit_record)
+          .i_clk          (i_clk),
+          .i_rst_n        (rst_n_sync),
+          .i_read_valid   (ksign_read_valid),
+          .i_read_col_idx (ksign_read_col_idx),
+          .o_read_record  (c2v_ksign_record_mem),
+          .i_write_valid  (ksign_commit_valid),
+          .i_write_col_idx(ksign_commit_col_idx),
+          .i_write_record (ksign_commit_record)
       );
 
       for (genvar lane_idx = 0; lane_idx < L; lane_idx++) begin : g_sign_reconstruct
@@ -673,7 +666,6 @@ module decoder_top
         assign ksign_commit_col_idx[lane_idx] = '0;
         assign ksign_commit_record[lane_idx] = '0;
       end
-      assign ksign_commit_pair_sel = 1'b0;
     end
   endgenerate
 
@@ -1137,7 +1129,7 @@ module decoder_top
         comp_write_pair_sel <= 1'b1;
       end
 
-      if (iter_last_cycle && !final_iter) begin
+      if (iter_last_cycle) begin
         comp_read_pair_sel  <= comp_write_pair_sel;
         comp_write_pair_sel <= comp_read_pair_sel;
       end

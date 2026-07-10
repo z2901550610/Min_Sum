@@ -6,14 +6,12 @@ module k_sign_selector
     input  logic                       i_clk,
     input  logic                       i_rst_n,
     input  logic [        CFG_W_W-1:0] i_cfg_w,
-    input  logic                       i_pair_sel,
     input  logic                       i_valid[0:L-1],
     input  logic [          COL_W-1:0] i_col_idx[0:L-1],
     input  logic [     TILE_OFF_W-1:0] i_tile_offset[0:L-1],
     input  logic [     DIAG_IDX_W-1:0] i_diag_idx_local,
     input  logic [          MSG_W-1:0] i_v2c_msg[0:L-1],
     input  logic                       i_base_sign[0:L-1],
-    output logic                       o_commit_pair_sel,
     output logic                       o_commit_valid[0:L-1],
     output logic [          COL_W-1:0] o_commit_col_idx[0:L-1],
     output logic [K_SIGN_RECORD_W-1:0] o_commit_record[0:L-1]
@@ -36,7 +34,6 @@ module k_sign_selector
   logic [               MSG_W-1:0] v2c_msg_q[0:L-1];
   logic                            base_sign_q[0:L-1];
   logic                            last_diag_q[0:L-1];
-  logic                            pair_sel_q;
 
   function automatic logic [LANE_IDX_W-1:0] col_bank(input  logic [COL_W-1:0] col_idx);
     begin
@@ -128,16 +125,6 @@ module k_sign_selector
       end
     end
   endgenerate
-
-  always_ff @(posedge i_clk or negedge i_rst_n) begin
-    if (!i_rst_n) begin
-      pair_sel_q <= 1'b0;
-    end else begin
-      pair_sel_q <= i_pair_sel;
-    end
-  end
-
-  assign o_commit_pair_sel = pair_sel_q;
 
   ram_k_tile u_ram_k_tile (
       .i_clk         (i_clk),
