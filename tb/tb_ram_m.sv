@@ -25,6 +25,8 @@ module tb_ram_m;
   logic [ROW_BANK_AW-1:0] flip_row_addr[0:L-1];
 
   localparam logic [COMP_C2V_W-1:0] TEST_COMP = {1'b1, DIAG_GLOBAL_W'(2), D'(7), D'(3)};
+  localparam logic [COMP_C2V_W-1:0] TEST_COMP_FLIPPED =
+      TEST_COMP ^ (COMP_C2V_W'(1) << COMP_C2V_SIGN_XOR_BIT);
 
   ram_m dut (
       .i_clk(clk),
@@ -101,6 +103,40 @@ module tb_ram_m;
     @(posedge clk);
     #1;
     if (v2c_comp[0] !== TEST_COMP) $fatal(1, "v2c pair read mismatch");
+    clear_inputs();
+
+    flip_pair_sel = 1'b1;
+    flip_valid[0] = 1'b1;
+    flip_row_addr[0] = '0;
+    @(posedge clk);
+    #1;
+    clear_inputs();
+    @(posedge clk);
+    #1;
+
+    c2v_pair_sel = 1'b1;
+    c2v_valid[0] = 1'b1;
+    c2v_row_addr[0] = '0;
+    @(posedge clk);
+    #1;
+    if (c2v_comp[0] !== TEST_COMP_FLIPPED) $fatal(1, "flip readback mismatch");
+    clear_inputs();
+
+    flip_pair_sel = 1'b1;
+    flip_valid[0] = 1'b1;
+    flip_row_addr[0] = '0;
+    repeat (2) @(posedge clk);
+    #1;
+    clear_inputs();
+    @(posedge clk);
+    #1;
+
+    v2c_pair_sel = 1'b1;
+    v2c_valid[0] = 1'b1;
+    v2c_row_addr[0] = '0;
+    @(posedge clk);
+    #1;
+    if (v2c_comp[0] !== TEST_COMP_FLIPPED) $fatal(1, "consecutive flip readback mismatch");
     clear_inputs();
 
     clear_valid = 1'b1;
