@@ -41,7 +41,9 @@ set rtl_files [list \
   rtl/ram_s.sv \
   rtl/k_sign_update.sv \
   rtl/k_sign_reconstruct.sv \
-  rtl/ram_k_sign.sv \
+  rtl/ram_k_tile.sv \
+  rtl/k_sign_selector.sv \
+  rtl/ram_k_global.sv \
   rtl/ram_syndrome.sv \
   rtl/ram_accum.sv \
   rtl/ram_t.sv \

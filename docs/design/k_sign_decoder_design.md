@@ -35,7 +35,7 @@ base_sign[j]
 dev_pos[j,0..K-1]
 ```
 
-`dev_pos` 只记录 `dev=1` 的边位置，并按 `v2c_mag` 选择幅值最大的 K 个。候选数少于 K 时，剩余槽为 invalid。
+`dev_pos` 只记录 `dev=1` 的边位置，并按 `v2c_mag` 选择幅值最大的 K 个。候选数少于 K 时，剩余槽为 invalid。候选工作槽保持无序；Top-K 集合由固定的最差项选择规则确定。
 
 C2V 阶段重建边 `k` 的近似 V2C 符号：
 
@@ -133,7 +133,15 @@ KSIGN_W = 1 + K * POS_W
 KSIGN_W_VALID = 1 + K * (POS_W + 1)
 ```
 
-推荐第一版采用哨兵编码，保持 `1 + K*7` 的估算口径。
+硬件采用哨兵编码，长期记录宽度为 `1 + K*7`。
+
+V2C 扫描期间使用 tile 局部工作记录：
+
+```text
+KSIGN_WORK_W = 1 + K * (POS_W + D)
+```
+
+工作记录保存 `base_sign` 和 K 个无序 `(dev_pos, magnitude)` 槽。变量列的最后一个 `diag_idx_local` 完成后，硬件将 `base_sign` 和 K 个位置提交到下一轮全局 K-sign RAM。幅值状态只覆盖活动 tile。
 
 ## 流水线位置
 
@@ -154,23 +162,25 @@ CNU A 幅度路径使用真实 `v2c_mag` 更新 min1/min2/min_diag_idx_global。
 
 ## Tile 内候选选择器
 
-译码器按 tile 对角线扫描，tile 内多个变量列交织到达。selector 需要为 tile 内每个列 offset 保留 K 个候选槽：
+译码器按 tile 对角线扫描，tile 内多个变量列交织到达。selector 为 tile 内每个列 offset 保留 K 个无序候选槽：
 
 ```text
 base_sign[tile_offset]
 pos[tile_offset][0..K-1]
 mag[tile_offset][0..K-1]
-valid[tile_offset][0..K-1]
 ```
+
+位置哨兵 `K_SIGN_DIAG_INVALID` 同时表达槽位有效性。
 
 每个有效 VNU 输出执行固定比较网络：
 
 1. 计算 `dev = v2c_sign XOR base_sign`。
 2. `dev=0` 时候选输入被 mask。
-3. `dev=1` 时将 `(diag_idx_local, mag)` 插入该 `tile_offset` 的 K 个候选槽。
-4. 比较和移动槽位的逻辑数量固定，不因候选数量提前结束。
+3. 平衡归约树从 K 个槽中选择最差项：invalid 优先被替换；有效槽中幅值较小者更差；幅值相同时位置较大者更差。
+4. `dev=1` 且候选优于最差项时，只覆盖最差槽。
+5. 比较树和单槽写选择的逻辑数量固定，不因候选数量提前结束。
 
-K 较小时可以使用插入式 top-K 网络。K=4 或 K=6 时，每个 lane 每拍执行 K 级比较和选择。比较对象是 4 bit 幅值和固定 tie-break 字段。
+K=4 或 K=6 时，每个 lane 使用 `K-1` 个比较选择节点组成最差项树，并使用一个候选门限比较器。树深约为 `ceil(log2(K))`，工作记录只更新一个槽。
 
 推荐 tie-break：
 
@@ -179,7 +189,7 @@ mag 更大者优先
 mag 相同则 diag_idx_local 更小者优先
 ```
 
-该规则完全确定，便于 C/RTL 对齐。
+同一变量列的候选按递增 `diag_idx_local` 到达。候选与最差项幅值相同时不执行替换；归约树在同幅值槽中选择位置较大的槽作为最差项。该规则完全确定，便于 C/RTL 对齐。
 
 ## Sign_xor 更新
 
@@ -294,14 +304,14 @@ BRAM36 粗估按 banked variable storage：
 
 完整符号存储参考约为 1.0k BRAM36。K-sign 长期存储的主收益来自把每变量 `W_MAX=111` 个符号位压缩为 `1+K*7` bit。
 
-Tile 内 selector 临时状态按 `COLS_PER_TILE=1056` 估算：
+Tile 内 selector 工作状态按 `COLS_PER_TILE=1168`、`D=4` 估算：
 
-| K | base_sign | pos | mag | valid | 合计 |
-| ---: | ---: | ---: | ---: | ---: | ---: |
-| 4 | 1,056 bit | 29,568 bit | 16,896 bit | 4,224 bit | 51,744 bit |
-| 6 | 1,056 bit | 44,352 bit | 25,344 bit | 6,336 bit | 77,088 bit |
+| K | 每变量工作记录 | 合计 |
+| ---: | ---: | ---: |
+| 4 | 45 bit | 52,560 bit |
+| 6 | 67 bit | 78,256 bit |
 
-该状态为 tile 临时状态，可由寄存器或 LUTRAM 实现，并在 tile 间复用。
+该状态由按变量列 bank 化的 tile 工作 RAM 保存，并在 tile 间复用。全局双缓冲 K-sign RAM 保存 `1+K*POS_W` bit 的长期记录。
 
 ## 仿真观察
 
@@ -347,22 +357,17 @@ TRIKE512：
 - K=4 以更小长期存储换取更大的 DFR margin 需求。
 - K=6 提供较稳的性能余量。
 
-## RTL 集成建议
+## RTL 集成
 
-建议按以下阶段实现：
+K-sign 数据通路由以下模块组成：
 
-1. 添加 K-sign 存储模块，接口按变量列读写 `base_sign` 和 K 个 `dev_pos`。
-2. 添加 VNU 后 selector，先支持 K=4，参数化扩展到 K=6。
-3. 添加 C2V 符号重构逻辑：`base_sign XOR hit(dev_pos == diag_idx_local)`。
-4. 添加 sign_xor 一致性实现。
-   - 功能优先版本使用双遍 V2C 更新。
-   - 性能版本使用 base-sign 主更新和固定 correction window。
-5. 添加 C/RTL 对比测试，固定 seed 覆盖 K=4、K=6 和多个 profile。
-6. 添加常数时间断言：
-   - 周期数固定。
-   - correction window 长度固定。
-   - selector 比较级数固定。
-   - invalid 槽只影响写 mask。
+1. `ram_k_global`：每个变量列的全局双缓冲记录，字段为 `base_sign` 和 K 个 `dev_pos`。
+2. `ram_k_tile`：活动 tile 的幅值工作 RAM，字段为 `base_sign` 和 K 个无序 `(dev_pos, magnitude)` 槽。
+3. `k_sign_update`：无序候选槽的最差项归约树和单槽更新组合逻辑。
+4. `k_sign_selector`：变量列 bank 路由、工作 RAM 读改写控制和压缩记录提交。
+5. `k_sign_reconstruct`：根据全局压缩记录和 `diag_idx_local` 重建近似符号及命中标志。
+
+最后一个对角线将压缩记录写入全局目标 pair。C2V 和 correction 读取全局记录，通过 `base_sign XOR hit(dev_pos == diag_idx_local)` 重建符号。主 V2C 使用 base-sign 更新，固定 correction 扫描对命中位置翻转对应 check row 的 `sign_xor`。
 
 ## 主要风险
 

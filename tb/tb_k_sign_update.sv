@@ -3,25 +3,33 @@
 module tb_k_sign_update;
   import bike_pkg::*;
 
-  logic                       clk;
-  logic                       rst_n;
-  logic [K_SIGN_RECORD_W-1:0] record_q;
-  logic [K_SIGN_RECORD_W-1:0] record_next;
-  logic                       clear;
-  logic                       valid;
-  logic [     DIAG_IDX_W-1:0] diag_idx_local;
-  logic [          MSG_W-1:0] v2c_msg;
-  logic                       base_sign;
-  logic                       recon_sign;
+  logic                            clk;
+  logic                            rst_n;
+  logic [K_SIGN_WORK_RECORD_W-1:0] record_q;
+  logic [K_SIGN_WORK_RECORD_W-1:0] record_next;
+  logic [     K_SIGN_RECORD_W-1:0] compressed_record;
+  logic                            clear;
+  logic                            valid;
+  logic [          DIAG_IDX_W-1:0] diag_idx_local;
+  logic [               MSG_W-1:0] v2c_msg;
+  logic                            base_sign;
+  logic                            recon_sign;
+  logic                            recon_hit;
 
-  logic                       c2v_valid[0:L-1];
-  logic [          COL_W-1:0] c2v_col_idx[0:L-1];
-  logic                       c2v_sign[0:L-1];
-  logic                       c2v_hit[0:L-1];
-  logic                       v2c_valid[0:L-1];
-  logic [          COL_W-1:0] v2c_col_idx[0:L-1];
-  logic [          MSG_W-1:0] v2c_msg_lane[0:L-1];
-  logic                       v2c_base_sign[0:L-1];
+  logic                            c2v_valid[0:L-1];
+  logic [               COL_W-1:0] c2v_col_idx[0:L-1];
+  logic                            c2v_sign[0:L-1];
+  logic                            c2v_hit[0:L-1];
+  logic [     K_SIGN_RECORD_W-1:0] c2v_record[0:L-1];
+  logic                            v2c_valid[0:L-1];
+  logic [               COL_W-1:0] v2c_col_idx[0:L-1];
+  logic [          TILE_OFF_W-1:0] v2c_tile_offset[0:L-1];
+  logic [               MSG_W-1:0] v2c_msg_lane[0:L-1];
+  logic                            v2c_base_sign[0:L-1];
+  logic                            commit_pair_sel;
+  logic                            commit_valid[0:L-1];
+  logic [               COL_W-1:0] commit_col_idx[0:L-1];
+  logic [     K_SIGN_RECORD_W-1:0] commit_record[0:L-1];
 
   k_sign_update u_k_sign_update (
       .i_record        (record_q),
@@ -34,30 +42,64 @@ module tb_k_sign_update;
   );
 
   k_sign_reconstruct u_k_sign_reconstruct (
-      .i_record (record_q),
+      .i_record        (compressed_record),
       .i_diag_idx_local(diag_idx_local),
-      .o_sign   (recon_sign)
+      .o_sign          (recon_sign),
+      .o_hit           (recon_hit)
   );
 
-  ram_k_sign u_ram_k_sign (
-      .i_clk               (clk),
-      .i_rst_n             (rst_n),
-      .i_c2v_pair_sel      (1'b0),
-      .i_c2v_valid         (c2v_valid),
-      .i_c2v_col_idx       (c2v_col_idx),
-      .i_c2v_diag_idx_local(diag_idx_local),
-      .o_c2v_sign          (c2v_sign),
-      .o_c2v_hit           (c2v_hit),
-      .i_v2c_pair_sel      (1'b0),
-      .i_v2c_valid         (v2c_valid),
-      .i_v2c_col_idx       (v2c_col_idx),
-      .i_v2c_diag_idx_local(diag_idx_local),
-      .i_v2c_msg           (v2c_msg_lane),
-      .i_v2c_base_sign     (v2c_base_sign)
+  k_sign_selector u_k_sign_selector (
+      .i_clk            (clk),
+      .i_rst_n          (rst_n),
+      .i_cfg_w          (CFG_W_W'(W)),
+      .i_pair_sel       (1'b0),
+      .i_valid          (v2c_valid),
+      .i_col_idx        (v2c_col_idx),
+      .i_tile_offset    (v2c_tile_offset),
+      .i_diag_idx_local (diag_idx_local),
+      .i_v2c_msg        (v2c_msg_lane),
+      .i_base_sign      (v2c_base_sign),
+      .o_commit_pair_sel(commit_pair_sel),
+      .o_commit_valid   (commit_valid),
+      .o_commit_col_idx (commit_col_idx),
+      .o_commit_record  (commit_record)
   );
+
+  ram_k_global u_ram_k_global (
+      .i_clk           (clk),
+      .i_rst_n         (rst_n),
+      .i_read_pair_sel (1'b0),
+      .i_read_valid    (c2v_valid),
+      .i_read_col_idx  (c2v_col_idx),
+      .o_read_record   (c2v_record),
+      .i_write_pair_sel(commit_pair_sel),
+      .i_write_valid   (commit_valid),
+      .i_write_col_idx (commit_col_idx),
+      .i_write_record  (commit_record)
+  );
+
+  generate
+    for (genvar lane_idx = 0; lane_idx < L; lane_idx++) begin : g_ram_reconstruct
+      k_sign_reconstruct u_k_sign_reconstruct (
+          .i_record        (c2v_record[lane_idx]),
+          .i_diag_idx_local(diag_idx_local),
+          .o_sign          (c2v_sign[lane_idx]),
+          .o_hit           (c2v_hit[lane_idx])
+      );
+    end
+  endgenerate
 
   initial clk = 1'b0;
   always #5 clk = ~clk;
+
+  always_comb begin
+    compressed_record = '0;
+    compressed_record[0] = record_q[0];
+    for (int slot_idx = 0; slot_idx < K_SIGN_K; slot_idx++) begin
+      compressed_record[1+(slot_idx*DIAG_IDX_W)+:DIAG_IDX_W] =
+          record_q[1+(slot_idx*K_SIGN_WORK_SLOT_W)+:DIAG_IDX_W];
+    end
+  end
 
   task automatic commit_update(input  logic clr, input  logic [DIAG_IDX_W-1:0] pos, input  logic sign,
                                input  logic [D-1:0] mag);
@@ -80,12 +122,14 @@ module tb_k_sign_update;
       for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
         v2c_valid[lane_idx] = 1'b0;
         v2c_col_idx[lane_idx] = COL_W'(lane_idx);
+        v2c_tile_offset[lane_idx] = TILE_OFF_W'(lane_idx);
         v2c_msg_lane[lane_idx] = '0;
         v2c_base_sign[lane_idx] = 1'b0;
       end
       diag_idx_local = pos;
       v2c_valid[0] = 1'b1;
       v2c_col_idx[0] = '0;
+      v2c_tile_offset[0] = '0;
       v2c_msg_lane[0] = {sign, mag};
       v2c_base_sign[0] = 1'b0;
       @(posedge clk);
@@ -125,6 +169,7 @@ module tb_k_sign_update;
       c2v_col_idx[lane_idx] = '0;
       v2c_valid[lane_idx] = 1'b0;
       v2c_col_idx[lane_idx] = '0;
+      v2c_tile_offset[lane_idx] = '0;
       v2c_msg_lane[lane_idx] = '0;
       v2c_base_sign[lane_idx] = 1'b0;
     end
@@ -134,20 +179,24 @@ module tb_k_sign_update;
     repeat (2) @(posedge clk);
 
     base_sign = 1'b0;
-    commit_update(1'b1, 3, 1'b1, 2);
+    commit_update(1'b1, 0, 1'b1, 7);
     commit_update(1'b0, 1, 1'b1, 7);
-    commit_update(1'b0, 2, 1'b1, 7);
-    commit_update(1'b0, 0, 1'b0, 15);
+    commit_update(1'b0, 2, 1'b1, 9);
 
     diag_idx_local = DIAG_IDX_W'(1);
     #1;
-    if (recon_sign !== 1'b1) $fatal(1, "expected hit at diag_idx_local=1");
+    if ((K_SIGN_K == 2) && (recon_sign !== 1'b0))
+      $fatal(1, "expected equal-magnitude eviction at diag_idx_local=1");
+    if ((K_SIGN_K == 2) && (recon_hit !== 1'b0)) $fatal(1, "expected no hit at diag_idx_local=1");
+    if ((K_SIGN_K > 2) && (recon_sign !== 1'b1))
+      $fatal(1, "expected retained edge at diag_idx_local=1");
+    if ((K_SIGN_K > 2) && (recon_hit !== 1'b1)) $fatal(1, "expected hit at diag_idx_local=1");
     diag_idx_local = DIAG_IDX_W'(2);
     #1;
     if (recon_sign !== 1'b1) $fatal(1, "expected hit at diag_idx_local=2");
     diag_idx_local = DIAG_IDX_W'(0);
     #1;
-    if (recon_sign !== 1'b0) $fatal(1, "expected base sign at diag_idx_local=0");
+    if (recon_sign !== 1'b1) $fatal(1, "expected hit at diag_idx_local=0");
 
     write_ram_edge(0, 1'b1, 3);
     write_ram_edge(1, 1'b0, 9);

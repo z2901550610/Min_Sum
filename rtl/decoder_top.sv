@@ -291,6 +291,7 @@ module decoder_top
   logic        [       COMP_C2V_W-1:0] v2c_comp_mem[0:L-1];
   logic        [       COMP_C2V_W-1:0] v2c_comp_eff[0:L-1];
   logic                                c2v_sign_mem[0:L-1];
+  logic        [  K_SIGN_RECORD_W-1:0] c2v_ksign_record_mem[0:L-1];
   logic                                c2v_ksign_sign_mem[0:L-1];
   logic                                c2v_ksign_hit_mem[0:L-1];
   logic                                c2v_ksign_sign_q[0:L-1];
@@ -298,6 +299,11 @@ module decoder_top
   logic                                ksign_read_valid[0:L-1];
   logic        [            COL_W-1:0] ksign_read_col_idx[0:L-1];
   logic        [       DIAG_IDX_W-1:0] ksign_read_diag_idx_local;
+  logic        [       DIAG_IDX_W-1:0] ksign_read_diag_idx_local_q;
+  logic                                ksign_commit_pair_sel;
+  logic                                ksign_commit_valid[0:L-1];
+  logic        [            COL_W-1:0] ksign_commit_col_idx[0:L-1];
+  logic        [  K_SIGN_RECORD_W-1:0] ksign_commit_record[0:L-1];
   logic                                v2c_sign_wdata[0:L-1];
   logic                                v2c_ksign_base_sign[0:L-1];
   logic signed [            ACC_W-1:0] old_c2v_sum[0:L-1];
@@ -601,24 +607,44 @@ module decoder_top
 
   generate
     if (K_SIGN_ENABLE) begin : g_sign_k
-      ram_k_sign u_ram_k_sign (
-          .i_clk               (i_clk),
-          .i_rst_n             (rst_n_sync),
-          .i_c2v_pair_sel      (ksign_read_pair_sel),
-          .i_c2v_valid         (ksign_read_valid),
-          .i_c2v_col_idx       (ksign_read_col_idx),
-          .i_c2v_diag_idx_local(ksign_read_diag_idx_local),
-          .o_c2v_sign          (c2v_ksign_sign_mem),
-          .o_c2v_hit           (c2v_ksign_hit_mem),
-          .i_v2c_pair_sel      (v2c_write_pair_sel_c),
-          .i_v2c_valid         (v2c_valid_c),
-          .i_v2c_col_idx       (v2c_col_idx_c),
-          .i_v2c_diag_idx_local(v2c_diag_idx_local_c),
-          .i_v2c_msg           (v2c_msg_c),
-          .i_v2c_base_sign     (v2c_ksign_base_sign)
+      k_sign_selector u_k_sign_selector (
+          .i_clk            (i_clk),
+          .i_rst_n          (rst_n_sync),
+          .i_cfg_w          (cfg_w),
+          .i_pair_sel       (v2c_write_pair_sel_c),
+          .i_valid          (v2c_valid_c),
+          .i_col_idx        (v2c_col_idx_c),
+          .i_tile_offset    (v2c_tile_offset_c),
+          .i_diag_idx_local (v2c_diag_idx_local_c),
+          .i_v2c_msg        (v2c_msg_c),
+          .i_base_sign      (v2c_ksign_base_sign),
+          .o_commit_pair_sel(ksign_commit_pair_sel),
+          .o_commit_valid   (ksign_commit_valid),
+          .o_commit_col_idx (ksign_commit_col_idx),
+          .o_commit_record  (ksign_commit_record)
       );
 
-      for (genvar lane_idx = 0; lane_idx < L; lane_idx++) begin : g_full_sign_const
+      ram_k_global u_ram_k_global (
+          .i_clk           (i_clk),
+          .i_rst_n         (rst_n_sync),
+          .i_read_pair_sel (ksign_read_pair_sel),
+          .i_read_valid    (ksign_read_valid),
+          .i_read_col_idx  (ksign_read_col_idx),
+          .o_read_record   (c2v_ksign_record_mem),
+          .i_write_pair_sel(ksign_commit_pair_sel),
+          .i_write_valid   (ksign_commit_valid),
+          .i_write_col_idx (ksign_commit_col_idx),
+          .i_write_record  (ksign_commit_record)
+      );
+
+      for (genvar lane_idx = 0; lane_idx < L; lane_idx++) begin : g_sign_reconstruct
+        k_sign_reconstruct u_k_sign_reconstruct (
+            .i_record        (c2v_ksign_record_mem[lane_idx]),
+            .i_diag_idx_local(ksign_read_diag_idx_local_q),
+            .o_sign          (c2v_ksign_sign_mem[lane_idx]),
+            .o_hit           (c2v_ksign_hit_mem[lane_idx])
+        );
+
         assign c2v_sign_mem[lane_idx] = 1'b0;
       end
     end else begin : g_sign_full
@@ -640,9 +666,14 @@ module decoder_top
       );
 
       for (genvar lane_idx = 0; lane_idx < L; lane_idx++) begin : g_ksign_const
+        assign c2v_ksign_record_mem[lane_idx] = '0;
         assign c2v_ksign_sign_mem[lane_idx] = 1'b0;
-        assign c2v_ksign_hit_mem[lane_idx]  = 1'b0;
+        assign c2v_ksign_hit_mem[lane_idx] = 1'b0;
+        assign ksign_commit_valid[lane_idx] = 1'b0;
+        assign ksign_commit_col_idx[lane_idx] = '0;
+        assign ksign_commit_record[lane_idx] = '0;
       end
+      assign ksign_commit_pair_sel = 1'b0;
     end
   endgenerate
 
@@ -800,6 +831,7 @@ module decoder_top
       ksign_corr_h_base_row_idx_e <= '0;
       ksign_corr_phase_r <= 1'b0;
       ksign_corr_diag_idx_local_r <= '0;
+      ksign_read_diag_idx_local_q <= '0;
       v2c_phase_e <= 1'b0;
       v2c_h_block_idx_e <= '0;
       v2c_tile_idx_e <= '0;
@@ -1003,6 +1035,7 @@ module decoder_top
       ksign_corr_h_base_row_idx_e <= c2v_h_base_row_idx;
       ksign_corr_phase_r <= ksign_corr_phase_e;
       ksign_corr_diag_idx_local_r <= ksign_corr_diag_idx_local_e;
+      ksign_read_diag_idx_local_q <= ksign_read_diag_idx_local;
       ctrl_done_r <= ctrl_done;
       ctrl_done_q <= ctrl_done_r;
       ctrl_done_s <= ctrl_done_q;

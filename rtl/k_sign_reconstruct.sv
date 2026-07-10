@@ -5,7 +5,8 @@ module k_sign_reconstruct
 (
     input  logic [K_SIGN_RECORD_W-1:0] i_record,
     input  logic [     DIAG_IDX_W-1:0] i_diag_idx_local,
-    output logic                       o_sign
+    output logic                       o_sign,
+    output logic                       o_hit
 );
 
   localparam int BASE_SIGN_BIT = 0;
@@ -15,7 +16,7 @@ module k_sign_reconstruct
 
   function automatic int slot_lsb(input int slot_idx);
     begin
-      slot_lsb = SLOT_BASE_LSB + (slot_idx * K_SIGN_SLOT_W);
+      slot_lsb = SLOT_BASE_LSB + (slot_idx * DIAG_IDX_W);
     end
   endfunction
 
@@ -31,5 +32,6 @@ module k_sign_reconstruct
       end
     end
     o_sign = i_record[BASE_SIGN_BIT] ^ hit;
+    o_hit  = hit;
   end
 endmodule

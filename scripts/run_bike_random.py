@@ -19,7 +19,9 @@ RTL_CORE = [
     "rtl/ram_s.sv",
     "rtl/k_sign_update.sv",
     "rtl/k_sign_reconstruct.sv",
-    "rtl/ram_k_sign.sv",
+    "rtl/ram_k_tile.sv",
+    "rtl/k_sign_selector.sv",
+    "rtl/ram_k_global.sv",
     "rtl/ram_syndrome.sv",
     "rtl/ram_accum.sv",
     "rtl/ram_t.sv",
@@ -363,7 +365,7 @@ package bike_pkg;
   parameter int I_MAX = {i_max};
   parameter int C_VAL = {c_val};
   parameter int MSG_BITS_CONFIG = {msg_bits};
-  parameter int K_SIGN_K_CONFIG = 6;
+  parameter int K_SIGN_K_CONFIG = 4;
   parameter bit K_SIGN_ENABLE = {1 if n0 == 3 else 0};
   parameter int ALPHA_SHIFT_0 = {alpha_shift_0};
   parameter int ALPHA_SHIFT_1 = {alpha_shift_1};
@@ -394,8 +396,11 @@ package bike_pkg;
 
   parameter int DIAG_IDX_W = (W > 1) ? $clog2(W) : 1;
   parameter int K_SIGN_K = K_SIGN_K_CONFIG;
-  parameter int K_SIGN_SLOT_W = DIAG_IDX_W + D;
-  parameter int K_SIGN_RECORD_W = 1 + (K_SIGN_K * K_SIGN_SLOT_W);
+  parameter int K_SIGN_WORK_SLOT_W = DIAG_IDX_W + D;
+  parameter int K_SIGN_WORK_RECORD_W = 1 + (K_SIGN_K * K_SIGN_WORK_SLOT_W);
+  parameter int K_SIGN_RECORD_W = 1 + (K_SIGN_K * DIAG_IDX_W);
+  parameter int K_SIGN_WORK_DEPTH = Q_BASE;
+  parameter int K_SIGN_WORK_AW = (K_SIGN_WORK_DEPTH > 1) ? $clog2(K_SIGN_WORK_DEPTH) : 1;
   localparam logic [DIAG_IDX_W-1:0] K_SIGN_DIAG_INVALID = '1;
   parameter int DIAG_GLOBAL_W = (DIAG_GLOBAL_COUNT > 1) ? $clog2(DIAG_GLOBAL_COUNT) : 1;
   parameter int ROW_IDX_W = (R > 1) ? $clog2(R) : 1;
