@@ -72,14 +72,19 @@ module tb_ram_i;
     clear = 1'b1;
     @(posedge clk);
     clear = 1'b0;
-    we = 1'b1;
-    h_block_idx = '0;
-    diag_idx_local = '0;
-    base_row_idx = ROW_IDX_W'(2 % R);
-    @(posedge clk);
-    diag_idx_local = DIAG_IDX_W'(1 % W);
-    base_row_idx   = ROW_IDX_W'(2 % R);
-    @(posedge clk);
+    for (int h = 0; h < N0; h++) begin
+      for (int k = 0; k < W; k++) begin
+        we = 1'b1;
+        h_block_idx = H_BLOCK_W'(h);
+        diag_idx_local = DIAG_IDX_W'(k);
+        if ((h == 0) && (k < 2)) begin
+          base_row_idx = ROW_IDX_W'(2 % R);
+        end else begin
+          base_row_idx = ROW_IDX_W'((h * W + k) % R);
+        end
+        @(posedge clk);
+      end
+    end
     we = 1'b0;
     while (!error) begin
       @(posedge clk);

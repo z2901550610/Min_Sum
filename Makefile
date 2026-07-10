@@ -25,7 +25,7 @@ export BIKE_PARALLEL_L
 
 TOY_CASE_SVH := tb/generated/bike_toy_case.svh
 RTL_PKG := rtl/bike_pkg.sv
-RTL_CORE := rtl/reset_sync.sv rtl/decoder_profile_config.sv rtl/ram_i.sv rtl/edge_addr_gen.sv rtl/tile_scheduler.sv rtl/ram_bram.sv rtl/ram_m.sv rtl/ram_s.sv rtl/k_sign_update.sv rtl/k_sign_reconstruct.sv rtl/ram_k_tile.sv rtl/k_sign_selector.sv rtl/ram_k_global.sv rtl/ram_syndrome.sv rtl/ram_accum.sv rtl/ram_t.sv rtl/msg_tc_to_signmag_sat.sv rtl/vnu.sv rtl/ram_decision.sv rtl/cnu_a.sv rtl/cnu_b.sv rtl/msg_signmag_to_tc.sv rtl/decoder_top.sv
+RTL_CORE := rtl/reset_sync.sv rtl/decoder_profile_config.sv rtl/ram_bram.sv rtl/ram_i.sv rtl/edge_addr_gen.sv rtl/tile_scheduler.sv rtl/ram_m.sv rtl/ram_s.sv rtl/k_sign_update.sv rtl/k_sign_reconstruct.sv rtl/ram_k_tile.sv rtl/k_sign_selector.sv rtl/ram_k_global.sv rtl/ram_syndrome.sv rtl/ram_accum.sv rtl/ram_t.sv rtl/msg_tc_to_signmag_sat.sv rtl/vnu.sv rtl/ram_decision.sv rtl/cnu_a.sv rtl/cnu_b.sv rtl/msg_signmag_to_tc.sv rtl/decoder_top.sv
 RTL := $(RTL_PKG) $(RTL_CORE)
 MAINTAINED_SV := $(sort $(wildcard rtl/*.sv) $(wildcard tb/*.sv))
 BIKE_RANDOM_BASE_SEED ?= 1
@@ -62,7 +62,7 @@ test-unit:
 	@$(SIM) ./obj_dir/Vtb_tile_scheduler +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_edge_addr_gen rtl/bike_pkg.sv rtl/edge_addr_gen.sv tb/tb_edge_addr_gen.sv
 	@$(SIM) ./obj_dir/Vtb_edge_addr_gen +verilator+quiet
-	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_i rtl/bike_pkg.sv rtl/ram_i.sv tb/tb_ram_i.sv
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_i rtl/bike_pkg.sv rtl/ram_bram.sv rtl/ram_i.sv tb/tb_ram_i.sv
 	@$(SIM) ./obj_dir/Vtb_ram_i +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_m rtl/bike_pkg.sv rtl/ram_bram.sv rtl/ram_m.sv tb/tb_ram_m.sv
 	@$(SIM) ./obj_dir/Vtb_ram_m +verilator+quiet

@@ -1,5 +1,5 @@
 `timescale 1ns / 1ps
-// RAM I: H first-column index storage with fixed-depth duplicate tracking.
+// RAM I: replicated block memory with fixed-cycle H-column validation.
 module ram_i
   import bike_pkg::*;
 (
@@ -23,145 +23,189 @@ module ram_i
 );
 
   localparam int H_ENTRY_COUNT = N0 * W;
+  localparam int H_ENTRY_ADDR_W = (H_ENTRY_COUNT > 1) ? $clog2(H_ENTRY_COUNT) : 1;
   localparam int H_ENTRY_COUNT_W = (H_ENTRY_COUNT > 1) ? $clog2(H_ENTRY_COUNT + 1) : 1;
 
-  logic [      ROW_IDX_W-1:0] mem[0:H_ENTRY_COUNT-1];
-  logic                       loaded_bit[0:H_ENTRY_COUNT-1];
+  logic [  H_ENTRY_COUNT-1:0] loaded_bit;
+  logic [H_ENTRY_COUNT_W-1:0] request_count;
   logic [H_ENTRY_COUNT_W-1:0] loaded_count;
-  logic                       error_reg;
-  logic                       duplicate_seen;
-  logic                       write_req_q;
-  logic [      H_BLOCK_W-1:0] write_h_block_idx_q;
-  logic [     DIAG_IDX_W-1:0] write_diag_idx_local_q;
-  logic [      ROW_IDX_W-1:0] write_base_row_idx_q;
-  logic                       write_index_valid_q;
-  logic                       write_base_row_idx_valid_q;
-  logic                       check_valid_q;
-  logic [      H_BLOCK_W-1:0] check_h_block_idx_q;
-  logic [     DIAG_IDX_W-1:0] check_diag_idx_local_q;
-  logic [      ROW_IDX_W-1:0] check_base_row_idx_q;
-  logic                       check_index_valid_q;
-  logic                       check_base_row_idx_valid_q;
-  logic                       check_duplicate_q;
 
-  function automatic int h_entry_addr(input  logic [H_BLOCK_W-1:0] h_block_idx,
-                                      input  logic [DIAG_IDX_W-1:0] diag_idx_local);
+  logic                       error_reg;
+  logic                       validation_active;
+  logic                       validation_done;
+  logic [      H_BLOCK_W-1:0] validation_h_block_idx;
+  logic [     DIAG_IDX_W-1:0] validation_diag_idx;
+  logic [     DIAG_IDX_W-1:0] validation_scan_idx;
+  logic                       compare_valid_q;
+  logic                       compare_same_entry_q;
+  logic                       compare_last_q;
+
+  logic                       write_index_valid;
+  logic                       write_row_valid;
+  logic                       write_entry_new;
+  logic                       write_accept;
+  logic [ H_ENTRY_ADDR_W-1:0] write_addr;
+  logic [ H_ENTRY_ADDR_W-1:0] read_addr_a;
+  logic [ H_ENTRY_ADDR_W-1:0] read_addr_b;
+  logic [      ROW_IDX_W-1:0] read_data_a;
+  logic [      ROW_IDX_W-1:0] read_data_b;
+  logic [H_ENTRY_COUNT_W-1:0] loaded_target;
+  logic                       validation_diag_last;
+  logic                       validation_scan_last;
+  logic                       validation_block_last;
+  logic                       validation_tuple_last;
+
+  function automatic logic [H_ENTRY_ADDR_W-1:0] h_entry_addr(
+      input  logic [H_BLOCK_W-1:0] h_block_idx, input  logic [DIAG_IDX_W-1:0] diag_idx_local);
     begin
-      h_entry_addr = (int'(h_block_idx) * W) + int'(diag_idx_local);
+      h_entry_addr = H_ENTRY_ADDR_W'((int'(h_block_idx) * W) + int'(diag_idx_local));
     end
   endfunction
 
   always_comb begin
-    logic [H_ENTRY_COUNT_W-1:0] loaded_target;
-
     loaded_target = H_ENTRY_COUNT_W'(N0 * int'(i_cfg_w));
-    o_loaded = (loaded_count == loaded_target) && !error_reg;
-    o_error = error_reg;
+
+    write_addr = h_entry_addr(i_h_block_idx, i_diag_idx_local);
+    write_index_valid = (int'(i_h_block_idx) < N0) && (int'(i_diag_idx_local) < int'(i_cfg_w));
+    write_row_valid = int'(i_base_row_idx) < int'(i_cfg_r);
+    write_entry_new = 1'b0;
+    if (write_index_valid && write_row_valid) begin
+      write_entry_new = !loaded_bit[write_addr];
+    end
+    write_accept =
+        i_we && i_rst_n && !i_clear && !validation_active && !validation_done && write_entry_new;
+
+    validation_diag_last = (int'(validation_diag_idx) + 1) >= int'(i_cfg_w);
+    validation_scan_last = (int'(validation_scan_idx) + 1) >= int'(i_cfg_w);
+    validation_block_last = (int'(validation_h_block_idx) + 1) >= N0;
+    validation_tuple_last = validation_diag_last && validation_scan_last && validation_block_last;
+
+    if (validation_active) begin
+      read_addr_a = h_entry_addr(validation_h_block_idx, validation_diag_idx);
+      read_addr_b = h_entry_addr(validation_h_block_idx, validation_scan_idx);
+    end else begin
+      read_addr_a = h_entry_addr(i_c2v_h_block_idx, i_c2v_diag_idx_local);
+      read_addr_b = h_entry_addr(i_v2c_h_block_idx, i_v2c_diag_idx_local);
+    end
+
+    o_c2v_base_row_idx = validation_done ? read_data_a : '0;
+    o_v2c_base_row_idx = validation_done ? read_data_b : '0;
+    o_loaded = validation_done && !error_reg;
+    o_error = validation_done && error_reg;
   end
+
+  ram_bram #(
+      .DATA_W(ROW_IDX_W),
+      .DEPTH (H_ENTRY_COUNT),
+      .ADDR_W(H_ENTRY_ADDR_W)
+  ) u_mem_c2v (
+      .i_clk  (i_clk),
+      .i_we   (write_accept),
+      .i_waddr(write_addr),
+      .i_wdata(i_base_row_idx),
+      .i_re   (1'b1),
+      .i_raddr(read_addr_a),
+      .o_rdata(read_data_a)
+  );
+
+  ram_bram #(
+      .DATA_W(ROW_IDX_W),
+      .DEPTH (H_ENTRY_COUNT),
+      .ADDR_W(H_ENTRY_ADDR_W)
+  ) u_mem_v2c (
+      .i_clk  (i_clk),
+      .i_we   (write_accept),
+      .i_waddr(write_addr),
+      .i_wdata(i_base_row_idx),
+      .i_re   (1'b1),
+      .i_raddr(read_addr_b),
+      .o_rdata(read_data_b)
+  );
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin
-      o_c2v_base_row_idx <= '0;
-      o_v2c_base_row_idx <= '0;
+      loaded_bit <= '0;
+      request_count <= '0;
+      loaded_count <= '0;
+      error_reg <= 1'b0;
+      validation_active <= 1'b0;
+      validation_done <= 1'b0;
+      validation_h_block_idx <= '0;
+      validation_diag_idx <= '0;
+      validation_scan_idx <= '0;
+      compare_valid_q <= 1'b0;
+      compare_same_entry_q <= 1'b0;
+      compare_last_q <= 1'b0;
     end else if (i_clear) begin
-      o_c2v_base_row_idx <= '0;
-      o_v2c_base_row_idx <= '0;
+      loaded_bit <= '0;
+      request_count <= '0;
+      loaded_count <= '0;
+      error_reg <= 1'b0;
+      validation_active <= 1'b0;
+      validation_done <= 1'b0;
+      validation_h_block_idx <= '0;
+      validation_diag_idx <= '0;
+      validation_scan_idx <= '0;
+      compare_valid_q <= 1'b0;
+      compare_same_entry_q <= 1'b0;
+      compare_last_q <= 1'b0;
     end else begin
-      o_c2v_base_row_idx <= mem[h_entry_addr(i_c2v_h_block_idx, i_c2v_diag_idx_local)];
-      o_v2c_base_row_idx <= mem[h_entry_addr(i_v2c_h_block_idx, i_v2c_diag_idx_local)];
-    end
-  end
+      compare_valid_q <= validation_active;
+      compare_same_entry_q <= validation_diag_idx == validation_scan_idx;
+      compare_last_q <= validation_active && validation_tuple_last;
 
-  always_comb begin
-    duplicate_seen = 1'b0;
-    if (write_req_q && write_index_valid_q) begin
-      for (int diag_scan = 0; diag_scan < W; diag_scan++) begin
-        if ((diag_scan < int'(i_cfg_w)) && (diag_scan != int'(write_diag_idx_local_q)) &&
-            loaded_bit[h_entry_addr(
-                write_h_block_idx_q, DIAG_IDX_W'(diag_scan)
-            )] && (mem[h_entry_addr(
-                write_h_block_idx_q, DIAG_IDX_W'(diag_scan)
-            )] == write_base_row_idx_q)) begin
-          duplicate_seen = 1'b1;
+      if (compare_valid_q) begin
+        if (!compare_same_entry_q && (read_data_a == read_data_b)) begin
+          error_reg <= 1'b1;
+        end
+        if (compare_last_q) begin
+          validation_done <= 1'b1;
         end
       end
-      if (check_valid_q && check_index_valid_q && check_base_row_idx_valid_q &&
-          (check_h_block_idx_q == write_h_block_idx_q) &&
-          (check_diag_idx_local_q != write_diag_idx_local_q) && (check_base_row_idx_q == write_base_row_idx_q)) begin
-        duplicate_seen = 1'b1;
-      end
-    end
-  end
 
-  always_ff @(posedge i_clk) begin
-    if (check_valid_q && check_index_valid_q && check_base_row_idx_valid_q && !check_duplicate_q) begin
-      mem[h_entry_addr(check_h_block_idx_q, check_diag_idx_local_q)] <= check_base_row_idx_q;
-    end
-  end
-
-  always_ff @(posedge i_clk or negedge i_rst_n) begin
-    if (!i_rst_n) begin
-      error_reg <= 1'b0;
-      loaded_count <= '0;
-      write_req_q <= 1'b0;
-      write_h_block_idx_q <= '0;
-      write_diag_idx_local_q <= '0;
-      write_base_row_idx_q <= '0;
-      write_index_valid_q <= 1'b0;
-      write_base_row_idx_valid_q <= 1'b0;
-      check_valid_q <= 1'b0;
-      check_h_block_idx_q <= '0;
-      check_diag_idx_local_q <= '0;
-      check_base_row_idx_q <= '0;
-      check_index_valid_q <= 1'b0;
-      check_base_row_idx_valid_q <= 1'b0;
-      check_duplicate_q <= 1'b0;
-      for (int entry_idx = 0; entry_idx < H_ENTRY_COUNT; entry_idx++) begin
-        loaded_bit[entry_idx] <= 1'b0;
-      end
-    end else if (i_clear) begin
-      error_reg <= 1'b0;
-      loaded_count <= '0;
-      write_req_q <= 1'b0;
-      write_h_block_idx_q <= '0;
-      write_diag_idx_local_q <= '0;
-      write_base_row_idx_q <= '0;
-      write_index_valid_q <= 1'b0;
-      write_base_row_idx_valid_q <= 1'b0;
-      check_valid_q <= 1'b0;
-      check_h_block_idx_q <= '0;
-      check_diag_idx_local_q <= '0;
-      check_base_row_idx_q <= '0;
-      check_index_valid_q <= 1'b0;
-      check_base_row_idx_valid_q <= 1'b0;
-      check_duplicate_q <= 1'b0;
-      for (int entry_idx = 0; entry_idx < H_ENTRY_COUNT; entry_idx++) begin
-        loaded_bit[entry_idx] <= 1'b0;
-      end
-    end else begin
-      write_req_q <= i_we;
-      write_h_block_idx_q <= i_h_block_idx;
-      write_diag_idx_local_q <= i_diag_idx_local;
-      write_base_row_idx_q <= i_base_row_idx;
-      write_index_valid_q <= (int'(i_h_block_idx) < N0) && (int'(i_diag_idx_local) < int'(i_cfg_w));
-      write_base_row_idx_valid_q <= int'(i_base_row_idx) < int'(i_cfg_r);
-
-      check_valid_q <= write_req_q;
-      check_h_block_idx_q <= write_h_block_idx_q;
-      check_diag_idx_local_q <= write_diag_idx_local_q;
-      check_base_row_idx_q <= write_base_row_idx_q;
-      check_index_valid_q <= write_index_valid_q;
-      check_base_row_idx_valid_q <= write_base_row_idx_valid_q;
-      check_duplicate_q <= duplicate_seen;
-
-      if (check_valid_q &&
-          (!check_index_valid_q || !check_base_row_idx_valid_q || check_duplicate_q)) begin
-        error_reg <= 1'b1;
-      end else if (check_valid_q) begin
-        if (!loaded_bit[h_entry_addr(check_h_block_idx_q, check_diag_idx_local_q)]) begin
-          loaded_count <= loaded_count + H_ENTRY_COUNT_W'(1);
+      if (validation_active) begin
+        if (validation_scan_last) begin
+          validation_scan_idx <= '0;
+          if (validation_diag_last) begin
+            validation_diag_idx <= '0;
+            if (validation_block_last) begin
+              validation_h_block_idx <= '0;
+              validation_active <= 1'b0;
+            end else begin
+              validation_h_block_idx <= validation_h_block_idx + H_BLOCK_W'(1);
+            end
+          end else begin
+            validation_diag_idx <= validation_diag_idx + DIAG_IDX_W'(1);
+          end
+        end else begin
+          validation_scan_idx <= validation_scan_idx + DIAG_IDX_W'(1);
         end
-        loaded_bit[h_entry_addr(check_h_block_idx_q, check_diag_idx_local_q)] <= 1'b1;
+      end
+
+      if (i_we) begin
+        if (validation_active || validation_done) begin
+          error_reg <= 1'b1;
+        end else begin
+          request_count <= request_count + H_ENTRY_COUNT_W'(1);
+
+          if (!write_index_valid || !write_row_valid || !write_entry_new) begin
+            error_reg <= 1'b1;
+          end else begin
+            loaded_bit[write_addr] <= 1'b1;
+            loaded_count <= loaded_count + H_ENTRY_COUNT_W'(1);
+          end
+
+          if ((loaded_target != '0) &&
+              (request_count == (loaded_target - H_ENTRY_COUNT_W'(1)))) begin
+            validation_active <= 1'b1;
+            validation_h_block_idx <= '0;
+            validation_diag_idx <= '0;
+            validation_scan_idx <= '0;
+            if ((loaded_count + H_ENTRY_COUNT_W'(write_accept)) != loaded_target) begin
+              error_reg <= 1'b1;
+            end
+          end
+        end
       end
     end
   end
