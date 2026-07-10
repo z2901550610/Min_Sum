@@ -1,5 +1,5 @@
 `timescale 1ns / 1ps
-// Banked distributed syndrome RAM with combinational read and synchronous write.
+// Banked syndrome block RAM with synchronous read and synchronous write.
 module ram_syndrome
   import bike_pkg::*;
 (
@@ -11,6 +11,9 @@ module ram_syndrome
     input  logic [ROW_BANK_AW-1:0] i_rd_row_addr[0:L-1],
     output logic                   o_rd_data[0:L-1]
 );
+
+  logic bank_rdata[0:L-1];
+  logic read_valid_q[0:L-1];
 
   function automatic logic [LANE_IDX_W-1:0] row_bank_of(input  logic [ROW_IDX_W-1:0] row_idx);
     begin
@@ -26,15 +29,29 @@ module ram_syndrome
 
   generate
     for (genvar bank_idx = 0; bank_idx < L; bank_idx++) begin : g_bank
-      (* ram_style = "distributed" *) logic mem[0:ROW_SEG_SIZE-1];
+      logic bank_we;
 
-      assign o_rd_data[bank_idx] = i_rd_valid[bank_idx] ? mem[i_rd_row_addr[bank_idx]] : 1'b0;
+      assign bank_we = i_we && (row_bank_of(i_wr_addr) == LANE_IDX_W'(bank_idx));
+
+      ram_bram #(
+          .DATA_W(1),
+          .DEPTH (ROW_SEG_SIZE),
+          .ADDR_W(ROW_BANK_AW)
+      ) u_bram (
+          .i_clk  (i_clk),
+          .i_we   (bank_we),
+          .i_waddr(row_addr_of(i_wr_addr)),
+          .i_wdata(i_wr_data),
+          .i_re   (i_rd_valid[bank_idx]),
+          .i_raddr(i_rd_row_addr[bank_idx]),
+          .o_rdata(bank_rdata[bank_idx])
+      );
 
       always_ff @(posedge i_clk) begin
-        if (i_we && (int'(row_bank_of(i_wr_addr)) == bank_idx)) begin
-          mem[row_addr_of(i_wr_addr)] <= i_wr_data;
-        end
+        read_valid_q[bank_idx] <= i_rd_valid[bank_idx];
       end
+
+      assign o_rd_data[bank_idx] = read_valid_q[bank_idx] ? bank_rdata[bank_idx] : 1'b0;
     end
   endgenerate
 endmodule

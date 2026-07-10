@@ -73,6 +73,7 @@ module tb_ram_syndrome;
     // Read back: assert valid for the target bank, check data.
     rd_valid[bank] = 1'b1;
     rd_row_addr[bank] = local_addr;
+    @(posedge clk);
     #1;
     if (rd_data[bank] !== 1'b1) begin
       $fatal(1, "syndrome write/read mismatch: expected 1 at addr %0d", test_addr);
@@ -85,6 +86,7 @@ module tb_ram_syndrome;
         rd_row_addr[lane_idx] = '0;
       end
     end
+    @(posedge clk);
     #1;
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
       if (lane_idx != int'(bank)) begin
@@ -96,6 +98,7 @@ module tb_ram_syndrome;
     clear_inputs();
 
     // When valid is deasserted, output should be 0.
+    @(posedge clk);
     #1;
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
       if (rd_data[lane_idx] !== 1'b0) begin

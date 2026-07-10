@@ -48,6 +48,7 @@ module tb_ram_decision;
     #1;
     clear_inputs();
     read_col_idx = COL_W'(3);
+    @(posedge clk);
     #1;
     if (rdata !== 1'b1) $fatal(1, "single-lane write/read mismatch");
 
@@ -62,6 +63,7 @@ module tb_ram_decision;
       #1;
       clear_inputs();
       read_col_idx = COL_W'(5);
+      @(posedge clk);
       #1;
       if (rdata !== 1'b0) $fatal(1, "same-bank write priority mismatch");
     end

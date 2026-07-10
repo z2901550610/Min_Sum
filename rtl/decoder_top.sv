@@ -1122,8 +1122,8 @@ module decoder_top
       .i_we         (i_syndrome_we),
       .i_wr_addr    (i_syndrome_addr),
       .i_wr_data    (i_syndrome_wdata),
-      .i_rd_valid   (c2v_valid_r),
-      .i_rd_row_addr(c2v_row_addr_r),
+      .i_rd_valid   (c2v_valid),
+      .i_rd_row_addr(c2v_row_addr),
       .o_rd_data    (syndrome_rdata)
   );
 

@@ -72,9 +72,9 @@ test-unit:
 	@$(SIM) ./obj_dir/Vtb_ram_accum +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_t rtl/bike_pkg.sv rtl/ram_bram.sv rtl/ram_t.sv tb/tb_ram_t.sv
 	@$(SIM) ./obj_dir/Vtb_ram_t +verilator+quiet
-	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_decision rtl/bike_pkg.sv rtl/ram_decision.sv tb/tb_ram_decision.sv
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_decision rtl/bike_pkg.sv rtl/ram_bram.sv rtl/ram_decision.sv tb/tb_ram_decision.sv
 	@$(SIM) ./obj_dir/Vtb_ram_decision +verilator+quiet
-	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_syndrome rtl/bike_pkg.sv rtl/ram_syndrome.sv tb/tb_ram_syndrome.sv
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_syndrome rtl/bike_pkg.sv rtl/ram_bram.sv rtl/ram_syndrome.sv tb/tb_ram_syndrome.sv
 	@$(SIM) ./obj_dir/Vtb_ram_syndrome +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_cnu_a rtl/bike_pkg.sv rtl/cnu_a.sv tb/tb_cnu_a.sv
 	@$(SIM) ./obj_dir/Vtb_cnu_a +verilator+quiet

@@ -82,7 +82,7 @@ H 加载接口：
 | `i_start` | 启动固定轮数译码 |
 | `o_done` | 译码完成 |
 | `o_iter_count` | 完成时等于 `I_MAX` |
-| `i_e_read_col_idx/o_e_rdata` | 最终错误估计串行读口 |
+| `i_e_read_col_idx/o_e_rdata` | 最终错误估计同步串行读口，地址到数据延迟一拍 |
 
 `i_start` 在 `o_h_loaded && !o_h_error` 时生效。
 
