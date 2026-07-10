@@ -34,7 +34,6 @@ module ram_m
   generate
     for (genvar pair_idx = 0; pair_idx < 2; pair_idx++) begin : g_pair
       for (genvar bank_idx = 0; bank_idx < L; bank_idx++) begin : g_bank
-        (* ram_style = "block" *) logic [ COMP_C2V_W-1:0] mem[0:ROW_SEG_SIZE-1];
         logic                   bank_re;
         logic [            1:0] bank_read_kind;
         logic [ROW_BANK_AW-1:0] bank_raddr;
@@ -44,7 +43,7 @@ module ram_m
         logic                   bank_read_valid_q;
         logic [            1:0] bank_read_kind_q;
         logic [ROW_BANK_AW-1:0] bank_raddr_q;
-        logic [ COMP_C2V_W-1:0] mem_rdata_q;
+        logic [ COMP_C2V_W-1:0] mem_rdata;
         logic                   read_bypass_valid_q;
         logic [ COMP_C2V_W-1:0] read_bypass_data_q;
         logic                   flip_we;
@@ -108,19 +107,22 @@ module ram_m
           end
         end
 
-        always_ff @(posedge i_clk) begin
-          if (bank_re) begin
-            mem_rdata_q <= mem[bank_raddr];
-          end
-          if (bank_we) begin
-            mem[bank_waddr] <= bank_wdata;
-          end else if (flip_we) begin
-            mem[flip_waddr] <= flip_wdata;
-          end
-        end
+        ram_m_bram #(
+            .DATA_W(COMP_C2V_W),
+            .DEPTH (ROW_SEG_SIZE),
+            .ADDR_W(ROW_BANK_AW)
+        ) u_mem (
+            .i_clk  (i_clk),
+            .i_we   (bank_we || flip_we),
+            .i_waddr(bank_we ? bank_waddr : flip_waddr),
+            .i_wdata(bank_we ? bank_wdata : flip_wdata),
+            .i_re   (bank_re),
+            .i_raddr(bank_raddr),
+            .o_rdata(mem_rdata)
+        );
 
         assign bank_rdata[pair_idx][bank_idx] = read_bypass_valid_q ? read_bypass_data_q :
-                                               mem_rdata_q;
+                                               mem_rdata;
         assign c2v_bank_read_valid[pair_idx][bank_idx] =
             bank_read_valid_q && (bank_read_kind_q == RAM_M_READ_C2V);
         assign v2c_bank_read_valid[pair_idx][bank_idx] =

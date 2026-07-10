@@ -17,6 +17,7 @@ file mkdir $build_dir
 set_param general.maxThreads $threads
 puts "Vivado synthesis threads: $threads"
 create_project -in_memory -part $part min_sum_vivado
+auto_detect_xpm
 
 proc run_step {name command} {
   puts "== $name =="
@@ -37,6 +38,7 @@ set rtl_files [list \
   rtl/ram_i.sv \
   rtl/edge_addr_gen.sv \
   rtl/tile_scheduler.sv \
+  rtl/ram_m_bram.sv \
   rtl/ram_m.sv \
   rtl/ram_s.sv \
   rtl/k_sign_update.sv \
