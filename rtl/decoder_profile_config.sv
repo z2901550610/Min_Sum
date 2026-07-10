@@ -18,6 +18,34 @@ module decoder_profile_config
   assign unused_param_level = PROFILE_RUNTIME_SELECT ? 1'b0 : ^i_param_level;
   /* verilator lint_on UNUSEDSIGNAL */
 
+`ifdef BIKE_UNIFIED_PARAMS
+  localparam int PROFILE_TILE_COUNT_VALS[0:2] = '{
+      (P_R_VALS[0] + COLS_PER_TILE - 1) / COLS_PER_TILE,
+      (P_R_VALS[1] + COLS_PER_TILE - 1) / COLS_PER_TILE,
+      (P_R_VALS[2] + COLS_PER_TILE - 1) / COLS_PER_TILE
+  };
+  localparam int PROFILE_ROW_SEG_SIZE_VALS[0:2] = '{
+      (P_R_VALS[0] + L - 1) / L,
+      (P_R_VALS[1] + L - 1) / L,
+      (P_R_VALS[2] + L - 1) / L
+  };
+`elsif TRIKE_UNIFIED_PARAMS
+  localparam int PROFILE_TILE_COUNT_VALS[0:4] = '{
+      (P_R_VALS[0] + COLS_PER_TILE - 1) / COLS_PER_TILE,
+      (P_R_VALS[1] + COLS_PER_TILE - 1) / COLS_PER_TILE,
+      (P_R_VALS[2] + COLS_PER_TILE - 1) / COLS_PER_TILE,
+      (P_R_VALS[3] + COLS_PER_TILE - 1) / COLS_PER_TILE,
+      (P_R_VALS[4] + COLS_PER_TILE - 1) / COLS_PER_TILE
+  };
+  localparam int PROFILE_ROW_SEG_SIZE_VALS[0:4] = '{
+      (P_R_VALS[0] + L - 1) / L,
+      (P_R_VALS[1] + L - 1) / L,
+      (P_R_VALS[2] + L - 1) / L,
+      (P_R_VALS[3] + L - 1) / L,
+      (P_R_VALS[4] + L - 1) / L
+  };
+`endif
+
   always_comb begin
     o_r = CFG_R_W'(R);
     o_w = CFG_W_W'(W);
@@ -37,8 +65,8 @@ module decoder_profile_config
       endcase
       o_r = CFG_R_W'(P_R_VALS[idx]);
       o_w = CFG_W_W'(P_W_VALS[idx]);
-      o_tile_count = TILE_IDX_W'((P_R_VALS[idx] + COLS_PER_TILE - 1) / COLS_PER_TILE);
-      o_row_seg_size = ROW_BANK_AW'((P_R_VALS[idx] + L - 1) / L);
+      o_tile_count = TILE_IDX_W'(PROFILE_TILE_COUNT_VALS[idx]);
+      o_row_seg_size = ROW_BANK_AW'(PROFILE_ROW_SEG_SIZE_VALS[idx]);
       o_c_val = CFG_CVAL_W'(P_C_VALS[idx]);
       o_alpha_shift_0 = CFG_ALPHA_SHIFT_W'(P_ASH0_VALS[idx]);
       o_alpha_shift_1 = CFG_ALPHA_SHIFT_W'(P_ASH1_VALS[idx]);
@@ -55,8 +83,8 @@ module decoder_profile_config
       endcase
       o_r = CFG_R_W'(P_R_VALS[idx]);
       o_w = CFG_W_W'(P_W_VALS[idx]);
-      o_tile_count = TILE_IDX_W'((P_R_VALS[idx] + COLS_PER_TILE - 1) / COLS_PER_TILE);
-      o_row_seg_size = ROW_BANK_AW'((P_R_VALS[idx] + L - 1) / L);
+      o_tile_count = TILE_IDX_W'(PROFILE_TILE_COUNT_VALS[idx]);
+      o_row_seg_size = ROW_BANK_AW'(PROFILE_ROW_SEG_SIZE_VALS[idx]);
       o_c_val = CFG_CVAL_W'(P_C_VALS[idx]);
       o_alpha_shift_0 = CFG_ALPHA_SHIFT_W'(P_ASH0_VALS[idx]);
       o_alpha_shift_1 = CFG_ALPHA_SHIFT_W'(P_ASH1_VALS[idx]);

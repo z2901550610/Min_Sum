@@ -107,7 +107,7 @@ module ram_m
           end
         end
 
-        ram_m_bram #(
+        ram_bram #(
             .DATA_W(COMP_C2V_W),
             .DEPTH (ROW_SEG_SIZE),
             .ADDR_W(ROW_BANK_AW)

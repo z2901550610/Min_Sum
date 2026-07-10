@@ -174,19 +174,23 @@ module ram_s
   end
 
   for (genvar chunk_idx = 0; chunk_idx < SIGN_CHUNK_COUNT; chunk_idx++) begin : g_chunk
-    (* ram_style = "block" *)sign_frame_t                     mem          [0:SIGN_CHUNK_DEPTH-1];
     logic                            write_we_q;
     logic        [SIGN_CHUNK_AW-1:0] write_addr_q;
     sign_frame_t                     write_data_q;
 
-    always_ff @(posedge i_clk) begin
-      if (read_valid && (int'(read_chunk) == chunk_idx)) begin
-        chunk_rframe_q[chunk_idx] <= mem[read_addr_local];
-      end
-      if (write_we_q) begin
-        mem[write_addr_q] <= write_data_q;
-      end
-    end
+    ram_bram #(
+        .DATA_W(SIGN_FRAME_W),
+        .DEPTH (SIGN_CHUNK_DEPTH),
+        .ADDR_W(SIGN_CHUNK_AW)
+    ) u_bram (
+        .i_clk  (i_clk),
+        .i_we   (write_we_q),
+        .i_waddr(write_addr_q),
+        .i_wdata(write_data_q),
+        .i_re   (read_valid && (int'(read_chunk) == chunk_idx)),
+        .i_raddr(read_addr_local),
+        .o_rdata(chunk_rframe_q[chunk_idx])
+    );
 
     always_ff @(posedge i_clk or negedge i_rst_n) begin
       if (!i_rst_n) begin

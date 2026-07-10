@@ -19,6 +19,11 @@ module ram_k_global
   localparam int KSIGN_BANK_AW = (KSIGN_BANK_DEPTH > 1) ? $clog2(KSIGN_BANK_DEPTH) : 1;
 
   logic [K_SIGN_RECORD_W-1:0] bank_rdata[  0:1][0:L-1];
+  logic                       routed_read_valid[0:L-1];
+  logic [  KSIGN_BANK_AW-1:0] routed_read_addr[0:L-1];
+  logic                       routed_write_valid[0:L-1];
+  logic [  KSIGN_BANK_AW-1:0] routed_write_addr[0:L-1];
+  logic [K_SIGN_RECORD_W-1:0] routed_write_data[0:L-1];
   logic                       read_pair_sel_q;
   logic [     LANE_IDX_W-1:0] read_lane_bank_q[0:L-1];
 
@@ -34,10 +39,27 @@ module ram_k_global
     end
   endfunction
 
+  always_comb begin
+    for (int bank_idx = 0; bank_idx < L; bank_idx++) begin
+      routed_read_valid[bank_idx]  = 1'b0;
+      routed_read_addr[bank_idx]   = '0;
+      routed_write_valid[bank_idx] = i_write_valid[bank_idx];
+      routed_write_addr[bank_idx]  = col_addr(i_write_col_idx[bank_idx]);
+      routed_write_data[bank_idx]  = i_write_record[bank_idx];
+      for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
+        if (i_read_valid[lane_idx] && (col_bank(
+                i_read_col_idx[lane_idx]
+            ) == LANE_IDX_W'(bank_idx))) begin
+          routed_read_valid[bank_idx] = 1'b1;
+          routed_read_addr[bank_idx]  = col_addr(i_read_col_idx[lane_idx]);
+        end
+      end
+    end
+  end
+
   generate
     for (genvar pair_idx = 0; pair_idx < 2; pair_idx++) begin : g_pair
       for (genvar bank_idx = 0; bank_idx < L; bank_idx++) begin : g_bank
-        (* ram_style = "block" *) logic [K_SIGN_RECORD_W-1:0] mem[0:KSIGN_BANK_DEPTH-1];
         logic                       bank_re;
         logic [  KSIGN_BANK_AW-1:0] bank_raddr;
         logic                       bank_we;
@@ -45,36 +67,26 @@ module ram_k_global
         logic [K_SIGN_RECORD_W-1:0] bank_wdata;
 
         always_comb begin
-          bank_re = 1'b0;
-          bank_raddr = '0;
-          bank_we = 1'b0;
-          bank_waddr = '0;
-          bank_wdata = '0;
-          for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-            if (i_read_valid[lane_idx] && (int'(i_read_pair_sel) == pair_idx) && (col_bank(
-                    i_read_col_idx[lane_idx]
-                ) == LANE_IDX_W'(bank_idx))) begin
-              bank_re = 1'b1;
-              bank_raddr = col_addr(i_read_col_idx[lane_idx]);
-            end
-            if (i_write_valid[lane_idx] && (int'(i_write_pair_sel) == pair_idx) && (col_bank(
-                    i_write_col_idx[lane_idx]
-                ) == LANE_IDX_W'(bank_idx))) begin
-              bank_we = 1'b1;
-              bank_waddr = col_addr(i_write_col_idx[lane_idx]);
-              bank_wdata = i_write_record[lane_idx];
-            end
-          end
+          bank_re = routed_read_valid[bank_idx] && (int'(i_read_pair_sel) == pair_idx);
+          bank_raddr = routed_read_addr[bank_idx];
+          bank_we = routed_write_valid[bank_idx] && (int'(i_write_pair_sel) == pair_idx);
+          bank_waddr = routed_write_addr[bank_idx];
+          bank_wdata = routed_write_data[bank_idx];
         end
 
-        always_ff @(posedge i_clk) begin
-          if (bank_re) begin
-            bank_rdata[pair_idx][bank_idx] <= mem[bank_raddr];
-          end
-          if (bank_we) begin
-            mem[bank_waddr] <= bank_wdata;
-          end
-        end
+        ram_bram #(
+            .DATA_W(K_SIGN_RECORD_W),
+            .DEPTH (KSIGN_BANK_DEPTH),
+            .ADDR_W(KSIGN_BANK_AW)
+        ) u_bram (
+            .i_clk  (i_clk),
+            .i_we   (bank_we),
+            .i_waddr(bank_waddr),
+            .i_wdata(bank_wdata),
+            .i_re   (bank_re),
+            .i_raddr(bank_raddr),
+            .o_rdata(bank_rdata[pair_idx][bank_idx])
+        );
       end
     end
   endgenerate

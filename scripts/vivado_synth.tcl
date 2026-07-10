@@ -38,7 +38,7 @@ set rtl_files [list \
   rtl/ram_i.sv \
   rtl/edge_addr_gen.sv \
   rtl/tile_scheduler.sv \
-  rtl/ram_m_bram.sv \
+  rtl/ram_bram.sv \
   rtl/ram_m.sv \
   rtl/ram_s.sv \
   rtl/k_sign_update.sv \

@@ -31,11 +31,12 @@ module ram_t
   generate
     for (genvar buf_idx = 0; buf_idx < 2; buf_idx++) begin : g_buf
       for (genvar lane_idx = 0; lane_idx < L; lane_idx++) begin : g_lane
-        (* ram_style = "block" *) logic signed [   MSG_W-1:0] mem[0:T_DEPTH-1];
         logic                       bank_re;
         logic        [T_ADDR_W-1:0] bank_raddr;
         logic                       bank_we;
         logic        [T_ADDR_W-1:0] bank_waddr;
+        logic                       bank_read_valid_q;
+        logic signed [   MSG_W-1:0] mem_rdata;
 
         always_comb begin
           bank_re = i_v2c_valid[lane_idx] && (int'(i_active_buf) == buf_idx);
@@ -45,11 +46,24 @@ module ram_t
         end
 
         always_ff @(posedge i_clk) begin
-          bank_rdata[buf_idx][lane_idx] <= bank_re ? mem[bank_raddr] : '0;
-          if (bank_we) begin
-            mem[bank_waddr] <= i_c2v_tc[lane_idx];
-          end
+          bank_read_valid_q <= bank_re;
         end
+
+        ram_bram #(
+            .DATA_W(MSG_W),
+            .DEPTH (T_DEPTH),
+            .ADDR_W(T_ADDR_W)
+        ) u_bram (
+            .i_clk  (i_clk),
+            .i_we   (bank_we),
+            .i_waddr(bank_waddr),
+            .i_wdata(i_c2v_tc[lane_idx]),
+            .i_re   (bank_re),
+            .i_raddr(bank_raddr),
+            .o_rdata(mem_rdata)
+        );
+
+        assign bank_rdata[buf_idx][lane_idx] = bank_read_valid_q ? mem_rdata : '0;
       end
     end
   endgenerate

@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
-// Common-clock simple dual-port block memory used by each RAM M bank.
-module ram_m_bram #(
+// Parameterized common-clock simple dual-port block memory.
+module ram_bram #(
     parameter int DATA_W = 18,
     parameter int DEPTH  = 1024,
     parameter int ADDR_W = (DEPTH > 1) ? $clog2(DEPTH) : 1

@@ -21,8 +21,15 @@ module ram_accum
   localparam int ACCUM_BANK_DEPTH = Q_BASE;
   localparam int ACCUM_BANK_AW = (ACCUM_BANK_DEPTH > 1) ? $clog2(ACCUM_BANK_DEPTH) : 1;
 
-  logic signed [ACC_W-1:0] c2v_bank_rdata[0:1][0:L-1];
-  logic signed [ACC_W-1:0] v2c_bank_rdata[0:1][0:L-1];
+  logic signed [        ACC_W-1:0] c2v_bank_rdata[  0:1][0:L-1];
+  logic signed [        ACC_W-1:0] v2c_bank_rdata[  0:1][0:L-1];
+  logic                            routed_c2v_read_valid[0:L-1];
+  logic        [ACCUM_BANK_AW-1:0] routed_c2v_read_addr[0:L-1];
+  logic                            routed_c2v_write_valid[0:L-1];
+  logic        [ACCUM_BANK_AW-1:0] routed_c2v_write_addr[0:L-1];
+  logic signed [        ACC_W-1:0] routed_c2v_write_data[0:L-1];
+  logic                            routed_v2c_read_valid[0:L-1];
+  logic        [ACCUM_BANK_AW-1:0] routed_v2c_read_addr[0:L-1];
 
   function automatic logic [LANE_IDX_W-1:0] offset_bank(input  logic [TILE_OFF_W-1:0] tile_offset);
     begin
@@ -37,6 +44,39 @@ module ram_accum
     end
   endfunction
 
+  always_comb begin
+    for (int bank_idx = 0; bank_idx < L; bank_idx++) begin
+      routed_c2v_read_valid[bank_idx]  = 1'b0;
+      routed_c2v_read_addr[bank_idx]   = '0;
+      routed_c2v_write_valid[bank_idx] = 1'b0;
+      routed_c2v_write_addr[bank_idx]  = '0;
+      routed_c2v_write_data[bank_idx]  = '0;
+      routed_v2c_read_valid[bank_idx]  = 1'b0;
+      routed_v2c_read_addr[bank_idx]   = '0;
+      for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
+        if (i_c2v_read_valid[lane_idx] && (offset_bank(
+                i_c2v_read_tile_offset[lane_idx]
+            ) == LANE_IDX_W'(bank_idx))) begin
+          routed_c2v_read_valid[bank_idx] = 1'b1;
+          routed_c2v_read_addr[bank_idx]  = offset_addr(i_c2v_read_tile_offset[lane_idx]);
+        end
+        if (i_c2v_write_valid[lane_idx] && (offset_bank(
+                i_c2v_write_tile_offset[lane_idx]
+            ) == LANE_IDX_W'(bank_idx))) begin
+          routed_c2v_write_valid[bank_idx] = 1'b1;
+          routed_c2v_write_addr[bank_idx]  = offset_addr(i_c2v_write_tile_offset[lane_idx]);
+          routed_c2v_write_data[bank_idx]  = i_updated_c2v_sum[lane_idx];
+        end
+        if (i_v2c_valid[lane_idx] && (offset_bank(
+                i_v2c_tile_offset[lane_idx]
+            ) == LANE_IDX_W'(bank_idx))) begin
+          routed_v2c_read_valid[bank_idx] = 1'b1;
+          routed_v2c_read_addr[bank_idx]  = offset_addr(i_v2c_tile_offset[lane_idx]);
+        end
+      end
+    end
+  end
+
   generate
     for (genvar buf_idx = 0; buf_idx < 2; buf_idx++) begin : g_buf
       for (genvar bank_idx = 0; bank_idx < L; bank_idx++) begin : g_bank
@@ -50,34 +90,13 @@ module ram_accum
         logic signed [        ACC_W-1:0] c2v_bank_wdata;
 
         always_comb begin
-          c2v_bank_re = 1'b0;
-          c2v_bank_raddr = '0;
-          v2c_bank_re = 1'b0;
-          v2c_bank_raddr = '0;
-          c2v_bank_we = 1'b0;
-          c2v_bank_waddr = '0;
-          c2v_bank_wdata = '0;
-          for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-            if (i_c2v_read_valid[lane_idx] && (int'(i_c2v_read_buf) == buf_idx) && (int'(offset_bank(
-                    i_c2v_read_tile_offset[lane_idx]
-                )) == bank_idx)) begin
-              c2v_bank_re = 1'b1;
-              c2v_bank_raddr = offset_addr(i_c2v_read_tile_offset[lane_idx]);
-            end
-            if (i_c2v_write_valid[lane_idx] && (int'(i_c2v_write_buf) == buf_idx) && (int'(offset_bank(
-                    i_c2v_write_tile_offset[lane_idx]
-                )) == bank_idx)) begin
-              c2v_bank_we = 1'b1;
-              c2v_bank_waddr = offset_addr(i_c2v_write_tile_offset[lane_idx]);
-              c2v_bank_wdata = i_updated_c2v_sum[lane_idx];
-            end
-            if (i_v2c_valid[lane_idx] && (int'(i_active_buf) == buf_idx) && (int'(offset_bank(
-                    i_v2c_tile_offset[lane_idx]
-                )) == bank_idx)) begin
-              v2c_bank_re = 1'b1;
-              v2c_bank_raddr = offset_addr(i_v2c_tile_offset[lane_idx]);
-            end
-          end
+          c2v_bank_re = routed_c2v_read_valid[bank_idx] && (int'(i_c2v_read_buf) == buf_idx);
+          c2v_bank_raddr = routed_c2v_read_addr[bank_idx];
+          v2c_bank_re = routed_v2c_read_valid[bank_idx] && (int'(i_active_buf) == buf_idx);
+          v2c_bank_raddr = routed_v2c_read_addr[bank_idx];
+          c2v_bank_we = routed_c2v_write_valid[bank_idx] && (int'(i_c2v_write_buf) == buf_idx);
+          c2v_bank_waddr = routed_c2v_write_addr[bank_idx];
+          c2v_bank_wdata = routed_c2v_write_data[bank_idx];
         end
 
         assign c2v_bank_rdata[buf_idx][bank_idx] =
@@ -96,20 +115,11 @@ module ram_accum
 
   always_comb begin
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-      o_old_c2v_sum[lane_idx] = '0;
-      o_c2v_sum[lane_idx] = '0;
-      for (int bank_idx = 0; bank_idx < L; bank_idx++) begin
-        if (i_c2v_read_valid[lane_idx] && (int'(offset_bank(
-                i_c2v_read_tile_offset[lane_idx]
-            )) == bank_idx)) begin
-          o_old_c2v_sum[lane_idx] = c2v_bank_rdata[int'(i_c2v_read_buf)][bank_idx];
-        end
-        if (i_v2c_valid[lane_idx] && (int'(offset_bank(
-                i_v2c_tile_offset[lane_idx]
-            )) == bank_idx)) begin
-          o_c2v_sum[lane_idx] = v2c_bank_rdata[int'(i_active_buf)][bank_idx];
-        end
-      end
+      o_old_c2v_sum[lane_idx] = i_c2v_read_valid[lane_idx] ?
+          c2v_bank_rdata[int'(i_c2v_read_buf)][int'(offset_bank(i_c2v_read_tile_offset[lane_idx]))]
+          : '0;
+      o_c2v_sum[lane_idx] = i_v2c_valid[lane_idx] ?
+          v2c_bank_rdata[int'(i_active_buf)][int'(offset_bank(i_v2c_tile_offset[lane_idx]))] : '0;
     end
   end
 endmodule

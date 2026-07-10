@@ -14,16 +14,19 @@ module ram_k_tile
 
   generate
     for (genvar bank_idx = 0; bank_idx < L; bank_idx++) begin : g_bank
-      (* ram_style = "block" *) logic [K_SIGN_WORK_RECORD_W-1:0] mem[0:K_SIGN_WORK_DEPTH-1];
-
-      always_ff @(posedge i_clk) begin
-        if (i_read_valid[bank_idx]) begin
-          o_read_record[bank_idx] <= mem[i_read_addr[bank_idx]];
-        end
-        if (i_write_valid[bank_idx]) begin
-          mem[i_write_addr[bank_idx]] <= i_write_record[bank_idx];
-        end
-      end
+      ram_bram #(
+          .DATA_W(K_SIGN_WORK_RECORD_W),
+          .DEPTH (K_SIGN_WORK_DEPTH),
+          .ADDR_W(K_SIGN_WORK_AW)
+      ) u_bram (
+          .i_clk  (i_clk),
+          .i_we   (i_write_valid[bank_idx]),
+          .i_waddr(i_write_addr[bank_idx]),
+          .i_wdata(i_write_record[bank_idx]),
+          .i_re   (i_read_valid[bank_idx]),
+          .i_raddr(i_read_addr[bank_idx]),
+          .o_rdata(o_read_record[bank_idx])
+      );
     end
   endgenerate
 endmodule

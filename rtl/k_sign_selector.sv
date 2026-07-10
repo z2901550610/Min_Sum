@@ -25,6 +25,9 @@ module k_sign_selector
   logic                            work_write_valid[0:L-1];
   logic [      K_SIGN_WORK_AW-1:0] work_write_addr[0:L-1];
   logic [K_SIGN_WORK_RECORD_W-1:0] work_write_record[0:L-1];
+  logic [               COL_W-1:0] routed_col_idx[0:L-1];
+  logic [               MSG_W-1:0] routed_v2c_msg[0:L-1];
+  logic                            routed_base_sign[0:L-1];
 
   logic                            read_valid_q[0:L-1];
   logic [      K_SIGN_WORK_AW-1:0] read_addr_q[0:L-1];
@@ -61,12 +64,18 @@ module k_sign_selector
 
   always_comb begin
     for (int bank_idx = 0; bank_idx < L; bank_idx++) begin
-      work_read_valid[bank_idx] = 1'b0;
-      work_read_addr[bank_idx]  = '0;
+      work_read_valid[bank_idx]  = 1'b0;
+      work_read_addr[bank_idx]   = '0;
+      routed_col_idx[bank_idx]   = '0;
+      routed_v2c_msg[bank_idx]   = '0;
+      routed_base_sign[bank_idx] = 1'b0;
       for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
         if (i_valid[lane_idx] && (col_bank(i_col_idx[lane_idx]) == LANE_IDX_W'(bank_idx))) begin
-          work_read_valid[bank_idx] = 1'b1;
-          work_read_addr[bank_idx]  = work_addr(i_tile_offset[lane_idx]);
+          work_read_valid[bank_idx]  = 1'b1;
+          work_read_addr[bank_idx]   = work_addr(i_tile_offset[lane_idx]);
+          routed_col_idx[bank_idx]   = i_col_idx[lane_idx];
+          routed_v2c_msg[bank_idx]   = i_v2c_msg[lane_idx];
+          routed_base_sign[bank_idx] = i_base_sign[lane_idx];
         end
       end
     end
@@ -74,23 +83,6 @@ module k_sign_selector
 
   generate
     for (genvar bank_idx = 0; bank_idx < L; bank_idx++) begin : g_bank
-      logic [COL_W-1:0] bank_col_idx;
-      logic [MSG_W-1:0] bank_v2c_msg;
-      logic             bank_base_sign;
-
-      always_comb begin
-        bank_col_idx   = '0;
-        bank_v2c_msg   = '0;
-        bank_base_sign = 1'b0;
-        for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-          if (i_valid[lane_idx] && (col_bank(i_col_idx[lane_idx]) == LANE_IDX_W'(bank_idx))) begin
-            bank_col_idx   = i_col_idx[lane_idx];
-            bank_v2c_msg   = i_v2c_msg[lane_idx];
-            bank_base_sign = i_base_sign[lane_idx];
-          end
-        end
-      end
-
       k_sign_update u_k_sign_update (
           .i_record        (work_read_record[bank_idx]),
           .i_clear         (diag_idx_local_q[bank_idx] == '0),
@@ -126,10 +118,10 @@ module k_sign_selector
         end else begin
           read_valid_q[bank_idx] <= work_read_valid[bank_idx];
           read_addr_q[bank_idx] <= work_read_addr[bank_idx];
-          col_idx_q[bank_idx] <= bank_col_idx;
+          col_idx_q[bank_idx] <= routed_col_idx[bank_idx];
           diag_idx_local_q[bank_idx] <= i_diag_idx_local;
-          v2c_msg_q[bank_idx] <= bank_v2c_msg;
-          base_sign_q[bank_idx] <= bank_base_sign;
+          v2c_msg_q[bank_idx] <= routed_v2c_msg[bank_idx];
+          base_sign_q[bank_idx] <= routed_base_sign[bank_idx];
           last_diag_q[bank_idx] <=
               DIAG_IDX_W'(i_diag_idx_local) == DIAG_IDX_W'(i_cfg_w - CFG_W_W'(1));
         end
