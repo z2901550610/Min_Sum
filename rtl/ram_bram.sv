@@ -1,9 +1,10 @@
 `timescale 1ns / 1ps
 // Parameterized common-clock simple dual-port block memory.
 module ram_bram #(
-    parameter int DATA_W = 18,
-    parameter int DEPTH  = 1024,
-    parameter int ADDR_W = (DEPTH > 1) ? $clog2(DEPTH) : 1
+    parameter int    DATA_W           = 18,
+    parameter int    DEPTH            = 1024,
+    parameter int    ADDR_W           = (DEPTH > 1) ? $clog2(DEPTH) : 1,
+    parameter string MEMORY_PRIMITIVE = "block"
 ) (
     input  logic              i_clk,
     input  logic              i_we,
@@ -25,7 +26,7 @@ module ram_bram #(
       .MEMORY_INIT_FILE("none"),
       .MEMORY_INIT_PARAM("0"),
       .MEMORY_OPTIMIZATION("true"),
-      .MEMORY_PRIMITIVE("block"),
+      .MEMORY_PRIMITIVE(MEMORY_PRIMITIVE),
       .MEMORY_SIZE(DEPTH * DATA_W),
       .MESSAGE_CONTROL(0),
       .READ_DATA_WIDTH_B(DATA_W),
@@ -58,6 +59,13 @@ module ram_bram #(
   );
 `else
   logic [DATA_W-1:0] mem[0:DEPTH-1];
+
+  initial begin
+    if ((MEMORY_PRIMITIVE != "block") && (MEMORY_PRIMITIVE != "distributed") &&
+        (MEMORY_PRIMITIVE != "auto")) begin
+      $error("ram_bram MEMORY_PRIMITIVE must be block, distributed, or auto");
+    end
+  end
 
   always_ff @(posedge i_clk) begin
     if (i_re) begin

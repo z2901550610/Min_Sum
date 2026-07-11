@@ -15,9 +15,10 @@ module ram_k_tile
   generate
     for (genvar bank_idx = 0; bank_idx < L; bank_idx++) begin : g_bank
       ram_bram #(
-          .DATA_W(K_SIGN_WORK_RECORD_W),
-          .DEPTH (K_SIGN_WORK_DEPTH),
-          .ADDR_W(K_SIGN_WORK_AW)
+          .DATA_W          (K_SIGN_WORK_RECORD_W),
+          .DEPTH           (K_SIGN_WORK_DEPTH),
+          .ADDR_W          (K_SIGN_WORK_AW),
+          .MEMORY_PRIMITIVE("distributed")
       ) u_bram (
           .i_clk  (i_clk),
           .i_we   (i_write_valid[bank_idx]),
