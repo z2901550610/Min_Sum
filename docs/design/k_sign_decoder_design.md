@@ -367,7 +367,7 @@ K-sign 数据通路由以下模块组成：
 4. `k_sign_selector`：变量列 bank 路由、工作 RAM 读改写控制和压缩记录提交。
 5. `k_sign_reconstruct`：根据全局压缩记录和 `diag_idx_local` 重建近似符号及命中标志。
 
-最后一个对角线在该变量列的全部旧记录读取完成后，将压缩记录写回原地址。C2V 和 correction 读取全局记录，通过 `base_sign XOR hit(dev_pos == diag_idx_local)` 重建符号。主 V2C 使用 base-sign 更新，固定 correction 扫描对命中位置翻转对应 check row 的 `sign_xor`。
+最后一个对角线在该变量列的全部旧记录读取完成后，将压缩记录写回原地址。C2V 和 correction 读取全局记录，通过 `base_sign XOR hit(dev_pos == diag_idx_local)` 重建符号。主 V2C 使用 base-sign 更新，固定 correction 扫描对命中位置翻转对应 check row 的 `sign_xor`。命中结果、row 地址和目标 pair 经过一级寄存后送入 `ram_m` 的翻转读改写端口。
 
 ## 主要风险
 

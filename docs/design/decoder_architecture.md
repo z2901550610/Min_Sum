@@ -111,6 +111,7 @@ V2C 阶段综合变量节点收到的校验建议，并更新下一轮 check-sta
 
 - C2V/V2C valid 对齐。
 - `ram_m` pair 选择和交换。
+- K-sign correction 命中、row 地址和目标 pair 的寄存写回。
 - final iteration decision 写使能。
 - `ram_accum` 首条 diag 的累加基值选择。
 - RAM 读写旁路和写使能屏蔽。

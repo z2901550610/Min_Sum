@@ -281,6 +281,9 @@ module decoder_top
   logic                                ksign_corr_valid_q[0:L-1];
   logic        [      ROW_BANK_AW-1:0] ksign_corr_row_addr_q[0:L-1];
   logic                                ksign_corr_hit[0:L-1];
+  logic                                comp_flip_valid_c[0:L-1];
+  logic        [      ROW_BANK_AW-1:0] comp_flip_row_addr_c[0:L-1];
+  logic                                comp_flip_pair_sel;
   logic                                comp_flip_valid[0:L-1];
   logic        [      ROW_BANK_AW-1:0] comp_flip_row_addr[0:L-1];
 
@@ -411,8 +414,8 @@ module decoder_top
       v2c_sign_wdata[lane_idx] = v2c_cnu_a_sign[lane_idx];
       v2c_ksign_base_sign[lane_idx] = posterior_sign_c[lane_idx];
       v2c_cnu_a_msg[lane_idx] = v2c_msg_c[lane_idx];
-      comp_flip_valid[lane_idx] = ksign_corr_valid_q[lane_idx] && ksign_corr_hit[lane_idx];
-      comp_flip_row_addr[lane_idx] = ksign_corr_row_addr_q[lane_idx];
+      comp_flip_valid_c[lane_idx] = ksign_corr_valid_q[lane_idx] && ksign_corr_hit[lane_idx];
+      comp_flip_row_addr_c[lane_idx] = ksign_corr_row_addr_q[lane_idx];
       if (K_SIGN_ENABLE) begin
         v2c_cnu_a_msg[lane_idx][MSG_SIGN_BIT] = posterior_sign_c[lane_idx];
       end
@@ -597,7 +600,7 @@ module decoder_top
       .i_v2c_write_valid(v2c_valid_p),
       .i_v2c_write_row_addr(v2c_row_addr_p),
       .i_v2c_write_data(v2c_comp_p),
-      .i_flip_pair_sel(comp_write_pair_sel),
+      .i_flip_pair_sel(comp_flip_pair_sel),
       .i_flip_valid(comp_flip_valid),
       .i_flip_row_addr(comp_flip_row_addr)
   );
@@ -824,6 +827,7 @@ module decoder_top
       ksign_corr_phase_r <= 1'b0;
       ksign_corr_diag_idx_local_r <= '0;
       ksign_read_diag_idx_local_q <= '0;
+      comp_flip_pair_sel <= 1'b0;
       v2c_phase_e <= 1'b0;
       v2c_h_block_idx_e <= '0;
       v2c_tile_idx_e <= '0;
@@ -919,6 +923,8 @@ module decoder_top
         ksign_corr_row_addr_r[lane_idx] <= '0;
         ksign_corr_valid_q[lane_idx] <= 1'b0;
         ksign_corr_row_addr_q[lane_idx] <= '0;
+        comp_flip_valid[lane_idx] <= 1'b0;
+        comp_flip_row_addr[lane_idx] <= '0;
       end
     end else begin
       if ((state == DEC_WAIT_START) || ((state == DEC_DONE) && ctrl_done_p)) begin
@@ -1028,6 +1034,7 @@ module decoder_top
       ksign_corr_phase_r <= ksign_corr_phase_e;
       ksign_corr_diag_idx_local_r <= ksign_corr_diag_idx_local_e;
       ksign_read_diag_idx_local_q <= ksign_read_diag_idx_local;
+      comp_flip_pair_sel <= comp_write_pair_sel;
       ctrl_done_r <= ctrl_done;
       ctrl_done_q <= ctrl_done_r;
       ctrl_done_s <= ctrl_done_q;
@@ -1105,6 +1112,8 @@ module decoder_top
         ksign_corr_row_addr_r[lane_idx] <= ksign_corr_row_addr[lane_idx];
         ksign_corr_valid_q[lane_idx] <= ksign_corr_valid_r[lane_idx];
         ksign_corr_row_addr_q[lane_idx] <= ksign_corr_row_addr_r[lane_idx];
+        comp_flip_valid[lane_idx] <= comp_flip_valid_c[lane_idx];
+        comp_flip_row_addr[lane_idx] <= comp_flip_row_addr_c[lane_idx];
       end
     end
   end
