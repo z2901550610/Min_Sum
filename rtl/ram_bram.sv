@@ -4,7 +4,8 @@ module ram_bram #(
     parameter int DATA_W          = 18,
     parameter int DEPTH           = 1024,
     parameter int ADDR_W          = (DEPTH > 1) ? $clog2(DEPTH) : 1,
-    parameter bit USE_DISTRIBUTED = 1'b0
+    parameter bit USE_DISTRIBUTED = 1'b0,
+    parameter bit USE_EXACT_DEPTH = 1'b0
 ) (
     input  logic              i_clk,
     input  logic              i_we,
@@ -18,6 +19,17 @@ module ram_bram #(
   generate
     if (USE_DISTRIBUTED) begin : g_distributed
       (* ram_style = "distributed" *) logic [DATA_W-1:0] mem[0:DEPTH-1];
+
+      always_ff @(posedge i_clk) begin
+        if (i_re) begin
+          o_rdata <= mem[i_raddr];
+        end
+        if (i_we) begin
+          mem[i_waddr] <= i_wdata;
+        end
+      end
+    end else if (USE_EXACT_DEPTH) begin : g_exact_block
+      (* ram_style = "block" *) logic [DATA_W-1:0] mem[0:DEPTH-1];
 
       always_ff @(posedge i_clk) begin
         if (i_re) begin
