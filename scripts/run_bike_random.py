@@ -21,6 +21,7 @@ RTL_CORE = [
     "rtl/ram_s.sv",
     "rtl/k_sign_update.sv",
     "rtl/k_sign_reconstruct.sv",
+    "rtl/k_sign_correction.sv",
     "rtl/ram_k_tile.sv",
     "rtl/k_sign_selector.sv",
     "rtl/ram_k_global.sv",
@@ -367,7 +368,7 @@ package bike_pkg;
   parameter int I_MAX = {i_max};
   parameter int C_VAL = {c_val};
   parameter int MSG_BITS_CONFIG = {msg_bits};
-  parameter int K_SIGN_K_CONFIG = 4;
+  parameter int K_SIGN_K_CONFIG = 3;
   parameter bit K_SIGN_ENABLE = {1 if n0 == 3 else 0};
   parameter int ALPHA_SHIFT_0 = {alpha_shift_0};
   parameter int ALPHA_SHIFT_1 = {alpha_shift_1};
@@ -398,6 +399,7 @@ package bike_pkg;
 
   parameter int DIAG_IDX_W = (W > 1) ? $clog2(W) : 1;
   parameter int K_SIGN_K = K_SIGN_K_CONFIG;
+  parameter int K_SIGN_SLOT_IDX_W = (K_SIGN_K > 1) ? $clog2(K_SIGN_K) : 1;
   parameter int K_SIGN_WORK_SLOT_W = DIAG_IDX_W + D;
   parameter int K_SIGN_WORK_RECORD_W = 1 + (K_SIGN_K * K_SIGN_WORK_SLOT_W);
   parameter int K_SIGN_RECORD_W = 1 + (K_SIGN_K * DIAG_IDX_W);
@@ -522,9 +524,14 @@ module tb_bike_decoder_random;
   localparam logic [PROFILE_ID_W-1:0] TEST_PROFILE_ID = {profile_id};
   localparam int TEST_ROW_SEG_SIZE = (TEST_R + L - 1) / L;
   localparam int TEST_TILE_COUNT = (TEST_R + COLS_PER_TILE - 1) / COLS_PER_TILE;
+  localparam int TEST_KSIGN_SCAN_CYCLES = TEST_W * Q_TILE;
+  localparam int TEST_KSIGN_DIRECT_CYCLES = K_SIGN_K * L * Q_BASE;
+  localparam int TEST_KSIGN_CORR_CYCLES =
+      (TEST_KSIGN_DIRECT_CYCLES < TEST_KSIGN_SCAN_CYCLES) ?
+      TEST_KSIGN_DIRECT_CYCLES : TEST_KSIGN_SCAN_CYCLES;
   localparam int TEST_DECODE_CYCLES = I_MAX * (
       TEST_ROW_SEG_SIZE + (((N0 * TEST_TILE_COUNT) + 1) * TEST_W * Q_TILE)
-      + (K_SIGN_ENABLE ? (8 + ((N0 * TEST_TILE_COUNT) * TEST_W * Q_TILE)) : 0)
+      + (K_SIGN_ENABLE ? (8 + ((N0 * TEST_TILE_COUNT) * TEST_KSIGN_CORR_CYCLES)) : 0)
   ) + 4;
   localparam int SYNDROME_WEIGHT = {len(syndrome_positions)};
   localparam int ERROR_WEIGHT = {len(error_positions)};

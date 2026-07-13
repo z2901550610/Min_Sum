@@ -126,7 +126,7 @@ package bike_pkg;
   localparam int MSG_BITS_CONFIG = `BIKE_MSG_BITS;
 `endif
 `ifndef BIKE_K_SIGN_K
-  localparam int K_SIGN_K_CONFIG = 4;
+  localparam int K_SIGN_K_CONFIG = 3;
 `else
   localparam int K_SIGN_K_CONFIG = `BIKE_K_SIGN_K;
 `endif
@@ -171,6 +171,7 @@ package bike_pkg;
 
   localparam int DIAG_IDX_W = (W > 1) ? $clog2(W) : 1;
   localparam int K_SIGN_K = K_SIGN_K_CONFIG;
+  localparam int K_SIGN_SLOT_IDX_W = (K_SIGN_K > 1) ? $clog2(K_SIGN_K) : 1;
   localparam int K_SIGN_WORK_SLOT_W = DIAG_IDX_W + D;
   localparam int K_SIGN_WORK_RECORD_W = 1 + (K_SIGN_K * K_SIGN_WORK_SLOT_W);
   localparam int K_SIGN_RECORD_W = 1 + (K_SIGN_K * DIAG_IDX_W);

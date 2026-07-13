@@ -105,13 +105,13 @@ V2C 阶段综合变量节点收到的校验建议，并更新下一轮 check-sta
 - 当前 iteration、window、tile、diag、lane group。
 - `c2v_valid`、`v2c_valid`、clear 周期和 done 状态。
 - tile 级 buffer 选择。
-- K-sign correction 阶段的固定调度。
+- K-sign correction 的扫描/直接固定模式和公开周期预算。
 
 `decoder_top` 负责局部流水控制：
 
 - C2V/V2C valid 对齐。
 - `ram_m` pair 选择和交换。
-- K-sign correction 命中、row 地址和目标 pair 的寄存写回。
+- K-sign correction 的记录/H 基址流水、row 地址和目标 pair 写回。
 - final iteration decision 写使能。
 - `ram_accum` 首条 diag 的累加基值选择。
 - RAM 读写旁路和写使能屏蔽。

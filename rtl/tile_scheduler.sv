@@ -3,33 +3,36 @@
 module tile_scheduler
   import bike_pkg::*;
 (
-    input  logic                        i_clk,
-    input  logic                        i_rst_n,
-    input  logic                        i_start,
-    input  logic [         CFG_W_W-1:0] i_cfg_w,
-    input  logic [      TILE_IDX_W-1:0] i_cfg_tile_count,
-    input  logic [     ROW_BANK_AW-1:0] i_cfg_row_seg_size,
-    output logic [     DEC_STATE_W-1:0] o_state,
-    output logic                        o_c2v_valid,
-    output logic                        o_v2c_valid,
-    output logic                        o_ksign_corr_valid,
-    output logic [       TILE_ID_W-1:0] o_c2v_tile_linear,
-    output logic [       TILE_ID_W-1:0] o_v2c_tile_linear,
-    output logic [       H_BLOCK_W-1:0] o_c2v_h_block_idx,
-    output logic [      TILE_IDX_W-1:0] o_c2v_tile_idx,
-    output logic [       H_BLOCK_W-1:0] o_v2c_h_block_idx,
-    output logic [      TILE_IDX_W-1:0] o_v2c_tile_idx,
-    output logic [      DIAG_IDX_W-1:0] o_diag_idx_local,
-    output logic [LANE_GROUP_IDX_W-1:0] o_lane_group_idx,
-    output logic                        o_clear_valid,
-    output logic [     ROW_BANK_AW-1:0] o_clear_addr,
-    output logic                        o_fill_buf,
-    output logic                        o_active_buf,
-    output logic                        o_final_iter,
-    output logic                        o_iter_first_cycle,
-    output logic                        o_iter_last_cycle,
-    output logic                        o_done,
-    output logic [          ITER_W-1:0] o_iter_count
+    input  logic                         i_clk,
+    input  logic                         i_rst_n,
+    input  logic                         i_start,
+    input  logic [          CFG_W_W-1:0] i_cfg_w,
+    input  logic [       TILE_IDX_W-1:0] i_cfg_tile_count,
+    input  logic [      ROW_BANK_AW-1:0] i_cfg_row_seg_size,
+    output logic [      DEC_STATE_W-1:0] o_state,
+    output logic                         o_c2v_valid,
+    output logic                         o_v2c_valid,
+    output logic                         o_ksign_corr_valid,
+    output logic                         o_ksign_corr_direct,
+    output logic [K_SIGN_SLOT_IDX_W-1:0] o_ksign_corr_slot_idx,
+    output logic [       LANE_IDX_W-1:0] o_ksign_corr_lane_idx,
+    output logic [        TILE_ID_W-1:0] o_c2v_tile_linear,
+    output logic [        TILE_ID_W-1:0] o_v2c_tile_linear,
+    output logic [        H_BLOCK_W-1:0] o_c2v_h_block_idx,
+    output logic [       TILE_IDX_W-1:0] o_c2v_tile_idx,
+    output logic [        H_BLOCK_W-1:0] o_v2c_h_block_idx,
+    output logic [       TILE_IDX_W-1:0] o_v2c_tile_idx,
+    output logic [       DIAG_IDX_W-1:0] o_diag_idx_local,
+    output logic [ LANE_GROUP_IDX_W-1:0] o_lane_group_idx,
+    output logic                         o_clear_valid,
+    output logic [      ROW_BANK_AW-1:0] o_clear_addr,
+    output logic                         o_fill_buf,
+    output logic                         o_active_buf,
+    output logic                         o_final_iter,
+    output logic                         o_iter_first_cycle,
+    output logic                         o_iter_last_cycle,
+    output logic                         o_done,
+    output logic [           ITER_W-1:0] o_iter_count
 );
 
   localparam int WINDOW_COUNT = TILES_TOTAL + 1;
@@ -37,12 +40,20 @@ module tile_scheduler
   localparam int KSIGN_CORR_GUARD_CYCLES = 8;
   localparam int KSIGN_CORR_GUARD_W = $clog2(KSIGN_CORR_GUARD_CYCLES + 1);
   localparam logic [LANE_GROUP_IDX_W-1:0] LANE_GROUP_IDX_LAST = LANE_GROUP_IDX_W'(Q_TILE - 1);
+  localparam logic [LANE_GROUP_IDX_W-1:0] KSIGN_CORR_GROUP_IDX_LAST = LANE_GROUP_IDX_W'(Q_BASE - 1);
+  localparam logic [K_SIGN_SLOT_IDX_W-1:0] KSIGN_CORR_SLOT_IDX_LAST =
+      K_SIGN_SLOT_IDX_W'(K_SIGN_K - 1);
+  localparam logic [LANE_IDX_W-1:0] KSIGN_CORR_LANE_IDX_LAST = LANE_IDX_W'(L - 1);
+  localparam int KSIGN_CORR_DIRECT_CYCLES = K_SIGN_K * L * Q_BASE;
+  localparam int KSIGN_CORR_DIRECT_MIN_W = (KSIGN_CORR_DIRECT_CYCLES + Q_TILE - 1) / Q_TILE;
   localparam logic [ITER_W-1:0] ITER_LAST = ITER_W'(I_MAX - 1);
 
   logic                          running_q;
   logic                          clear_q;
   logic                          ksign_corr_q;
   logic [KSIGN_CORR_GUARD_W-1:0] ksign_corr_guard_q;
+  logic [ K_SIGN_SLOT_IDX_W-1:0] ksign_corr_slot_idx_q;
+  logic [        LANE_IDX_W-1:0] ksign_corr_lane_idx_q;
   logic [       ROW_BANK_AW-1:0] clear_addr_q;
   logic [      WINDOW_IDX_W-1:0] window_idx_q;
   logic [        DIAG_IDX_W-1:0] diag_idx_local_q;
@@ -62,6 +73,8 @@ module tile_scheduler
   logic                          clear_d;
   logic                          ksign_corr_d;
   logic [KSIGN_CORR_GUARD_W-1:0] ksign_corr_guard_d;
+  logic [ K_SIGN_SLOT_IDX_W-1:0] ksign_corr_slot_idx_d;
+  logic [        LANE_IDX_W-1:0] ksign_corr_lane_idx_d;
   logic [       ROW_BANK_AW-1:0] clear_addr_d;
   logic [      WINDOW_IDX_W-1:0] window_idx_d;
   logic [        DIAG_IDX_W-1:0] diag_idx_local_d;
@@ -88,6 +101,9 @@ module tile_scheduler
   logic [        TILE_IDX_W-1:0] v2c_tile_idx_d;
   logic                          clear_valid_d;
   logic                          ksign_corr_valid_d;
+  logic                          ksign_corr_direct_d;
+  logic [ K_SIGN_SLOT_IDX_W-1:0] ksign_corr_slot_idx_out_d;
+  logic [        LANE_IDX_W-1:0] ksign_corr_lane_idx_out_d;
   logic [       ROW_BANK_AW-1:0] clear_addr_out_d;
   logic                          fill_buf_d;
   logic                          active_buf_d;
@@ -98,6 +114,7 @@ module tile_scheduler
   logic [         TILE_ID_W-1:0] cfg_tile_linear_last;
   logic [        TILE_IDX_W-1:0] cfg_tile_count_last;
   logic [       ROW_BANK_AW-1:0] cfg_row_seg_last;
+  logic                          ksign_corr_direct_mode;
 
   function automatic logic [TILE_ID_W-1:0] next_tile_linear(
       input  logic [TILE_ID_W-1:0] tile_linear);
@@ -110,6 +127,7 @@ module tile_scheduler
   assign cfg_tile_linear_last = (TILE_ID_W'(N0) * TILE_ID_W'(i_cfg_tile_count)) - TILE_ID_W'(1);
   assign cfg_tile_count_last = TILE_IDX_W'(i_cfg_tile_count) - TILE_IDX_W'(1);
   assign cfg_row_seg_last = ROW_BANK_AW'(i_cfg_row_seg_size) - ROW_BANK_AW'(1);
+  assign ksign_corr_direct_mode = int'(i_cfg_w) >= KSIGN_CORR_DIRECT_MIN_W;
 
   always_comb begin
     logic current_last_cycle;
@@ -123,6 +141,8 @@ module tile_scheduler
     clear_d = clear_q;
     ksign_corr_d = ksign_corr_q;
     ksign_corr_guard_d = ksign_corr_guard_q;
+    ksign_corr_slot_idx_d = ksign_corr_slot_idx_q;
+    ksign_corr_lane_idx_d = ksign_corr_lane_idx_q;
     clear_addr_d = clear_addr_q;
     window_idx_d = window_idx_q;
     diag_idx_local_d = diag_idx_local_q;
@@ -151,6 +171,8 @@ module tile_scheduler
       clear_d = 1'b1;
       ksign_corr_d = 1'b0;
       ksign_corr_guard_d = '0;
+      ksign_corr_slot_idx_d = '0;
+      ksign_corr_lane_idx_d = '0;
       clear_addr_d = '0;
       window_idx_d = '0;
       diag_idx_local_d = '0;
@@ -175,7 +197,12 @@ module tile_scheduler
         end
       end else if (ksign_corr_q && (ksign_corr_guard_q != '0)) begin
         ksign_corr_guard_d = ksign_corr_guard_q - KSIGN_CORR_GUARD_W'(1);
-      end else if (ksign_corr_q && last_tile_linear && last_diag_idx_local && last_lane_group_idx) begin
+      end else if (ksign_corr_q && last_tile_linear &&
+                   ((ksign_corr_direct_mode &&
+                     (lane_group_idx_q == KSIGN_CORR_GROUP_IDX_LAST) &&
+                     (ksign_corr_slot_idx_q == KSIGN_CORR_SLOT_IDX_LAST) &&
+                     (ksign_corr_lane_idx_q == KSIGN_CORR_LANE_IDX_LAST)) ||
+                    (!ksign_corr_direct_mode && last_diag_idx_local && last_lane_group_idx))) begin
         ksign_corr_d = 1'b0;
         if (iter_count_q == ITER_LAST) begin
           running_d = 1'b0;
@@ -187,6 +214,8 @@ module tile_scheduler
           window_idx_d = '0;
           diag_idx_local_d = '0;
           lane_group_idx_d = '0;
+          ksign_corr_slot_idx_d = '0;
+          ksign_corr_lane_idx_d = '0;
           iter_count_d = iter_count_q + ITER_W'(1);
           c2v_tile_active_d = 1'b1;
           v2c_tile_active_d = 1'b0;
@@ -198,19 +227,41 @@ module tile_scheduler
           v2c_tile_idx_state_d = '0;
         end
       end else if (ksign_corr_q) begin
-        if (last_lane_group_idx) begin
-          lane_group_idx_d = '0;
-          if (last_diag_idx_local) begin
-            diag_idx_local_d = '0;
-            c2v_tile_linear_state_d = next_tile_linear(c2v_tile_linear_state_q);
-            c2v_h_block_state_d = last_tile_idx ? c2v_h_block_state_q + H_BLOCK_W'(1) :
-                c2v_h_block_state_q;
-            c2v_tile_idx_state_d = last_tile_idx ? '0 : c2v_tile_idx_state_q + TILE_IDX_W'(1);
+        if (ksign_corr_direct_mode) begin
+          if (ksign_corr_lane_idx_q == KSIGN_CORR_LANE_IDX_LAST) begin
+            ksign_corr_lane_idx_d = '0;
+            if (ksign_corr_slot_idx_q == KSIGN_CORR_SLOT_IDX_LAST) begin
+              ksign_corr_slot_idx_d = '0;
+              if (lane_group_idx_q == KSIGN_CORR_GROUP_IDX_LAST) begin
+                lane_group_idx_d = '0;
+                c2v_tile_linear_state_d = next_tile_linear(c2v_tile_linear_state_q);
+                c2v_h_block_state_d = last_tile_idx ? c2v_h_block_state_q + H_BLOCK_W'(1) :
+                    c2v_h_block_state_q;
+                c2v_tile_idx_state_d = last_tile_idx ? '0 : c2v_tile_idx_state_q + TILE_IDX_W'(1);
+              end else begin
+                lane_group_idx_d = lane_group_idx_q + LANE_GROUP_IDX_W'(1);
+              end
+            end else begin
+              ksign_corr_slot_idx_d = ksign_corr_slot_idx_q + K_SIGN_SLOT_IDX_W'(1);
+            end
           end else begin
-            diag_idx_local_d = diag_idx_local_q + DIAG_IDX_W'(1);
+            ksign_corr_lane_idx_d = ksign_corr_lane_idx_q + LANE_IDX_W'(1);
           end
         end else begin
-          lane_group_idx_d = lane_group_idx_q + LANE_GROUP_IDX_W'(1);
+          if (last_lane_group_idx) begin
+            lane_group_idx_d = '0;
+            if (last_diag_idx_local) begin
+              diag_idx_local_d = '0;
+              c2v_tile_linear_state_d = next_tile_linear(c2v_tile_linear_state_q);
+              c2v_h_block_state_d = last_tile_idx ? c2v_h_block_state_q + H_BLOCK_W'(1) :
+                  c2v_h_block_state_q;
+              c2v_tile_idx_state_d = last_tile_idx ? '0 : c2v_tile_idx_state_q + TILE_IDX_W'(1);
+            end else begin
+              diag_idx_local_d = diag_idx_local_q + DIAG_IDX_W'(1);
+            end
+          end else begin
+            lane_group_idx_d = lane_group_idx_q + LANE_GROUP_IDX_W'(1);
+          end
         end
       end else if (current_last_cycle) begin
         if (K_SIGN_ENABLE) begin
@@ -219,6 +270,8 @@ module tile_scheduler
           window_idx_d = '0;
           diag_idx_local_d = '0;
           lane_group_idx_d = '0;
+          ksign_corr_slot_idx_d = '0;
+          ksign_corr_lane_idx_d = '0;
           c2v_tile_active_d = 1'b0;
           v2c_tile_active_d = 1'b0;
           c2v_tile_linear_state_d = '0;
@@ -234,6 +287,8 @@ module tile_scheduler
           window_idx_d = '0;
           diag_idx_local_d = '0;
           lane_group_idx_d = '0;
+          ksign_corr_slot_idx_d = '0;
+          ksign_corr_lane_idx_d = '0;
           iter_count_d = iter_count_q + ITER_W'(1);
           c2v_tile_active_d = 1'b1;
           v2c_tile_active_d = 1'b0;
@@ -273,11 +328,17 @@ module tile_scheduler
 
     clear_active_d = running_q && clear_q;
     ksign_corr_last_active = K_SIGN_ENABLE && running_q && ksign_corr_q &&
-        (ksign_corr_guard_q == '0) &&
-        (c2v_tile_linear_state_q == cfg_tile_linear_last) &&
-        (diag_idx_local_q == cfg_w_last) && (lane_group_idx_q == LANE_GROUP_IDX_LAST);
+        (ksign_corr_guard_q == '0) && (c2v_tile_linear_state_q == cfg_tile_linear_last) &&
+        ((ksign_corr_direct_mode && (lane_group_idx_q == KSIGN_CORR_GROUP_IDX_LAST) &&
+          (ksign_corr_slot_idx_q == KSIGN_CORR_SLOT_IDX_LAST) &&
+          (ksign_corr_lane_idx_q == KSIGN_CORR_LANE_IDX_LAST)) ||
+         (!ksign_corr_direct_mode && (diag_idx_local_q == cfg_w_last) &&
+          (lane_group_idx_q == LANE_GROUP_IDX_LAST)));
     ksign_corr_valid_d = running_d && !i_start && !clear_active_d && ksign_corr_d &&
         (ksign_corr_guard_d == '0);
+    ksign_corr_direct_d = ksign_corr_valid_d && ksign_corr_direct_mode;
+    ksign_corr_slot_idx_out_d = ksign_corr_valid_d ? ksign_corr_slot_idx_d : '0;
+    ksign_corr_lane_idx_out_d = ksign_corr_valid_d ? ksign_corr_lane_idx_d : '0;
     c2v_valid_d = running_d && !i_start && !clear_active_d && !ksign_corr_valid_d &&
         c2v_tile_active_d;
     v2c_valid_d = running_d && !i_start && !clear_active_d && !ksign_corr_valid_d &&
@@ -321,6 +382,8 @@ module tile_scheduler
       clear_q <= 1'b0;
       ksign_corr_q <= 1'b0;
       ksign_corr_guard_q <= '0;
+      ksign_corr_slot_idx_q <= '0;
+      ksign_corr_lane_idx_q <= '0;
       clear_addr_q <= '0;
       window_idx_q <= '0;
       diag_idx_local_q <= '0;
@@ -339,6 +402,9 @@ module tile_scheduler
       o_c2v_valid <= 1'b0;
       o_v2c_valid <= 1'b0;
       o_ksign_corr_valid <= 1'b0;
+      o_ksign_corr_direct <= 1'b0;
+      o_ksign_corr_slot_idx <= '0;
+      o_ksign_corr_lane_idx <= '0;
       o_c2v_tile_linear <= '0;
       o_v2c_tile_linear <= '0;
       o_c2v_h_block_idx <= '0;
@@ -361,6 +427,8 @@ module tile_scheduler
       clear_q <= clear_d;
       ksign_corr_q <= ksign_corr_d;
       ksign_corr_guard_q <= ksign_corr_guard_d;
+      ksign_corr_slot_idx_q <= ksign_corr_slot_idx_d;
+      ksign_corr_lane_idx_q <= ksign_corr_lane_idx_d;
       clear_addr_q <= clear_addr_d;
       window_idx_q <= window_idx_d;
       diag_idx_local_q <= diag_idx_local_d;
@@ -379,6 +447,9 @@ module tile_scheduler
       o_c2v_valid <= c2v_valid_d;
       o_v2c_valid <= v2c_valid_d;
       o_ksign_corr_valid <= ksign_corr_valid_d;
+      o_ksign_corr_direct <= ksign_corr_direct_d;
+      o_ksign_corr_slot_idx <= ksign_corr_slot_idx_out_d;
+      o_ksign_corr_lane_idx <= ksign_corr_lane_idx_out_d;
       o_c2v_tile_linear <= c2v_tile_linear_d;
       o_v2c_tile_linear <= v2c_tile_linear_d;
       o_c2v_h_block_idx <= c2v_h_block_idx_d;

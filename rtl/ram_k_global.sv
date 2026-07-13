@@ -71,10 +71,9 @@ module ram_k_global
   generate
     for (genvar bank_idx = 0; bank_idx < L; bank_idx++) begin : g_bank
       ram_bram #(
-          .DATA_W         (K_SIGN_RECORD_W),
-          .DEPTH          (KSIGN_BANK_DEPTH),
-          .ADDR_W         (KSIGN_BANK_AW),
-          .USE_EXACT_DEPTH(1'b1)
+          .DATA_W(K_SIGN_RECORD_W),
+          .DEPTH (KSIGN_BANK_DEPTH),
+          .ADDR_W(KSIGN_BANK_AW)
       ) u_bram (
           .i_clk  (i_clk),
           .i_we   (routed_write_valid[bank_idx]),

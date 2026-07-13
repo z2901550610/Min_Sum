@@ -49,6 +49,7 @@ module decoder_top
   logic                                c2v_phase_active;
   logic                                v2c_phase_active;
   logic                                ksign_corr_phase_active;
+  logic                                ksign_corr_direct;
   logic        [        H_BLOCK_W-1:0] c2v_h_block_idx;
   logic        [       TILE_IDX_W-1:0] c2v_tile_idx;
   logic        [        H_BLOCK_W-1:0] v2c_h_block_idx;
@@ -75,7 +76,6 @@ module decoder_top
 
   logic        [        ROW_IDX_W-1:0] c2v_h_base_row_idx;
   logic        [        ROW_IDX_W-1:0] v2c_h_base_row_idx;
-  logic        [        ROW_IDX_W-1:0] ksign_corr_h_base_row_idx_e;
   logic                                c2v_corr_valid[0:L-1];
   logic        [            COL_W-1:0] c2v_corr_col_idx[0:L-1];
   logic        [    DIAG_GLOBAL_W-1:0] c2v_corr_diag_idx_global[0:L-1];
@@ -261,29 +261,36 @@ module decoder_top
   logic                                v2c_bypass_valid_b[0:L-1];
   logic        [      ROW_BANK_AW-1:0] v2c_bypass_row_addr_b[0:L-1];
   logic        [       COMP_C2V_W-1:0] v2c_bypass_comp_b[0:L-1];
-  logic                                ksign_corr_phase_h;
-  logic        [        H_BLOCK_W-1:0] ksign_corr_h_block_idx_h;
-  logic        [       TILE_IDX_W-1:0] ksign_corr_tile_idx_h;
-  logic        [       DIAG_IDX_W-1:0] ksign_corr_diag_idx_local_h;
-  logic        [ LANE_GROUP_IDX_W-1:0] ksign_corr_lane_group_idx_h;
-  logic                                ksign_corr_phase_e;
-  logic        [        H_BLOCK_W-1:0] ksign_corr_h_block_idx_e;
-  logic        [       TILE_IDX_W-1:0] ksign_corr_tile_idx_e;
-  logic        [       DIAG_IDX_W-1:0] ksign_corr_diag_idx_local_e;
-  logic        [ LANE_GROUP_IDX_W-1:0] ksign_corr_lane_group_idx_e;
-  logic                                ksign_corr_phase_r;
-  logic        [       DIAG_IDX_W-1:0] ksign_corr_diag_idx_local_r;
-  logic                                ksign_corr_valid[0:L-1];
-  logic        [            COL_W-1:0] ksign_corr_col_idx[0:L-1];
-  logic        [      ROW_BANK_AW-1:0] ksign_corr_row_addr[0:L-1];
-  logic                                ksign_corr_valid_r[0:L-1];
-  logic        [            COL_W-1:0] ksign_corr_col_idx_r[0:L-1];
-  logic        [      ROW_BANK_AW-1:0] ksign_corr_row_addr_r[0:L-1];
-  logic                                ksign_corr_valid_q[0:L-1];
-  logic        [      ROW_BANK_AW-1:0] ksign_corr_row_addr_q[0:L-1];
-  logic                                ksign_corr_hit[0:L-1];
-  logic                                comp_flip_valid_c[0:L-1];
-  logic        [      ROW_BANK_AW-1:0] comp_flip_row_addr_c[0:L-1];
+  logic        [K_SIGN_SLOT_IDX_W-1:0] ksign_corr_slot_idx;
+  logic        [       LANE_IDX_W-1:0] ksign_corr_lane_idx;
+  logic                                ksign_corr_record_read_valid[0:L-1];
+  logic        [            COL_W-1:0] ksign_corr_record_read_col_idx[0:L-1];
+  logic                                ksign_corr_h_read_valid;
+  logic        [        H_BLOCK_W-1:0] ksign_corr_h_block_idx;
+  logic        [       DIAG_IDX_W-1:0] ksign_corr_h_diag_idx_local;
+  logic                                ksign_scan_phase_h;
+  logic        [        H_BLOCK_W-1:0] ksign_scan_h_block_idx_h;
+  logic        [       TILE_IDX_W-1:0] ksign_scan_tile_idx_h;
+  logic        [       DIAG_IDX_W-1:0] ksign_scan_diag_idx_local_h;
+  logic        [ LANE_GROUP_IDX_W-1:0] ksign_scan_lane_group_idx_h;
+  logic                                ksign_scan_phase_e;
+  logic        [        H_BLOCK_W-1:0] ksign_scan_h_block_idx_e;
+  logic        [       TILE_IDX_W-1:0] ksign_scan_tile_idx_e;
+  logic        [       DIAG_IDX_W-1:0] ksign_scan_diag_idx_local_e;
+  logic        [ LANE_GROUP_IDX_W-1:0] ksign_scan_lane_group_idx_e;
+  logic        [        ROW_IDX_W-1:0] ksign_scan_h_base_row_idx_e;
+  logic                                ksign_scan_phase_r;
+  logic        [       DIAG_IDX_W-1:0] ksign_scan_diag_idx_local_r;
+  logic                                ksign_scan_valid[0:L-1];
+  logic        [            COL_W-1:0] ksign_scan_col_idx[0:L-1];
+  logic        [      ROW_BANK_AW-1:0] ksign_scan_row_addr[0:L-1];
+  logic                                ksign_scan_valid_r[0:L-1];
+  logic        [            COL_W-1:0] ksign_scan_col_idx_r[0:L-1];
+  logic        [      ROW_BANK_AW-1:0] ksign_scan_row_addr_r[0:L-1];
+  logic                                ksign_scan_valid_q[0:L-1];
+  logic        [      ROW_BANK_AW-1:0] ksign_scan_row_addr_q[0:L-1];
+  logic                                ksign_direct_flip_valid[0:L-1];
+  logic        [      ROW_BANK_AW-1:0] ksign_direct_flip_row_addr[0:L-1];
   logic                                comp_flip_pair_sel;
   logic                                comp_flip_valid[0:L-1];
   logic        [      ROW_BANK_AW-1:0] comp_flip_row_addr[0:L-1];
@@ -297,7 +304,9 @@ module decoder_top
   logic                                c2v_sign_mem[0:L-1];
   logic        [  K_SIGN_RECORD_W-1:0] c2v_ksign_record_mem[0:L-1];
   logic                                c2v_ksign_sign_mem[0:L-1];
+  /* verilator lint_off UNUSEDSIGNAL */
   logic                                c2v_ksign_hit_mem[0:L-1];
+  /* verilator lint_on UNUSEDSIGNAL */
   logic                                c2v_ksign_sign_q[0:L-1];
   logic                                ksign_read_valid[0:L-1];
   logic        [            COL_W-1:0] ksign_read_col_idx[0:L-1];
@@ -402,7 +411,8 @@ module decoder_top
 
   always_comb begin
     first_iter_c2v_comp = {1'b0, DIAG_GLOBAL_W'(0), D'(cfg_c_val), D'(cfg_c_val)};
-    ksign_read_diag_idx_local = ksign_corr_phase_r ? ksign_corr_diag_idx_local_r : c2v_diag_idx_local_r;
+    ksign_read_diag_idx_local = ksign_scan_phase_r ? ksign_scan_diag_idx_local_r :
+        c2v_diag_idx_local_r;
 
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
       c2v_valid[lane_idx] = c2v_corr_valid[lane_idx] && c2v_phase_e;
@@ -411,21 +421,20 @@ module decoder_top
       c2v_row_bank[lane_idx] = c2v_corr_row_bank[lane_idx];
       c2v_row_addr[lane_idx] = c2v_corr_row_addr[lane_idx];
       c2v_tile_offset[lane_idx] = c2v_corr_tile_offset[lane_idx];
-      ksign_corr_valid[lane_idx] = c2v_corr_valid[lane_idx] && ksign_corr_phase_e;
-      ksign_corr_col_idx[lane_idx] = c2v_corr_col_idx[lane_idx];
-      ksign_corr_row_addr[lane_idx] = c2v_corr_row_addr[lane_idx];
-      ksign_read_valid[lane_idx] = ksign_corr_phase_r ? ksign_corr_valid_r[lane_idx] :
-          c2v_valid_r[lane_idx];
-      ksign_read_col_idx[lane_idx] = ksign_corr_phase_r ? ksign_corr_col_idx_r[lane_idx] :
-          c2v_col_idx_r[lane_idx];
-      ksign_corr_hit[lane_idx] = c2v_ksign_hit_mem[lane_idx];
+      ksign_scan_valid[lane_idx] = c2v_corr_valid[lane_idx] && ksign_scan_phase_e;
+      ksign_scan_col_idx[lane_idx] = c2v_corr_col_idx[lane_idx];
+      ksign_scan_row_addr[lane_idx] = c2v_corr_row_addr[lane_idx];
+      ksign_read_valid[lane_idx] = ksign_corr_direct ?
+          ksign_corr_record_read_valid[lane_idx] :
+          (ksign_scan_phase_r ? ksign_scan_valid_r[lane_idx] : c2v_valid_r[lane_idx]);
+      ksign_read_col_idx[lane_idx] = ksign_corr_direct ?
+          ksign_corr_record_read_col_idx[lane_idx] :
+          (ksign_scan_phase_r ? ksign_scan_col_idx_r[lane_idx] : c2v_col_idx_r[lane_idx]);
       c2v_tc_ext[lane_idx] = '0;
       v2c_comp_next[lane_idx] = COMP_C2V_INIT;
       v2c_sign_wdata[lane_idx] = v2c_cnu_a_sign[lane_idx];
       v2c_ksign_base_sign[lane_idx] = posterior_sign_c[lane_idx];
       v2c_cnu_a_msg[lane_idx] = v2c_msg_c[lane_idx];
-      comp_flip_valid_c[lane_idx] = ksign_corr_valid_q[lane_idx] && ksign_corr_hit[lane_idx];
-      comp_flip_row_addr_c[lane_idx] = ksign_corr_row_addr_q[lane_idx];
       if (K_SIGN_ENABLE) begin
         v2c_cnu_a_msg[lane_idx][MSG_SIGN_BIT] = posterior_sign_c[lane_idx];
       end
@@ -472,6 +481,11 @@ module decoder_top
             ((c2v_diag_idx_local_c == '0) ? '0 : old_c2v_sum_c[lane_idx]) + c2v_tc_ext[lane_idx];
       end
 
+      comp_flip_valid[lane_idx] = ksign_direct_flip_valid[lane_idx] ||
+          (ksign_scan_valid_q[lane_idx] && c2v_ksign_hit_mem[lane_idx]);
+      comp_flip_row_addr[lane_idx] = ksign_direct_flip_valid[lane_idx] ?
+          ksign_direct_flip_row_addr[lane_idx] : ksign_scan_row_addr_q[lane_idx];
+
     end
 
     if (C2V_WRITE_PIPELINE) begin
@@ -493,8 +507,9 @@ module decoder_top
       .i_h_block_idx(i_h_block_idx),
       .i_diag_idx_local(i_h_diag_idx_local),
       .i_base_row_idx(i_h_base_row_idx),
-      .i_c2v_h_block_idx(c2v_h_block_idx),
-      .i_c2v_diag_idx_local(active_diag_idx_local),
+      .i_c2v_h_block_idx(ksign_corr_h_read_valid ? ksign_corr_h_block_idx : c2v_h_block_idx),
+      .i_c2v_diag_idx_local(
+          ksign_corr_h_read_valid ? ksign_corr_h_diag_idx_local : active_diag_idx_local),
       .i_v2c_h_block_idx(v2c_h_block_idx),
       .i_v2c_diag_idx_local(active_diag_idx_local),
       .i_cfg_r(cfg_r),
@@ -516,6 +531,9 @@ module decoder_top
       .o_c2v_valid(c2v_phase_active),
       .o_v2c_valid(v2c_phase_active),
       .o_ksign_corr_valid(ksign_corr_phase_active),
+      .o_ksign_corr_direct(ksign_corr_direct),
+      .o_ksign_corr_slot_idx(ksign_corr_slot_idx),
+      .o_ksign_corr_lane_idx(ksign_corr_lane_idx),
       .o_c2v_tile_linear(unused_c2v_tile_linear),
       .o_v2c_tile_linear(unused_v2c_tile_linear),
       .o_c2v_h_block_idx(c2v_h_block_idx),
@@ -536,12 +554,12 @@ module decoder_top
   );
 
   edge_addr_gen u_c2v_corr_addr_gen (
-      .i_phase_valid(c2v_phase_e || ksign_corr_phase_e),
-      .i_h_block_idx(ksign_corr_phase_e ? ksign_corr_h_block_idx_e : c2v_h_block_idx_e),
-      .i_tile_idx(ksign_corr_phase_e ? ksign_corr_tile_idx_e : c2v_tile_idx_e),
-      .i_lane_group_idx(ksign_corr_phase_e ? ksign_corr_lane_group_idx_e : c2v_lane_group_idx_e),
-      .i_base_row_idx(ksign_corr_phase_e ? ksign_corr_h_base_row_idx_e : c2v_h_base_row_idx_e),
-      .i_diag_idx_local(ksign_corr_phase_e ? ksign_corr_diag_idx_local_e : c2v_diag_idx_local_e),
+      .i_phase_valid(c2v_phase_e || ksign_scan_phase_e),
+      .i_h_block_idx(ksign_scan_phase_e ? ksign_scan_h_block_idx_e : c2v_h_block_idx_e),
+      .i_tile_idx(ksign_scan_phase_e ? ksign_scan_tile_idx_e : c2v_tile_idx_e),
+      .i_lane_group_idx(ksign_scan_phase_e ? ksign_scan_lane_group_idx_e : c2v_lane_group_idx_e),
+      .i_base_row_idx(ksign_scan_phase_e ? ksign_scan_h_base_row_idx_e : c2v_h_base_row_idx_e),
+      .i_diag_idx_local(ksign_scan_phase_e ? ksign_scan_diag_idx_local_e : c2v_diag_idx_local_e),
       .i_cfg_r(cfg_r),
       .i_cfg_w(cfg_w),
       .o_valid(c2v_corr_valid),
@@ -552,6 +570,28 @@ module decoder_top
       .o_row_bank(c2v_corr_row_bank),
       .o_row_addr(c2v_corr_row_addr),
       .o_tile_offset(c2v_corr_tile_offset)
+  );
+
+  k_sign_correction u_k_sign_correction (
+      .i_clk(i_clk),
+      .i_rst_n(rst_n_sync),
+      .i_phase_valid(ksign_corr_phase_active && ksign_corr_direct),
+      .i_h_block_idx(c2v_h_block_idx),
+      .i_tile_idx(c2v_tile_idx),
+      .i_lane_group_idx(active_lane_group_idx),
+      .i_slot_idx(ksign_corr_slot_idx),
+      .i_lane_idx(ksign_corr_lane_idx),
+      .i_cfg_r(cfg_r),
+      .i_cfg_w(cfg_w),
+      .o_record_read_valid(ksign_corr_record_read_valid),
+      .o_record_read_col_idx(ksign_corr_record_read_col_idx),
+      .i_record(c2v_ksign_record_mem),
+      .o_h_read_valid(ksign_corr_h_read_valid),
+      .o_h_block_idx(ksign_corr_h_block_idx),
+      .o_h_diag_idx_local(ksign_corr_h_diag_idx_local),
+      .i_h_base_row_idx(c2v_h_base_row_idx),
+      .o_flip_valid(ksign_direct_flip_valid),
+      .o_flip_row_addr(ksign_direct_flip_row_addr)
   );
 
   edge_addr_gen u_v2c_addr_gen (
@@ -804,19 +844,19 @@ module decoder_top
       v2c_write_lane_group_idx_p <= '0;
       v2c_write_pair_sel_p <= 1'b0;
       v2c_bypass_pair_sel_b <= 1'b0;
-      ksign_corr_phase_h <= 1'b0;
-      ksign_corr_h_block_idx_h <= '0;
-      ksign_corr_tile_idx_h <= '0;
-      ksign_corr_diag_idx_local_h <= '0;
-      ksign_corr_lane_group_idx_h <= '0;
-      ksign_corr_phase_e <= 1'b0;
-      ksign_corr_h_block_idx_e <= '0;
-      ksign_corr_tile_idx_e <= '0;
-      ksign_corr_diag_idx_local_e <= '0;
-      ksign_corr_lane_group_idx_e <= '0;
-      ksign_corr_h_base_row_idx_e <= '0;
-      ksign_corr_phase_r <= 1'b0;
-      ksign_corr_diag_idx_local_r <= '0;
+      ksign_scan_phase_h <= 1'b0;
+      ksign_scan_h_block_idx_h <= '0;
+      ksign_scan_tile_idx_h <= '0;
+      ksign_scan_diag_idx_local_h <= '0;
+      ksign_scan_lane_group_idx_h <= '0;
+      ksign_scan_phase_e <= 1'b0;
+      ksign_scan_h_block_idx_e <= '0;
+      ksign_scan_tile_idx_e <= '0;
+      ksign_scan_diag_idx_local_e <= '0;
+      ksign_scan_lane_group_idx_e <= '0;
+      ksign_scan_h_base_row_idx_e <= '0;
+      ksign_scan_phase_r <= 1'b0;
+      ksign_scan_diag_idx_local_r <= '0;
       ksign_read_diag_idx_local_q <= '0;
       comp_flip_pair_sel <= 1'b0;
       v2c_phase_e <= 1'b0;
@@ -909,13 +949,11 @@ module decoder_top
         v2c_bypass_valid_b[lane_idx] <= 1'b0;
         v2c_bypass_row_addr_b[lane_idx] <= '0;
         v2c_bypass_comp_b[lane_idx] <= COMP_C2V_INIT;
-        ksign_corr_valid_r[lane_idx] <= 1'b0;
-        ksign_corr_col_idx_r[lane_idx] <= '0;
-        ksign_corr_row_addr_r[lane_idx] <= '0;
-        ksign_corr_valid_q[lane_idx] <= 1'b0;
-        ksign_corr_row_addr_q[lane_idx] <= '0;
-        comp_flip_valid[lane_idx] <= 1'b0;
-        comp_flip_row_addr[lane_idx] <= '0;
+        ksign_scan_valid_r[lane_idx] <= 1'b0;
+        ksign_scan_col_idx_r[lane_idx] <= '0;
+        ksign_scan_row_addr_r[lane_idx] <= '0;
+        ksign_scan_valid_q[lane_idx] <= 1'b0;
+        ksign_scan_row_addr_q[lane_idx] <= '0;
       end
     end else begin
       if ((state == DEC_WAIT_START) || ((state == DEC_DONE) && ctrl_done_p)) begin
@@ -1011,21 +1049,23 @@ module decoder_top
       v2c_write_lane_group_idx_p <= v2c_lane_group_idx_c;
       v2c_write_pair_sel_p <= v2c_write_pair_sel_c;
       v2c_bypass_pair_sel_b <= v2c_write_pair_sel_p;
-      ksign_corr_phase_h <= ksign_corr_phase_active;
-      ksign_corr_h_block_idx_h <= c2v_h_block_idx;
-      ksign_corr_tile_idx_h <= c2v_tile_idx;
-      ksign_corr_diag_idx_local_h <= active_diag_idx_local;
-      ksign_corr_lane_group_idx_h <= active_lane_group_idx;
-      ksign_corr_phase_e <= ksign_corr_phase_h;
-      ksign_corr_h_block_idx_e <= ksign_corr_h_block_idx_h;
-      ksign_corr_tile_idx_e <= ksign_corr_tile_idx_h;
-      ksign_corr_diag_idx_local_e <= ksign_corr_diag_idx_local_h;
-      ksign_corr_lane_group_idx_e <= ksign_corr_lane_group_idx_h;
-      ksign_corr_h_base_row_idx_e <= c2v_h_base_row_idx;
-      ksign_corr_phase_r <= ksign_corr_phase_e;
-      ksign_corr_diag_idx_local_r <= ksign_corr_diag_idx_local_e;
+      ksign_scan_phase_h <= ksign_corr_phase_active && !ksign_corr_direct;
+      ksign_scan_h_block_idx_h <= c2v_h_block_idx;
+      ksign_scan_tile_idx_h <= c2v_tile_idx;
+      ksign_scan_diag_idx_local_h <= active_diag_idx_local;
+      ksign_scan_lane_group_idx_h <= active_lane_group_idx;
+      ksign_scan_phase_e <= ksign_scan_phase_h;
+      ksign_scan_h_block_idx_e <= ksign_scan_h_block_idx_h;
+      ksign_scan_tile_idx_e <= ksign_scan_tile_idx_h;
+      ksign_scan_diag_idx_local_e <= ksign_scan_diag_idx_local_h;
+      ksign_scan_lane_group_idx_e <= ksign_scan_lane_group_idx_h;
+      ksign_scan_h_base_row_idx_e <= c2v_h_base_row_idx;
+      ksign_scan_phase_r <= ksign_scan_phase_e;
+      ksign_scan_diag_idx_local_r <= ksign_scan_diag_idx_local_e;
       ksign_read_diag_idx_local_q <= ksign_read_diag_idx_local;
-      comp_flip_pair_sel <= comp_write_pair_sel;
+      if (ksign_corr_phase_active) begin
+        comp_flip_pair_sel <= comp_write_pair_sel;
+      end
       ctrl_done_r <= ctrl_done;
       ctrl_done_q <= ctrl_done_r;
       ctrl_done_s <= ctrl_done_q;
@@ -1098,13 +1138,11 @@ module decoder_top
         v2c_bypass_valid_b[lane_idx] <= v2c_valid_p[lane_idx];
         v2c_bypass_row_addr_b[lane_idx] <= v2c_row_addr_p[lane_idx];
         v2c_bypass_comp_b[lane_idx] <= v2c_comp_p[lane_idx];
-        ksign_corr_valid_r[lane_idx] <= ksign_corr_valid[lane_idx];
-        ksign_corr_col_idx_r[lane_idx] <= ksign_corr_col_idx[lane_idx];
-        ksign_corr_row_addr_r[lane_idx] <= ksign_corr_row_addr[lane_idx];
-        ksign_corr_valid_q[lane_idx] <= ksign_corr_valid_r[lane_idx];
-        ksign_corr_row_addr_q[lane_idx] <= ksign_corr_row_addr_r[lane_idx];
-        comp_flip_valid[lane_idx] <= comp_flip_valid_c[lane_idx];
-        comp_flip_row_addr[lane_idx] <= comp_flip_row_addr_c[lane_idx];
+        ksign_scan_valid_r[lane_idx] <= ksign_scan_valid[lane_idx];
+        ksign_scan_col_idx_r[lane_idx] <= ksign_scan_col_idx[lane_idx];
+        ksign_scan_row_addr_r[lane_idx] <= ksign_scan_row_addr[lane_idx];
+        ksign_scan_valid_q[lane_idx] <= ksign_scan_valid_r[lane_idx];
+        ksign_scan_row_addr_q[lane_idx] <= ksign_scan_row_addr_r[lane_idx];
       end
     end
   end

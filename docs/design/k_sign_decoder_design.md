@@ -180,7 +180,7 @@ mag[tile_offset][0..K-1]
 4. `dev=1` 且候选优于最差项时，只覆盖最差槽。
 5. 比较树和单槽写选择的逻辑数量固定，不因候选数量提前结束。
 
-K=4 或 K=6 时，每个 lane 使用 `K-1` 个比较选择节点组成最差项树，并使用一个候选门限比较器。树深约为 `ceil(log2(K))`，工作记录只更新一个槽。
+K=3 时，每个 lane 使用两个比较选择节点组成最差项树，并使用一个候选门限比较器。工作记录只更新一个槽。
 
 推荐 tie-break：
 
@@ -225,42 +225,53 @@ selector 同时找出每个变量节点的 K 个 dev 位置。tile 扫描完成�
 sign_xor_approx[row(dev_edge)] = sign_xor_base[row(dev_edge)] XOR 1
 ```
 
-固定校正窗口遍历：
+RTL 按公开参数为每个等级选择周期数较小的固定校正窗口。
+
+扫描模式遍历 tile 对角线和列组，每拍并行检查 L 列：
 
 ```text
-for slot in 0..K-1:
-  for q in 0..Q_BASE-1:
+for diag_idx_local in 0..W-1:
+  for q in 0..Q_TILE-1:
     for lane in 0..L-1:
       column = q * L + lane
-      if valid[column][slot]:
-        flip sign_xor at row(base_row_idx[dev_pos] + column)
+      if column is valid and diag_idx_local matches any valid dev_pos[column]:
+        flip sign_xor at row(base_row_idx[diag_idx_local] + column)
 ```
 
-无效槽执行 mask，不改变状态。窗口长度由公开参数决定。
+无效列和未命中的位置执行 mask，不改变状态。窗口长度由公开参数决定。
 
-该选项的工程重点是 correction write 的 bank 冲突。可选实现：
-
-- 将 `sign_xor` 从 min 状态中拆出，使用独立的 XOR 更新存储。
-- correction 写入使用固定 subslot 调度，每个 subslot 对每个 bank 至多一次写。
-- 对同一 row 的多次 flip 先做 XOR 合并。
-- subslot 数为公开常量，不能由冲突数量动态决定。
-
-理想 correction 带宽为 L 条/拍时，tile 内额外周期约为：
+直接模式遍历记录中的 K 个位置，每拍串行处理一列：
 
 ```text
-T_CORR = K * Q_BASE
-T_TILE = W * Q_TILE
-overhead = T_CORR / T_TILE
+for tile in 0..TILES_TOTAL-1:
+  for q in 0..Q_BASE-1:
+    for slot in 0..K-1:
+      for lane in 0..L-1:
+        column = tile_column_base + q * L + lane
+        diag_idx_local = dev_pos[column][slot]
+        if column and slot are valid:
+          flip sign_xor at row(base_row_idx[diag_idx_local] + column_local)
 ```
 
-例：`L=32, COLS_PER_TILE=1056, Q_BASE=33, Q_TILE=36, W=111`
+直接模式每拍最多发出一个 flip，row-bank 冲突数量恒为零。K-sign 记录读取、H 基址读取、row 计算和 `ram_m` 翻转读改写使用固定流水。无效列和 invalid 槽占用相同调度周期并屏蔽 flip。
+
+两种模式的 tile 周期为：
 
 ```text
-K=4: 132 / 3996 = 3.3%
-K=6: 198 / 3996 = 5.0%
+T_SCAN   = W * Q_TILE
+T_DIRECT = K * L * Q_BASE
+T_CORR   = min(T_SCAN, T_DIRECT)
 ```
 
-若 correction 写入采用最保守逐列串行调度，周期成本接近 `K*COLS_PER_TILE`，适合作为功能验证，不适合作为性能实现。
+统一 TRIKE、`K=3`、`L=16`、`Q_BASE=73`、`Q_TILE=76`：
+
+| 等级 | W | 扫描模式 | 直接模式 | 固定选择 |
+| --- | ---: | ---: | ---: | ---: |
+| TRIKE128 | 27 | 2052 | 3504 | 2052 |
+| TRIKE160 | 35 | 2660 | 3504 | 2660 |
+| TRIKE256 | 55 | 4180 | 3504 | 3504 |
+| TRIKE384 | 83 | 6308 | 3504 | 3504 |
+| TRIKE512 | 111 | 8436 | 3504 | 3504 |
 
 ## 常数时间要求
 
@@ -269,7 +280,7 @@ K-sign 实现遵守以下固定时间规则：
 - 每个公开参数等级使用固定 `K`、`POS_W`、`COLS_PER_TILE`、`L`。
 - selector 始终执行 K 级比较，不因候选填满提前结束。
 - 每个 tile 始终执行完整 `W * Q_TILE` 主扫描。
-- correction 阶段始终执行固定窗口，invalid 槽只 mask 写使能。
+- correction 模式和窗口长度只由公开参数决定，invalid 槽只 mask 写使能。
 - 不使用由 syndrome、错误模式、H base row、dev 数量、候选幅值决定的循环次数。
 - bank 冲突处理使用公开固定 subslot 数。
 - 不使用译码成功提前停止。
@@ -292,15 +303,9 @@ POS_W = 7
 
 | K | 每变量 bit | 总 bit | 约 MiB |
 | ---: | ---: | ---: | ---: |
-| 4 | 29 | 9,447,069 | 1.13 |
-| 6 | 43 | 14,007,723 | 1.67 |
+| 3 | 22 | 7,166,742 | 0.85 |
 
-BRAM36 粗估按 banked variable storage：
-
-| 并行度 | K=4 | K=6 |
-| ---: | ---: | ---: |
-| L=16 | 约 272 BRAM36 | 约 400 BRAM36 |
-| L=32 | 约 288 BRAM36 | 约 416 BRAM36 |
+BRAM 数量由目标器件的 SDP primitive、bank 深度和 Vivado memory mapping 共同决定。统一 TRIKE、`L=16` 的全局记录总容量为 7,166,742 bit，综合时以目标器件报告为准。
 
 完整符号存储参考约为 1.0k BRAM36。K-sign 长期存储的主收益来自把每变量 `W_MAX=111` 个符号位压缩为 `1+K*7` bit。
 
@@ -308,12 +313,13 @@ Tile 内 selector 工作状态按 `COLS_PER_TILE=1168`、`D=4` 估算：
 
 | K | 每变量工作记录 | 合计 |
 | ---: | ---: | ---: |
-| 4 | 45 bit | 52,560 bit |
-| 6 | 67 bit | 78,256 bit |
+| 3 | 34 bit | 39,712 bit |
 
 该状态由按变量列 bank 化的 tile 工作 RAM 保存，并在 tile 间复用。全局 K-sign RAM 保存一份 `1+K*POS_W` bit 的长期记录。C2V 完成一个 tile 的旧记录读取后，落后一窗口的 V2C 对同一 tile 原地提交新记录。
 
 ## 仿真观察
+
+下表是 K=4 和 K=6 的算法比较数据，用于判断减小 K 时的 DFR 趋势。K=3 的 RTL 随机 exact 测试覆盖功能一致性，不构成 DFR 结论；K=3 需要独立的多 seed DFR campaign。
 
 仿真参数：
 
@@ -366,28 +372,29 @@ K-sign 数据通路由以下模块组成：
 3. `k_sign_update`：无序候选槽的最差项归约树和单槽更新组合逻辑。
 4. `k_sign_selector`：变量列 bank 路由、工作 RAM 读改写控制和压缩记录提交。
 5. `k_sign_reconstruct`：根据全局压缩记录和 `diag_idx_local` 重建近似符号及命中标志。
+6. `k_sign_correction`：直接模式的固定列/槽调度流水、H 基址查询和串行 row flip 地址生成。
 
-最后一个对角线在该变量列的全部旧记录读取完成后，将压缩记录写回原地址。C2V 和 correction 读取全局记录，通过 `base_sign XOR hit(dev_pos == diag_idx_local)` 重建符号。主 V2C 使用 base-sign 更新，固定 correction 扫描对命中位置翻转对应 check row 的 `sign_xor`。命中结果、row 地址和目标 pair 经过一级寄存后送入 `ram_m` 的翻转读改写端口。
+最后一个对角线在该变量列的全部记录读取完成后，将压缩记录写回同一地址。C2V 和扫描模式 correction 通过 `base_sign XOR hit(dev_pos == diag_idx_local)` 重建命中；直接模式从记录槽取得 `diag_idx_local`。主 V2C 使用 base-sign 更新，两种固定 correction 模式对命中位置翻转对应 check row 的 `sign_xor`。目标 pair 在 correction 窗口内锁存并保持到翻转流水排空。
 
 ## 主要风险
 
 | 风险 | 说明 | 处理方式 |
 | --- | --- | --- |
-| correction bank 冲突 | K 个 dev 位置按变量选择，映射到 row bank 后可能冲突 | 使用固定 subslot 调度或独立 sign_xor 更新存储 |
+| correction bank 冲突 | 多列 dev 位置可能映射到同一个 row bank | 直接模式每拍串行一个 flip；扫描模式使用 edge bank 排列 |
 | selector 布线 | `COLS_PER_TILE*K` 候选状态分布在 tile 内 | 将 selector 状态按 lane/bank 分区，靠近 VNU 输出放置 |
-| K=4 余量 | 小 K 对 DFR margin 更敏感 | 使用多 seed 和更低 DFR 区确认 |
+| K=3 余量 | 小 K 对 DFR margin 更敏感 | 使用多 seed 和更低 DFR 区确认 |
 | sign_xor 语义 | C2V 与 CNU A 必须使用同一近似符号定义 | C model、RTL 和测试向量共享 tie-break 规则 |
 
-## 推荐配置
+## RTL 配置
 
-仿真和资源估算支持以下主配置：
+RTL 使用以下配置：
 
 ```text
-K = 4 或 K = 6
+K = 3
 POS_W = 7
 base_sign 保存在 K-sign 记录中
 selector 规则 = high_mag_dev
 tie-break = mag 大优先，diag_idx_local 小优先
 ```
 
-硬件第一版可选择 K=4 作为资源优先配置，K=6 作为性能余量配置。最终 K 值由多 seed DFR、BRAM 预算、correction 写入时序共同决定。
+多 seed DFR、BRAM 预算和 correction 写入时序共同用于评估该固定配置。DFR campaign 完成前，K=3 属于资源优化候选参数。

@@ -3,50 +3,53 @@
 module tb_tile_scheduler;
   import bike_pkg::*;
 
-  logic                        clk;
-  logic                        rst_n;
-  logic                        start;
-  logic                        sample_reset;
-  logic [     DEC_STATE_W-1:0] state;
-  logic                        c2v_valid;
-  logic                        v2c_valid;
-  logic                        ksign_corr_valid;
-  logic [       TILE_ID_W-1:0] c2v_tile_linear;
-  logic [       TILE_ID_W-1:0] v2c_tile_linear;
-  logic [       H_BLOCK_W-1:0] c2v_h_block_idx;
-  logic [      TILE_IDX_W-1:0] c2v_tile_idx;
-  logic [       H_BLOCK_W-1:0] v2c_h_block_idx;
-  logic [      TILE_IDX_W-1:0] v2c_tile_idx;
-  logic [      DIAG_IDX_W-1:0] diag_idx_local;
-  logic [LANE_GROUP_IDX_W-1:0] lane_group_idx;
-  logic                        clear_valid;
-  logic [     ROW_BANK_AW-1:0] clear_addr;
-  logic                        fill_buf;
-  logic                        active_buf;
-  logic                        final_iter;
-  logic                        iter_first_cycle;
-  logic                        iter_last_cycle;
-  logic                        done;
-  logic [          ITER_W-1:0] iter_count;
+  logic                         clk;
+  logic                         rst_n;
+  logic                         start;
+  logic                         sample_reset;
+  logic [      DEC_STATE_W-1:0] state;
+  logic                         c2v_valid;
+  logic                         v2c_valid;
+  logic                         ksign_corr_valid;
+  logic [        TILE_ID_W-1:0] c2v_tile_linear;
+  logic [        TILE_ID_W-1:0] v2c_tile_linear;
+  logic [        H_BLOCK_W-1:0] c2v_h_block_idx;
+  logic [       TILE_IDX_W-1:0] c2v_tile_idx;
+  logic [        H_BLOCK_W-1:0] v2c_h_block_idx;
+  logic [       TILE_IDX_W-1:0] v2c_tile_idx;
+  logic [       DIAG_IDX_W-1:0] diag_idx_local;
+  logic [ LANE_GROUP_IDX_W-1:0] lane_group_idx;
+  logic                         clear_valid;
+  logic [      ROW_BANK_AW-1:0] clear_addr;
+  logic                         fill_buf;
+  logic                         active_buf;
+  logic                         final_iter;
+  logic                         iter_first_cycle;
+  logic                         iter_last_cycle;
+  logic                         done;
+  logic [           ITER_W-1:0] iter_count;
 
-  int                          cycle_count;
-  logic                        saw_prime;
-  logic                        saw_overlap;
-  logic                        saw_drain;
-  int                          clear_count;
+  int                           cycle_count;
+  logic                         saw_prime;
+  logic                         saw_overlap;
+  logic                         saw_drain;
+  int                           clear_count;
   /* verilator lint_off UNUSEDSIGNAL */
-  logic [       H_BLOCK_W-1:0] observed_c2v_h_block_idx;
-  logic [      TILE_IDX_W-1:0] observed_c2v_tile_idx;
-  logic [       H_BLOCK_W-1:0] observed_v2c_h_block_idx;
-  logic [      TILE_IDX_W-1:0] observed_v2c_tile_idx;
-  logic [      DIAG_IDX_W-1:0] observed_diag_idx_local;
-  logic [LANE_GROUP_IDX_W-1:0] observed_lane_group_idx;
-  logic                        observed_fill_buf;
-  logic                        observed_active_buf;
-  logic                        observed_final_iter;
-  logic                        observed_iter_first_cycle;
-  logic                        observed_iter_last_cycle;
-  logic                        observed_ksign_corr_valid;
+  logic                         unused_ksign_corr_direct;
+  logic [K_SIGN_SLOT_IDX_W-1:0] unused_ksign_corr_slot_idx;
+  logic [       LANE_IDX_W-1:0] unused_ksign_corr_lane_idx;
+  logic [        H_BLOCK_W-1:0] observed_c2v_h_block_idx;
+  logic [       TILE_IDX_W-1:0] observed_c2v_tile_idx;
+  logic [        H_BLOCK_W-1:0] observed_v2c_h_block_idx;
+  logic [       TILE_IDX_W-1:0] observed_v2c_tile_idx;
+  logic [       DIAG_IDX_W-1:0] observed_diag_idx_local;
+  logic [ LANE_GROUP_IDX_W-1:0] observed_lane_group_idx;
+  logic                         observed_fill_buf;
+  logic                         observed_active_buf;
+  logic                         observed_final_iter;
+  logic                         observed_iter_first_cycle;
+  logic                         observed_iter_last_cycle;
+  logic                         observed_ksign_corr_valid;
   /* verilator lint_on UNUSEDSIGNAL */
 
   tile_scheduler dut (
@@ -60,6 +63,9 @@ module tb_tile_scheduler;
       .o_c2v_valid(c2v_valid),
       .o_v2c_valid(v2c_valid),
       .o_ksign_corr_valid(ksign_corr_valid),
+      .o_ksign_corr_direct(unused_ksign_corr_direct),
+      .o_ksign_corr_slot_idx(unused_ksign_corr_slot_idx),
+      .o_ksign_corr_lane_idx(unused_ksign_corr_lane_idx),
       .o_c2v_tile_linear(c2v_tile_linear),
       .o_v2c_tile_linear(v2c_tile_linear),
       .o_c2v_h_block_idx(c2v_h_block_idx),
