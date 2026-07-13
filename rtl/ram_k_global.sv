@@ -16,8 +16,12 @@ module ram_k_global
   localparam int KSIGN_BANK_DEPTH = (N + L - 1) / L;
   localparam int KSIGN_BANK_AW = (KSIGN_BANK_DEPTH > 1) ? $clog2(KSIGN_BANK_DEPTH) : 1;
   localparam int READ_ROUTE_W = 1 + KSIGN_BANK_AW;
+  localparam int BASE_SIGN_BIT = 0;
+  localparam int SLOT_BASE_LSB = 1;
 
   logic [K_SIGN_RECORD_W-1:0] bank_rdata[0:L-1];
+  logic [                0:0] bank_base_sign_rdata[0:L-1];
+  logic [     DIAG_IDX_W-1:0] bank_diag_rdata[0:L-1][0:K_SIGN_K-1];
   logic [   READ_ROUTE_W-1:0] read_route_in[0:L-1];
   logic [   READ_ROUTE_W-1:0] read_route_out[0:L-1];
   logic [K_SIGN_RECORD_W-1:0] read_record_route_out[0:L-1];
@@ -38,6 +42,12 @@ module ram_k_global
   function automatic logic [KSIGN_BANK_AW-1:0] col_addr(input  logic [COL_W-1:0] col_idx);
     begin
       col_addr = KSIGN_BANK_AW'(col_idx >> L_SHIFT);
+    end
+  endfunction
+
+  function automatic int slot_lsb(input int slot_idx);
+    begin
+      slot_lsb = SLOT_BASE_LSB + (slot_idx * DIAG_IDX_W);
     end
   endfunction
 
@@ -71,18 +81,43 @@ module ram_k_global
   generate
     for (genvar bank_idx = 0; bank_idx < L; bank_idx++) begin : g_bank
       ram_bram #(
-          .DATA_W(K_SIGN_RECORD_W),
+          .DATA_W(1),
           .DEPTH (KSIGN_BANK_DEPTH),
           .ADDR_W(KSIGN_BANK_AW)
-      ) u_bram (
+      ) u_base_bram (
           .i_clk  (i_clk),
           .i_we   (routed_write_valid[bank_idx]),
           .i_waddr(routed_write_addr[bank_idx]),
-          .i_wdata(routed_write_data[bank_idx]),
+          .i_wdata(routed_write_data[bank_idx][BASE_SIGN_BIT]),
           .i_re   (routed_read_valid[bank_idx]),
           .i_raddr(routed_read_addr[bank_idx]),
-          .o_rdata(bank_rdata[bank_idx])
+          .o_rdata(bank_base_sign_rdata[bank_idx])
       );
+
+      for (genvar slot_idx = 0; slot_idx < K_SIGN_K; slot_idx++) begin : g_slot
+        ram_bram #(
+            .DATA_W(DIAG_IDX_W),
+            .DEPTH (KSIGN_BANK_DEPTH),
+            .ADDR_W(KSIGN_BANK_AW)
+        ) u_diag_bram (
+            .i_clk  (i_clk),
+            .i_we   (routed_write_valid[bank_idx]),
+            .i_waddr(routed_write_addr[bank_idx]),
+            .i_wdata(routed_write_data[bank_idx][slot_lsb(slot_idx)+:DIAG_IDX_W]),
+            .i_re   (routed_read_valid[bank_idx]),
+            .i_raddr(routed_read_addr[bank_idx]),
+            .o_rdata(bank_diag_rdata[bank_idx][slot_idx])
+        );
+      end
+
+      always_comb begin
+        bank_rdata[bank_idx] = '0;
+        bank_rdata[bank_idx][BASE_SIGN_BIT] = bank_base_sign_rdata[bank_idx][0];
+        for (int slot_idx = 0; slot_idx < K_SIGN_K; slot_idx++) begin
+          bank_rdata[bank_idx][slot_lsb(slot_idx)+:DIAG_IDX_W] =
+              bank_diag_rdata[bank_idx][slot_idx];
+        end
+      end
     end
   endgenerate
 

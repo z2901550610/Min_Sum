@@ -315,7 +315,7 @@ Tile 内 selector 工作状态按 `COLS_PER_TILE=1168`、`D=4` 估算：
 | ---: | ---: | ---: |
 | 3 | 34 bit | 39,712 bit |
 
-该状态由按变量列 bank 化的 tile 工作 RAM 保存，并在 tile 间复用。全局 K-sign RAM 保存一份 `1+K*POS_W` bit 的长期记录。C2V 完成一个 tile 的旧记录读取后，落后一窗口的 V2C 对同一 tile 原地提交新记录。
+该状态由按变量列 bank 化的 tile 工作 RAM 保存，并在 tile 间复用。全局 K-sign RAM 的逻辑记录宽度为 `1+K*POS_W` bit，物理上将 `base_sign` 和每个 `dev_pos` 槽映射到独立的窄 BRAM 字段，各字段使用相同的 bank 地址和读写使能。C2V 完成一个 tile 的旧记录读取后，落后一窗口的 V2C 对同一 tile 原地提交新记录。
 
 ## 仿真观察
 
@@ -367,7 +367,7 @@ TRIKE512：
 
 K-sign 数据通路由以下模块组成：
 
-1. `ram_k_global`：每个变量列的一份全局原地更新记录，字段为 `base_sign` 和 K 个 `dev_pos`。
+1. `ram_k_global`：每个变量列的一份全局原地更新记录，`base_sign` 和 K 个 `dev_pos` 使用独立窄 BRAM 字段。
 2. `ram_k_tile`：活动 tile 的幅值工作 RAM，字段为 `base_sign` 和 K 个无序 `(dev_pos, magnitude)` 槽。
 3. `k_sign_update`：无序候选槽的最差项归约树和单槽更新组合逻辑。
 4. `k_sign_selector`：变量列 bank 路由、工作 RAM 读改写控制和压缩记录提交。

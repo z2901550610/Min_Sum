@@ -362,11 +362,12 @@ module decoder_top
   logic                                ctrl_done_s;
   logic                                ctrl_done_p;
   logic                                ctrl_done_out;
+  logic                                ctrl_done_final;
 
   assign param_level_in = PROFILE_RUNTIME_SELECT ? i_param_level : PROFILE_DEFAULT;
 
   assign decode_start = i_start && o_h_loaded && !o_h_error;
-  assign o_done = ctrl_done_out;
+  assign o_done = ctrl_done_final;
 
   reset_sync u_reset_sync (
       .i_clk  (i_clk),
@@ -921,6 +922,7 @@ module decoder_top
       ctrl_done_s <= 1'b0;
       ctrl_done_p <= 1'b0;
       ctrl_done_out <= 1'b0;
+      ctrl_done_final <= 1'b0;
       for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
         c2v_valid_r[lane_idx] <= 1'b0;
         c2v_col_idx_r[lane_idx] <= '0;
@@ -998,7 +1000,7 @@ module decoder_top
         comp_flip_row_addr[lane_idx] <= '0;
       end
     end else begin
-      if ((state == DEC_WAIT_START) || ((state == DEC_DONE) && ctrl_done_out)) begin
+      if ((state == DEC_WAIT_START) || ((state == DEC_DONE) && ctrl_done_final)) begin
         param_level <= param_level_in;
       end
 
@@ -1124,11 +1126,12 @@ module decoder_top
       if (ksign_corr_phase_active) begin
         comp_flip_pair_sel <= comp_write_pair_sel;
       end
-      ctrl_done_r   <= ctrl_done;
-      ctrl_done_q   <= ctrl_done_r;
-      ctrl_done_s   <= ctrl_done_q;
-      ctrl_done_p   <= ctrl_done_s;
+      ctrl_done_r <= ctrl_done;
+      ctrl_done_q <= ctrl_done_r;
+      ctrl_done_s <= ctrl_done_q;
+      ctrl_done_p <= ctrl_done_s;
       ctrl_done_out <= ctrl_done_p;
+      ctrl_done_final <= ctrl_done_out;
       for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
         c2v_valid_r[lane_idx] <= c2v_valid[lane_idx];
         c2v_col_idx_r[lane_idx] <= c2v_col_idx[lane_idx];

@@ -35,6 +35,10 @@ module k_sign_correction
   logic [          CFG_R_W-1:0] record_col_local_q;
   logic [       DIAG_IDX_W-1:0] selected_diag_idx;
   logic                         selected_diag_valid;
+  logic                         selected_valid_q;
+  logic [        H_BLOCK_W-1:0] selected_h_block_idx_q;
+  logic [          CFG_R_W-1:0] selected_col_local_q;
+  logic [       DIAG_IDX_W-1:0] selected_diag_idx_q;
   logic                         base_valid_q;
   logic [          CFG_R_W-1:0] base_col_local_q;
   logic [          CFG_R_W-1:0] row_sum;
@@ -89,9 +93,9 @@ module k_sign_correction
     end
     selected_diag_valid = record_valid_q && (selected_diag_idx != K_SIGN_DIAG_INVALID) &&
         (CFG_W_W'(selected_diag_idx) < i_cfg_w);
-    o_h_read_valid = selected_diag_valid;
-    o_h_block_idx = record_h_block_idx_q;
-    o_h_diag_idx_local = selected_diag_valid ? selected_diag_idx : '0;
+    o_h_read_valid = selected_valid_q;
+    o_h_block_idx = selected_h_block_idx_q;
+    o_h_diag_idx_local = selected_valid_q ? selected_diag_idx_q : '0;
   end
 
   always_comb begin
@@ -107,6 +111,10 @@ module k_sign_correction
       record_h_block_idx_q <= '0;
       record_slot_idx_q <= '0;
       record_col_local_q <= '0;
+      selected_valid_q <= 1'b0;
+      selected_h_block_idx_q <= '0;
+      selected_col_local_q <= '0;
+      selected_diag_idx_q <= '0;
       base_valid_q <= 1'b0;
       base_col_local_q <= '0;
       for (int bank_idx = 0; bank_idx < L; bank_idx++) begin
@@ -118,8 +126,12 @@ module k_sign_correction
       record_h_block_idx_q <= i_h_block_idx;
       record_slot_idx_q <= i_slot_idx;
       record_col_local_q <= request_col_local;
-      base_valid_q <= selected_diag_valid;
-      base_col_local_q <= record_col_local_q;
+      selected_valid_q <= selected_diag_valid;
+      selected_h_block_idx_q <= record_h_block_idx_q;
+      selected_col_local_q <= record_col_local_q;
+      selected_diag_idx_q <= selected_diag_idx;
+      base_valid_q <= selected_valid_q;
+      base_col_local_q <= selected_col_local_q;
       for (int bank_idx = 0; bank_idx < L; bank_idx++) begin
         o_flip_valid[bank_idx] <= 1'b0;
         o_flip_row_addr[bank_idx] <= '0;

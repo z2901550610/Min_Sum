@@ -49,7 +49,7 @@ Random test result:
 | --- | ---: |
 | Seed | 1 |
 | Iterations | 7 |
-| Decode cycles | 472372 |
+| Decode cycles | 472373 |
 | Target weight | 134 |
 | Output weight | 134 |
 | Residual weight | 0 |
@@ -58,9 +58,9 @@ Random test result:
 Cycle budget:
 
 ```text
-I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE) + 5
-= 7 * (386 + (44 + 1) * 71 * 21) + 5
-= 472372
+I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE) + 6
+= 7 * (386 + (44 + 1) * 71 * 21) + 6
+= 472373
 ```
 
 ## BIKE-192
@@ -89,7 +89,7 @@ Random test result:
 | --- | ---: |
 | Seed | 1 |
 | Iterations | 7 |
-| Decode cycles | 1322669 |
+| Decode cycles | 1322670 |
 | Target weight | 199 |
 | Output weight | 199 |
 | Residual weight | 0 |
@@ -98,9 +98,9 @@ Random test result:
 Cycle budget:
 
 ```text
-I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE) + 5
-= 7 * (771 + (86 + 1) * 103 * 21) + 5
-= 1322669
+I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE) + 6
+= 7 * (771 + (86 + 1) * 103 * 21) + 6
+= 1322670
 ```
 
 ## BIKE-256
@@ -129,7 +129,7 @@ Random test result:
 | --- | ---: |
 | Seed | 1 |
 | Iterations | 7 |
-| Decode cycles | 2929127 |
+| Decode cycles | 2929128 |
 | Target weight | 264 |
 | Output weight | 264 |
 | Residual weight | 0 |
@@ -138,9 +138,9 @@ Random test result:
 Cycle budget:
 
 ```text
-I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE) + 5
-= 7 * (1281 + (144 + 1) * 137 * 21) + 5
-= 2929127
+I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE) + 6
+= 7 * (1281 + (144 + 1) * 137 * 21) + 6
+= 2929128
 ```
 
 ## Result Template

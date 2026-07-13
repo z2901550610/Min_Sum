@@ -40,7 +40,7 @@ K-sign 每个迭代的调度周期数和顶层可见译码周期数为：
 
 ```text
 T_ITER   = ROW_SEG_SIZE + T_MAIN + 8 + TILES_TOTAL * T_CORR
-T_DECODE = I_MAX * T_ITER + 5
+T_DECODE = I_MAX * T_ITER + 6
 ```
 
 ## 可见状态
