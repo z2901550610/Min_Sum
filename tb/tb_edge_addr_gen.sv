@@ -3,6 +3,8 @@
 module tb_edge_addr_gen;
   import bike_pkg::*;
 
+  logic                        clk;
+  logic                        rst_n;
   logic                        phase_valid;
   logic [       H_BLOCK_W-1:0] h_block_idx;
   logic [      TILE_IDX_W-1:0] tile_idx;
@@ -22,6 +24,8 @@ module tb_edge_addr_gen;
   /* verilator lint_on UNUSEDSIGNAL */
 
   edge_addr_gen dut (
+      .i_clk(clk),
+      .i_rst_n(rst_n),
       .i_phase_valid(phase_valid),
       .i_h_block_idx(h_block_idx),
       .i_tile_idx(tile_idx),
@@ -40,8 +44,11 @@ module tb_edge_addr_gen;
       .o_tile_offset(tile_offset)
   );
 
+  initial clk = 1'b0;
+  always #1 clk = ~clk;
+
   initial begin
-    #10000;
+    #1000000;
     $fatal(1, "tb_edge_addr_gen timeout");
   end
 
@@ -114,6 +121,7 @@ module tb_edge_addr_gen;
 
       for (int lane_group_idx_loop = 0; lane_group_idx_loop < Q_TILE; lane_group_idx_loop++) begin
         lane_group_idx = LANE_GROUP_IDX_W'(lane_group_idx_loop);
+        @(posedge clk);
         #1;
         check_no_bank_conflict();
         if (diag_idx_global_base != expected_diag_idx_global) begin
@@ -219,12 +227,16 @@ module tb_edge_addr_gen;
   endtask
 
   initial begin
+    rst_n = 1'b0;
     phase_valid = 1'b1;
     h_block_idx = '0;
     tile_idx = '0;
     lane_group_idx = '0;
     base_row_idx = '0;
     diag_idx_local = '0;
+    repeat (2) @(posedge clk);
+    rst_n = 1'b1;
+    @(posedge clk);
     #1;
     if (valid_count() != first_group_cols(0)) begin
       $fatal(1, "base_row_idx=0 valid count mismatch got=%0d exp=%0d", valid_count(),
@@ -247,12 +259,14 @@ module tb_edge_addr_gen;
 
     base_row_idx   = ROW_IDX_W'(R - 1);
     lane_group_idx = '0;
+    @(posedge clk);
     #1;
     if (valid_count() != 1) $fatal(1, "pre-wrap should have one valid lane");
     if (!has_tile_offset(0)) $fatal(1, "pre-wrap offset 0 should be valid");
     check_no_bank_conflict();
 
     lane_group_idx = LANE_GROUP_IDX_W'(1);
+    @(posedge clk);
     #1;
     if (valid_count() != (first_group_cols(0) - 1)) begin
       $fatal(1, "post-wrap valid count mismatch got=%0d exp=%0d", valid_count(), first_group_cols(0
@@ -267,11 +281,13 @@ module tb_edge_addr_gen;
 
     base_row_idx   = '0;
     lane_group_idx = LANE_GROUP_IDX_W'(Q_TILE - 1);
+    @(posedge clk);
     #1;
     if (valid_count() != 0) $fatal(1, "guard dummy should have no valid lanes");
 
     tile_idx = TILE_IDX_W'(TILE_COUNT - 1);
     lane_group_idx = '0;
+    @(posedge clk);
     #1;
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
       if (valid[lane_idx] && (int'(col_idx[lane_idx]) >= N)) begin

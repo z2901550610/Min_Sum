@@ -532,7 +532,7 @@ module tb_bike_decoder_random;
   localparam int TEST_DECODE_CYCLES = I_MAX * (
       TEST_ROW_SEG_SIZE + (((N0 * TEST_TILE_COUNT) + 1) * TEST_W * Q_TILE)
       + (K_SIGN_ENABLE ? (8 + ((N0 * TEST_TILE_COUNT) * TEST_KSIGN_CORR_CYCLES)) : 0)
-  ) + 4;
+  ) + 5;
   localparam int SYNDROME_WEIGHT = {len(syndrome_positions)};
   localparam int ERROR_WEIGHT = {len(error_positions)};
   localparam int unsigned SYNDROME_POS [0:{syndrome_array_depth - 1}] = {sv_int_array(syndrome_positions)};

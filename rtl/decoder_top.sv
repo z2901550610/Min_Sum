@@ -100,6 +100,13 @@ module decoder_top
   logic                                c2v_iter_zero_e;
   logic        [        ROW_IDX_W-1:0] c2v_h_base_row_idx_e;
   logic                                comp_read_pair_sel_e;
+  logic                                c2v_phase_a;
+  logic        [       TILE_IDX_W-1:0] c2v_tile_idx_a;
+  logic        [       DIAG_IDX_W-1:0] c2v_diag_idx_local_a;
+  logic        [ LANE_GROUP_IDX_W-1:0] c2v_lane_group_idx_a;
+  logic                                c2v_fill_buf_a;
+  logic                                c2v_iter_zero_a;
+  logic                                comp_read_pair_sel_a;
 
   logic                                c2v_valid[0:L-1];
   logic        [            COL_W-1:0] c2v_col_idx[0:L-1];
@@ -182,6 +189,13 @@ module decoder_top
   logic                                v2c_final_iter_e;
   logic        [        ROW_IDX_W-1:0] v2c_h_base_row_idx_e;
   logic                                comp_write_pair_sel_e;
+  logic                                v2c_phase_a;
+  logic        [       TILE_IDX_W-1:0] v2c_tile_idx_a;
+  logic        [       DIAG_IDX_W-1:0] v2c_diag_idx_local_a;
+  logic        [ LANE_GROUP_IDX_W-1:0] v2c_lane_group_idx_a;
+  logic                                v2c_active_buf_a;
+  logic                                v2c_final_iter_a;
+  logic                                comp_write_pair_sel_a;
 
   logic                                v2c_valid[0:L-1];
   logic        [    DIAG_GLOBAL_W-1:0] v2c_diag_idx_global_base;
@@ -279,6 +293,8 @@ module decoder_top
   logic        [       DIAG_IDX_W-1:0] ksign_scan_diag_idx_local_e;
   logic        [ LANE_GROUP_IDX_W-1:0] ksign_scan_lane_group_idx_e;
   logic        [        ROW_IDX_W-1:0] ksign_scan_h_base_row_idx_e;
+  logic                                ksign_scan_phase_a;
+  logic        [       DIAG_IDX_W-1:0] ksign_scan_diag_idx_local_a;
   logic                                ksign_scan_phase_r;
   logic        [       DIAG_IDX_W-1:0] ksign_scan_diag_idx_local_r;
   logic                                ksign_scan_valid[0:L-1];
@@ -292,6 +308,8 @@ module decoder_top
   logic                                ksign_direct_flip_valid[0:L-1];
   logic        [      ROW_BANK_AW-1:0] ksign_direct_flip_row_addr[0:L-1];
   logic                                comp_flip_pair_sel;
+  logic                                comp_flip_valid_c[0:L-1];
+  logic        [      ROW_BANK_AW-1:0] comp_flip_row_addr_c[0:L-1];
   logic                                comp_flip_valid[0:L-1];
   logic        [      ROW_BANK_AW-1:0] comp_flip_row_addr[0:L-1];
 
@@ -343,11 +361,12 @@ module decoder_top
   logic                                ctrl_done_q;
   logic                                ctrl_done_s;
   logic                                ctrl_done_p;
+  logic                                ctrl_done_out;
 
   assign param_level_in = PROFILE_RUNTIME_SELECT ? i_param_level : PROFILE_DEFAULT;
 
   assign decode_start = i_start && o_h_loaded && !o_h_error;
-  assign o_done = ctrl_done_p;
+  assign o_done = ctrl_done_out;
 
   reset_sync u_reset_sync (
       .i_clk  (i_clk),
@@ -415,13 +434,13 @@ module decoder_top
         c2v_diag_idx_local_r;
 
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-      c2v_valid[lane_idx] = c2v_corr_valid[lane_idx] && c2v_phase_e;
+      c2v_valid[lane_idx] = c2v_corr_valid[lane_idx] && c2v_phase_a;
       c2v_col_idx[lane_idx] = c2v_corr_col_idx[lane_idx];
       c2v_diag_idx_global[lane_idx] = c2v_corr_diag_idx_global[lane_idx];
       c2v_row_bank[lane_idx] = c2v_corr_row_bank[lane_idx];
       c2v_row_addr[lane_idx] = c2v_corr_row_addr[lane_idx];
       c2v_tile_offset[lane_idx] = c2v_corr_tile_offset[lane_idx];
-      ksign_scan_valid[lane_idx] = c2v_corr_valid[lane_idx] && ksign_scan_phase_e;
+      ksign_scan_valid[lane_idx] = c2v_corr_valid[lane_idx] && ksign_scan_phase_a;
       ksign_scan_col_idx[lane_idx] = c2v_corr_col_idx[lane_idx];
       ksign_scan_row_addr[lane_idx] = c2v_corr_row_addr[lane_idx];
       ksign_read_valid[lane_idx] = ksign_corr_direct ?
@@ -481,9 +500,9 @@ module decoder_top
             ((c2v_diag_idx_local_c == '0) ? '0 : old_c2v_sum_c[lane_idx]) + c2v_tc_ext[lane_idx];
       end
 
-      comp_flip_valid[lane_idx] = ksign_direct_flip_valid[lane_idx] ||
+      comp_flip_valid_c[lane_idx] = ksign_direct_flip_valid[lane_idx] ||
           (ksign_scan_valid_q[lane_idx] && c2v_ksign_hit_mem[lane_idx]);
-      comp_flip_row_addr[lane_idx] = ksign_direct_flip_valid[lane_idx] ?
+      comp_flip_row_addr_c[lane_idx] = ksign_direct_flip_valid[lane_idx] ?
           ksign_direct_flip_row_addr[lane_idx] : ksign_scan_row_addr_q[lane_idx];
 
     end
@@ -554,6 +573,8 @@ module decoder_top
   );
 
   edge_addr_gen u_c2v_corr_addr_gen (
+      .i_clk(i_clk),
+      .i_rst_n(rst_n_sync),
       .i_phase_valid(c2v_phase_e || ksign_scan_phase_e),
       .i_h_block_idx(ksign_scan_phase_e ? ksign_scan_h_block_idx_e : c2v_h_block_idx_e),
       .i_tile_idx(ksign_scan_phase_e ? ksign_scan_tile_idx_e : c2v_tile_idx_e),
@@ -595,6 +616,8 @@ module decoder_top
   );
 
   edge_addr_gen u_v2c_addr_gen (
+      .i_clk(i_clk),
+      .i_rst_n(rst_n_sync),
       .i_phase_valid(v2c_phase_e),
       .i_h_block_idx(v2c_h_block_idx_e),
       .i_tile_idx(v2c_tile_idx_e),
@@ -806,6 +829,13 @@ module decoder_top
       c2v_iter_zero_e <= 1'b0;
       c2v_h_base_row_idx_e <= '0;
       comp_read_pair_sel_e <= 1'b0;
+      c2v_phase_a <= 1'b0;
+      c2v_tile_idx_a <= '0;
+      c2v_diag_idx_local_a <= '0;
+      c2v_lane_group_idx_a <= '0;
+      c2v_fill_buf_a <= 1'b0;
+      c2v_iter_zero_a <= 1'b0;
+      comp_read_pair_sel_a <= 1'b0;
       c2v_diag_idx_local_r <= '0;
       c2v_lane_group_idx_r <= '0;
       c2v_tile_idx_r <= '0;
@@ -855,6 +885,8 @@ module decoder_top
       ksign_scan_diag_idx_local_e <= '0;
       ksign_scan_lane_group_idx_e <= '0;
       ksign_scan_h_base_row_idx_e <= '0;
+      ksign_scan_phase_a <= 1'b0;
+      ksign_scan_diag_idx_local_a <= '0;
       ksign_scan_phase_r <= 1'b0;
       ksign_scan_diag_idx_local_r <= '0;
       ksign_read_diag_idx_local_q <= '0;
@@ -868,6 +900,13 @@ module decoder_top
       v2c_final_iter_e <= 1'b0;
       v2c_h_base_row_idx_e <= '0;
       comp_write_pair_sel_e <= 1'b0;
+      v2c_phase_a <= 1'b0;
+      v2c_tile_idx_a <= '0;
+      v2c_diag_idx_local_a <= '0;
+      v2c_lane_group_idx_a <= '0;
+      v2c_active_buf_a <= 1'b0;
+      v2c_final_iter_a <= 1'b0;
+      comp_write_pair_sel_a <= 1'b0;
       v2c_phase_r <= 1'b0;
       v2c_tile_idx_r <= '0;
       v2c_diag_idx_global_base_r <= '0;
@@ -881,6 +920,7 @@ module decoder_top
       ctrl_done_q <= 1'b0;
       ctrl_done_s <= 1'b0;
       ctrl_done_p <= 1'b0;
+      ctrl_done_out <= 1'b0;
       for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
         c2v_valid_r[lane_idx] <= 1'b0;
         c2v_col_idx_r[lane_idx] <= '0;
@@ -954,9 +994,11 @@ module decoder_top
         ksign_scan_row_addr_r[lane_idx] <= '0;
         ksign_scan_valid_q[lane_idx] <= 1'b0;
         ksign_scan_row_addr_q[lane_idx] <= '0;
+        comp_flip_valid[lane_idx] <= 1'b0;
+        comp_flip_row_addr[lane_idx] <= '0;
       end
     end else begin
-      if ((state == DEC_WAIT_START) || ((state == DEC_DONE) && ctrl_done_p)) begin
+      if ((state == DEC_WAIT_START) || ((state == DEC_DONE) && ctrl_done_out)) begin
         param_level <= param_level_in;
       end
 
@@ -977,12 +1019,19 @@ module decoder_top
       c2v_iter_zero_e <= c2v_iter_zero_h;
       c2v_h_base_row_idx_e <= c2v_h_base_row_idx;
       comp_read_pair_sel_e <= comp_read_pair_sel_h;
-      c2v_diag_idx_local_r <= c2v_diag_idx_local_e;
-      c2v_lane_group_idx_r <= c2v_lane_group_idx_e;
-      c2v_tile_idx_r <= c2v_tile_idx_e;
-      c2v_fill_buf_r <= c2v_fill_buf_e;
-      c2v_iter_zero_r <= c2v_iter_zero_e;
-      comp_read_pair_sel_r <= comp_read_pair_sel_e;
+      c2v_phase_a <= c2v_phase_e;
+      c2v_tile_idx_a <= c2v_tile_idx_e;
+      c2v_diag_idx_local_a <= c2v_diag_idx_local_e;
+      c2v_lane_group_idx_a <= c2v_lane_group_idx_e;
+      c2v_fill_buf_a <= c2v_fill_buf_e;
+      c2v_iter_zero_a <= c2v_iter_zero_e;
+      comp_read_pair_sel_a <= comp_read_pair_sel_e;
+      c2v_diag_idx_local_r <= c2v_diag_idx_local_a;
+      c2v_lane_group_idx_r <= c2v_lane_group_idx_a;
+      c2v_tile_idx_r <= c2v_tile_idx_a;
+      c2v_fill_buf_r <= c2v_fill_buf_a;
+      c2v_iter_zero_r <= c2v_iter_zero_a;
+      comp_read_pair_sel_r <= comp_read_pair_sel_a;
       c2v_diag_idx_local_q <= c2v_diag_idx_local_r;
       c2v_lane_group_idx_q <= c2v_lane_group_idx_r;
       c2v_fill_buf_q <= c2v_fill_buf_r;
@@ -1016,14 +1065,21 @@ module decoder_top
       v2c_final_iter_e <= v2c_final_iter_h;
       v2c_h_base_row_idx_e <= v2c_h_base_row_idx;
       comp_write_pair_sel_e <= comp_write_pair_sel_h;
-      v2c_phase_r <= v2c_phase_e;
-      v2c_tile_idx_r <= v2c_tile_idx_e;
+      v2c_phase_a <= v2c_phase_e;
+      v2c_tile_idx_a <= v2c_tile_idx_e;
+      v2c_diag_idx_local_a <= v2c_diag_idx_local_e;
+      v2c_lane_group_idx_a <= v2c_lane_group_idx_e;
+      v2c_active_buf_a <= v2c_active_buf_e;
+      v2c_final_iter_a <= v2c_final_iter_e;
+      comp_write_pair_sel_a <= comp_write_pair_sel_e;
+      v2c_phase_r <= v2c_phase_a;
+      v2c_tile_idx_r <= v2c_tile_idx_a;
       v2c_diag_idx_global_base_r <= v2c_diag_idx_global_base;
-      v2c_diag_idx_local_r <= v2c_diag_idx_local_e;
-      v2c_lane_group_idx_r <= v2c_lane_group_idx_e;
-      v2c_active_buf_r <= v2c_active_buf_e;
-      v2c_final_iter_r <= v2c_final_iter_e;
-      comp_write_pair_sel_r <= comp_write_pair_sel_e;
+      v2c_diag_idx_local_r <= v2c_diag_idx_local_a;
+      v2c_lane_group_idx_r <= v2c_lane_group_idx_a;
+      v2c_active_buf_r <= v2c_active_buf_a;
+      v2c_final_iter_r <= v2c_final_iter_a;
+      comp_write_pair_sel_r <= comp_write_pair_sel_a;
       v2c_phase_q <= v2c_phase_r;
       v2c_tile_idx_q <= v2c_tile_idx_r;
       v2c_diag_idx_global_base_q <= v2c_diag_idx_global_base_r;
@@ -1060,16 +1116,19 @@ module decoder_top
       ksign_scan_diag_idx_local_e <= ksign_scan_diag_idx_local_h;
       ksign_scan_lane_group_idx_e <= ksign_scan_lane_group_idx_h;
       ksign_scan_h_base_row_idx_e <= c2v_h_base_row_idx;
-      ksign_scan_phase_r <= ksign_scan_phase_e;
-      ksign_scan_diag_idx_local_r <= ksign_scan_diag_idx_local_e;
+      ksign_scan_phase_a <= ksign_scan_phase_e;
+      ksign_scan_diag_idx_local_a <= ksign_scan_diag_idx_local_e;
+      ksign_scan_phase_r <= ksign_scan_phase_a;
+      ksign_scan_diag_idx_local_r <= ksign_scan_diag_idx_local_a;
       ksign_read_diag_idx_local_q <= ksign_read_diag_idx_local;
       if (ksign_corr_phase_active) begin
         comp_flip_pair_sel <= comp_write_pair_sel;
       end
-      ctrl_done_r <= ctrl_done;
-      ctrl_done_q <= ctrl_done_r;
-      ctrl_done_s <= ctrl_done_q;
-      ctrl_done_p <= ctrl_done_s;
+      ctrl_done_r   <= ctrl_done;
+      ctrl_done_q   <= ctrl_done_r;
+      ctrl_done_s   <= ctrl_done_q;
+      ctrl_done_p   <= ctrl_done_s;
+      ctrl_done_out <= ctrl_done_p;
       for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
         c2v_valid_r[lane_idx] <= c2v_valid[lane_idx];
         c2v_col_idx_r[lane_idx] <= c2v_col_idx[lane_idx];
@@ -1143,6 +1202,8 @@ module decoder_top
         ksign_scan_row_addr_r[lane_idx] <= ksign_scan_row_addr[lane_idx];
         ksign_scan_valid_q[lane_idx] <= ksign_scan_valid_r[lane_idx];
         ksign_scan_row_addr_q[lane_idx] <= ksign_scan_row_addr_r[lane_idx];
+        comp_flip_valid[lane_idx] <= comp_flip_valid_c[lane_idx];
+        comp_flip_row_addr[lane_idx] <= comp_flip_row_addr_c[lane_idx];
       end
     end
   end

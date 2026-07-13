@@ -9,6 +9,9 @@ tile_linear = h_block_idx * TILE_COUNT + tile_idx
 tile_base   = tile_idx * COLS_PER_TILE
 ```
 
+`edge_addr_gen` 使用两级流水：第一级寄存 tile、wrap 和参数上下文，第二级计算每个
+bank 的 lane 偏移与行地址。流水每拍接收一组地址请求，内部延迟不改变固定窗口长度。
+
 每个迭代先执行 `ROW_SEG_SIZE` 个 check-state 写 pair 清空周期。每个 tile 固定执行：
 
 ```text
@@ -37,7 +40,7 @@ K-sign 每个迭代的调度周期数和顶层可见译码周期数为：
 
 ```text
 T_ITER   = ROW_SEG_SIZE + T_MAIN + 8 + TILES_TOTAL * T_CORR
-T_DECODE = I_MAX * T_ITER + 4
+T_DECODE = I_MAX * T_ITER + 5
 ```
 
 ## 可见状态
