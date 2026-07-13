@@ -42,14 +42,9 @@ module decoder_top
   logic        [        TILE_ID_W-1:0] unused_c2v_tile_linear;
   logic        [        TILE_ID_W-1:0] unused_v2c_tile_linear;
   logic                                unused_iter_first_cycle;
-  logic        [        ROW_IDX_W-1:0] unused_c2v_check_row_idx[0:L-1];
+  logic        [        ROW_IDX_W-1:0] unused_c2v_corr_check_row_idx[0:L-1];
   logic        [        ROW_IDX_W-1:0] unused_v2c_check_row_idx[0:L-1];
-  logic        [        ROW_IDX_W-1:0] unused_ksign_corr_check_row_idx[0:L-1];
-  logic        [    DIAG_GLOBAL_W-1:0] unused_c2v_diag_idx_global_base;
-  logic        [    DIAG_GLOBAL_W-1:0] unused_ksign_corr_diag_idx_global_base;
-  logic        [    DIAG_GLOBAL_W-1:0] unused_ksign_corr_diag_idx_global[0:L-1];
-  logic        [       LANE_IDX_W-1:0] unused_ksign_corr_row_bank[0:L-1];
-  logic        [       TILE_OFF_W-1:0] unused_ksign_corr_tile_offset[0:L-1];
+  logic        [    DIAG_GLOBAL_W-1:0] unused_c2v_corr_diag_idx_global_base;
   /* verilator lint_on UNUSEDSIGNAL */
   logic                                c2v_phase_active;
   logic                                v2c_phase_active;
@@ -81,6 +76,12 @@ module decoder_top
   logic        [        ROW_IDX_W-1:0] c2v_h_base_row_idx;
   logic        [        ROW_IDX_W-1:0] v2c_h_base_row_idx;
   logic        [        ROW_IDX_W-1:0] ksign_corr_h_base_row_idx_e;
+  logic                                c2v_corr_valid[0:L-1];
+  logic        [            COL_W-1:0] c2v_corr_col_idx[0:L-1];
+  logic        [    DIAG_GLOBAL_W-1:0] c2v_corr_diag_idx_global[0:L-1];
+  logic        [       LANE_IDX_W-1:0] c2v_corr_row_bank[0:L-1];
+  logic        [      ROW_BANK_AW-1:0] c2v_corr_row_addr[0:L-1];
+  logic        [       TILE_OFF_W-1:0] c2v_corr_tile_offset[0:L-1];
 
   logic                                c2v_phase_h;
   logic        [        H_BLOCK_W-1:0] c2v_h_block_idx_h;
@@ -404,6 +405,15 @@ module decoder_top
     ksign_read_diag_idx_local = ksign_corr_phase_r ? ksign_corr_diag_idx_local_r : c2v_diag_idx_local_r;
 
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
+      c2v_valid[lane_idx] = c2v_corr_valid[lane_idx] && c2v_phase_e;
+      c2v_col_idx[lane_idx] = c2v_corr_col_idx[lane_idx];
+      c2v_diag_idx_global[lane_idx] = c2v_corr_diag_idx_global[lane_idx];
+      c2v_row_bank[lane_idx] = c2v_corr_row_bank[lane_idx];
+      c2v_row_addr[lane_idx] = c2v_corr_row_addr[lane_idx];
+      c2v_tile_offset[lane_idx] = c2v_corr_tile_offset[lane_idx];
+      ksign_corr_valid[lane_idx] = c2v_corr_valid[lane_idx] && ksign_corr_phase_e;
+      ksign_corr_col_idx[lane_idx] = c2v_corr_col_idx[lane_idx];
+      ksign_corr_row_addr[lane_idx] = c2v_corr_row_addr[lane_idx];
       ksign_read_valid[lane_idx] = ksign_corr_phase_r ? ksign_corr_valid_r[lane_idx] :
           c2v_valid_r[lane_idx];
       ksign_read_col_idx[lane_idx] = ksign_corr_phase_r ? ksign_corr_col_idx_r[lane_idx] :
@@ -525,23 +535,23 @@ module decoder_top
       .o_iter_count(o_iter_count)
   );
 
-  edge_addr_gen u_c2v_addr_gen (
-      .i_phase_valid(c2v_phase_e),
-      .i_h_block_idx(c2v_h_block_idx_e),
-      .i_tile_idx(c2v_tile_idx_e),
-      .i_lane_group_idx(c2v_lane_group_idx_e),
-      .i_base_row_idx(c2v_h_base_row_idx_e),
-      .i_diag_idx_local(c2v_diag_idx_local_e),
+  edge_addr_gen u_c2v_corr_addr_gen (
+      .i_phase_valid(c2v_phase_e || ksign_corr_phase_e),
+      .i_h_block_idx(ksign_corr_phase_e ? ksign_corr_h_block_idx_e : c2v_h_block_idx_e),
+      .i_tile_idx(ksign_corr_phase_e ? ksign_corr_tile_idx_e : c2v_tile_idx_e),
+      .i_lane_group_idx(ksign_corr_phase_e ? ksign_corr_lane_group_idx_e : c2v_lane_group_idx_e),
+      .i_base_row_idx(ksign_corr_phase_e ? ksign_corr_h_base_row_idx_e : c2v_h_base_row_idx_e),
+      .i_diag_idx_local(ksign_corr_phase_e ? ksign_corr_diag_idx_local_e : c2v_diag_idx_local_e),
       .i_cfg_r(cfg_r),
       .i_cfg_w(cfg_w),
-      .o_valid(c2v_valid),
-      .o_check_row_idx(unused_c2v_check_row_idx),
-      .o_col_idx(c2v_col_idx),
-      .o_diag_idx_global_base(unused_c2v_diag_idx_global_base),
-      .o_diag_idx_global(c2v_diag_idx_global),
-      .o_row_bank(c2v_row_bank),
-      .o_row_addr(c2v_row_addr),
-      .o_tile_offset(c2v_tile_offset)
+      .o_valid(c2v_corr_valid),
+      .o_check_row_idx(unused_c2v_corr_check_row_idx),
+      .o_col_idx(c2v_corr_col_idx),
+      .o_diag_idx_global_base(unused_c2v_corr_diag_idx_global_base),
+      .o_diag_idx_global(c2v_corr_diag_idx_global),
+      .o_row_bank(c2v_corr_row_bank),
+      .o_row_addr(c2v_corr_row_addr),
+      .o_tile_offset(c2v_corr_tile_offset)
   );
 
   edge_addr_gen u_v2c_addr_gen (
@@ -561,25 +571,6 @@ module decoder_top
       .o_row_bank(v2c_row_bank),
       .o_row_addr(v2c_row_addr),
       .o_tile_offset(v2c_tile_offset)
-  );
-
-  edge_addr_gen u_ksign_corr_addr_gen (
-      .i_phase_valid(ksign_corr_phase_e),
-      .i_h_block_idx(ksign_corr_h_block_idx_e),
-      .i_tile_idx(ksign_corr_tile_idx_e),
-      .i_lane_group_idx(ksign_corr_lane_group_idx_e),
-      .i_base_row_idx(ksign_corr_h_base_row_idx_e),
-      .i_diag_idx_local(ksign_corr_diag_idx_local_e),
-      .i_cfg_r(cfg_r),
-      .i_cfg_w(cfg_w),
-      .o_valid(ksign_corr_valid),
-      .o_check_row_idx(unused_ksign_corr_check_row_idx),
-      .o_col_idx(ksign_corr_col_idx),
-      .o_diag_idx_global_base(unused_ksign_corr_diag_idx_global_base),
-      .o_diag_idx_global(unused_ksign_corr_diag_idx_global),
-      .o_row_bank(unused_ksign_corr_row_bank),
-      .o_row_addr(ksign_corr_row_addr),
-      .o_tile_offset(unused_ksign_corr_tile_offset)
   );
 
   ram_m u_ram_m (

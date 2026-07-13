@@ -1,0 +1,13 @@
+<mxfile host="app.diagrams.net" modified="2026-07-12T00:00:00.000Z" agent="Codex recovery" version="26.0.0" type="device">
+  <diagram id="recovered-decoder-top" name="Recovered decoder top" compressed="false">
+    <mxGraphModel dx="3498" dy="1473" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="3498" pageHeight="1473" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="recovered-image" value="" style="shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;aspect=fixed;image=file%3A%2F%2F%2FUsers%2Fz2901550610%2FDocuments%2FMin_Sum%2Fdocs%2Frecovered%2F1_decoder%2520top.recovered.png;" vertex="1" parent="1">
+          <mxGeometry x="0" y="0" width="1749" height="736.5" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

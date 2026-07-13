@@ -17,6 +17,8 @@ module k_sign_selector
     output logic [K_SIGN_RECORD_W-1:0] o_commit_record[0:L-1]
 );
 
+  localparam int ROUTE_W = 1 + K_SIGN_WORK_AW + COL_W + MSG_W + 1;
+
   logic                            work_read_valid[0:L-1];
   logic [      K_SIGN_WORK_AW-1:0] work_read_addr[0:L-1];
   logic [K_SIGN_WORK_RECORD_W-1:0] work_read_record[0:L-1];
@@ -26,6 +28,9 @@ module k_sign_selector
   logic [               COL_W-1:0] routed_col_idx[0:L-1];
   logic [               MSG_W-1:0] routed_v2c_msg[0:L-1];
   logic                            routed_base_sign[0:L-1];
+  logic [             ROUTE_W-1:0] route_in[0:L-1];
+  logic [             ROUTE_W-1:0] route_out[0:L-1];
+  logic [          LANE_IDX_W-1:0] route_shift;
 
   logic                            read_valid_q[0:L-1];
   logic [      K_SIGN_WORK_AW-1:0] read_addr_q[0:L-1];
@@ -60,23 +65,27 @@ module k_sign_selector
   endfunction
 
   always_comb begin
-    for (int bank_idx = 0; bank_idx < L; bank_idx++) begin
-      work_read_valid[bank_idx]  = 1'b0;
-      work_read_addr[bank_idx]   = '0;
-      routed_col_idx[bank_idx]   = '0;
-      routed_v2c_msg[bank_idx]   = '0;
-      routed_base_sign[bank_idx] = 1'b0;
-      for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-        if (i_valid[lane_idx] && (col_bank(i_col_idx[lane_idx]) == LANE_IDX_W'(bank_idx))) begin
-          work_read_valid[bank_idx]  = 1'b1;
-          work_read_addr[bank_idx]   = work_addr(i_tile_offset[lane_idx]);
-          routed_col_idx[bank_idx]   = i_col_idx[lane_idx];
-          routed_v2c_msg[bank_idx]   = i_v2c_msg[lane_idx];
-          routed_base_sign[bank_idx] = i_base_sign[lane_idx];
-        end
-      end
+    route_shift = col_bank(i_col_idx[0]);
+    for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
+      route_in[lane_idx] = {
+        i_valid[lane_idx],
+        work_addr(i_tile_offset[lane_idx]),
+        i_col_idx[lane_idx],
+        i_v2c_msg[lane_idx],
+        i_base_sign[lane_idx]
+      };
+      {work_read_valid[lane_idx], work_read_addr[lane_idx], routed_col_idx[lane_idx],
+       routed_v2c_msg[lane_idx], routed_base_sign[lane_idx]} = route_out[lane_idx];
     end
   end
+
+  barrel_rotate #(
+      .DATA_W(ROUTE_W)
+  ) u_work_route (
+      .i_data (route_in),
+      .i_shift(LANE_IDX_W'('0 - route_shift)),
+      .o_data (route_out)
+  );
 
   generate
     for (genvar bank_idx = 0; bank_idx < L; bank_idx++) begin : g_bank

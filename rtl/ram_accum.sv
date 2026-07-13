@@ -20,9 +20,24 @@ module ram_accum
 
   localparam int ACCUM_BANK_DEPTH = Q_BASE;
   localparam int ACCUM_BANK_AW = (ACCUM_BANK_DEPTH > 1) ? $clog2(ACCUM_BANK_DEPTH) : 1;
+  localparam int READ_ROUTE_W = 1 + ACCUM_BANK_AW;
+  localparam int WRITE_ROUTE_W = READ_ROUTE_W + ACC_W;
 
   logic signed [        ACC_W-1:0] c2v_bank_rdata[  0:1][0:L-1];
   logic signed [        ACC_W-1:0] v2c_bank_rdata[  0:1][0:L-1];
+  logic        [ READ_ROUTE_W-1:0] c2v_read_route_in[0:L-1];
+  logic        [ READ_ROUTE_W-1:0] c2v_read_route_out[0:L-1];
+  logic        [WRITE_ROUTE_W-1:0] c2v_write_route_in[0:L-1];
+  logic        [WRITE_ROUTE_W-1:0] c2v_write_route_out[0:L-1];
+  logic        [ READ_ROUTE_W-1:0] v2c_read_route_in[0:L-1];
+  logic        [ READ_ROUTE_W-1:0] v2c_read_route_out[0:L-1];
+  logic        [        ACC_W-1:0] c2v_selected_bank_rdata[0:L-1];
+  logic        [        ACC_W-1:0] v2c_selected_bank_rdata[0:L-1];
+  logic        [        ACC_W-1:0] c2v_lane_rdata[0:L-1];
+  logic        [        ACC_W-1:0] v2c_lane_rdata[0:L-1];
+  logic        [   LANE_IDX_W-1:0] c2v_read_shift;
+  logic        [   LANE_IDX_W-1:0] c2v_write_shift;
+  logic        [   LANE_IDX_W-1:0] v2c_read_shift;
   logic                            routed_c2v_read_valid[0:L-1];
   logic        [ACCUM_BANK_AW-1:0] routed_c2v_read_addr[0:L-1];
   logic                            routed_c2v_write_valid[0:L-1];
@@ -45,37 +60,71 @@ module ram_accum
   endfunction
 
   always_comb begin
-    for (int bank_idx = 0; bank_idx < L; bank_idx++) begin
-      routed_c2v_read_valid[bank_idx]  = 1'b0;
-      routed_c2v_read_addr[bank_idx]   = '0;
-      routed_c2v_write_valid[bank_idx] = 1'b0;
-      routed_c2v_write_addr[bank_idx]  = '0;
-      routed_c2v_write_data[bank_idx]  = '0;
-      routed_v2c_read_valid[bank_idx]  = 1'b0;
-      routed_v2c_read_addr[bank_idx]   = '0;
-      for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-        if (i_c2v_read_valid[lane_idx] && (offset_bank(
-                i_c2v_read_tile_offset[lane_idx]
-            ) == LANE_IDX_W'(bank_idx))) begin
-          routed_c2v_read_valid[bank_idx] = 1'b1;
-          routed_c2v_read_addr[bank_idx]  = offset_addr(i_c2v_read_tile_offset[lane_idx]);
-        end
-        if (i_c2v_write_valid[lane_idx] && (offset_bank(
-                i_c2v_write_tile_offset[lane_idx]
-            ) == LANE_IDX_W'(bank_idx))) begin
-          routed_c2v_write_valid[bank_idx] = 1'b1;
-          routed_c2v_write_addr[bank_idx]  = offset_addr(i_c2v_write_tile_offset[lane_idx]);
-          routed_c2v_write_data[bank_idx]  = i_updated_c2v_sum[lane_idx];
-        end
-        if (i_v2c_valid[lane_idx] && (offset_bank(
-                i_v2c_tile_offset[lane_idx]
-            ) == LANE_IDX_W'(bank_idx))) begin
-          routed_v2c_read_valid[bank_idx] = 1'b1;
-          routed_v2c_read_addr[bank_idx]  = offset_addr(i_v2c_tile_offset[lane_idx]);
-        end
-      end
+    c2v_read_shift  = offset_bank(i_c2v_read_tile_offset[0]);
+    c2v_write_shift = offset_bank(i_c2v_write_tile_offset[0]);
+    v2c_read_shift  = offset_bank(i_v2c_tile_offset[0]);
+    for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
+      c2v_read_route_in[lane_idx] = {
+        i_c2v_read_valid[lane_idx], offset_addr(i_c2v_read_tile_offset[lane_idx])
+      };
+      c2v_write_route_in[lane_idx] = {
+        i_c2v_write_valid[lane_idx],
+        offset_addr(i_c2v_write_tile_offset[lane_idx]),
+        i_updated_c2v_sum[lane_idx]
+      };
+      v2c_read_route_in[lane_idx] = {
+        i_v2c_valid[lane_idx], offset_addr(i_v2c_tile_offset[lane_idx])
+      };
+      c2v_selected_bank_rdata[lane_idx] = c2v_bank_rdata[int'(i_c2v_read_buf)][lane_idx];
+      v2c_selected_bank_rdata[lane_idx] = v2c_bank_rdata[int'(i_active_buf)][lane_idx];
+      {routed_c2v_read_valid[lane_idx], routed_c2v_read_addr[lane_idx]} =
+          c2v_read_route_out[lane_idx];
+      {routed_c2v_write_valid[lane_idx], routed_c2v_write_addr[lane_idx],
+       routed_c2v_write_data[lane_idx]} = c2v_write_route_out[lane_idx];
+      {routed_v2c_read_valid[lane_idx], routed_v2c_read_addr[lane_idx]} =
+          v2c_read_route_out[lane_idx];
     end
   end
+
+  barrel_rotate #(
+      .DATA_W(READ_ROUTE_W)
+  ) u_c2v_read_route (
+      .i_data (c2v_read_route_in),
+      .i_shift(LANE_IDX_W'('0 - c2v_read_shift)),
+      .o_data (c2v_read_route_out)
+  );
+
+  barrel_rotate #(
+      .DATA_W(WRITE_ROUTE_W)
+  ) u_c2v_write_route (
+      .i_data (c2v_write_route_in),
+      .i_shift(LANE_IDX_W'('0 - c2v_write_shift)),
+      .o_data (c2v_write_route_out)
+  );
+
+  barrel_rotate #(
+      .DATA_W(READ_ROUTE_W)
+  ) u_v2c_read_route (
+      .i_data (v2c_read_route_in),
+      .i_shift(LANE_IDX_W'('0 - v2c_read_shift)),
+      .o_data (v2c_read_route_out)
+  );
+
+  barrel_rotate #(
+      .DATA_W(ACC_W)
+  ) u_c2v_read_return (
+      .i_data (c2v_selected_bank_rdata),
+      .i_shift(c2v_read_shift),
+      .o_data (c2v_lane_rdata)
+  );
+
+  barrel_rotate #(
+      .DATA_W(ACC_W)
+  ) u_v2c_read_return (
+      .i_data (v2c_selected_bank_rdata),
+      .i_shift(v2c_read_shift),
+      .o_data (v2c_lane_rdata)
+  );
 
   generate
     for (genvar buf_idx = 0; buf_idx < 2; buf_idx++) begin : g_buf
@@ -115,11 +164,8 @@ module ram_accum
 
   always_comb begin
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-      o_old_c2v_sum[lane_idx] = i_c2v_read_valid[lane_idx] ?
-          c2v_bank_rdata[int'(i_c2v_read_buf)][int'(offset_bank(i_c2v_read_tile_offset[lane_idx]))]
-          : '0;
-      o_c2v_sum[lane_idx] = i_v2c_valid[lane_idx] ?
-          v2c_bank_rdata[int'(i_active_buf)][int'(offset_bank(i_v2c_tile_offset[lane_idx]))] : '0;
+      o_old_c2v_sum[lane_idx] = i_c2v_read_valid[lane_idx] ? $signed(c2v_lane_rdata[lane_idx]) : '0;
+      o_c2v_sum[lane_idx] = i_v2c_valid[lane_idx] ? $signed(v2c_lane_rdata[lane_idx]) : '0;
     end
   end
 endmodule

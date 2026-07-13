@@ -161,15 +161,13 @@ module edge_addr_gen
         lane_valid = 1'b0;
       end
 
-      if (lane_valid) begin
-        o_valid[bank_idx] = 1'b1;
-        o_check_row_idx[bank_idx] = ROW_IDX_W'(check_row_idx);
-        o_col_idx[bank_idx] = h_block_col_base(i_h_block_idx, i_cfg_r) + COL_W'(col_local);
-        o_diag_idx_global[bank_idx] = diag_idx_global_base;
-        o_row_bank[bank_idx] = LANE_IDX_W'(bank_idx);
-        o_row_addr[bank_idx] = row_addr;
-        o_tile_offset[bank_idx] = TILE_OFF_W'(offset);
-      end
+      o_valid[bank_idx] = lane_valid;
+      o_check_row_idx[bank_idx] = ROW_IDX_W'(check_row_idx);
+      o_col_idx[bank_idx] = h_block_col_base(i_h_block_idx, i_cfg_r) + COL_W'(col_local);
+      o_diag_idx_global[bank_idx] = diag_idx_global_base;
+      o_row_bank[bank_idx] = LANE_IDX_W'(bank_idx);
+      o_row_addr[bank_idx] = row_addr;
+      o_tile_offset[bank_idx] = TILE_OFF_W'(offset);
     end
   end
 endmodule

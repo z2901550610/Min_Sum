@@ -79,13 +79,13 @@ module ram_s
   logic                                  read_valid;
   logic           [SIGN_CHUNK_IDX_W-1:0] read_chunk_q;
   logic                                  read_valid_q;
-  sign_word_idx_t                        lane_rbit        [               0:L-1];
-  sign_word_idx_t                        lane_rbit_q      [               0:L-1];
-  logic                                  lane_read_valid_q[               0:L-1];
-  sign_word_t                            lane_word_q      [               0:L-1];
-  sign_word_t                            lane_word_next   [               0:L-1];
-  logic                                  lane_sign_next[               0:L-1];
-  logic                                  lane_sign_q[               0:L-1];
+  sign_word_idx_t                        lane_rbit[0:L-1];
+  sign_word_idx_t                        lane_rbit_q[0:L-1];
+  logic                                  lane_read_valid_q[0:L-1];
+  sign_word_t                            lane_word_q[0:L-1];
+  sign_word_t                            lane_word_next[0:L-1];
+  logic                                  lane_sign_next[0:L-1];
+  logic                                  lane_sign_q[0:L-1];
   logic                                  word_start;
   logic                                  word_flush;
   logic           [    SIGN_BANK_AW-1:0] write_addr;
@@ -94,7 +94,7 @@ module ram_s
   sign_word_idx_t                        write_bit;
   sign_frame_t                           write_frame_next;
   sign_frame_t                           read_frame_next;
-  sign_frame_t                           chunk_rframe_q   [0:SIGN_CHUNK_COUNT-1];
+  sign_frame_t                           chunk_rframe_q[0:SIGN_CHUNK_COUNT-1];
 
   always_comb begin
     logic [DIAG_GLOBAL_W-1:0] read_diag_idx_global;

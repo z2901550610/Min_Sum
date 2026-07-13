@@ -14,6 +14,7 @@ RTL_CORE = [
     "rtl/decoder_profile_config.sv",
     "rtl/ram_bram.sv",
     "rtl/ram_i.sv",
+    "rtl/barrel_rotate.sv",
     "rtl/edge_addr_gen.sv",
     "rtl/tile_scheduler.sv",
     "rtl/ram_m.sv",

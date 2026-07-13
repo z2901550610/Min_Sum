@@ -15,14 +15,19 @@ module ram_k_global
 
   localparam int KSIGN_BANK_DEPTH = (N + L - 1) / L;
   localparam int KSIGN_BANK_AW = (KSIGN_BANK_DEPTH > 1) ? $clog2(KSIGN_BANK_DEPTH) : 1;
+  localparam int READ_ROUTE_W = 1 + KSIGN_BANK_AW;
 
   logic [K_SIGN_RECORD_W-1:0] bank_rdata[0:L-1];
+  logic [   READ_ROUTE_W-1:0] read_route_in[0:L-1];
+  logic [   READ_ROUTE_W-1:0] read_route_out[0:L-1];
+  logic [K_SIGN_RECORD_W-1:0] read_record_route_out[0:L-1];
   logic                       routed_read_valid[0:L-1];
   logic [  KSIGN_BANK_AW-1:0] routed_read_addr[0:L-1];
   logic                       routed_write_valid[0:L-1];
   logic [  KSIGN_BANK_AW-1:0] routed_write_addr[0:L-1];
   logic [K_SIGN_RECORD_W-1:0] routed_write_data[0:L-1];
-  logic [     LANE_IDX_W-1:0] read_lane_bank_q[0:L-1];
+  logic [     LANE_IDX_W-1:0] read_route_shift;
+  logic [     LANE_IDX_W-1:0] read_route_shift_q;
 
   function automatic logic [LANE_IDX_W-1:0] col_bank(input  logic [COL_W-1:0] col_idx);
     begin
@@ -37,22 +42,31 @@ module ram_k_global
   endfunction
 
   always_comb begin
+    read_route_shift = col_bank(i_read_col_idx[0]);
     for (int bank_idx = 0; bank_idx < L; bank_idx++) begin
-      routed_read_valid[bank_idx]  = 1'b0;
-      routed_read_addr[bank_idx]   = '0;
+      read_route_in[bank_idx] = {i_read_valid[bank_idx], col_addr(i_read_col_idx[bank_idx])};
+      {routed_read_valid[bank_idx], routed_read_addr[bank_idx]} = read_route_out[bank_idx];
       routed_write_valid[bank_idx] = i_write_valid[bank_idx];
-      routed_write_addr[bank_idx]  = col_addr(i_write_col_idx[bank_idx]);
-      routed_write_data[bank_idx]  = i_write_record[bank_idx];
-      for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-        if (i_read_valid[lane_idx] && (col_bank(
-                i_read_col_idx[lane_idx]
-            ) == LANE_IDX_W'(bank_idx))) begin
-          routed_read_valid[bank_idx] = 1'b1;
-          routed_read_addr[bank_idx]  = col_addr(i_read_col_idx[lane_idx]);
-        end
-      end
+      routed_write_addr[bank_idx] = col_addr(i_write_col_idx[bank_idx]);
+      routed_write_data[bank_idx] = i_write_record[bank_idx];
     end
   end
+
+  barrel_rotate #(
+      .DATA_W(READ_ROUTE_W)
+  ) u_read_route (
+      .i_data (read_route_in),
+      .i_shift(LANE_IDX_W'('0 - read_route_shift)),
+      .o_data (read_route_out)
+  );
+
+  barrel_rotate #(
+      .DATA_W(K_SIGN_RECORD_W)
+  ) u_read_return (
+      .i_data (bank_rdata),
+      .i_shift(read_route_shift_q),
+      .o_data (read_record_route_out)
+  );
 
   generate
     for (genvar bank_idx = 0; bank_idx < L; bank_idx++) begin : g_bank
@@ -74,19 +88,15 @@ module ram_k_global
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin
-      for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-        read_lane_bank_q[lane_idx] <= '0;
-      end
+      read_route_shift_q <= '0;
     end else begin
-      for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-        read_lane_bank_q[lane_idx] <= col_bank(i_read_col_idx[lane_idx]);
-      end
+      read_route_shift_q <= read_route_shift;
     end
   end
 
   always_comb begin
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-      o_read_record[lane_idx] = bank_rdata[read_lane_bank_q[lane_idx]];
+      o_read_record[lane_idx] = read_record_route_out[lane_idx];
     end
   end
 
