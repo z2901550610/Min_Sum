@@ -18,10 +18,16 @@ module ram_k_global
   localparam int READ_ROUTE_W = 1 + KSIGN_BANK_AW;
   localparam int BASE_SIGN_BIT = 0;
   localparam int SLOT_BASE_LSB = 1;
+  localparam int DIAG_SEG_MAX_AW = 12;
+  localparam int DIAG_SEG_AW = (KSIGN_BANK_AW < DIAG_SEG_MAX_AW) ? KSIGN_BANK_AW : DIAG_SEG_MAX_AW;
+  localparam int DIAG_SEG_DEPTH = 1 << DIAG_SEG_AW;
+  localparam int DIAG_SEG_COUNT = (KSIGN_BANK_DEPTH + DIAG_SEG_DEPTH - 1) / DIAG_SEG_DEPTH;
+  localparam int DIAG_SEG_IDX_W = (DIAG_SEG_COUNT > 1) ? $clog2(DIAG_SEG_COUNT) : 1;
 
   logic [K_SIGN_RECORD_W-1:0] bank_rdata[0:L-1];
   logic [                0:0] bank_base_sign_rdata[0:L-1];
   logic [     DIAG_IDX_W-1:0] bank_diag_rdata[0:L-1][0:K_SIGN_K-1];
+  logic [     DIAG_IDX_W-1:0] bank_diag_segment_rdata[0:L-1] [0:K_SIGN_K-1] [0:DIAG_SEG_COUNT-1];
   logic [   READ_ROUTE_W-1:0] read_route_in[0:L-1];
   logic [   READ_ROUTE_W-1:0] read_route_out[0:L-1];
   logic [K_SIGN_RECORD_W-1:0] read_record_route_out[0:L-1];
@@ -30,6 +36,14 @@ module ram_k_global
   logic                       routed_write_valid[0:L-1];
   logic [  KSIGN_BANK_AW-1:0] routed_write_addr[0:L-1];
   logic [K_SIGN_RECORD_W-1:0] routed_write_data[0:L-1];
+  logic                       write_valid_q[0:L-1];
+  logic [  KSIGN_BANK_AW-1:0] write_addr_q[0:L-1];
+  logic [K_SIGN_RECORD_W-1:0] write_data_q[0:L-1];
+  logic [ DIAG_SEG_IDX_W-1:0] diag_read_segment_idx[0:L-1];
+  logic [ DIAG_SEG_IDX_W-1:0] diag_read_segment_idx_q[0:L-1];
+  logic [    DIAG_SEG_AW-1:0] diag_read_local_addr[0:L-1];
+  logic [ DIAG_SEG_IDX_W-1:0] diag_write_segment_idx[0:L-1];
+  logic [    DIAG_SEG_AW-1:0] diag_write_local_addr[0:L-1];
   logic [     LANE_IDX_W-1:0] read_route_shift;
   logic [     LANE_IDX_W-1:0] read_route_shift_q;
 
@@ -59,6 +73,10 @@ module ram_k_global
       routed_write_valid[bank_idx] = i_write_valid[bank_idx];
       routed_write_addr[bank_idx] = col_addr(i_write_col_idx[bank_idx]);
       routed_write_data[bank_idx] = i_write_record[bank_idx];
+      diag_read_segment_idx[bank_idx] = DIAG_SEG_IDX_W'(routed_read_addr[bank_idx] >> DIAG_SEG_AW);
+      diag_read_local_addr[bank_idx] = DIAG_SEG_AW'(routed_read_addr[bank_idx]);
+      diag_write_segment_idx[bank_idx] = DIAG_SEG_IDX_W'(write_addr_q[bank_idx] >> DIAG_SEG_AW);
+      diag_write_local_addr[bank_idx] = DIAG_SEG_AW'(write_addr_q[bank_idx]);
     end
   end
 
@@ -86,34 +104,45 @@ module ram_k_global
           .ADDR_W(KSIGN_BANK_AW)
       ) u_base_bram (
           .i_clk  (i_clk),
-          .i_we   (routed_write_valid[bank_idx]),
-          .i_waddr(routed_write_addr[bank_idx]),
-          .i_wdata(routed_write_data[bank_idx][BASE_SIGN_BIT]),
+          .i_we   (write_valid_q[bank_idx]),
+          .i_waddr(write_addr_q[bank_idx]),
+          .i_wdata(write_data_q[bank_idx][BASE_SIGN_BIT]),
           .i_re   (routed_read_valid[bank_idx]),
           .i_raddr(routed_read_addr[bank_idx]),
           .o_rdata(bank_base_sign_rdata[bank_idx])
       );
 
       for (genvar slot_idx = 0; slot_idx < K_SIGN_K; slot_idx++) begin : g_slot
-        ram_bram #(
-            .DATA_W(DIAG_IDX_W),
-            .DEPTH (KSIGN_BANK_DEPTH),
-            .ADDR_W(KSIGN_BANK_AW)
-        ) u_diag_bram (
-            .i_clk  (i_clk),
-            .i_we   (routed_write_valid[bank_idx]),
-            .i_waddr(routed_write_addr[bank_idx]),
-            .i_wdata(routed_write_data[bank_idx][slot_lsb(slot_idx)+:DIAG_IDX_W]),
-            .i_re   (routed_read_valid[bank_idx]),
-            .i_raddr(routed_read_addr[bank_idx]),
-            .o_rdata(bank_diag_rdata[bank_idx][slot_idx])
-        );
+        for (genvar segment_idx = 0; segment_idx < DIAG_SEG_COUNT; segment_idx++) begin : g_segment
+          ram_bram #(
+              .DATA_W(DIAG_IDX_W),
+              .DEPTH (DIAG_SEG_DEPTH),
+              .ADDR_W(DIAG_SEG_AW)
+          ) u_diag_bram (
+              .i_clk(i_clk),
+              .i_we(write_valid_q[bank_idx] &&
+                    (diag_write_segment_idx[bank_idx] == DIAG_SEG_IDX_W'(segment_idx))),
+              .i_waddr(diag_write_local_addr[bank_idx]),
+              .i_wdata(write_data_q[bank_idx][slot_lsb(slot_idx)+:DIAG_IDX_W]),
+              .i_re(routed_read_valid[bank_idx] &&
+                    (diag_read_segment_idx[bank_idx] == DIAG_SEG_IDX_W'(segment_idx))),
+              .i_raddr(diag_read_local_addr[bank_idx]),
+              .o_rdata(bank_diag_segment_rdata[bank_idx][slot_idx][segment_idx])
+          );
+        end
       end
 
       always_comb begin
         bank_rdata[bank_idx] = '0;
         bank_rdata[bank_idx][BASE_SIGN_BIT] = bank_base_sign_rdata[bank_idx][0];
         for (int slot_idx = 0; slot_idx < K_SIGN_K; slot_idx++) begin
+          bank_diag_rdata[bank_idx][slot_idx] = '0;
+          for (int segment_idx = 0; segment_idx < DIAG_SEG_COUNT; segment_idx++) begin
+            if (diag_read_segment_idx_q[bank_idx] == DIAG_SEG_IDX_W'(segment_idx)) begin
+              bank_diag_rdata[bank_idx][slot_idx] =
+                  bank_diag_segment_rdata[bank_idx][slot_idx][segment_idx];
+            end
+          end
           bank_rdata[bank_idx][slot_lsb(slot_idx)+:DIAG_IDX_W] =
               bank_diag_rdata[bank_idx][slot_idx];
         end
@@ -124,8 +153,23 @@ module ram_k_global
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin
       read_route_shift_q <= '0;
+      for (int bank_idx = 0; bank_idx < L; bank_idx++) begin
+        diag_read_segment_idx_q[bank_idx] <= '0;
+        write_valid_q[bank_idx] <= 1'b0;
+      end
     end else begin
       read_route_shift_q <= read_route_shift;
+      for (int bank_idx = 0; bank_idx < L; bank_idx++) begin
+        diag_read_segment_idx_q[bank_idx] <= diag_read_segment_idx[bank_idx];
+        write_valid_q[bank_idx] <= routed_write_valid[bank_idx];
+      end
+    end
+  end
+
+  always_ff @(posedge i_clk) begin
+    for (int bank_idx = 0; bank_idx < L; bank_idx++) begin
+      write_addr_q[bank_idx] <= routed_write_addr[bank_idx];
+      write_data_q[bank_idx] <= routed_write_data[bank_idx];
     end
   end
 
@@ -138,8 +182,8 @@ module ram_k_global
 `ifndef SYNTHESIS
   always @(posedge i_clk) begin
     for (int bank_idx = 0; bank_idx < L; bank_idx++) begin
-      if (routed_read_valid[bank_idx] && routed_write_valid[bank_idx] &&
-          (routed_read_addr[bank_idx] == routed_write_addr[bank_idx])) begin
+      if (routed_read_valid[bank_idx] && write_valid_q[bank_idx] &&
+          (routed_read_addr[bank_idx] == write_addr_q[bank_idx])) begin
         $fatal(1, "ram_k_global in-place read/write collision bank=%0d addr=%0d", bank_idx,
                routed_read_addr[bank_idx]);
       end

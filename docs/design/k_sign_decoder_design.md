@@ -315,7 +315,7 @@ Tile 内 selector 工作状态按 `COLS_PER_TILE=1168`、`D=4` 估算：
 | ---: | ---: | ---: |
 | 3 | 34 bit | 39,712 bit |
 
-该状态由按变量列 bank 化的 tile 工作 RAM 保存，并在 tile 间复用。全局 K-sign RAM 的逻辑记录宽度为 `1+K*POS_W` bit，物理上将 `base_sign` 和每个 `dev_pos` 槽映射到独立的窄 BRAM 字段，各字段使用相同的 bank 地址和读写使能。C2V 完成一个 tile 的旧记录读取后，落后一窗口的 V2C 对同一 tile 原地提交新记录。
+该状态由按变量列 bank 化的 tile 工作 RAM 保存，并在 tile 间复用。全局 K-sign RAM 的逻辑记录宽度为 `1+K*POS_W` bit，物理上将 `base_sign` 和每个 `dev_pos` 槽映射到独立的窄 BRAM 字段。`dev_pos` 字段按 RAMB36 的 4K×9 原生几何划分深度段，各字段使用相同的逻辑 bank 地址和读写使能。C2V 完成一个 tile 的旧记录读取后，落后一窗口的 V2C 对同一 tile 原地提交新记录。
 
 ## 仿真观察
 

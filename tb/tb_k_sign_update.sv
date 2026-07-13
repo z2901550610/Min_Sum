@@ -196,6 +196,7 @@ module tb_k_sign_update;
     write_ram_edge(0, 1'b1, 3);
     write_ram_edge(1, 1'b0, 9);
     write_ram_edge(2, 1'b1, 8);
+    @(posedge clk);
 
     read_ram_edge(0, sign_read);
     if (sign_read !== 1'b1) $fatal(1, "ram sign mismatch at edge 0");
