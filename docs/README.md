@@ -10,6 +10,7 @@
 - [译码调度](design/decoder_schedule.md)：固定窗口调度器计数器、可见状态和周期预算。
 - [K-sign 译码器设计](design/k_sign_decoder_design.md)：压缩符号更新设计和集成说明。
 - [RTL 实现状态与 Vivado 基线](design/implementation_status.md)：实现配置、存储组织、固定周期、资源占用、时序和验证结果。
+- [译码器架构与资源优化探索记录](design/optimization_exploration_history.md)：按实施顺序记录已评估方案、实现结果和取舍结论。
 - [RTL 命名规范](design/naming_conventions.md)：坐标、buffer、端口和 debug 信号命名规则。
 
 ## 验证和结果

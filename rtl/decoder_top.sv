@@ -277,8 +277,7 @@ module decoder_top
   logic        [       COMP_C2V_W-1:0] v2c_bypass_comp_b[0:L-1];
   logic        [K_SIGN_SLOT_IDX_W-1:0] ksign_corr_slot_idx;
   logic        [       LANE_IDX_W-1:0] ksign_corr_lane_idx;
-  logic                                ksign_corr_record_read_valid[0:L-1];
-  logic        [            COL_W-1:0] ksign_corr_record_read_col_idx[0:L-1];
+  ksd_t                                ksign_corr_record_read;
   logic                                ksign_corr_h_read_valid;
   logic        [        H_BLOCK_W-1:0] ksign_corr_h_block_idx;
   logic        [       DIAG_IDX_W-1:0] ksign_corr_h_diag_idx_local;
@@ -444,12 +443,10 @@ module decoder_top
       ksign_scan_valid[lane_idx] = c2v_corr_valid[lane_idx] && ksign_scan_phase_a;
       ksign_scan_col_idx[lane_idx] = c2v_corr_col_idx[lane_idx];
       ksign_scan_row_addr[lane_idx] = c2v_corr_row_addr[lane_idx];
-      ksign_read_valid[lane_idx] = ksign_corr_direct ?
-          ksign_corr_record_read_valid[lane_idx] :
-          (ksign_scan_phase_r ? ksign_scan_valid_r[lane_idx] : c2v_valid_r[lane_idx]);
-      ksign_read_col_idx[lane_idx] = ksign_corr_direct ?
-          ksign_corr_record_read_col_idx[lane_idx] :
-          (ksign_scan_phase_r ? ksign_scan_col_idx_r[lane_idx] : c2v_col_idx_r[lane_idx]);
+      ksign_read_valid[lane_idx] =
+          ksign_scan_phase_r ? ksign_scan_valid_r[lane_idx] : c2v_valid_r[lane_idx];
+      ksign_read_col_idx[lane_idx] =
+          ksign_scan_phase_r ? ksign_scan_col_idx_r[lane_idx] : c2v_col_idx_r[lane_idx];
       c2v_tc_ext[lane_idx] = '0;
       v2c_comp_next[lane_idx] = COMP_C2V_INIT;
       v2c_sign_wdata[lane_idx] = v2c_cnu_a_sign[lane_idx];
@@ -605,8 +602,7 @@ module decoder_top
       .i_lane_idx(ksign_corr_lane_idx),
       .i_cfg_r(cfg_r),
       .i_cfg_w(cfg_w),
-      .o_record_read_valid(ksign_corr_record_read_valid),
-      .o_record_read_col_idx(ksign_corr_record_read_col_idx),
+      .o_record_read(ksign_corr_record_read),
       .i_record(c2v_ksign_record_mem),
       .o_h_read_valid(ksign_corr_h_read_valid),
       .o_h_block_idx(ksign_corr_h_block_idx),
@@ -682,6 +678,7 @@ module decoder_top
           .i_rst_n        (rst_n_sync),
           .i_read_valid   (ksign_read_valid),
           .i_read_col_idx (ksign_read_col_idx),
+          .i_direct_read  (ksign_corr_record_read),
           .o_read_record  (c2v_ksign_record_mem),
           .i_write_valid  (ksign_commit_valid),
           .i_write_col_idx(ksign_commit_col_idx),
