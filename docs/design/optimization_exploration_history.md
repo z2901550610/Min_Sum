@@ -18,8 +18,9 @@
 | 报告阶段 | Fully Placed / Routed |
 
 BRAM 以 `Block RAM Tile` 为主要指标，因为一个 RAMB36 占一个 Tile，两个 RAMB18 合计占一个 Tile。
-单独观察 RAMB36 或 RAMB18 数量可能误判收益。WNS 一列统一使用整体 WNS；最终基线的
-`decoder_clk` 内部 WNS 另记为 `+0.653 ns`。
+单独观察 RAMB36 或 RAMB18 数量可能误判收益。WNS 一列统一使用整体 WNS；阶段 5 的
+`decoder_clk` 内部 WNS 为 `+0.653 ns`，阶段 8 为 `+0.145 ns`。当前 RTL 对应阶段 4，回退后的
+placed/routed 复现结果待测。
 
 ## 同条件实现结果总表
 
@@ -28,14 +29,15 @@ BRAM 以 `Block RAM Tile` 为主要指标，因为一个 RAMB36 占一个 Tile�
 | 1 | 桶形路由和直接 correction 后、地址流水前基准 | 24,711 | 10,023 | 8,497 | 601 | 560 | 82 | -1.165 ns | 未满足 100 MHz |
 | 2 | `edge_addr_gen` 固定两级流水 | 23,613 | 10,416 | 8,017 | 601 | 560 | 82 | +0.211 ns | 保留 |
 | 3 | 全局 K 记录按逻辑字段初步拆分 | 23,895 | 10,364 | 8,279 | 601 | 560 | 82 | +0.424 ns | BRAM 无收益，继续细化 |
-| 4 | 按 `4K × 9` 原生几何显式分段 | 24,110 | 11,129 | 8,519 | 505 | 464 | 82 | +0.629 ns | 保留 |
-| 5 | `base_sign` 与 slot 0 打包 | 24,151 | 11,124 | 8,555 | 489 | 448 | 82 | +0.536 ns | 保留，形成基线 |
+| 4 | 按 `4K × 9` 原生几何显式分段 | 24,110 | 11,129 | 8,519 | 505 | 464 | 82 | +0.629 ns | 恢复为当前 RTL |
+| 5 | `base_sign` 与 slot 0 打包 | 24,151 | 11,124 | 8,555 | 489 | 448 | 82 | +0.536 ns | 撤回，优先时序余量 |
 | 6 | `ram_t` 地址交织双缓冲 | 24,493 | 11,004 | 8,590 | 489 | 464 | 50 | +0.532 ns | 撤回 |
 | 7 | `k_sign_update` valid 状态折叠 | 24,315 | 11,012 | 8,571 | 489 | 448 | 82 | +0.197 ns | 撤回 |
+| 8 | correction 线性计数与 K RAM 预译码直达读口 | 23,917 | 11,179 | 8,430 | 489 | 448 | 82 | +0.145 ns | 撤回，时序收益为负 |
 
 阶段 1 到阶段 2 的累计变化为 LUT 减少 1,098、Slice 减少 480，WNS 从 `-1.165 ns` 提升至
-`+0.211 ns`。阶段 3 只改善时序，没有改变 BRAM 数量。阶段 4 和阶段 5 合计减少 112 个
-BRAM Tile，最终达到 489 个。
+`+0.211 ns`。阶段 3 只改善时序，没有改变 BRAM 数量。阶段 4 将 BRAM Tile 减少到 505；阶段 5
+进一步降至 489，但降低了时序余量。
 
 ## 1. K 候选维护结构选择
 
@@ -203,7 +205,8 @@ Kintex-7 RAMB36 的窄数据模式适合 `4K × 9`。全局 K RAM 因此按以�
 - 整体 WNS 为 `+0.536 ns`，`decoder_clk` 内部 WNS 为 `+0.653 ns`，hold WNS 为 `+0.036 ns`。
 
 最大参数下，全局 K RAM 的物理数量为 `16 lane × 3 fields × 5 segments = 240 RAMB36`。
-该方案保留，并形成当前实现基线。
+该方案曾形成 489 BRAM Tile 基线。固定周期相同的条件下，整体 WNS 比阶段 4 低 0.093 ns；按译码性能
+优先、存储其次的取舍规则，该打包方案在 2026-07-14 回退。
 
 ## 12. `ram_t` 地址交织实验
 
@@ -240,7 +243,7 @@ Kintex-7 RAMB36 的窄数据模式适合 `4K × 9`。全局 K RAM 因此按以�
 结果：RTL 表达更紧凑不代表综合结果更小。valid、幅值、位置和槽号的组合比较形成了更差的逻辑映射与
 布线路径。该实验撤回，更新器使用显式无效槽优先规则和平衡归约比较。
 
-## 14. 最终基线验证
+## 14. 阶段 5 基线验证
 
 保留方案组合后的资源和时序对应总表阶段 5：
 
@@ -260,6 +263,88 @@ hold WNS        +0.036 ns
 TRIKE-512、seed 1 的完整随机译码固定执行 23,425,443 拍，输出 weight 为 877，residual 为 0，
 exact 为 1。toy 集成测试固定执行 154 拍并得到 residual 0、exact 1。
 
+## 15. correction 线性计数与 K RAM 预译码直达读口
+
+时间：2026-07-14。placed utilization 报告时间为 11:42:23，routed timing summary 报告时间为
+11:44:52。
+
+目标与假设：阶段 5 的内部最差 setup 路径从 `tile_scheduler` 的 tile index 寄存器进入
+`k_sign_correction` 列地址计算，并经过 K RAM bank/segment 译码到分段 RAMB36 enable。该路径的数据路径
+延迟为 9.249 ns，其中 logic 3.618 ns、route 5.631 ns。实验假设是用线性列计数器消除
+`tile_idx * COLS_PER_TILE`，并在 K RAM 前寄存 physical bank、4K 段内地址和 segment one-hot，切断请求侧
+的乘加、旋转和分段译码组合路径。
+
+关键实现：
+
+- `k_sign_correction` 按公开的 lane、slot、lane group 和 tile 调度维护线性列计数器；tile 边界使用公开
+  `COLS_PER_TILE` padding 回绕。
+- correction 请求寄存器保存 valid、bank index/one-hot、段内地址、segment index/one-hot。
+- `ram_k_global` 使用 correction 专用直达读口驱动物理 bank 和 segment，C2V/scan 标准读口维持原有接口。
+- 请求端增加的寄存边界通过 correction 返回流水重排吸收，固定调度公式和顶层可见周期不增加。
+- `ifndef SYNTHESIS` 断言逐拍核对线性列计数器与乘加参考公式。
+
+验证范围：
+
+- Verible 格式、lint 和 `git diff --check` 通过。
+- 全部 unit test 与 toy integration 通过；toy 固定 154 拍，residual 0、exact 1。
+- TRIKE-128/160/256/384/512、seed 1 完整随机译码全部 residual 0、exact 1；固定周期依次为
+  621,270、1,253,181、4,237,694、10,991,791、23,425,443。
+
+Vivado 报告条件：`TRIKE_UNIFIED_PARAMS`、`L=16`、`K=3`、`COLS_PER_TILE=1168`，最大等级
+TRIKE-512，`xc7k355tffg901-2L`，Vivado 2023.2，100 MHz/10 ns，clock uncertainty 0.100 ns；资源为
+Fully Placed，时序为 Routed。报告由用户提供。
+
+与阶段 5 同条件基线相比：
+
+- Slice LUT：24,151 → 23,917，减少 234。
+- Slice Register：11,124 → 11,179，增加 55。
+- Slice：8,555 → 8,430，减少 125。
+- Block RAM Tile：489，RAMB36：448，RAMB18：82，均不变。
+- DSP48E1：1 → 0，乘加 DSP 被消除。
+- setup WNS：整体 `+0.536 ns` → `+0.145 ns`；`decoder_clk` 内部 `+0.653 ns` →
+  `+0.145 ns`；TNS 保持 0。
+- hold WHS：`+0.036 ns` → `+0.042 ns`；THS 保持 0。WPWS 为 `+4.232 ns`。
+
+原 correction 请求到 K RAM enable 路径没有进入新的 setup 前十。新的最差 setup 路径从全局 K RAM 的
+RAMB36 同步读出，经过记录槽选择、H base-row 请求和 `ram_i` 扁平读地址生成，到 `ram_i` 的 RAMB18 地址；
+数据路径延迟 8.798 ns，logic 2.756 ns，route 6.042 ns，13 级逻辑。第十条路径是
+`v2c_tile_offset_c` 到 `ram_k_tile`，扇出 529，数据路径延迟 9.145 ns，其中 route 8.879 ns。
+
+结论：目标请求侧路径被切断，DSP、LUT 和 Slice 有小幅资源收益，100 MHz setup/hold 均收敛；整体与内部
+WNS 下降，固定周期下的可达频率余量变差，因此本实验不能视为时序性能提升。该方案在 2026-07-14 撤回。
+
+## 16. 回退到阶段 4 时序性能基线
+
+时间：2026-07-14。
+
+目标与依据：阶段 4、阶段 5 和阶段 8 的固定译码周期相同，整体 WNS 分别为 `+0.629 ns`、`+0.536 ns`
+和 `+0.145 ns`。根据固定周期与可达频率优先、存储其次的项目取舍规则，阶段 4 是已有同条件报告中时序
+余量最大的版本。
+
+关键实现状态：
+
+- `ram_k_global` 的三个 `dev_pos` 字段分别按 `4K × 9` 原生几何显式分为 5 段。
+- `base_sign` 使用独立 1-bit 全深度字段，不与 slot 0 打包。
+- correction 使用固定列/槽调度和标准 K RAM bank 路由。
+- 线性列计数、K RAM 预译码直达读口和对应接口撤回。
+
+已有同条件报告为 LUT 24,110、FF 11,129、Slice 8,519、BRAM Tile 505、RAMB36 464、RAMB18 82、
+整体 WNS `+0.629 ns`、TNS 0、hold WHS `+0.036 ns`。这些数字来自阶段 4 的历史 placed/routed 报告；
+回退后重新运行 Vivado 的资源、时序和 top-path 结果为待测。
+
+验证结果：
+
+- `make check-format-rtl` 通过。
+- tracked `rtl/*.sv` 与 `tb/*.sv` 的 Verible lint 通过。
+- `make test-unit` 全部通过，包括 `tb_k_sign_update` 的 K=3 检查。
+- `make test-integration` 通过；toy case 固定 154 拍，residual 0、exact 1。
+- TRIKE-512、seed 1 完整随机回归通过；固定 23,425,443 拍，target/output weight 877，residual 0、
+  exact 1。
+- 完整 `make lint-rtl` 被工作区未跟踪的 `rtl/test.sv` 文件名规则阻断，该文件不属于回退范围。
+- 其余 TRIKE 参数等级随机回归和回退后的 Vivado placed/routed 复现结果待测。
+
+状态：RTL 已恢复为阶段 4，功能与维护 RTL lint 通过，完整实现结果待复核。
+
 ## 形成的设计结论
 
 1. 存储优化必须以目标器件的原生宽深模式和 BRAM Tile 为依据；只改数组声明或逻辑字段宽度不能保证映射。
@@ -269,3 +354,5 @@ exact 为 1。toy 集成测试固定执行 154 拍并得到 residual 0、exact 1
 5. RTL 运算符更少、表达式更短或实例数量更少，都不能单独作为资源优化成立的依据。
 6. 每项方案需要同时比较 LUT、FF、Slice、BRAM Tile、routed setup/hold 和固定周期功能回归。
 7. 器件、速度等级、参数、XDC 或 Vivado 版本变化后的报告不能与基线直接计算增减量。
+8. 切断一条关键路径可能把瓶颈转移到相邻流水；只有 routed top-path 集合和固定译码时间共同改善时，才能
+   判定为时序性能收益。

@@ -7,39 +7,45 @@ module ram_k_global
     input  logic                       i_rst_n,
     input  logic                       i_read_valid[0:L-1],
     input  logic [          COL_W-1:0] i_read_col_idx[0:L-1],
-    input  ksd_t                       i_direct_read,
     output logic [K_SIGN_RECORD_W-1:0] o_read_record[0:L-1],
     input  logic                       i_write_valid[0:L-1],
     input  logic [          COL_W-1:0] i_write_col_idx[0:L-1],
     input  logic [K_SIGN_RECORD_W-1:0] i_write_record[0:L-1]
 );
 
-  localparam int READ_ROUTE_W = 1 + K_SIGN_BANK_AW;
+  localparam int KSIGN_BANK_DEPTH = (N + L - 1) / L;
+  localparam int KSIGN_BANK_AW = (KSIGN_BANK_DEPTH > 1) ? $clog2(KSIGN_BANK_DEPTH) : 1;
+  localparam int READ_ROUTE_W = 1 + KSIGN_BANK_AW;
   localparam int BASE_SIGN_BIT = 0;
   localparam int SLOT_BASE_LSB = 1;
-  localparam int SLOT0_FIELD_W = 1 + DIAG_IDX_W;
+  localparam int DIAG_SEG_MAX_AW = 12;
+  localparam int DIAG_SEG_AW = (KSIGN_BANK_AW < DIAG_SEG_MAX_AW) ? KSIGN_BANK_AW : DIAG_SEG_MAX_AW;
+  localparam int DIAG_SEG_DEPTH = 1 << DIAG_SEG_AW;
+  localparam int DIAG_SEG_COUNT = (KSIGN_BANK_DEPTH + DIAG_SEG_DEPTH - 1) / DIAG_SEG_DEPTH;
+  localparam int DIAG_SEG_IDX_W = (DIAG_SEG_COUNT > 1) ? $clog2(DIAG_SEG_COUNT) : 1;
 
   logic [K_SIGN_RECORD_W-1:0] bank_rdata[0:L-1];
-  logic [SLOT0_FIELD_W-1:0] bank_slot0_segment_rdata[0:L-1][0:K_SIGN_DIAG_SEG_COUNT-1];
-  logic [DIAG_IDX_W-1:0] bank_diag_segment_rdata[0:L-1][0:K_SIGN_K-1][0:K_SIGN_DIAG_SEG_COUNT-1];
-  logic [READ_ROUTE_W-1:0] read_route_in[0:L-1];
-  logic [READ_ROUTE_W-1:0] read_route_out[0:L-1];
+  logic [                0:0] bank_base_sign_rdata[0:L-1];
+  logic [     DIAG_IDX_W-1:0] bank_diag_rdata[0:L-1][0:K_SIGN_K-1];
+  logic [     DIAG_IDX_W-1:0] bank_diag_segment_rdata[0:L-1] [0:K_SIGN_K-1] [0:DIAG_SEG_COUNT-1];
+  logic [   READ_ROUTE_W-1:0] read_route_in[0:L-1];
+  logic [   READ_ROUTE_W-1:0] read_route_out[0:L-1];
   logic [K_SIGN_RECORD_W-1:0] read_record_route_out[0:L-1];
-  logic routed_read_valid[0:L-1];
-  logic [K_SIGN_BANK_AW-1:0] routed_read_addr[0:L-1];
-  logic routed_write_valid[0:L-1];
-  logic [K_SIGN_BANK_AW-1:0] routed_write_addr[0:L-1];
+  logic                       routed_read_valid[0:L-1];
+  logic [  KSIGN_BANK_AW-1:0] routed_read_addr[0:L-1];
+  logic                       routed_write_valid[0:L-1];
+  logic [  KSIGN_BANK_AW-1:0] routed_write_addr[0:L-1];
   logic [K_SIGN_RECORD_W-1:0] routed_write_data[0:L-1];
-  logic write_valid_q[0:L-1];
-  logic [K_SIGN_BANK_AW-1:0] write_addr_q[0:L-1];
+  logic                       write_valid_q[0:L-1];
+  logic [  KSIGN_BANK_AW-1:0] write_addr_q[0:L-1];
   logic [K_SIGN_RECORD_W-1:0] write_data_q[0:L-1];
-  logic [K_SIGN_DIAG_SEG_IDX_W-1:0] diag_read_segment_idx[0:L-1];
-  logic [K_SIGN_DIAG_SEG_IDX_W-1:0] diag_read_segment_idx_q[0:L-1];
-  logic [K_SIGN_DIAG_SEG_AW-1:0] diag_read_local_addr[0:L-1];
-  logic [K_SIGN_DIAG_SEG_IDX_W-1:0] diag_write_segment_idx[0:L-1];
-  logic [K_SIGN_DIAG_SEG_AW-1:0] diag_write_local_addr[0:L-1];
-  logic [LANE_IDX_W-1:0] read_route_shift;
-  logic [LANE_IDX_W-1:0] read_route_shift_q;
+  logic [ DIAG_SEG_IDX_W-1:0] diag_read_segment_idx[0:L-1];
+  logic [ DIAG_SEG_IDX_W-1:0] diag_read_segment_idx_q[0:L-1];
+  logic [    DIAG_SEG_AW-1:0] diag_read_local_addr[0:L-1];
+  logic [ DIAG_SEG_IDX_W-1:0] diag_write_segment_idx[0:L-1];
+  logic [    DIAG_SEG_AW-1:0] diag_write_local_addr[0:L-1];
+  logic [     LANE_IDX_W-1:0] read_route_shift;
+  logic [     LANE_IDX_W-1:0] read_route_shift_q;
 
   function automatic logic [LANE_IDX_W-1:0] col_bank(input  logic [COL_W-1:0] col_idx);
     begin
@@ -47,9 +53,9 @@ module ram_k_global
     end
   endfunction
 
-  function automatic logic [K_SIGN_BANK_AW-1:0] col_addr(input  logic [COL_W-1:0] col_idx);
+  function automatic logic [KSIGN_BANK_AW-1:0] col_addr(input  logic [COL_W-1:0] col_idx);
     begin
-      col_addr = K_SIGN_BANK_AW'(col_idx >> L_SHIFT);
+      col_addr = KSIGN_BANK_AW'(col_idx >> L_SHIFT);
     end
   endfunction
 
@@ -60,19 +66,17 @@ module ram_k_global
   endfunction
 
   always_comb begin
-    read_route_shift = i_direct_read.valid ? i_direct_read.bank_idx : col_bank(i_read_col_idx[0]);
+    read_route_shift = col_bank(i_read_col_idx[0]);
     for (int bank_idx = 0; bank_idx < L; bank_idx++) begin
       read_route_in[bank_idx] = {i_read_valid[bank_idx], col_addr(i_read_col_idx[bank_idx])};
       {routed_read_valid[bank_idx], routed_read_addr[bank_idx]} = read_route_out[bank_idx];
       routed_write_valid[bank_idx] = i_write_valid[bank_idx];
       routed_write_addr[bank_idx] = col_addr(i_write_col_idx[bank_idx]);
       routed_write_data[bank_idx] = i_write_record[bank_idx];
-      diag_read_segment_idx[bank_idx] =
-          K_SIGN_DIAG_SEG_IDX_W'(routed_read_addr[bank_idx] >> K_SIGN_DIAG_SEG_AW);
-      diag_read_local_addr[bank_idx] = K_SIGN_DIAG_SEG_AW'(routed_read_addr[bank_idx]);
-      diag_write_segment_idx[bank_idx] =
-          K_SIGN_DIAG_SEG_IDX_W'(write_addr_q[bank_idx] >> K_SIGN_DIAG_SEG_AW);
-      diag_write_local_addr[bank_idx] = K_SIGN_DIAG_SEG_AW'(write_addr_q[bank_idx]);
+      diag_read_segment_idx[bank_idx] = DIAG_SEG_IDX_W'(routed_read_addr[bank_idx] >> DIAG_SEG_AW);
+      diag_read_local_addr[bank_idx] = DIAG_SEG_AW'(routed_read_addr[bank_idx]);
+      diag_write_segment_idx[bank_idx] = DIAG_SEG_IDX_W'(write_addr_q[bank_idx] >> DIAG_SEG_AW);
+      diag_write_local_addr[bank_idx] = DIAG_SEG_AW'(write_addr_q[bank_idx]);
     end
   end
 
@@ -94,53 +98,35 @@ module ram_k_global
 
   generate
     for (genvar bank_idx = 0; bank_idx < L; bank_idx++) begin : g_bank
-      for (
-          genvar segment_idx = 0; segment_idx < K_SIGN_DIAG_SEG_COUNT; segment_idx++
-      ) begin : g_slot0_segment
-        ram_bram #(
-            .DATA_W(SLOT0_FIELD_W),
-            .DEPTH (K_SIGN_DIAG_SEG_DEPTH),
-            .ADDR_W(K_SIGN_DIAG_SEG_AW)
-        ) u_diag_bram (
-            .i_clk(i_clk),
-            .i_we(write_valid_q[bank_idx] &&
-                  (diag_write_segment_idx[bank_idx] == K_SIGN_DIAG_SEG_IDX_W'(segment_idx))),
-            .i_waddr(diag_write_local_addr[bank_idx]),
-            .i_wdata({
-              write_data_q[bank_idx][slot_lsb(0)+:DIAG_IDX_W], write_data_q[bank_idx][BASE_SIGN_BIT]
-            }),
-            .i_re(i_direct_read.valid ?
-                  (i_direct_read.bank_onehot[bank_idx] &&
-                   i_direct_read.segment_onehot[segment_idx]) :
-                  (routed_read_valid[bank_idx] &&
-                   (diag_read_segment_idx[bank_idx] == K_SIGN_DIAG_SEG_IDX_W'(segment_idx)))),
-            .i_raddr(i_direct_read.valid ? i_direct_read.local_addr :
-                     diag_read_local_addr[bank_idx]),
-            .o_rdata(bank_slot0_segment_rdata[bank_idx][segment_idx])
-        );
-      end
+      ram_bram #(
+          .DATA_W(1),
+          .DEPTH (KSIGN_BANK_DEPTH),
+          .ADDR_W(KSIGN_BANK_AW)
+      ) u_base_bram (
+          .i_clk  (i_clk),
+          .i_we   (write_valid_q[bank_idx]),
+          .i_waddr(write_addr_q[bank_idx]),
+          .i_wdata(write_data_q[bank_idx][BASE_SIGN_BIT]),
+          .i_re   (routed_read_valid[bank_idx]),
+          .i_raddr(routed_read_addr[bank_idx]),
+          .o_rdata(bank_base_sign_rdata[bank_idx])
+      );
 
-      for (genvar slot_idx = 1; slot_idx < K_SIGN_K; slot_idx++) begin : g_slot
-        for (
-            genvar segment_idx = 0; segment_idx < K_SIGN_DIAG_SEG_COUNT; segment_idx++
-        ) begin : g_segment
+      for (genvar slot_idx = 0; slot_idx < K_SIGN_K; slot_idx++) begin : g_slot
+        for (genvar segment_idx = 0; segment_idx < DIAG_SEG_COUNT; segment_idx++) begin : g_segment
           ram_bram #(
               .DATA_W(DIAG_IDX_W),
-              .DEPTH (K_SIGN_DIAG_SEG_DEPTH),
-              .ADDR_W(K_SIGN_DIAG_SEG_AW)
+              .DEPTH (DIAG_SEG_DEPTH),
+              .ADDR_W(DIAG_SEG_AW)
           ) u_diag_bram (
               .i_clk(i_clk),
               .i_we(write_valid_q[bank_idx] &&
-                    (diag_write_segment_idx[bank_idx] == K_SIGN_DIAG_SEG_IDX_W'(segment_idx))),
+                    (diag_write_segment_idx[bank_idx] == DIAG_SEG_IDX_W'(segment_idx))),
               .i_waddr(diag_write_local_addr[bank_idx]),
               .i_wdata(write_data_q[bank_idx][slot_lsb(slot_idx)+:DIAG_IDX_W]),
-              .i_re(i_direct_read.valid ?
-                    (i_direct_read.bank_onehot[bank_idx] &&
-                     i_direct_read.segment_onehot[segment_idx]) :
-                    (routed_read_valid[bank_idx] &&
-                     (diag_read_segment_idx[bank_idx] == K_SIGN_DIAG_SEG_IDX_W'(segment_idx)))),
-              .i_raddr(i_direct_read.valid ? i_direct_read.local_addr :
-                       diag_read_local_addr[bank_idx]),
+              .i_re(routed_read_valid[bank_idx] &&
+                    (diag_read_segment_idx[bank_idx] == DIAG_SEG_IDX_W'(segment_idx))),
+              .i_raddr(diag_read_local_addr[bank_idx]),
               .o_rdata(bank_diag_segment_rdata[bank_idx][slot_idx][segment_idx])
           );
         end
@@ -148,17 +134,17 @@ module ram_k_global
 
       always_comb begin
         bank_rdata[bank_idx] = '0;
-        for (int segment_idx = 0; segment_idx < K_SIGN_DIAG_SEG_COUNT; segment_idx++) begin
-          if (diag_read_segment_idx_q[bank_idx] == K_SIGN_DIAG_SEG_IDX_W'(segment_idx)) begin
-            bank_rdata[bank_idx][BASE_SIGN_BIT] =
-                bank_slot0_segment_rdata[bank_idx][segment_idx][0];
-            bank_rdata[bank_idx][slot_lsb(0)+:DIAG_IDX_W] =
-                bank_slot0_segment_rdata[bank_idx][segment_idx][1+:DIAG_IDX_W];
-            for (int slot_idx = 1; slot_idx < K_SIGN_K; slot_idx++) begin
-              bank_rdata[bank_idx][slot_lsb(slot_idx)+:DIAG_IDX_W] =
+        bank_rdata[bank_idx][BASE_SIGN_BIT] = bank_base_sign_rdata[bank_idx][0];
+        for (int slot_idx = 0; slot_idx < K_SIGN_K; slot_idx++) begin
+          bank_diag_rdata[bank_idx][slot_idx] = '0;
+          for (int segment_idx = 0; segment_idx < DIAG_SEG_COUNT; segment_idx++) begin
+            if (diag_read_segment_idx_q[bank_idx] == DIAG_SEG_IDX_W'(segment_idx)) begin
+              bank_diag_rdata[bank_idx][slot_idx] =
                   bank_diag_segment_rdata[bank_idx][slot_idx][segment_idx];
             end
           end
+          bank_rdata[bank_idx][slot_lsb(slot_idx)+:DIAG_IDX_W] =
+              bank_diag_rdata[bank_idx][slot_idx];
         end
       end
     end
@@ -174,8 +160,7 @@ module ram_k_global
     end else begin
       read_route_shift_q <= read_route_shift;
       for (int bank_idx = 0; bank_idx < L; bank_idx++) begin
-        diag_read_segment_idx_q[bank_idx] <=
-            i_direct_read.valid ? i_direct_read.segment_idx : diag_read_segment_idx[bank_idx];
+        diag_read_segment_idx_q[bank_idx] <= diag_read_segment_idx[bank_idx];
         write_valid_q[bank_idx] <= routed_write_valid[bank_idx];
       end
     end

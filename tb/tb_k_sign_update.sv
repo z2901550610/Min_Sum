@@ -67,7 +67,6 @@ module tb_k_sign_update;
       .i_rst_n        (rst_n),
       .i_read_valid   (c2v_valid),
       .i_read_col_idx (c2v_col_idx),
-      .i_direct_read  ('0),
       .o_read_record  (c2v_record),
       .i_write_valid  (commit_valid),
       .i_write_col_idx(commit_col_idx),

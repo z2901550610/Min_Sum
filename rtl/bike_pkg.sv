@@ -178,29 +178,10 @@ package bike_pkg;
   localparam int K_SIGN_WORK_DEPTH = Q_BASE;
   localparam int K_SIGN_WORK_AW = (K_SIGN_WORK_DEPTH > 1) ? $clog2(K_SIGN_WORK_DEPTH) : 1;
   localparam logic [DIAG_IDX_W-1:0] K_SIGN_DIAG_INVALID = '1;
-  localparam int K_SIGN_BANK_DEPTH = (N + L - 1) / L;
-  localparam int K_SIGN_BANK_AW = (K_SIGN_BANK_DEPTH > 1) ? $clog2(K_SIGN_BANK_DEPTH) : 1;
-  localparam int K_SIGN_DIAG_SEG_MAX_AW = 12;
-  localparam int K_SIGN_DIAG_SEG_AW =
-      (K_SIGN_BANK_AW < K_SIGN_DIAG_SEG_MAX_AW) ? K_SIGN_BANK_AW : K_SIGN_DIAG_SEG_MAX_AW;
-  localparam int K_SIGN_DIAG_SEG_DEPTH = 1 << K_SIGN_DIAG_SEG_AW;
-  localparam int K_SIGN_DIAG_SEG_COUNT =
-      (K_SIGN_BANK_DEPTH + K_SIGN_DIAG_SEG_DEPTH - 1) / K_SIGN_DIAG_SEG_DEPTH;
-  localparam int K_SIGN_DIAG_SEG_IDX_W = (K_SIGN_DIAG_SEG_COUNT > 1) ? $clog2(
-      K_SIGN_DIAG_SEG_COUNT
-  ) : 1;
   localparam int DIAG_GLOBAL_W = (DIAG_GLOBAL_COUNT > 1) ? $clog2(DIAG_GLOBAL_COUNT) : 1;
   localparam int ROW_IDX_W = (R > 1) ? $clog2(R) : 1;
   localparam int LANE_IDX_W = (L > 1) ? $clog2(L) : 1;
   localparam int L_SHIFT = (L > 1) ? $clog2(L) : 0;
-  typedef struct packed {
-    logic valid;
-    logic [LANE_IDX_W-1:0] bank_idx;
-    logic [L-1:0] bank_onehot;
-    logic [K_SIGN_DIAG_SEG_AW-1:0] local_addr;
-    logic [K_SIGN_DIAG_SEG_IDX_W-1:0] segment_idx;
-    logic [K_SIGN_DIAG_SEG_COUNT-1:0] segment_onehot;
-  } ksd_t;
   localparam int ITER_W = $clog2(I_MAX + 1);
 
 `ifdef DECODER_TRIKE_FAMILY
