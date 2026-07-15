@@ -29,6 +29,12 @@ module tb_k_sign_update;
   logic                            commit_valid[0:L-1];
   logic [               COL_W-1:0] commit_col_idx[0:L-1];
   logic [     K_SIGN_RECORD_W-1:0] commit_record[0:L-1];
+  logic                            corr_read_valid[0:L-1];
+  logic [               COL_W-1:0] corr_col_idx[0:L-1];
+  logic [          TILE_OFF_W-1:0] corr_tile_offset[0:L-1];
+  /* verilator lint_off UNUSEDSIGNAL */
+  logic [     K_SIGN_RECORD_W-1:0] unused_corr_record[0:L-1];
+  /* verilator lint_on UNUSEDSIGNAL */
 
   k_sign_update u_k_sign_update (
       .i_record        (record_q),
@@ -48,18 +54,24 @@ module tb_k_sign_update;
   );
 
   k_sign_selector u_k_sign_selector (
-      .i_clk           (clk),
-      .i_rst_n         (rst_n),
-      .i_cfg_w         (CFG_W_W'(W)),
-      .i_valid         (v2c_valid),
-      .i_col_idx       (v2c_col_idx),
-      .i_tile_offset   (v2c_tile_offset),
-      .i_diag_idx_local(diag_idx_local),
-      .i_v2c_msg       (v2c_msg_lane),
-      .i_base_sign     (v2c_base_sign),
-      .o_commit_valid  (commit_valid),
-      .o_commit_col_idx(commit_col_idx),
-      .o_commit_record (commit_record)
+      .i_clk             (clk),
+      .i_rst_n           (rst_n),
+      .i_cfg_w           (CFG_W_W'(W)),
+      .i_valid           (v2c_valid),
+      .i_col_idx         (v2c_col_idx),
+      .i_tile_offset     (v2c_tile_offset),
+      .i_diag_idx_local  (diag_idx_local),
+      .i_v2c_msg         (v2c_msg_lane),
+      .i_base_sign       (v2c_base_sign),
+      .i_work_buf_sel    (1'b0),
+      .o_commit_valid    (commit_valid),
+      .o_commit_col_idx  (commit_col_idx),
+      .o_commit_record   (commit_record),
+      .i_corr_buf_sel    (1'b1),
+      .i_corr_read_valid (corr_read_valid),
+      .i_corr_col_idx    (corr_col_idx),
+      .i_corr_tile_offset(corr_tile_offset),
+      .o_corr_read_record(unused_corr_record)
   );
 
   ram_k_global u_ram_k_global (
@@ -167,6 +179,9 @@ module tb_k_sign_update;
       v2c_tile_offset[lane_idx] = '0;
       v2c_msg_lane[lane_idx] = '0;
       v2c_base_sign[lane_idx] = 1'b0;
+      corr_read_valid[lane_idx] = 1'b0;
+      corr_col_idx[lane_idx] = '0;
+      corr_tile_offset[lane_idx] = '0;
     end
 
     repeat (2) @(posedge clk);

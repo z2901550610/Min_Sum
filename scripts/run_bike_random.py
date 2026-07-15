@@ -22,9 +22,11 @@ RTL_CORE = [
     "rtl/k_sign_update.sv",
     "rtl/k_sign_reconstruct.sv",
     "rtl/k_sign_correction.sv",
+    "rtl/k_sign_overlap_scheduler.sv",
     "rtl/ram_k_tile.sv",
     "rtl/k_sign_selector.sv",
     "rtl/ram_k_global.sv",
+    "rtl/ram_sign_delta.sv",
     "rtl/ram_syndrome.sv",
     "rtl/ram_accum.sv",
     "rtl/ram_t.sv",
@@ -525,13 +527,9 @@ module tb_bike_decoder_random;
   localparam int TEST_ROW_SEG_SIZE = (TEST_R + L - 1) / L;
   localparam int TEST_TILE_COUNT = (TEST_R + COLS_PER_TILE - 1) / COLS_PER_TILE;
   localparam int TEST_KSIGN_SCAN_CYCLES = TEST_W * Q_TILE;
-  localparam int TEST_KSIGN_DIRECT_CYCLES = K_SIGN_K * L * Q_BASE;
-  localparam int TEST_KSIGN_CORR_CYCLES =
-      (TEST_KSIGN_DIRECT_CYCLES < TEST_KSIGN_SCAN_CYCLES) ?
-      TEST_KSIGN_DIRECT_CYCLES : TEST_KSIGN_SCAN_CYCLES;
   localparam int TEST_DECODE_CYCLES = I_MAX * (
       TEST_ROW_SEG_SIZE + (((N0 * TEST_TILE_COUNT) + 1) * TEST_W * Q_TILE)
-      + (K_SIGN_ENABLE ? (8 + ((N0 * TEST_TILE_COUNT) * TEST_KSIGN_CORR_CYCLES)) : 0)
+      + (K_SIGN_ENABLE ? (8 + TEST_KSIGN_SCAN_CYCLES) : 0)
   ) + 6;
   localparam int SYNDROME_WEIGHT = {len(syndrome_positions)};
   localparam int ERROR_WEIGHT = {len(error_positions)};

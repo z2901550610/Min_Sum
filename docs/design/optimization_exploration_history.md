@@ -19,8 +19,8 @@
 
 BRAM 以 `Block RAM Tile` 为主要指标，因为一个 RAMB36 占一个 Tile，两个 RAMB18 合计占一个 Tile。
 单独观察 RAMB36 或 RAMB18 数量可能误判收益。WNS 一列统一使用整体 WNS；阶段 5 的
-`decoder_clk` 内部 WNS 为 `+0.653 ns`，阶段 8 为 `+0.145 ns`。当前 RTL 对应阶段 4，回退后的
-placed/routed 复现结果待测。
+`decoder_clk` 内部 WNS 为 `+0.653 ns`，阶段 8 为 `+0.145 ns`。当前 RTL包含重叠 correction 探索，
+placed/routed 结果待测。
 
 ## 同条件实现结果总表
 
@@ -29,11 +29,12 @@ placed/routed 复现结果待测。
 | 1 | 桶形路由和直接 correction 后、地址流水前基准 | 24,711 | 10,023 | 8,497 | 601 | 560 | 82 | -1.165 ns | 未满足 100 MHz |
 | 2 | `edge_addr_gen` 固定两级流水 | 23,613 | 10,416 | 8,017 | 601 | 560 | 82 | +0.211 ns | 保留 |
 | 3 | 全局 K 记录按逻辑字段初步拆分 | 23,895 | 10,364 | 8,279 | 601 | 560 | 82 | +0.424 ns | BRAM 无收益，继续细化 |
-| 4 | 按 `4K × 9` 原生几何显式分段 | 24,110 | 11,129 | 8,519 | 505 | 464 | 82 | +0.629 ns | 恢复为当前 RTL |
+| 4 | 按 `4K × 9` 原生几何显式分段 | 24,110 | 11,129 | 8,519 | 505 | 464 | 82 | +0.629 ns | 历史参考基线 |
 | 5 | `base_sign` 与 slot 0 打包 | 24,151 | 11,124 | 8,555 | 489 | 448 | 82 | +0.536 ns | 撤回，优先时序余量 |
 | 6 | `ram_t` 地址交织双缓冲 | 24,493 | 11,004 | 8,590 | 489 | 464 | 50 | +0.532 ns | 撤回 |
 | 7 | `k_sign_update` valid 状态折叠 | 24,315 | 11,012 | 8,571 | 489 | 448 | 82 | +0.197 ns | 撤回 |
 | 8 | correction 线性计数与 K RAM 预译码直达读口 | 23,917 | 11,179 | 8,430 | 489 | 448 | 82 | +0.145 ns | 撤回，时序收益为负 |
+| 9 | correction 跨 tile 重叠 | 待测 | 待测 | 待测 | 待测 | 待测 | 待测 | 待测 | RTL 保留，实现结果待定 |
 
 阶段 1 到阶段 2 的累计变化为 LUT 减少 1,098、Slice 减少 480，WNS 从 `-1.165 ns` 提升至
 `+0.211 ns`。阶段 3 只改善时序，没有改变 BRAM 数量。阶段 4 将 BRAM Tile 减少到 505；阶段 5
@@ -344,6 +345,60 @@ WNS 下降，固定周期下的可达频率余量变差，因此本实验不能�
 - 其余 TRIKE 参数等级随机回归和回退后的 Vivado placed/routed 复现结果待测。
 
 状态：RTL 已恢复为阶段 4，功能与维护 RTL lint 通过，完整实现结果待复核。
+
+## 17. K-sign correction 跨 tile 重叠
+
+时间：2026-07-15。
+
+目标与假设：固定 correction 为每个 tile 增加独立串行窗口，且总 correction 周期随
+`TILES_TOTAL` 线性增加。K-sign 记录在 tile V2C 完成后已经确定，后续 tile 的 V2C 使用另一份局部工作
+状态，因此可让完成 tile 的 correction 与后续主窗口并行。目标是在保持 K=3、high-mag top-K、tie-break
+和固定访问深度的条件下，把每轮可见 correction 尾部限制为一个 tile 扫描窗口。
+
+关键实现：
+
+- `ram_k_tile` 使用两个 distributed-RAM 工作 buffer，按 `tile_linear[0]` ping-pong；V2C 维护当前
+  buffer，correction 读取上一完成 buffer。
+- `k_sign_overlap_scheduler` 在 tile 0 的 V2C 尾拍启动，固定扫描全部 `N0*TILE_COUNT` 个 tile，每个 tile
+  执行 `W*Q_TILE` 拍。扫描次数与命中数量、invalid 槽和消息幅值无关。
+- check 符号状态拆成 `ram_m.sign_xor_base` 和 `ram_sign_delta.dev_xor`。主 V2C 累积 base parity，
+  correction 对每个命中位置翻转 deviation parity，下一轮 C2V 读取后将两者异或。
+- `ram_sign_delta` 使用两个 iteration pair，使 C2V 读取和重叠 correction 写入落在不同 pair；连续同地址
+  flip 使用固定 RMW 旁路。
+- `ram_i` 提供 C2V、V2C 和 correction 三个固定同步读视图。correction 使用独立 `edge_addr_gen`，每拍
+  并行处理 L 列。
+- 固定周期公式为
+  `I_MAX * (ROW_SEG_SIZE + (N0*TILE_COUNT+1)*W*Q_TILE + 8 + W*Q_TILE) + 6`。
+
+功能验证：
+
+- `make test-unit` 通过；新增 `tb_ram_sign_delta` 覆盖单次翻转、同地址连续翻转旁路和跨 pair 并行读写。
+- `make test-integration` 通过；toy case 固定 154 拍，residual 0、exact 1。
+- TRIKE-128/160/256/384/512、seed 1 完整随机译码全部 residual 0、exact 1；固定周期依次为
+  333,990、657,341、2,353,770、7,135,995、16,641,183。
+- TRIKE-128 追加 seed 2 至 5，五个 seed 均固定 333,990 拍、residual 0、exact 1。
+- TRIKE-512 追加 seed 2，固定 16,641,183 拍、residual 0、exact 1。
+- 五档结果验证了 RTL 固定周期公式和该组测试向量的译码一致性。K-sign 选择规则与符号近似定义保持，
+  多 seed 低 DFR campaign 待运行，当前结果不作为统计 DFR 结论。
+
+与阶段 4 架构的固定周期比较：
+
+| 参数等级 | 串行 correction 周期 | 重叠 correction 周期 | 减少拍数 | 降幅 |
+| --- | ---: | ---: | ---: | ---: |
+| TRIKE128 | 621,270 | 333,990 | 287,280 | 46.24% |
+| TRIKE160 | 1,253,181 | 657,341 | 595,840 | 47.55% |
+| TRIKE256 | 4,237,694 | 2,353,770 | 1,883,924 | 44.46% |
+| TRIKE384 | 10,991,791 | 7,135,995 | 3,855,796 | 35.08% |
+| TRIKE512 | 23,425,443 | 16,641,183 | 6,784,260 | 28.96% |
+
+实现状态：目标条件仍为 `TRIKE_UNIFIED_PARAMS`、`L=16`、`K=3`、`COLS_PER_TILE=1168`、
+`xc7k355tffg901-2L`、Vivado 2023.2、100 MHz/10 ns 和 0.100 ns clock uncertainty。当前执行环境没有
+`vivado` 可执行文件，Slice LUT、FF、Slice、Block RAM Tile、RAMB36、RAMB18、DSP、setup WNS/TNS 和
+hold WHS 均为待测，不能据此计算资源或时序增减量。
+
+结论与状态：固定周期显著缩短，RTL 与功能验证保留。该方案是否形成新的 placed/routed 基线，取决于同条件
+Vivado 报告是否保持 100 MHz setup/hold 收敛，并确认双 tile buffer、delta RAM 和第三个 H 读副本没有造成
+不可接受的 LUT/BRAM 增长；当前状态为待定。
 
 ## 形成的设计结论
 

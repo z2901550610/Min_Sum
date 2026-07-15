@@ -26,20 +26,18 @@ T_MAIN = (TILES_TOTAL + 1) * W * Q_TILE
 
 第一个窗口执行 tile 0 的 C2V 填充，最后一个窗口执行最后一个 tile 的 V2C 排空，中间窗口同时执行当前 tile 的 C2V 和前一个 tile 的 V2C。
 
-K-sign correction 对每个公开参数等级固定选择以下较短窗口：
+K-sign correction 使用与主窗口同速的 tile 扫描：
 
 ```text
-T_CORR_SCAN   = W * Q_TILE
-T_CORR_DIRECT = K * L * Q_BASE
-T_CORR        = min(T_CORR_SCAN, T_CORR_DIRECT)
+T_TILE = W * Q_TILE
 ```
 
-扫描模式使用 `diag_idx_local` 和 `lane_group_idx` 检查 L 列。直接模式使用 `lane_group_idx`、`ksign_slot_idx` 和 `ksign_lane_idx`，每拍串行处理一个保留位置。两种模式都执行公开固定数量的周期。
+tile 0 的 V2C 完成后启动 correction。correction 读取已完成 tile 的 K-sign 工作 buffer，同时主路径在另一个工作 buffer 上处理后续 tile。两个 buffer 按 `tile_linear[0]` 交替选择。correction 扫描全部 `TILES_TOTAL` 个 tile，绝大部分周期与后续主窗口重叠；最后一个主窗口排空后保留一个 `T_TILE` 的固定尾部和 8 拍控制/流水边界。
 
 K-sign 每个迭代的调度周期数和顶层可见译码周期数为：
 
 ```text
-T_ITER   = ROW_SEG_SIZE + T_MAIN + 8 + TILES_TOTAL * T_CORR
+T_ITER   = ROW_SEG_SIZE + T_MAIN + 8 + T_TILE
 T_DECODE = I_MAX * T_ITER + 6
 ```
 
@@ -52,7 +50,7 @@ T_DECODE = I_MAX * T_ITER + 6
 | `DEC_ITER_C2V_PRIME` | 首 tile C2V 填充 |
 | `DEC_ITER_OVERLAP` | C2V(tile n) 与 V2C(tile n-1) 重叠 |
 | `DEC_ITER_V2C_DRAIN` | 尾 tile V2C 排空 |
-| `DEC_ITER_KSIGN_CORR` | K-sign 固定 correction 窗口 |
+| `DEC_ITER_KSIGN_CORR` | K-sign 重叠扫描的固定尾部与流水排空 |
 | `DEC_DONE` | 固定轮数完成 |
 
 `o_iter_count` 在完成时等于 `I_MAX`。
@@ -67,8 +65,6 @@ T_DECODE = I_MAX * T_ITER + 6
 | `window_idx` | `0 .. TILES_TOTAL` |
 | `diag_idx_local` | `0 .. W-1` |
 | `lane_group_idx` | `0 .. Q_TILE-1` |
-| `ksign_slot_idx` | `0 .. K-1`，直接 correction 模式 |
-| `ksign_lane_idx` | `0 .. L-1`，直接 correction 模式 |
 | `iter_count` | `0 .. I_MAX` |
 
 `clear_addr` 在迭代开始递增；清空完成后进入 tile 窗口。`lane_group_idx` 最内层递增；`lane_group_idx` 到达 `Q_TILE-1` 后推进 `diag_idx_local`；`diag_idx_local` 到达 `W-1` 后推进 `window_idx`；最后一个窗口结束后推进迭代。
@@ -111,8 +107,8 @@ active_buf = ~window_idx[0]
 decode_start = i_start && o_h_loaded && !o_h_error
 ```
 
-调度器收到 `decode_start` 后从迭代 0、窗口 0、H 第一列项 0、`lane_group_idx=0` 开始。主窗口排空后执行 K-sign correction；最后一个 correction 坐标和固定流水排空完成后拉高 `o_done`。
+调度器收到 `decode_start` 后从迭代 0、窗口 0、H 第一列项 0、`lane_group_idx=0` 开始。tile 0 的 V2C 尾拍启动独立 correction 调度器；最后一个 correction 坐标和固定流水排空完成后拉高 `o_done`。
 
 ## 常量时间属性
 
-H 第一列项数、tile 数、guard 周期数、迭代轮数和 correction 模式都由公开参数决定。H base row、K-sign 位置、候选有效位、syndrome 和错误模式只影响写使能及地址，不影响窗口数量。
+H 第一列项数、tile 数、guard 周期数和迭代轮数都由公开参数决定。H base row、K-sign 位置、候选有效位、syndrome 和错误模式只影响写使能及地址，不影响窗口数量。

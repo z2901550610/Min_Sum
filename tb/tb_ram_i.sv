@@ -12,6 +12,9 @@ module tb_ram_i;
   logic [ ROW_IDX_W-1:0] base_row_idx;
   logic [ ROW_IDX_W-1:0] c2v_base_row_idx;
   logic [ ROW_IDX_W-1:0] v2c_base_row_idx;
+  /* verilator lint_off UNUSEDSIGNAL */
+  logic [ ROW_IDX_W-1:0] unused_corr_base_row_idx;
+  /* verilator lint_on UNUSEDSIGNAL */
   logic                  loaded;
   logic                  error;
 
@@ -27,10 +30,13 @@ module tb_ram_i;
       .i_c2v_diag_idx_local(DIAG_IDX_W'(1 % W)),
       .i_v2c_h_block_idx(H_BLOCK_W'(N0 - 1)),
       .i_v2c_diag_idx_local(DIAG_IDX_W'(W - 1)),
+      .i_corr_h_block_idx(H_BLOCK_W'(0)),
+      .i_corr_diag_idx_local(DIAG_IDX_W'(0)),
       .i_cfg_r(CFG_R_W'(R)),
       .i_cfg_w(CFG_W_W'(W)),
       .o_c2v_base_row_idx(c2v_base_row_idx),
       .o_v2c_base_row_idx(v2c_base_row_idx),
+      .o_corr_base_row_idx(unused_corr_base_row_idx),
       .o_loaded(loaded),
       .o_error(error)
   );

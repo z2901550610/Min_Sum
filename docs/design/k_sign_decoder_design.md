@@ -193,85 +193,62 @@ mag 相同则 diag_idx_local 更小者优先
 
 ## Sign_xor 更新
 
-K-sign 的关键约束是 `sign_xor_approx` 必须和 C2V 读取的近似 V2C 符号一致。硬件实现有两个固定时间选项。
-
-### 选项 A：双遍 V2C 更新
-
-第一遍 V2C 只计算 VNU 输出并完成 K-sign 选择。第二遍 V2C 使用已确定的 K-sign 记录更新 CNU A：
-
-```text
-v2c_sign_approx = base_sign XOR hit(dev_pos == diag_idx_local)
-CNU A sign_xor  = sign_xor XOR v2c_sign_approx
-```
-
-特点：
-
-- 语义直接，CNU A 只看到最终近似符号。
-- bank 冲突处理沿用主 V2C 扫描路径。
-- 周期增加接近一个 V2C tile pass。
-- 适合作为参考 RTL 和算法对齐版本。
-
-### 选项 B：Base-sign 主更新 + 固定校正
-
-主 V2C 扫描中，CNU A 符号路径先按 `base_sign` 更新：
+K-sign 的关键约束是 `sign_xor_approx` 必须和 C2V 读取的近似 V2C 符号一致。check 符号状态拆成 base parity 和 deviation parity：
 
 ```text
 sign_xor_base[row] = XOR of base_sign over connected variables
+dev_xor[row]       = XOR of hit(dev_pos == diag_idx_local) over connected variables
+sign_xor_approx[row] = sign_xor_base[row] XOR dev_xor[row]
 ```
 
-selector 同时找出每个变量节点的 K 个 dev 位置。tile 扫描完成后，对每个有效 dev 位置翻转对应校验节点的 `sign_xor`：
+主 V2C 扫描中，CNU A 把 `base_sign` 累积到 `ram_m.sign_xor_base`，并在 tile 工作 RAM 中确定每个变量节点的 K 个偏离位置。独立 correction 扫描读取完成 tile 的记录；每个命中位置对 `ram_sign_delta.dev_xor` 中对应 check row 执行一次翻转：
 
 ```text
-sign_xor_approx[row(dev_edge)] = sign_xor_base[row(dev_edge)] XOR 1
+if hit(dev_pos == diag_idx_local):
+    dev_xor[row(dev_edge)] ^= 1
 ```
 
-RTL 按公开参数为每个等级选择周期数较小的固定校正窗口。
-
-扫描模式遍历 tile 对角线和列组，每拍并行检查 L 列：
+下一轮 C2V 同步读取 `ram_m` 和 `ram_sign_delta`，在进入 CNU B 前组合：
 
 ```text
-for diag_idx_local in 0..W-1:
-  for q in 0..Q_TILE-1:
-    for lane in 0..L-1:
-      column = q * L + lane
-      if column is valid and diag_idx_local matches any valid dev_pos[column]:
-        flip sign_xor at row(base_row_idx[diag_idx_local] + column)
+c2v_sign = (sign_xor_base XOR dev_xor) XOR v2c_sign_approx XOR syndrome
 ```
 
-无效列和未命中的位置执行 mask，不改变状态。窗口长度由公开参数决定。
+`ram_m` 和 `ram_sign_delta` 都使用两个 iteration pair。C2V 读取上一轮 pair，V2C/correction 写当前轮 pair，因此重叠期间的读写访问落在不同物理 pair。
 
-直接模式遍历记录中的 K 个位置，每拍串行处理一列：
+## Correction 重叠调度
+
+`ram_k_tile` 使用两个工作 buffer。tile `t` 的 V2C 在 buffer `t[0]` 中维护候选；tile 完成后，correction 从该 buffer 读取记录，同时 tile `t+1` 的 V2C 使用另一个 buffer。扫描顺序固定为：
 
 ```text
-for tile in 0..TILES_TOTAL-1:
-  for q in 0..Q_BASE-1:
-    for slot in 0..K-1:
-      for lane in 0..L-1:
-        column = tile_column_base + q * L + lane
-        diag_idx_local = dev_pos[column][slot]
-        if column and slot are valid:
-          flip sign_xor at row(base_row_idx[diag_idx_local] + column_local)
+for h_block_idx in 0..N0-1:
+  for tile_idx in 0..TILE_COUNT-1:
+    for diag_idx_local in 0..W-1:
+      for lane_group_idx in 0..Q_TILE-1:
+        parallel for lane in 0..L-1:
+          if column valid and diag matches one retained dev_pos:
+            dev_xor[row] ^= 1
 ```
 
-直接模式每拍最多发出一个 flip，row-bank 冲突数量恒为零。K-sign 记录读取、H 基址读取、row 计算和 `ram_m` 翻转读改写使用固定流水。无效列和 invalid 槽占用相同调度周期并屏蔽 flip。
+同一个 `diag_idx_local/lane_group_idx` 的 L 个有效列经 `edge_addr_gen` 映射到不同 row bank，因此每个 delta bank 每拍最多接收一个 flip。`ram_sign_delta` 对连续命中同一地址提供固定 RMW 旁路。
 
-两种模式的 tile 周期为：
+tile 0 的 V2C 尾拍启动 correction。主路径共有 `TILES_TOTAL+1` 个 tile 窗口，correction 共有 `TILES_TOTAL` 个 tile 扫描窗口；启动错开两个 tile 窗口，因此主路径结束后固定保留一个 tile 扫描尾部：
 
 ```text
-T_SCAN   = W * Q_TILE
-T_DIRECT = K * L * Q_BASE
-T_CORR   = min(T_SCAN, T_DIRECT)
+T_TILE   = W * Q_TILE
+T_ITER   = ROW_SEG_SIZE + (TILES_TOTAL + 1) * T_TILE + 8 + T_TILE
+T_DECODE = I_MAX * T_ITER + 6
 ```
 
-统一 TRIKE、`K=3`、`L=16`、`Q_BASE=73`、`Q_TILE=76`：
+统一 TRIKE、`K=3`、`L=16`、`Q_TILE=76` 的 correction 固定尾部为：
 
-| 等级 | W | 扫描模式 | 直接模式 | 固定选择 |
-| --- | ---: | ---: | ---: | ---: |
-| TRIKE128 | 27 | 2052 | 3504 | 2052 |
-| TRIKE160 | 35 | 2660 | 3504 | 2660 |
-| TRIKE256 | 55 | 4180 | 3504 | 3504 |
-| TRIKE384 | 83 | 6308 | 3504 | 3504 |
-| TRIKE512 | 111 | 8436 | 3504 | 3504 |
+| 等级 | W | `T_TILE` |
+| --- | ---: | ---: |
+| TRIKE128 | 27 | 2052 |
+| TRIKE160 | 35 | 2660 |
+| TRIKE256 | 55 | 4180 |
+| TRIKE384 | 83 | 6308 |
+| TRIKE512 | 111 | 8436 |
 
 ## 常数时间要求
 
@@ -280,9 +257,8 @@ K-sign 实现遵守以下固定时间规则：
 - 每个公开参数等级使用固定 `K`、`POS_W`、`COLS_PER_TILE`、`L`。
 - selector 始终执行 K 级比较，不因候选填满提前结束。
 - 每个 tile 始终执行完整 `W * Q_TILE` 主扫描。
-- correction 模式和窗口长度只由公开参数决定，invalid 槽只 mask 写使能。
+- correction 窗口长度只由公开参数决定，invalid 槽只 mask 写使能。
 - 不使用由 syndrome、错误模式、H base row、dev 数量、候选幅值决定的循环次数。
-- bank 冲突处理使用公开固定 subslot 数。
 - 不使用译码成功提前停止。
 
 公开参数等级可选择不同固定周期预算。统一硬件可按最大 `W_MAX`、`POS_W` 和固定 K 实现。
@@ -311,11 +287,13 @@ BRAM 数量由目标器件的 SDP primitive、bank 深度和 Vivado memory mappi
 
 Tile 内 selector 工作状态按 `COLS_PER_TILE=1168`、`D=4` 估算：
 
-| K | 每变量工作记录 | 合计 |
-| ---: | ---: | ---: |
-| 3 | 34 bit | 39,712 bit |
+| K | 每变量工作记录 | 单 buffer | 双 buffer |
+| ---: | ---: | ---: | ---: |
+| 3 | 34 bit | 39,712 bit | 79,424 bit |
 
-该状态由按变量列 bank 化的 tile 工作 RAM 保存，并在 tile 间复用。全局 K-sign RAM 的逻辑记录宽度为 `1+K*POS_W` bit，物理上使用独立的 `base_sign` 字段，三个 `dev_pos` 槽分别使用窄 BRAM 字段。`dev_pos` 字段按 RAMB36 的 4K×9 原生几何划分深度段，并使用相同的逻辑 bank 地址和读写使能。C2V 完成一个 tile 的记录读取后，落后一窗口的 V2C 对同一 tile 原地提交记录。
+该状态由按变量列 bank 化的双 buffer tile 工作 RAM 保存。一个 buffer 供 V2C 维护候选，另一个 buffer 供 correction 读取完成记录。全局 K-sign RAM 的逻辑记录宽度为 `1+K*POS_W` bit，物理上使用独立的 `base_sign` 字段，三个 `dev_pos` 槽分别使用窄 BRAM 字段。`dev_pos` 字段按 RAMB36 的 4K×9 原生几何划分深度段，并使用相同的逻辑 bank 地址和读写使能。C2V 完成一个 tile 的记录读取后，落后一窗口的 V2C 对同一 tile 原地提交记录。
+
+`ram_sign_delta` 保存两个 iteration pair、每个 pair `R` bit 的 `dev_xor`，逻辑容量为 `2*R_MAX=217,174 bit`。它按 L 个 row bank 组织，物理 BRAM 数量以 Vivado 报告为准。
 
 统一 TRIKE、`L=16`、K=3 的 RTL 实现和 Vivado 资源结果见
 [implementation_status.md](implementation_status.md)。
@@ -371,22 +349,24 @@ TRIKE512：
 K-sign 数据通路由以下模块组成：
 
 1. `ram_k_global`：每个变量列的一份全局原地更新记录，`base_sign` 使用独立字段，三个 `dev_pos` 使用独立窄 BRAM 字段。
-2. `ram_k_tile`：活动 tile 的幅值工作 RAM，字段为 `base_sign` 和 K 个无序 `(dev_pos, magnitude)` 槽。
+2. `ram_k_tile`：两个 tile 工作 buffer，字段为 `base_sign` 和 K 个无序 `(dev_pos, magnitude)` 槽。
 3. `k_sign_update`：无序候选槽的最差项归约树和单槽更新组合逻辑。
-4. `k_sign_selector`：变量列 bank 路由、工作 RAM 读改写控制和压缩记录提交。
+4. `k_sign_selector`：变量列 bank 路由、双工作 RAM 读改写、correction 读取和压缩记录提交。
 5. `k_sign_reconstruct`：根据全局压缩记录和 `diag_idx_local` 重建近似符号及命中标志。
-6. `k_sign_correction`：直接模式的固定列/槽调度流水、H 基址查询和串行 row flip 地址生成。
+6. `k_sign_overlap_scheduler`：按公开参数生成重叠 correction 的 tile、对角线和列组坐标。
+7. `ram_sign_delta`：保存每个 check row 的 deviation parity，支持同步读取、清空和翻转 RMW。
 
-最后一个对角线在该变量列的全部记录读取完成后，将压缩记录写回同一地址。C2V 和扫描模式 correction 通过 `base_sign XOR hit(dev_pos == diag_idx_local)` 重建命中；直接模式从记录槽取得 `diag_idx_local`。主 V2C 使用 base-sign 更新，两种固定 correction 模式对命中位置翻转对应 check row 的 `sign_xor`。目标 pair 在 correction 窗口内锁存并保持到翻转流水排空。
+最后一个对角线在该变量列的全部记录读取完成后，将压缩记录写回同一地址。C2V 通过 `base_sign XOR hit(dev_pos == diag_idx_local)` 重建变量边符号。主 V2C 把 base-sign 累积到 `ram_m`，重叠 correction 把命中位置的奇偶性累积到 `ram_sign_delta`；下一轮 C2V 将两部分异或后送入 CNU B。
 
 ## 主要风险
 
 | 风险 | 说明 | 处理方式 |
 | --- | --- | --- |
-| correction bank 冲突 | 多列 dev 位置可能映射到同一个 row bank | 直接模式每拍串行一个 flip；扫描模式使用 edge bank 排列 |
+| correction bank 冲突 | 多列 dev 位置可能映射到同一个 row bank | 扫描使用与主 edge 路径相同的 lane-to-bank 排列 |
 | selector 布线 | `COLS_PER_TILE*K` 候选状态分布在 tile 内 | 将 selector 状态按 lane/bank 分区，靠近 VNU 输出放置 |
 | K=3 余量 | 小 K 对 DFR margin 更敏感 | 使用多 seed 和更低 DFR 区确认 |
 | sign_xor 语义 | C2V 与 CNU A 必须使用同一近似符号定义 | C model、RTL 和测试向量共享 tie-break 规则 |
+| 重叠路径时序 | 双 tile buffer、第三个 H 读口和 delta RMW 增加布局压力 | 使用 placed/routed 报告检查 LUT、BRAM 和 setup/hold |
 
 ## RTL 配置
 

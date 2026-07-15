@@ -14,10 +14,13 @@ module ram_i
     input  logic [DIAG_IDX_W-1:0] i_c2v_diag_idx_local,
     input  logic [ H_BLOCK_W-1:0] i_v2c_h_block_idx,
     input  logic [DIAG_IDX_W-1:0] i_v2c_diag_idx_local,
+    input  logic [ H_BLOCK_W-1:0] i_corr_h_block_idx,
+    input  logic [DIAG_IDX_W-1:0] i_corr_diag_idx_local,
     input  logic [   CFG_R_W-1:0] i_cfg_r,
     input  logic [   CFG_W_W-1:0] i_cfg_w,
     output logic [ ROW_IDX_W-1:0] o_c2v_base_row_idx,
     output logic [ ROW_IDX_W-1:0] o_v2c_base_row_idx,
+    output logic [ ROW_IDX_W-1:0] o_corr_base_row_idx,
     output logic                  o_loaded,
     output logic                  o_error
 );
@@ -47,8 +50,10 @@ module ram_i
   logic [ H_ENTRY_ADDR_W-1:0] write_addr;
   logic [ H_ENTRY_ADDR_W-1:0] read_addr_a;
   logic [ H_ENTRY_ADDR_W-1:0] read_addr_b;
+  logic [ H_ENTRY_ADDR_W-1:0] read_addr_c;
   logic [      ROW_IDX_W-1:0] read_data_a;
   logic [      ROW_IDX_W-1:0] read_data_b;
+  logic [      ROW_IDX_W-1:0] read_data_c;
   logic [H_ENTRY_COUNT_W-1:0] loaded_target;
   logic                       validation_diag_last;
   logic                       validation_scan_last;
@@ -87,9 +92,11 @@ module ram_i
       read_addr_a = h_entry_addr(i_c2v_h_block_idx, i_c2v_diag_idx_local);
       read_addr_b = h_entry_addr(i_v2c_h_block_idx, i_v2c_diag_idx_local);
     end
+    read_addr_c = h_entry_addr(i_corr_h_block_idx, i_corr_diag_idx_local);
 
     o_c2v_base_row_idx = validation_done ? read_data_a : '0;
     o_v2c_base_row_idx = validation_done ? read_data_b : '0;
+    o_corr_base_row_idx = validation_done ? read_data_c : '0;
     o_loaded = validation_done && !error_reg;
     o_error = validation_done && error_reg;
   end
@@ -120,6 +127,20 @@ module ram_i
       .i_re   (1'b1),
       .i_raddr(read_addr_b),
       .o_rdata(read_data_b)
+  );
+
+  ram_bram #(
+      .DATA_W(ROW_IDX_W),
+      .DEPTH (H_ENTRY_COUNT),
+      .ADDR_W(H_ENTRY_ADDR_W)
+  ) u_mem_corr (
+      .i_clk  (i_clk),
+      .i_we   (write_accept),
+      .i_waddr(write_addr),
+      .i_wdata(i_base_row_idx),
+      .i_re   (1'b1),
+      .i_raddr(read_addr_c),
+      .o_rdata(read_data_c)
   );
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin

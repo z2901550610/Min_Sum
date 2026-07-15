@@ -56,6 +56,7 @@ module tb_tile_scheduler;
       .i_clk(clk),
       .i_rst_n(rst_n),
       .i_start(start),
+      .i_ksign_corr_done(1'b0),
       .i_cfg_w(CFG_W_W'(W)),
       .i_cfg_tile_count(TILE_IDX_W'(TILE_COUNT)),
       .i_cfg_row_seg_size(ROW_BANK_AW'(ROW_SEG_SIZE)),

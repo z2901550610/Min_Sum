@@ -23,7 +23,7 @@
 | Vivado | 2023.2 |
 | 目标时钟 | 100 MHz，周期 10 ns |
 | 时钟不确定度 | 0.100 ns |
-| 报告阶段 | Fully Placed / Routed |
+| 报告阶段 | 当前 RTL 待运行 Fully Placed / Routed |
 
 统一硬件使用最大参数确定存储和计数器几何。`i_param_level` 是公开输入，各参数等级使用公开固定的
 `R`、`W`、tile 数和周期预算。
@@ -35,9 +35,11 @@
 - `edge_addr_gen` 使用两级地址流水，每拍接收一组 tile/diag/lane 坐标。
 - `barrel_rotate` 完成 lane 到 bank 的请求路由和读数据返回。
 - `ram_m` 使用两个 iteration pair，C2V 读取一个 pair，V2C 更新另一个 pair。
+- `ram_sign_delta` 使用两个 iteration pair，C2V 读取 deviation parity，重叠 correction 更新另一个 pair。
 - `ram_accum` 和 `ram_t` 使用独立的 fill/active 双 buffer，使相邻 tile 的 C2V 与 V2C 重叠。
-- `ram_m` 的翻转、V2C 写回和同地址读写使用固定旁路规则。
-- `tile_scheduler` 根据公开参数选择 K-sign 扫描 correction 或直接 correction。
+- `ram_k_tile` 使用双工作 buffer，使完成 tile 的 correction 与后续 tile 的 V2C 重叠。
+- `ram_sign_delta` 的翻转读改写和连续同地址访问使用固定旁路规则。
+- `k_sign_overlap_scheduler` 使用公开固定 tile/diag/lane 扫描深度。
 - invalid lane、invalid K 槽、syndrome、H 第一列内容和译码结果只控制 valid/写使能，不改变调度深度。
 - 主循环固定执行 `I_MAX` 轮，不使用提前终止。
 
@@ -46,13 +48,14 @@
 | 模块 | 物理组织 | 端口与时序 |
 | --- | --- | --- |
 | `ram_bram` | XPM 简单双口 block RAM；tile 工作存储可选择 distributed RAM | 同步写、同步读，read-first 语义 |
-| `ram_i` | 两份 H 第一列 `base_row_idx` BRAM | C2V/V2C 双读视图；加载后执行固定周期合法性校验 |
-| `ram_m` | `2 × L` 个压缩 check-state bank | pair 隔离；每 bank 同步读写；flip 具有固定旁路 |
+| `ram_i` | 三份 H 第一列 `base_row_idx` BRAM | C2V/V2C/correction 三读视图；加载后执行固定周期合法性校验 |
+| `ram_m` | `2 × L` 个压缩 check-state bank | pair 隔离；保存幅度状态和 base-sign parity |
+| `ram_sign_delta` | `2 × L` 个 1-bit row-parity bank | pair 隔离；同步读、清空和 flip RMW |
 | `ram_syndrome` | `L` 个 syndrome bit BRAM bank | 外部写入，C2V 同步读 |
 | `ram_accum` | 两组 banked distributed RAM | C2V 读改写，V2C 读取 active buffer |
 | `ram_t` | 每个 buffer、每个 lane 一份 BRAM | C2V 写 fill buffer，V2C 读 active buffer |
-| `ram_k_tile` | `L` 个 distributed RAM 工作 bank | 保存活动 tile 的 K=3 无序 `(dev_pos, magnitude)` 槽 |
-| `ram_k_global` | `L` 个原地更新全局 bank | C2V/correction 同步读，V2C 提交经寄存器后同步写 |
+| `ram_k_tile` | `2 × L` 个 distributed RAM 工作 bank | ping-pong 保存 K=3 无序 `(dev_pos, magnitude)` 槽 |
+| `ram_k_global` | `L` 个原地更新全局 bank | C2V 同步读，V2C 提交经寄存器后同步写 |
 | `ram_decision` | `L` 个最终判决 bit BRAM bank | final iteration 写，外部同步读 |
 
 TRIKE K-sign 配置不实例化完整符号存储 `ram_s`。C2V 符号由全局 K-sign 记录重建。
@@ -85,8 +88,7 @@ base_sign RAMB36/bank  = 1
 global K RAMB36        = 16 banks × (15 + 1) = 256
 ```
 
-全局 K-sign RAM 占基线 RAMB36 总数的 `256 / 464`。tile 工作记录宽度为
-`1 + 3 × (7 + 4) = 34 bit`，深度为 `Q_BASE=73`。
+tile 工作记录宽度为 `1 + 3 × (7 + 4) = 34 bit`，每个 buffer 深度为 `Q_BASE=73`。
 
 ### K=3 更新器
 
@@ -101,89 +103,53 @@ global K RAMB36        = 16 banks × (15 + 1) = 256
 
 ## 固定周期
 
-TRIKE-512 基线参数：
+TRIKE-512 参数：
 
 ```text
 ROW_SEG_SIZE = ceil(108587 / 16) = 6787
 T_MAIN       = (279 + 1) × 111 × 76 = 2362080
-T_CORR_SCAN  = 111 × 76 = 8436
-T_CORR_DIRECT= 3 × 16 × 73 = 3504
-T_CORR       = 3504
-T_ITER       = 6787 + 2362080 + 8 + 279 × 3504 = 3346491
-T_DECODE     = 7 × 3346491 + 6 = 23425443
+T_TILE       = 111 × 76 = 8436
+T_ITER       = 6787 + 2362080 + 8 + 8436 = 2377311
+T_DECODE     = 7 × 2377311 + 6 = 16641183
 ```
 
-23,425,443 拍由公开参数完全确定。H 第一列、syndrome、错误模式、候选位置、候选幅值和 residual
+16,641,183 拍由公开参数完全确定。H 第一列、syndrome、错误模式、候选位置、候选幅值和 residual
 不改变该周期数。
+
+| 参数等级 | 固定周期 | 100 MHz 延时 |
+| --- | ---: | ---: |
+| TRIKE128 | 333,990 | 3.33990 ms |
+| TRIKE160 | 657,341 | 6.57341 ms |
+| TRIKE256 | 2,353,770 | 23.53770 ms |
+| TRIKE384 | 7,135,995 | 71.35995 ms |
+| TRIKE512 | 16,641,183 | 166.41183 ms |
 
 ## Vivado 资源占用
 
-下表为基线配置的 placed utilization：
+当前重叠 correction RTL 的 placed utilization 待测。需要报告 Slice LUT、LUT as Logic、LUT as Memory、
+Slice Register、Slice、Block RAM Tile、RAMB36E1、RAMB18E1、DSP48E1 和 CARRY4。重点检查双
+`ram_k_tile`、`ram_sign_delta` 与第三份 `ram_i` 对 LUTRAM 和 BRAM Tile 的影响。
 
-| 资源 | 使用量 | 可用量 | 利用率 |
-| --- | ---: | ---: | ---: |
-| Slice LUT | 24,110 | 222,600 | 10.83% |
-| LUT as Logic | 20,381 | 222,600 | 9.16% |
-| LUT as Memory | 3,729 | 81,400 | 4.58% |
-| Distributed RAM LUT | 3,520 | — | — |
-| SRL LUT | 209 | — | — |
-| Slice Register | 11,129 | 445,200 | 2.50% |
-| Slice | 8,519 | 55,650 | 15.31% |
-| Block RAM Tile | 505 | 715 | 70.63% |
-| RAMB36E1 | 464 | 715 | 64.90% |
-| RAMB18E1 | 82 | 1,430 | 5.73% |
-| DSP48E1 | 1 | 1,440 | 0.07% |
-| CARRY4 | 1,416 | — | — |
-| Bonded IOB | 78 | 300 | 26.00% |
-| BUFGCTRL | 1 | 32 | 3.13% |
+## Vivado 时序状态
 
-资源压力由 BRAM Tile 主导。LUT 总量中 3,520 个用于 distributed RAM，主要承载 tile 工作状态；
-寄存器和 DSP 利用率具有较大余量。
+当前重叠 correction RTL 的 routed timing 待测。目标约束为 10.000 ns，clock uncertainty 为
+0.100 ns；需要检查整体 WNS/TNS、`decoder_clk` 内部 WNS、WHS/THS、WPWS 和 setup top paths。
 
-## Vivado 时序基线
-
-| 指标 | 结果 |
-| --- | ---: |
-| 时钟周期 | 10.000 ns |
-| 整体 WNS | +0.629 ns |
-| `decoder_clk` 内部 WNS | +0.629 ns |
-| TNS | 0.000 ns |
-| WHS | +0.036 ns |
-| THS | 0.000 ns |
-| WPWS | +4.232 ns |
-
-内部最差 setup 路径从 `tile_scheduler` 的 C2V tile index 寄存器到
-`ram_k_global` slot 0、segment 3 的 RAMB36 enable 端口：
-
-```text
-Data Path Delay = 9.130 ns
-logic           = 3.561 ns
-route           = 5.569 ns
-Logic Levels    = 8
-```
-
-该路径包含 correction 列地址乘加、bank/segment 选择和 BRAM 使能译码。路径延迟以布线为主，
-实现评估同时关注 WNS、DSP 乘加和 route 比例。
-
-XDC 定义 100 MHz 时钟、0.100 ns clock uncertainty 和异步复位 false path。core 级报告包含：
-
-- 69 个普通输入端口没有 input delay。
-- 1 个异步复位输入使用 false path。
-- 7 个输出端口没有 output delay。
-- methodology 报告包含 `DPIR-1=18` 和 `TIMING-18=76`。
-
-板级或上层系统集成需要根据真实接口补充 I/O delay。RTL 内部时序判断使用
-`decoder_clk` intra-clock 结果。
+XDC 定义 100 MHz 时钟、0.100 ns clock uncertainty 和异步复位 false path。板级或上层系统集成需要
+根据真实接口补充 I/O delay。RTL 内部时序判断使用 `decoder_clk` intra-clock 结果。
 
 ## 验证状态
 
-基线 RTL 通过：
+当前 RTL 通过：
 
 ```sh
 make test-unit
 make test-integration
-make check-format-rtl && make lint-rtl
+make test-trike-unified-ksign-random BIKE_RANDOM_TRIALS=1
 ```
+
+维护范围内的修改文件通过 Verible 格式检查与 lint。工作区未跟踪的 `rtl/test.sv` 不属于本次修改范围，
+因此没有执行会包含该文件的完整 `make check-format-rtl && make lint-rtl`。
 
 顶层 toy 集成结果：
 
@@ -197,12 +163,17 @@ TRIKE-512、seed 1、`L=16`、`COLS_PER_TILE=1168` 的完整随机译码结果�
 
 ```text
 iter            = 7
-cycles          = 23425443
+cycles          = 16641183
 target_weight   = 877
 output_weight   = 877
 residual_weight = 0
 exact           = 1
 ```
+
+统一 TRIKE、seed 1 的五档完整随机译码均为 residual 0、exact 1，周期依次为
+333,990、657,341、2,353,770、7,135,995、16,641,183。
+TRIKE-128 的 seed 1 至 5 均固定 333,990 拍、residual 0、exact 1。
+TRIKE-512 的 seed 1 和 2 均固定 16,641,183 拍、residual 0、exact 1。
 
 统一 TRIKE 多参数回归入口：
 
@@ -216,7 +187,8 @@ Vivado 综合入口：
 make vivado-synth-trike-unified-ksign
 ```
 
-完整实现报告至少检查 utilization、timing summary、methodology、CDC 和 messages。
+当前执行环境没有 `vivado` 可执行文件，因此本架构的 utilization、timing summary、methodology、CDC 和
+messages 报告均为待测。
 
 ## 实现判据
 
