@@ -175,6 +175,7 @@ package bike_pkg;
   localparam int K_SIGN_WORK_SLOT_W = DIAG_IDX_W + D;
   localparam int K_SIGN_WORK_RECORD_W = 1 + (K_SIGN_K * K_SIGN_WORK_SLOT_W);
   localparam int K_SIGN_RECORD_W = 1 + (K_SIGN_K * DIAG_IDX_W);
+  localparam int K_SIGN_POS_RECORD_W = K_SIGN_K * DIAG_IDX_W;
   localparam int K_SIGN_WORK_DEPTH = Q_BASE;
   localparam int K_SIGN_WORK_AW = (K_SIGN_WORK_DEPTH > 1) ? $clog2(K_SIGN_WORK_DEPTH) : 1;
   localparam logic [DIAG_IDX_W-1:0] K_SIGN_DIAG_INVALID = '1;

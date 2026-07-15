@@ -32,9 +32,11 @@ module tb_k_sign_update;
   logic                            corr_read_valid[0:L-1];
   logic [               COL_W-1:0] corr_col_idx[0:L-1];
   logic [          TILE_OFF_W-1:0] corr_tile_offset[0:L-1];
+  logic [     K_SIGN_RECORD_W-1:0] corr_record[0:L-1];
   /* verilator lint_off UNUSEDSIGNAL */
-  logic [     K_SIGN_RECORD_W-1:0] unused_corr_record[0:L-1];
+  logic                            unused_corr_sign;
   /* verilator lint_on UNUSEDSIGNAL */
+  logic                            corr_hit;
 
   k_sign_update u_k_sign_update (
       .i_record        (record_q),
@@ -63,15 +65,20 @@ module tb_k_sign_update;
       .i_diag_idx_local  (diag_idx_local),
       .i_v2c_msg         (v2c_msg_lane),
       .i_base_sign       (v2c_base_sign),
-      .i_work_buf_sel    (1'b0),
       .o_commit_valid    (commit_valid),
       .o_commit_col_idx  (commit_col_idx),
       .o_commit_record   (commit_record),
-      .i_corr_buf_sel    (1'b1),
       .i_corr_read_valid (corr_read_valid),
       .i_corr_col_idx    (corr_col_idx),
       .i_corr_tile_offset(corr_tile_offset),
-      .o_corr_read_record(unused_corr_record)
+      .o_corr_read_record(corr_record)
+  );
+
+  k_sign_reconstruct u_corr_reconstruct (
+      .i_record        (corr_record[0]),
+      .i_diag_idx_local(diag_idx_local),
+      .o_sign          (unused_corr_sign),
+      .o_hit           (corr_hit)
   );
 
   ram_k_global u_ram_k_global (
@@ -161,6 +168,23 @@ module tb_k_sign_update;
     end
   endtask
 
+  task automatic read_corr_edge(input  logic [DIAG_IDX_W-1:0] pos, input  logic expected_hit);
+    begin
+      @(negedge clk);
+      diag_idx_local = pos;
+      corr_read_valid[0] = 1'b1;
+      corr_col_idx[0] = '0;
+      corr_tile_offset[0] = '0;
+      @(posedge clk);
+      #1;
+      if (corr_hit !== expected_hit) begin
+        $fatal(1, "correction snapshot hit mismatch at edge %0d", pos);
+      end
+      @(negedge clk);
+      corr_read_valid[0] = 1'b0;
+    end
+  endtask
+
   initial begin
     logic sign_read;
 
@@ -212,6 +236,10 @@ module tb_k_sign_update;
     write_ram_edge(1, 1'b0, 9);
     write_ram_edge(2, 1'b1, 8);
     @(posedge clk);
+
+    read_corr_edge(0, 1'b1);
+    read_corr_edge(1, 1'b0);
+    read_corr_edge(2, 1'b1);
 
     read_ram_edge(0, sign_read);
     if (sign_read !== 1'b1) $fatal(1, "ram sign mismatch at edge 0");

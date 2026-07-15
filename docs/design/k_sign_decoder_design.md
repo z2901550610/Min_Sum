@@ -218,7 +218,7 @@ c2v_sign = (sign_xor_base XOR dev_xor) XOR v2c_sign_approx XOR syndrome
 
 ## Correction 重叠调度
 
-`ram_k_tile` 使用两个工作 buffer。tile `t` 的 V2C 在 buffer `t[0]` 中维护候选；tile 完成后，correction 从该 buffer 读取记录，同时 tile `t+1` 的 V2C 使用另一个 buffer。扫描顺序固定为：
+`ram_k_tile` 使用一份34-bit候选工作RAM和一份21-bit位置snapshot RAM。tile `t` 的V2C在工作RAM中维护候选，并在最后一个对角线把三个 `dev_pos` 写入snapshot；correction从snapshot读取tile `t`，同时tile `t+1`复用工作RAM。两条路径在最后一个对角线对snapshot执行同地址读取和覆盖写入，read-first语义保证correction取得tile `t` 的位置，随后保存tile `t+1` 的位置。扫描顺序固定为：
 
 ```text
 for h_block_idx in 0..N0-1:
@@ -287,11 +287,11 @@ BRAM 数量由目标器件的 SDP primitive、bank 深度和 Vivado memory mappi
 
 Tile 内 selector 工作状态按 `COLS_PER_TILE=1168`、`D=4` 估算：
 
-| K | 每变量工作记录 | 单 buffer | 双 buffer |
+| K | 工作记录 | correction snapshot | 合计 |
 | ---: | ---: | ---: | ---: |
-| 3 | 34 bit | 39,712 bit | 79,424 bit |
+| 3 | 34 bit × 1168 = 39,712 bit | 21 bit × 1168 = 24,528 bit | 64,240 bit |
 
-该状态由按变量列 bank 化的双 buffer tile 工作 RAM 保存。一个 buffer 供 V2C 维护候选，另一个 buffer 供 correction 读取完成记录。全局 K-sign RAM 的逻辑记录宽度为 `1+K*POS_W` bit，物理上使用独立的 `base_sign` 字段，三个 `dev_pos` 槽分别使用窄 BRAM 字段。`dev_pos` 字段按 RAMB36 的 4K×9 原生几何划分深度段，并使用相同的逻辑 bank 地址和读写使能。C2V 完成一个 tile 的记录读取后，落后一窗口的 V2C 对同一 tile 原地提交记录。
+工作RAM保存 `base_sign` 和K个无序 `(dev_pos, magnitude)` 槽；snapshot只保存correction需要的K个 `dev_pos`，invalid仍由位置哨兵表达。两份RAM均按变量列bank化。全局K-sign RAM的逻辑记录宽度为 `1+K*POS_W` bit，物理上使用独立的 `base_sign` 字段，三个 `dev_pos` 槽分别使用窄BRAM字段。`dev_pos` 字段按RAMB36的4K×9原生几何划分深度段，并使用相同的逻辑bank地址和读写使能。C2V完成一个tile的记录读取后，落后一窗口的V2C对同一tile原地提交记录。
 
 `ram_sign_delta` 保存两个 iteration pair、每个 pair `R` bit 的 `dev_xor`，逻辑容量为 `2*R_MAX=217,174 bit`。它按 L 个 row bank 组织，物理 BRAM 数量以 Vivado 报告为准。
 
@@ -349,9 +349,9 @@ TRIKE512：
 K-sign 数据通路由以下模块组成：
 
 1. `ram_k_global`：每个变量列的一份全局原地更新记录，`base_sign` 使用独立字段，三个 `dev_pos` 使用独立窄 BRAM 字段。
-2. `ram_k_tile`：两个 tile 工作 buffer，字段为 `base_sign` 和 K 个无序 `(dev_pos, magnitude)` 槽。
+2. `ram_k_tile`：一份34-bit候选工作RAM和一份21-bit correction位置snapshot RAM。
 3. `k_sign_update`：无序候选槽的最差项归约树和单槽更新组合逻辑。
-4. `k_sign_selector`：变量列 bank 路由、双工作 RAM 读改写、correction 读取和压缩记录提交。
+4. `k_sign_selector`：变量列bank路由、工作RAM读改写、snapshot读写和全局压缩记录提交。
 5. `k_sign_reconstruct`：根据全局压缩记录和 `diag_idx_local` 重建近似符号及命中标志。
 6. `k_sign_overlap_scheduler`：按公开参数生成重叠 correction 的 tile、对角线和列组坐标。
 7. `ram_sign_delta`：保存每个 check row 的 deviation parity，支持同步读取、清空和翻转 RMW。
@@ -366,7 +366,7 @@ K-sign 数据通路由以下模块组成：
 | selector 布线 | `COLS_PER_TILE*K` 候选状态分布在 tile 内 | 将 selector 状态按 lane/bank 分区，靠近 VNU 输出放置 |
 | K=3 余量 | 小 K 对 DFR margin 更敏感 | 使用多 seed 和更低 DFR 区确认 |
 | sign_xor 语义 | C2V 与 CNU A 必须使用同一近似符号定义 | C model、RTL 和测试向量共享 tie-break 规则 |
-| 重叠路径时序 | 双 tile buffer、第三个 H 读口和 delta RMW 增加布局压力 | 使用 placed/routed 报告检查 LUT、BRAM 和 setup/hold |
+| 重叠路径时序 | 工作RAM、snapshot、第三个H读口和delta RMW增加布局压力 | snapshot版本的placed/routed结果待测 |
 
 ## RTL 配置
 

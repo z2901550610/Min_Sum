@@ -32,7 +32,7 @@ K-sign correction 使用与主窗口同速的 tile 扫描：
 T_TILE = W * Q_TILE
 ```
 
-tile 0 的 V2C 完成后启动 correction。correction 读取已完成 tile 的 K-sign 工作 buffer，同时主路径在另一个工作 buffer 上处理后续 tile。两个 buffer 按 `tile_linear[0]` 交替选择。correction 扫描全部 `TILES_TOTAL` 个 tile，绝大部分周期与后续主窗口重叠；最后一个主窗口排空后保留一个 `T_TILE` 的固定尾部和 8 拍控制/流水边界。
+tile 0 的 V2C 完成后启动 correction。V2C 使用34-bit工作RAM维护候选，并在最后一个对角线把21-bit位置记录写入correction snapshot RAM。correction 读取上一完成tile的snapshot，同时工作RAM被后续tile复用。snapshot使用read-first语义处理上一tile读取与当前tile提交的同地址重叠。correction扫描全部 `TILES_TOTAL` 个tile，绝大部分周期与后续主窗口重叠；最后一个主窗口排空后保留一个 `T_TILE` 的固定尾部和8拍控制/流水边界。
 
 K-sign 每个迭代的调度周期数和顶层可见译码周期数为：
 

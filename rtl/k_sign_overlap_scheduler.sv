@@ -13,7 +13,6 @@ module k_sign_overlap_scheduler
     output logic [      TILE_IDX_W-1:0] o_tile_idx,
     output logic [      DIAG_IDX_W-1:0] o_diag_idx_local,
     output logic [LANE_GROUP_IDX_W-1:0] o_lane_group_idx,
-    output logic                        o_tile_buf_sel,
     output logic                        o_done
 );
 
@@ -82,7 +81,6 @@ module k_sign_overlap_scheduler
     o_tile_idx = tile_idx_q;
     o_diag_idx_local = diag_idx_local_q;
     o_lane_group_idx = lane_group_idx_q;
-    o_tile_buf_sel = (h_block_idx_q[0] & i_cfg_tile_count[0]) ^ tile_idx_q[0];
     o_done = done_q;
   end
 endmodule

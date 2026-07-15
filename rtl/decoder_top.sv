@@ -64,7 +64,6 @@ module decoder_top
   logic        [       TILE_IDX_W-1:0] ksign_overlap_tile_idx;
   logic        [       DIAG_IDX_W-1:0] ksign_overlap_diag_idx_local;
   logic        [ LANE_GROUP_IDX_W-1:0] ksign_overlap_lane_group_idx;
-  logic                                ksign_overlap_tile_buf_sel;
   logic        [        H_BLOCK_W-1:0] c2v_h_block_idx;
   logic        [       TILE_IDX_W-1:0] c2v_tile_idx;
   logic        [        H_BLOCK_W-1:0] v2c_h_block_idx;
@@ -306,9 +305,7 @@ module decoder_top
   logic        [       DIAG_IDX_W-1:0] ksign_scan_diag_idx_local_e;
   logic        [ LANE_GROUP_IDX_W-1:0] ksign_scan_lane_group_idx_e;
   logic        [        ROW_IDX_W-1:0] ksign_scan_h_base_row_idx_e;
-  logic                                ksign_scan_tile_buf_sel_e;
   logic        [       DIAG_IDX_W-1:0] ksign_scan_diag_idx_local_a;
-  logic                                ksign_scan_tile_buf_sel_a;
   logic        [       DIAG_IDX_W-1:0] ksign_scan_diag_idx_local_r;
   logic                                ksign_scan_valid[0:L-1];
   logic        [            COL_W-1:0] ksign_scan_col_idx[0:L-1];
@@ -347,9 +344,6 @@ module decoder_top
   logic        [  K_SIGN_RECORD_W-1:0] ksign_commit_record[0:L-1];
   logic                                v2c_sign_wdata[0:L-1];
   logic                                v2c_ksign_base_sign[0:L-1];
-  logic                                v2c_ksign_buf_sel_q;
-  logic                                v2c_ksign_buf_sel_s;
-  logic                                v2c_ksign_buf_sel_c;
   logic signed [            ACC_W-1:0] old_c2v_sum[0:L-1];
   logic signed [            ACC_W-1:0] vnu_c2v_sum[0:L-1];
   logic signed [            ACC_W-1:0] vnu_c2v_edge[0:L-1];
@@ -622,7 +616,6 @@ module decoder_top
       .o_tile_idx(ksign_overlap_tile_idx),
       .o_diag_idx_local(ksign_overlap_diag_idx_local),
       .o_lane_group_idx(ksign_overlap_lane_group_idx),
-      .o_tile_buf_sel(ksign_overlap_tile_buf_sel),
       .o_done(ksign_overlap_done)
   );
 
@@ -703,11 +696,9 @@ module decoder_top
           .i_diag_idx_local  (v2c_diag_idx_local_c),
           .i_v2c_msg         (v2c_msg_c),
           .i_base_sign       (v2c_ksign_base_sign),
-          .i_work_buf_sel    (v2c_ksign_buf_sel_c),
           .o_commit_valid    (ksign_commit_valid),
           .o_commit_col_idx  (ksign_commit_col_idx),
           .o_commit_record   (ksign_commit_record),
-          .i_corr_buf_sel    (ksign_scan_tile_buf_sel_a),
           .i_corr_read_valid (ksign_scan_valid),
           .i_corr_col_idx    (ksign_scan_col_idx),
           .i_corr_tile_offset(ksign_scan_tile_offset),
@@ -952,9 +943,7 @@ module decoder_top
       ksign_scan_diag_idx_local_e <= '0;
       ksign_scan_lane_group_idx_e <= '0;
       ksign_scan_h_base_row_idx_e <= '0;
-      ksign_scan_tile_buf_sel_e <= 1'b0;
       ksign_scan_diag_idx_local_a <= '0;
-      ksign_scan_tile_buf_sel_a <= 1'b0;
       ksign_scan_diag_idx_local_r <= '0;
       ksign_read_diag_idx_local_q <= '0;
       v2c_phase_e <= 1'b0;
@@ -982,9 +971,6 @@ module decoder_top
       v2c_final_iter_r <= 1'b0;
       comp_write_pair_sel_r <= 1'b0;
       v2c_write_pair_sel_q <= 1'b0;
-      v2c_ksign_buf_sel_q <= 1'b0;
-      v2c_ksign_buf_sel_s <= 1'b0;
-      v2c_ksign_buf_sel_c <= 1'b0;
       ctrl_done_r <= 1'b0;
       ctrl_done_q <= 1'b0;
       ctrl_done_s <= 1'b0;
@@ -1154,21 +1140,18 @@ module decoder_top
       v2c_lane_group_idx_q <= v2c_lane_group_idx_r;
       v2c_final_iter_q <= v2c_final_iter_r;
       v2c_write_pair_sel_q <= comp_write_pair_sel_r;
-      v2c_ksign_buf_sel_q <= v2c_active_buf_r;
       v2c_phase_s <= v2c_phase_q;
       v2c_tile_idx_s <= v2c_tile_idx_q;
       v2c_diag_idx_global_base_s <= v2c_diag_idx_global_base_q;
       v2c_diag_idx_local_s <= v2c_diag_idx_local_q;
       v2c_lane_group_idx_s <= v2c_lane_group_idx_q;
       v2c_write_pair_sel_s <= v2c_write_pair_sel_q;
-      v2c_ksign_buf_sel_s <= v2c_ksign_buf_sel_q;
       v2c_phase_c <= v2c_phase_s;
       v2c_tile_idx_c <= v2c_tile_idx_s;
       v2c_diag_idx_global_base_c <= v2c_diag_idx_global_base_s;
       v2c_diag_idx_local_c <= v2c_diag_idx_local_s;
       v2c_lane_group_idx_c <= v2c_lane_group_idx_s;
       v2c_write_pair_sel_c <= v2c_write_pair_sel_s;
-      v2c_ksign_buf_sel_c <= v2c_ksign_buf_sel_s;
       v2c_write_phase_p <= v2c_phase_c;
       v2c_write_tile_idx_p <= v2c_tile_idx_c;
       v2c_write_diag_idx_global_base_p <= v2c_diag_idx_global_base_c;
@@ -1186,9 +1169,7 @@ module decoder_top
       ksign_scan_diag_idx_local_e <= ksign_scan_diag_idx_local_h;
       ksign_scan_lane_group_idx_e <= ksign_scan_lane_group_idx_h;
       ksign_scan_h_base_row_idx_e <= ksign_h_base_row_idx;
-      ksign_scan_tile_buf_sel_e <= ksign_overlap_tile_buf_sel;
       ksign_scan_diag_idx_local_a <= ksign_scan_diag_idx_local_e;
-      ksign_scan_tile_buf_sel_a <= ksign_scan_tile_buf_sel_e;
       ksign_scan_diag_idx_local_r <= ksign_scan_diag_idx_local_a;
       ksign_read_diag_idx_local_q <= ksign_read_diag_idx_local;
       ctrl_done_r <= ctrl_done;

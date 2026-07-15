@@ -12,11 +12,9 @@ module k_sign_selector
     input  logic [     DIAG_IDX_W-1:0] i_diag_idx_local,
     input  logic [          MSG_W-1:0] i_v2c_msg[0:L-1],
     input  logic                       i_base_sign[0:L-1],
-    input  logic                       i_work_buf_sel,
     output logic                       o_commit_valid[0:L-1],
     output logic [          COL_W-1:0] o_commit_col_idx[0:L-1],
     output logic [K_SIGN_RECORD_W-1:0] o_commit_record[0:L-1],
-    input  logic                       i_corr_buf_sel,
     input  logic                       i_corr_read_valid[0:L-1],
     input  logic [          COL_W-1:0] i_corr_col_idx[0:L-1],
     input  logic [     TILE_OFF_W-1:0] i_corr_tile_offset[0:L-1],
@@ -45,9 +43,12 @@ module k_sign_selector
   logic [               MSG_W-1:0] v2c_msg_q[0:L-1];
   logic                            base_sign_q[0:L-1];
   logic                            last_diag_q[0:L-1];
+  logic                            snapshot_write_valid[0:L-1];
+  logic [      K_SIGN_WORK_AW-1:0] snapshot_write_addr[0:L-1];
+  logic [ K_SIGN_POS_RECORD_W-1:0] snapshot_write_record[0:L-1];
   logic                            corr_work_read_valid[0:L-1];
   logic [      K_SIGN_WORK_AW-1:0] corr_work_read_addr[0:L-1];
-  logic [K_SIGN_WORK_RECORD_W-1:0] corr_work_read_record[0:L-1];
+  logic [ K_SIGN_POS_RECORD_W-1:0] corr_work_read_record[0:L-1];
   logic [    1+K_SIGN_WORK_AW-1:0] corr_route_in[0:L-1];
   logic [    1+K_SIGN_WORK_AW-1:0] corr_route_out[0:L-1];
   logic [     K_SIGN_RECORD_W-1:0] corr_record_bank[0:L-1];
@@ -147,8 +148,13 @@ module k_sign_selector
         o_commit_col_idx[bank_idx] = col_idx_q[bank_idx];
         o_commit_record[bank_idx] = '0;
         o_commit_record[bank_idx][0] = work_write_record[bank_idx][0];
+        snapshot_write_valid[bank_idx] = o_commit_valid[bank_idx];
+        snapshot_write_addr[bank_idx] = work_write_addr[bank_idx];
+        snapshot_write_record[bank_idx] = '0;
         for (int slot_idx = 0; slot_idx < K_SIGN_K; slot_idx++) begin
           o_commit_record[bank_idx][record_slot_lsb(slot_idx)+:DIAG_IDX_W] =
+              work_write_record[bank_idx][work_slot_lsb(slot_idx)+:DIAG_IDX_W];
+          snapshot_write_record[bank_idx][slot_idx*DIAG_IDX_W+:DIAG_IDX_W] =
               work_write_record[bank_idx][work_slot_lsb(slot_idx)+:DIAG_IDX_W];
         end
       end
@@ -176,10 +182,9 @@ module k_sign_selector
 
       always_comb begin
         corr_record_bank[bank_idx] = '0;
-        corr_record_bank[bank_idx][0] = corr_work_read_record[bank_idx][0];
         for (int slot_idx = 0; slot_idx < K_SIGN_K; slot_idx++) begin
           corr_record_bank[bank_idx][record_slot_lsb(slot_idx)+:DIAG_IDX_W] =
-              corr_work_read_record[bank_idx][work_slot_lsb(slot_idx)+:DIAG_IDX_W];
+              corr_work_read_record[bank_idx][slot_idx*DIAG_IDX_W+:DIAG_IDX_W];
         end
       end
     end
@@ -200,17 +205,18 @@ module k_sign_selector
   end
 
   ram_k_tile u_ram_k_tile (
-      .i_clk             (i_clk),
-      .i_work_buf_sel    (i_work_buf_sel),
-      .i_read_valid      (work_read_valid),
-      .i_read_addr       (work_read_addr),
-      .o_read_record     (work_read_record),
-      .i_write_valid     (work_write_valid),
-      .i_write_addr      (work_write_addr),
-      .i_write_record    (work_write_record),
-      .i_corr_buf_sel    (i_corr_buf_sel),
-      .i_corr_read_valid (corr_work_read_valid),
-      .i_corr_read_addr  (corr_work_read_addr),
-      .o_corr_read_record(corr_work_read_record)
+      .i_clk                  (i_clk),
+      .i_read_valid           (work_read_valid),
+      .i_read_addr            (work_read_addr),
+      .o_read_record          (work_read_record),
+      .i_write_valid          (work_write_valid),
+      .i_write_addr           (work_write_addr),
+      .i_write_record         (work_write_record),
+      .i_snapshot_write_valid (snapshot_write_valid),
+      .i_snapshot_write_addr  (snapshot_write_addr),
+      .i_snapshot_write_record(snapshot_write_record),
+      .i_corr_read_valid      (corr_work_read_valid),
+      .i_corr_read_addr       (corr_work_read_addr),
+      .o_corr_read_record     (corr_work_read_record)
   );
 endmodule

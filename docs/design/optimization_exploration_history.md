@@ -19,8 +19,8 @@
 
 BRAM 以 `Block RAM Tile` 为主要指标，因为一个 RAMB36 占一个 Tile，两个 RAMB18 合计占一个 Tile。
 单独观察 RAMB36 或 RAMB18 数量可能误判收益。WNS 一列统一使用整体 WNS；阶段 5 的
-`decoder_clk` 内部 WNS 为 `+0.653 ns`，阶段 8 为 `+0.145 ns`。当前 RTL包含重叠 correction 探索，
-placed/routed 结果待测。
+`decoder_clk` 内部 WNS 为 `+0.653 ns`，阶段 8 为 `+0.145 ns`。当前 RTL对应阶段10的correction
+snapshot优化，placed/routed结果待测；阶段9是最近的完整实现参考。
 
 ## 同条件实现结果总表
 
@@ -34,7 +34,8 @@ placed/routed 结果待测。
 | 6 | `ram_t` 地址交织双缓冲 | 24,493 | 11,004 | 8,590 | 489 | 464 | 50 | +0.532 ns | 撤回 |
 | 7 | `k_sign_update` valid 状态折叠 | 24,315 | 11,012 | 8,571 | 489 | 448 | 82 | +0.197 ns | 撤回 |
 | 8 | correction 线性计数与 K RAM 预译码直达读口 | 23,917 | 11,179 | 8,430 | 489 | 448 | 82 | +0.145 ns | 撤回，时序收益为负 |
-| 9 | correction 跨 tile 重叠 | 待测 | 待测 | 待测 | 待测 | 待测 | 待测 | 待测 | RTL 保留，实现结果待定 |
+| 9 | correction 跨 tile 重叠 | 29,099 | 11,653 | 9,327 | 521.5 | 464 | 115 | +0.309 ns | 最近完整实现基线 |
+| 10 | 21-bit correction snapshot | 待测 | 待测 | 待测 | 待测 | 待测 | 待测 | 待测 | RTL保留，实现结果待定 |
 
 阶段 1 到阶段 2 的累计变化为 LUT 减少 1,098、Slice 减少 480，WNS 从 `-1.165 ns` 提升至
 `+0.211 ns`。阶段 3 只改善时序，没有改变 BRAM 数量。阶段 4 将 BRAM Tile 减少到 505；阶段 5
@@ -391,14 +392,74 @@ WNS 下降，固定周期下的可达频率余量变差，因此本实验不能�
 | TRIKE384 | 10,991,791 | 7,135,995 | 3,855,796 | 35.08% |
 | TRIKE512 | 23,425,443 | 16,641,183 | 6,784,260 | 28.96% |
 
-实现状态：目标条件仍为 `TRIKE_UNIFIED_PARAMS`、`L=16`、`K=3`、`COLS_PER_TILE=1168`、
-`xc7k355tffg901-2L`、Vivado 2023.2、100 MHz/10 ns 和 0.100 ns clock uncertainty。当前执行环境没有
-`vivado` 可执行文件，Slice LUT、FF、Slice、Block RAM Tile、RAMB36、RAMB18、DSP、setup WNS/TNS 和
-hold WHS 均为待测，不能据此计算资源或时序增减量。
+Vivado 报告条件：`TRIKE_UNIFIED_PARAMS`、`L=16`、`K=3`、`COLS_PER_TILE=1168`，最大等级
+TRIKE-512，`xc7k355tffg901-2L`，Vivado 2023.2，100 MHz/10 ns，clock uncertainty 0.100 ns；资源为
+Fully Placed，时序为 Routed。报告时间为 2026-07-15 14:38 至 14:41，结果由用户提供。
 
-结论与状态：固定周期显著缩短，RTL 与功能验证保留。该方案是否形成新的 placed/routed 基线，取决于同条件
-Vivado 报告是否保持 100 MHz setup/hold 收敛，并确认双 tile buffer、delta RAM 和第三个 H 读副本没有造成
-不可接受的 LUT/BRAM 增长；当前状态为待定。
+与阶段 4 同条件参考基线相比：
+
+- Slice LUT：24,110 → 29,099，增加 4,989（20.69%）；其中 LUT as Logic 增加 3,513，distributed
+  RAM LUT 增加 1,472。
+- Slice Register：11,129 → 11,653，增加 524（4.71%）。
+- Slice：8,519 → 9,327，增加 808（9.48%）。
+- Block RAM Tile：505 → 521.5，增加 16.5（3.27%）；RAMB36 保持 464，RAMB18 从 82 增至 115。
+- DSP48E1：1 → 0；CARRY4 从 1,416 增至 1,697。
+- setup WNS：`+0.629 ns` → `+0.309 ns`，下降 0.320 ns，TNS 保持 0。
+- hold WHS 保持 `+0.036 ns`，THS 为 0；WPWS 保持 `+4.232 ns`。
+
+新的最差 setup 路径从 `k_sign_selector` 的 `diag_idx_local_q` 寄存器到 `ram_k_tile` buffer 0、bank 5
+的 distributed RAM 数据输入。数据路径延迟 9.223 ns，其中 logic 1.568 ns、route 7.655 ns，17 级逻辑；
+前十条 setup 路径均属于同类 tile LUTRAM 写入路径。
+
+结论与状态：五档固定周期降低 28.96% 至 47.55%，100 MHz setup/hold 收敛。代价为 LUT 增加 20.69%、
+Slice 增加 9.48% 和 BRAM Tile 增加 3.27%，器件总利用率分别为 13.07%、16.76% 和 72.94%。相对周期收益
+明显，资源仍在器件容量内，方案保留为新的 placed/routed 基线。关键路径集中在双 buffer tile LUTRAM 写入
+布线，后续优化优先处理该路径。
+
+## 18. 21-bit correction snapshot与delta pair端口审查
+
+时间：2026-07-15。
+
+目标与假设：阶段9的两个tile工作buffer都保存34-bit `base_sign + K*(dev_pos+magnitude)`，但correction
+只使用三个 `dev_pos`。将上一完成tile的correction状态压缩为21-bit位置snapshot，可减少LUTRAM容量和
+双buffer选择路由，同时保持K=3选择结果、扫描顺序和固定周期。
+
+关键实现：
+
+- `ram_k_tile`包含一份34-bit候选工作RAM和一份21-bit位置snapshot RAM，深度均为 `Q_BASE`，按L个
+  variable-column bank组织。
+- V2C在最后一个对角线同时把22-bit全局K-sign记录提交到 `ram_k_global`，并把其中三个位置写入
+  snapshot。snapshot不保存correction未使用的 `base_sign` 和幅值。
+- correction读取上一tile snapshot的同时，当前tile在最后一个对角线覆盖写入相同地址。同步RAM的
+  read-first语义保证读出上一tile位置，随后保存当前tile位置。
+- 工作RAM在下一tile的第一个对角线通过既有clear输入重建候选记录，因此只需要一份34-bit状态。
+- `k_sign_overlap_scheduler`和顶层移除tile buffer选择信号；固定扫描坐标、delta翻转路径和周期公式保持。
+
+逻辑容量变化：
+
+```text
+阶段9 tile工作状态 = 2 * 34 * 1168 = 79,424 bit
+阶段10工作+snapshot = (34 + 21) * 1168 = 64,240 bit
+减少                              = 15,184 bit（19.12%）
+```
+
+同时审查了将 `ram_sign_delta` 两个iteration pair合并为每bank一块true-dual-port RAM的方案。重叠阶段每个
+bank同拍需要：C2V读取read pair、correction读取write pair的新flip地址、写回上一拍flip地址，即两个独立
+读地址和一个独立写地址。单块TDP RAM只有两个地址端口，无法在任意连续flip地址下维持每拍吞吐。使用固定
+读写子周期会增加correction周期，复制存储则不节省BRAM。当前两个RAMB18可共置为一个Block RAM Tile/bank，
+因此delta pair合并方案撤回，`ram_sign_delta`结构保留。
+
+验证与实现状态：
+
+- `tb_k_sign_update`增加snapshot位置0/1/2的命中读回检查，覆盖有效、无效位置。
+- `make test-unit`全部通过。
+- `make test-integration`通过；toy case固定154拍，residual 0、exact 1。
+- TRIKE-128/160/256/384/512、seed 1完整随机译码全部residual 0、exact 1；固定周期依次为
+  333,990、657,341、2,353,770、7,135,995、16,641,183。
+- Slice LUT、FF、Slice、Block RAM Tile、RAMB36、RAMB18、DSP、setup WNS/TNS和hold WHS待同条件
+  Vivado placed/routed测量，不能按逻辑bit数推测实现增减量。
+
+状态：21-bit snapshot RTL和功能验证保留，Vivado实现结果待测；delta pair TDP合并方案撤回。
 
 ## 形成的设计结论
 

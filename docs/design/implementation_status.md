@@ -23,7 +23,7 @@
 | Vivado | 2023.2 |
 | 目标时钟 | 100 MHz，周期 10 ns |
 | 时钟不确定度 | 0.100 ns |
-| 报告阶段 | 当前 RTL 待运行 Fully Placed / Routed |
+| 报告阶段 | correction snapshot RTL 待运行 Fully Placed / Routed |
 
 统一硬件使用最大参数确定存储和计数器几何。`i_param_level` 是公开输入，各参数等级使用公开固定的
 `R`、`W`、tile 数和周期预算。
@@ -37,7 +37,7 @@
 - `ram_m` 使用两个 iteration pair，C2V 读取一个 pair，V2C 更新另一个 pair。
 - `ram_sign_delta` 使用两个 iteration pair，C2V 读取 deviation parity，重叠 correction 更新另一个 pair。
 - `ram_accum` 和 `ram_t` 使用独立的 fill/active 双 buffer，使相邻 tile 的 C2V 与 V2C 重叠。
-- `ram_k_tile` 使用双工作 buffer，使完成 tile 的 correction 与后续 tile 的 V2C 重叠。
+- `ram_k_tile` 使用一份候选工作RAM和一份位置snapshot，使完成tile的correction与后续tile的V2C重叠。
 - `ram_sign_delta` 的翻转读改写和连续同地址访问使用固定旁路规则。
 - `k_sign_overlap_scheduler` 使用公开固定 tile/diag/lane 扫描深度。
 - invalid lane、invalid K 槽、syndrome、H 第一列内容和译码结果只控制 valid/写使能，不改变调度深度。
@@ -54,7 +54,7 @@
 | `ram_syndrome` | `L` 个 syndrome bit BRAM bank | 外部写入，C2V 同步读 |
 | `ram_accum` | 两组 banked distributed RAM | C2V 读改写，V2C 读取 active buffer |
 | `ram_t` | 每个 buffer、每个 lane 一份 BRAM | C2V 写 fill buffer，V2C 读 active buffer |
-| `ram_k_tile` | `2 × L` 个 distributed RAM 工作 bank | ping-pong 保存 K=3 无序 `(dev_pos, magnitude)` 槽 |
+| `ram_k_tile` | `L` 个34-bit工作bank和 `L` 个21-bit snapshot bank | 工作RAM维护候选；snapshot供correction读取位置 |
 | `ram_k_global` | `L` 个原地更新全局 bank | C2V 同步读，V2C 提交经寄存器后同步写 |
 | `ram_decision` | `L` 个最终判决 bit BRAM bank | final iteration 写，外部同步读 |
 
@@ -88,7 +88,9 @@ base_sign RAMB36/bank  = 1
 global K RAMB36        = 16 banks × (15 + 1) = 256
 ```
 
-tile 工作记录宽度为 `1 + 3 × (7 + 4) = 34 bit`，每个 buffer 深度为 `Q_BASE=73`。
+tile工作记录宽度为 `1 + 3 × (7 + 4) = 34 bit`，correction snapshot宽度为 `3 × 7 = 21 bit`，
+两者深度均为 `Q_BASE=73`。最后一个对角线同时提交全局K-sign记录和snapshot；snapshot同步读写采用
+read-first语义。
 
 ### K=3 更新器
 
@@ -126,17 +128,15 @@ T_DECODE     = 7 × 2377311 + 6 = 16641183
 
 ## Vivado 资源占用
 
-当前重叠 correction RTL 的 placed utilization 待测。需要报告 Slice LUT、LUT as Logic、LUT as Memory、
-Slice Register、Slice、Block RAM Tile、RAMB36E1、RAMB18E1、DSP48E1 和 CARRY4。重点检查双
-`ram_k_tile`、`ram_sign_delta` 与第三份 `ram_i` 对 LUTRAM 和 BRAM Tile 的影响。
+correction snapshot RTL的placed utilization待测。需要检查Slice LUT、LUT as Logic、LUT as Memory、
+Distributed RAM LUT、FF、Slice、Block RAM Tile、RAMB36、RAMB18、DSP和CARRY4。工作状态的逻辑容量为
+64,240 bit；资源映射和相对上一placed基线的增减量必须以新报告为准。
 
 ## Vivado 时序状态
 
-当前重叠 correction RTL 的 routed timing 待测。目标约束为 10.000 ns，clock uncertainty 为
-0.100 ns；需要检查整体 WNS/TNS、`decoder_clk` 内部 WNS、WHS/THS、WPWS 和 setup top paths。
-
-XDC 定义 100 MHz 时钟、0.100 ns clock uncertainty 和异步复位 false path。板级或上层系统集成需要
-根据真实接口补充 I/O delay。RTL 内部时序判断使用 `decoder_clk` intra-clock 结果。
+correction snapshot RTL的routed timing待测。目标约束为10.000 ns，clock uncertainty为0.100 ns；需要检查
+整体WNS/TNS、`decoder_clk`内部WNS、WHS/THS、WPWS和setup top paths。XDC定义100 MHz时钟和异步
+复位false path；板级或上层系统集成需要根据真实接口补充I/O delay。
 
 ## 验证状态
 
@@ -172,8 +172,6 @@ exact           = 1
 
 统一 TRIKE、seed 1 的五档完整随机译码均为 residual 0、exact 1，周期依次为
 333,990、657,341、2,353,770、7,135,995、16,641,183。
-TRIKE-128 的 seed 1 至 5 均固定 333,990 拍、residual 0、exact 1。
-TRIKE-512 的 seed 1 和 2 均固定 16,641,183 拍、residual 0、exact 1。
 
 统一 TRIKE 多参数回归入口：
 
@@ -187,8 +185,8 @@ Vivado 综合入口：
 make vivado-synth-trike-unified-ksign
 ```
 
-当前执行环境没有 `vivado` 可执行文件，因此本架构的 utilization、timing summary、methodology、CDC 和
-messages 报告均为待测。
+correction snapshot RTL的Fully Placed utilization、Routed timing summary、methodology、CDC和完整
+messages报告待运行。
 
 ## 实现判据
 
