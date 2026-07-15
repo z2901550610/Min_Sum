@@ -23,7 +23,7 @@
 | Vivado | 2023.2 |
 | 目标时钟 | 100 MHz，周期 10 ns |
 | 时钟不确定度 | 0.100 ns |
-| 报告阶段 | correction snapshot RTL 待运行 Fully Placed / Routed |
+| 报告阶段 | `ram_accum` 单读口 RTL 待运行 Fully Placed / Routed |
 
 统一硬件使用最大参数确定存储和计数器几何。`i_param_level` 是公开输入，各参数等级使用公开固定的
 `R`、`W`、tile 数和周期预算。
@@ -36,7 +36,8 @@
 - `barrel_rotate` 完成 lane 到 bank 的请求路由和读数据返回。
 - `ram_m` 使用两个 iteration pair，C2V 读取一个 pair，V2C 更新另一个 pair。
 - `ram_sign_delta` 使用两个 iteration pair，C2V 读取 deviation parity，重叠 correction 更新另一个 pair。
-- `ram_accum` 和 `ram_t` 使用独立的 fill/active 双 buffer，使相邻 tile 的 C2V 与 V2C 重叠。
+- `ram_accum` 和 `ram_t` 使用独立的 fill/active 双 buffer，使相邻 tile 的 C2V 与 V2C 重叠；两个buffer
+  选择恒为互补。
 - `ram_k_tile` 使用一份候选工作RAM和一份位置snapshot，使完成tile的correction与后续tile的V2C重叠。
 - `ram_sign_delta` 的翻转读改写和连续同地址访问使用固定旁路规则。
 - `k_sign_overlap_scheduler` 使用公开固定 tile/diag/lane 扫描深度。
@@ -52,7 +53,7 @@
 | `ram_m` | `2 × L` 个压缩 check-state bank | pair 隔离；保存幅度状态和 base-sign parity |
 | `ram_sign_delta` | `2 × L` 个 1-bit row-parity bank | pair 隔离；同步读、清空和 flip RMW |
 | `ram_syndrome` | `L` 个 syndrome bit BRAM bank | 外部写入，C2V 同步读 |
-| `ram_accum` | 两组 banked distributed RAM | C2V 读改写，V2C 读取 active buffer |
+| `ram_accum` | 两组单读口 banked distributed RAM | 每个物理buffer在C2V/V2C之间共享一个读地址；C2V读改写 |
 | `ram_t` | 每个 buffer、每个 lane 一份 BRAM | C2V 写 fill buffer，V2C 读 active buffer |
 | `ram_k_tile` | `L` 个34-bit工作bank和 `L` 个21-bit snapshot bank | 工作RAM维护候选；snapshot供correction读取位置 |
 | `ram_k_global` | `L` 个原地更新全局 bank | C2V 同步读，V2C 提交经寄存器后同步写 |
@@ -128,15 +129,17 @@ T_DECODE     = 7 × 2377311 + 6 = 16641183
 
 ## Vivado 资源占用
 
-correction snapshot RTL的placed utilization待测。需要检查Slice LUT、LUT as Logic、LUT as Memory、
-Distributed RAM LUT、FF、Slice、Block RAM Tile、RAMB36、RAMB18、DSP和CARRY4。工作状态的逻辑容量为
-64,240 bit；资源映射和相对上一placed基线的增减量必须以新报告为准。
+当前RTL的Fully Placed aggregate/hierarchical utilization待测。需要检查Slice LUT、LUT as Logic、
+LUT as Memory、Distributed RAM LUT、FF、Slice、Block RAM Tile、RAMB36、RAMB18、DSP和CARRY4，
+并单列 `ram_accum` 的层级资源。综合目标是让每个distributed RAM array只有一个异步读地址；实际是否
+减少LUTRAM以及读选择逻辑的代价必须以Vivado报告为准。既有完整实现报告保存在
+[optimization_exploration_history.md](optimization_exploration_history.md)。
 
 ## Vivado 时序状态
 
-correction snapshot RTL的routed timing待测。目标约束为10.000 ns，clock uncertainty为0.100 ns；需要检查
-整体WNS/TNS、`decoder_clk`内部WNS、WHS/THS、WPWS和setup top paths。XDC定义100 MHz时钟和异步
-复位false path；板级或上层系统集成需要根据真实接口补充I/O delay。
+当前RTL的Routed timing待测。目标约束为10.000 ns周期和0.100 ns clock uncertainty；需要检查整体
+WNS/TNS、WHS/THS、WPWS、snapshot写路径、`ram_accum`读地址选择路径和routed top paths。XDC定义
+100 MHz时钟和异步复位false path；板级或上层系统集成需要根据真实接口补充I/O delay。
 
 ## 验证状态
 
@@ -148,8 +151,7 @@ make test-integration
 make test-trike-unified-ksign-random BIKE_RANDOM_TRIALS=1
 ```
 
-维护范围内的修改文件通过 Verible 格式检查与 lint。工作区未跟踪的 `rtl/test.sv` 不属于本次修改范围，
-因此没有执行会包含该文件的完整 `make check-format-rtl && make lint-rtl`。
+维护范围内的RTL和testbench通过Verible格式检查与lint。
 
 顶层 toy 集成结果：
 
@@ -185,8 +187,8 @@ Vivado 综合入口：
 make vivado-synth-trike-unified-ksign
 ```
 
-correction snapshot RTL的Fully Placed utilization、Routed timing summary、methodology、CDC和完整
-messages报告待运行。
+当前RTL的Fully Placed utilization、hierarchical utilization、Routed timing summary、methodology、
+CDC和完整messages报告待运行。
 
 ## 实现判据
 

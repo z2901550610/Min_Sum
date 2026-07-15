@@ -134,6 +134,9 @@ module ram_accum
         logic        [ACCUM_BANK_AW-1:0] c2v_bank_raddr;
         logic                            v2c_bank_re;
         logic        [ACCUM_BANK_AW-1:0] v2c_bank_raddr;
+        logic                            bank_re;
+        logic        [ACCUM_BANK_AW-1:0] bank_raddr;
+        logic signed [        ACC_W-1:0] bank_rdata;
         logic                            c2v_bank_we;
         logic        [ACCUM_BANK_AW-1:0] c2v_bank_waddr;
         logic signed [        ACC_W-1:0] c2v_bank_wdata;
@@ -143,21 +146,32 @@ module ram_accum
           c2v_bank_raddr = routed_c2v_read_addr[bank_idx];
           v2c_bank_re = routed_v2c_read_valid[bank_idx] && (int'(i_active_buf) == buf_idx);
           v2c_bank_raddr = routed_v2c_read_addr[bank_idx];
+          bank_re = c2v_bank_re || v2c_bank_re;
+          bank_raddr = c2v_bank_re ? c2v_bank_raddr : v2c_bank_raddr;
           c2v_bank_we = routed_c2v_write_valid[bank_idx] && (int'(i_c2v_write_buf) == buf_idx);
           c2v_bank_waddr = routed_c2v_write_addr[bank_idx];
           c2v_bank_wdata = routed_c2v_write_data[bank_idx];
         end
 
-        assign c2v_bank_rdata[buf_idx][bank_idx] =
-            c2v_bank_re ? ((c2v_bank_we && (c2v_bank_waddr == c2v_bank_raddr)) ?
-                           c2v_bank_wdata : mem[c2v_bank_raddr]) : '0;
-        assign v2c_bank_rdata[buf_idx][bank_idx] = v2c_bank_re ? mem[v2c_bank_raddr] : '0;
+        assign bank_rdata =
+            bank_re ? ((c2v_bank_re && c2v_bank_we && (c2v_bank_waddr == bank_raddr)) ?
+                       c2v_bank_wdata : mem[bank_raddr]) : '0;
+        assign c2v_bank_rdata[buf_idx][bank_idx] = c2v_bank_re ? bank_rdata : '0;
+        assign v2c_bank_rdata[buf_idx][bank_idx] = v2c_bank_re ? bank_rdata : '0;
 
         always_ff @(posedge i_clk) begin
           if (c2v_bank_we) begin
             mem[c2v_bank_waddr] <= c2v_bank_wdata;
           end
         end
+
+`ifndef SYNTHESIS
+        always @(posedge i_clk) begin
+          if (c2v_bank_re && v2c_bank_re) begin
+            $fatal(1, "ram_accum simultaneous reads target buffer=%0d bank=%0d", buf_idx, bank_idx);
+          end
+        end
+`endif
       end
     end
   endgenerate

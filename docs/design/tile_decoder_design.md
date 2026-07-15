@@ -92,7 +92,10 @@ lane_group_idx > wrap_lane_group_idx + 1 : lane_group_idx_eff = lane_group_idx -
 | tile raw C2V edge | `ram_t[buf][lane][diag_idx_local * Q_TILE + lane_group_idx]` |
 | decision bit | `ram_decision[col_idx]` |
 
-`ram_accum` 和 `ram_t` 使用 `fill_buf/active_buf` 双缓冲。compressed check state 使用 `comp_read_pair_sel/comp_write_pair_sel` 双 pair。每轮写 pair 按固定地址序列初始化为 `COMP_C2V_INIT`。
+`ram_accum` 和 `ram_t` 使用 `fill_buf/active_buf` 双缓冲。两个buffer选择恒为互补，`ram_accum` 的每个
+物理buffer在C2V/V2C之间共享一个读地址。compressed check state使用
+`comp_read_pair_sel/comp_write_pair_sel`双pair。每轮写pair按固定地址序列初始化为
+`COMP_C2V_INIT`。
 
 ## C2V
 

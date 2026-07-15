@@ -60,10 +60,27 @@ module tb_ram_accum;
     end
   endtask
 
-  task automatic expect_buf(input  logic buf_sel, input  logic signed [ACC_W-1:0] base_value);
+  task automatic write_buf(input  logic buf_sel, input  logic signed [ACC_W-1:0] base_value);
     begin
-      c2v_read_buf = buf_sel;
-      active_buf   = buf_sel;
+      clear_inputs();
+      c2v_write_buf = buf_sel;
+      for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
+        c2v_write_valid[lane_idx] = lane_idx < TEST_LANES;
+        c2v_write_tile_offset[lane_idx] = TILE_OFF_W'(lane_idx);
+        updated_c2v_sum[lane_idx] = base_value + ACC_W'(lane_idx);
+      end
+      @(posedge clk);
+      #1;
+      clear_inputs();
+    end
+  endtask
+
+  task automatic expect_buffers(input  logic c2v_buf_sel,
+                                input  logic signed [ACC_W-1:0] c2v_base_value,
+                                input  logic signed [ACC_W-1:0] v2c_base_value);
+    begin
+      c2v_read_buf = c2v_buf_sel;
+      active_buf   = ~c2v_buf_sel;
       for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
         c2v_read_valid[lane_idx] = lane_idx < TEST_LANES;
         c2v_read_tile_offset[lane_idx] = TILE_OFF_W'(lane_idx);
@@ -72,12 +89,12 @@ module tb_ram_accum;
       end
       #1;
       for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-        if ((lane_idx < TEST_LANES) &&
-            (old_c2v_sum[lane_idx] !== (base_value + ACC_W'(lane_idx)))) begin
+        if ((lane_idx < TEST_LANES) && (old_c2v_sum[lane_idx] !==
+                                       (c2v_base_value + ACC_W'(lane_idx)))) begin
           $fatal(1, "c2v read mismatch lane=%0d", lane_idx);
         end
-        if ((lane_idx < TEST_LANES) &&
-            (c2v_sum[lane_idx] !== (base_value + ACC_W'(lane_idx)))) begin
+        if ((lane_idx < TEST_LANES) && (c2v_sum[lane_idx] !==
+                                       (v2c_base_value + ACC_W'(lane_idx)))) begin
           $fatal(1, "v2c read mismatch lane=%0d", lane_idx);
         end
         if ((lane_idx >= TEST_LANES) &&
@@ -91,28 +108,11 @@ module tb_ram_accum;
   initial begin
     clear_inputs();
 
-    c2v_write_buf = 1'b0;
-    for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-      c2v_write_valid[lane_idx] = lane_idx < TEST_LANES;
-      c2v_write_tile_offset[lane_idx] = TILE_OFF_W'(lane_idx);
-      updated_c2v_sum[lane_idx] = ACC_W'(4 + lane_idx);
-    end
-    @(posedge clk);
-    #1;
+    write_buf(1'b0, ACC_W'(4));
+    write_buf(1'b1, ACC_W'(12));
+    expect_buffers(1'b0, ACC_W'(4), ACC_W'(12));
     clear_inputs();
-    expect_buf(1'b0, ACC_W'(4));
-
-    clear_inputs();
-    c2v_write_buf = 1'b1;
-    for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-      c2v_write_valid[lane_idx] = lane_idx < TEST_LANES;
-      c2v_write_tile_offset[lane_idx] = TILE_OFF_W'(lane_idx);
-      updated_c2v_sum[lane_idx] = ACC_W'(12 + lane_idx);
-    end
-    @(posedge clk);
-    #1;
-    clear_inputs();
-    expect_buf(1'b1, ACC_W'(12));
+    expect_buffers(1'b1, ACC_W'(12), ACC_W'(4));
 
     $display("tb_ram_accum PASS");
     $finish;

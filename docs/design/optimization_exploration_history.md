@@ -19,8 +19,8 @@
 
 BRAM 以 `Block RAM Tile` 为主要指标，因为一个 RAMB36 占一个 Tile，两个 RAMB18 合计占一个 Tile。
 单独观察 RAMB36 或 RAMB18 数量可能误判收益。WNS 一列统一使用整体 WNS；阶段 5 的
-`decoder_clk` 内部 WNS 为 `+0.653 ns`，阶段 8 为 `+0.145 ns`。当前 RTL对应阶段10的correction
-snapshot优化，placed/routed结果待测；阶段9是最近的完整实现参考。
+`decoder_clk` 内部 WNS 为 `+0.653 ns`，阶段 8 为 `+0.145 ns`。当前RTL对应阶段11的 `ram_accum`
+单读口buffer实验，placed/routed结果待测；阶段10是最近的完整placed/routed基线。
 
 ## 同条件实现结果总表
 
@@ -34,8 +34,9 @@ snapshot优化，placed/routed结果待测；阶段9是最近的完整实现参�
 | 6 | `ram_t` 地址交织双缓冲 | 24,493 | 11,004 | 8,590 | 489 | 464 | 50 | +0.532 ns | 撤回 |
 | 7 | `k_sign_update` valid 状态折叠 | 24,315 | 11,012 | 8,571 | 489 | 448 | 82 | +0.197 ns | 撤回 |
 | 8 | correction 线性计数与 K RAM 预译码直达读口 | 23,917 | 11,179 | 8,430 | 489 | 448 | 82 | +0.145 ns | 撤回，时序收益为负 |
-| 9 | correction 跨 tile 重叠 | 29,099 | 11,653 | 9,327 | 521.5 | 464 | 115 | +0.309 ns | 最近完整实现基线 |
-| 10 | 21-bit correction snapshot | 待测 | 待测 | 待测 | 待测 | 待测 | 待测 | 待测 | RTL保留，实现结果待定 |
+| 9 | correction 跨 tile 重叠 | 29,099 | 11,653 | 9,327 | 521.5 | 464 | 115 | +0.309 ns | 历史重叠基线 |
+| 10 | 21-bit correction snapshot | 27,070 | 11,491 | 9,193 | 521.5 | 464 | 115 | +0.072 ns | 保留，当前完整基线 |
+| 11 | `ram_accum` 单读口buffer | 待测 | 待测 | 待测 | 待测 | 待测 | 待测 | 待测 | RTL待实现报告 |
 
 阶段 1 到阶段 2 的累计变化为 LUT 减少 1,098、Slice 减少 480，WNS 从 `-1.165 ns` 提升至
 `+0.211 ns`。阶段 3 只改善时序，没有改变 BRAM 数量。阶段 4 将 BRAM Tile 减少到 505；阶段 5
@@ -449,17 +450,95 @@ bank同拍需要：C2V读取read pair、correction读取write pair的新flip地�
 读写子周期会增加correction周期，复制存储则不节省BRAM。当前两个RAMB18可共置为一个Block RAM Tile/bank，
 因此delta pair合并方案撤回，`ram_sign_delta`结构保留。
 
-验证与实现状态：
+验证结果：
 
 - `tb_k_sign_update`增加snapshot位置0/1/2的命中读回检查，覆盖有效、无效位置。
 - `make test-unit`全部通过。
 - `make test-integration`通过；toy case固定154拍，residual 0、exact 1。
 - TRIKE-128/160/256/384/512、seed 1完整随机译码全部residual 0、exact 1；固定周期依次为
   333,990、657,341、2,353,770、7,135,995、16,641,183。
-- Slice LUT、FF、Slice、Block RAM Tile、RAMB36、RAMB18、DSP、setup WNS/TNS和hold WHS待同条件
-  Vivado placed/routed测量，不能按逻辑bit数推测实现增减量。
 
-状态：21-bit snapshot RTL和功能验证保留，Vivado实现结果待测；delta pair TDP合并方案撤回。
+Vivado报告条件：`TRIKE_UNIFIED_PARAMS`、`L=16`、`K=3`、`COLS_PER_TILE=1168`，最大等级
+TRIKE-512，`xc7k355tffg901-2L`，Vivado 2023.2，100 MHz/10 ns，clock uncertainty 0.100 ns；资源为
+Fully Placed，时序为 Routed。资源报告时间为2026-07-15 15:29:25，时序报告时间为15:31:47，结果由
+用户提供。
+
+同一实现的hierarchical utilization补充报告时间为2026-07-15 16:53:15，报告阶段为Fully Routed，
+层级深度为6。该报告与15:29:25 aggregate utilization的总量完全一致，并确认以下资源归属：
+
+- `k_sign_selector`含 `ram_k_tile`：6,421 Slice LUT，其中4,053 LUT as Logic、2,368 distributed
+  RAM LUT，1,350 FF；`ram_k_tile`自身为5,719 LUT、2,368 distributed RAM LUT和864 FF。
+- `ram_accum`：5,152 Slice LUT，其中3,104 LUT as Logic和2,048 distributed RAM LUT。
+- `ram_k_global`：2,263 LUT、670 FF、256 RAMB36；占全设计RAMB36数量的55.17%。
+- `ram_m`：3,412 LUT、1,107 FF、128 RAMB36和32 RAMB18。
+- `ram_t`：720 LUT、32 FF、64 RAMB36和32 RAMB18。其每个buffer/lane bank的8436×5存储映射为
+  2个RAMB36和1个RAMB18；若通过等价地址映射将有效深度压到8192以内，理论上可减少32个RAMB36，
+  RAMB18数量不变。该数字仅为原生宽深模式推导，RTL实施、固定周期验证和Vivado结果均待测。
+- `ram_decision`：2,191 LUT、4 FF、16 RAMB36；`ram_sign_delta`为32 RAMB18，`ram_syndrome`为
+  16 RAMB18，`ram_i`为3 RAMB18。
+- 全部4,416个distributed RAM LUT由 `ram_k_tile` 的2,368个和 `ram_accum` 的2,048个组成。
+
+因此，BRAM优化的实测优先对象依次是 `ram_t` 的深度边界、`ram_decision` 的只读结果副本，以及不增加
+端口冲突的窄RAM打包；LUT和时序优化的实测优先对象是 `ram_k_tile` 的snapshot写路径、`ram_accum` 的
+双读口分布式RAM及其旋转网络。层级报告也修正了 `ram_t` 深度优化的预估：目标收益为32 Block RAM
+Tile，而不是48 Tile。所有收益在取得同条件placed/routed报告前均标记为待测。
+
+与阶段9同条件基线相比：
+
+- Slice LUT：29,099 → 27,070，减少2,029（6.97%）。
+- LUT as Logic：23,894 → 22,441，减少1,453（6.08%）。
+- LUT as Memory：5,205 → 4,629，减少576（11.07%）；其中distributed RAM LUT从4,992降到4,416，
+  减少576（11.54%）。
+- Slice Register：11,653 → 11,491，减少162（1.39%）。
+- Slice：9,327 → 9,193，减少134（1.44%）。
+- Block RAM Tile保持521.5，RAMB36保持464，RAMB18保持115，DSP保持0。
+- CARRY4：1,697 → 1,664，减少33（1.94%）。
+- setup WNS：`+0.309 ns` → `+0.072 ns`，下降0.237 ns；TNS保持0。
+- hold WHS：`+0.036 ns` → `+0.035 ns`，THS保持0；WPWS保持`+4.232 ns`。
+
+新的最差setup路径从 `k_sign_selector` 的 `diag_idx_local_q` 寄存器进入 `ram_k_tile` bank 6的snapshot
+distributed RAM写数据端。数据路径延迟9.481 ns，其中logic 1.547 ns、route 7.934 ns，route占83.68%，
+包含15级逻辑。阶段9最差路径的数据路径延迟为9.223 ns，其中route 7.655 ns；snapshot减少了逻辑和
+LUTRAM资源，但新的物理布局布线使关键路径route增加0.279 ns，100 MHz仍无setup、hold或pulse-width
+违例。时序报告没有unconstrained internal endpoint；顶层I/O delay仍需按实际系统接口补充。
+
+结论与状态：21-bit snapshot使tile状态逻辑容量减少19.12%，placed Slice LUT减少6.97%，Slice减少
+1.44%，固定周期和译码结果保持。BRAM Tile没有变化，setup余量减少0.237 ns但仍满足100 MHz。该方案以
+明确的逻辑资源收益保留为当前完整基线；delta pair TDP合并方案撤回。后续若继续优化，应针对snapshot
+写入的高布线占比做寄存器复制、bank局部化或写数据流水实验，并分别检查固定周期和routed WNS。
+
+## 19. `ram_accum` 单读口buffer实验
+
+时间：2026-07-15。
+
+目标与假设：阶段10层级报告显示 `ram_accum` 使用5,152个Slice LUT，其中2,048个为distributed RAM
+LUT。每个物理buffer的数组在RTL中分别出现C2V和V2C两个异步读表达式，可能导致Vivado复制存储阵列。
+`tile_scheduler`由同一个公开窗口编号生成互补的 `fill_buf` 和 `active_buf`，两条路径到 `ram_accum` 的
+buffer选择经过等长流水，因此一个物理buffer同拍只需要一个读地址。
+
+关键实现：
+
+- 每个buffer/bank只保留一次 `mem[bank_raddr]` 引用，C2V和V2C请求先按buffer选择合并为一个读使能和
+  一个读地址，再把读数据返回对应通路。
+- C2V同地址读写继续使用写数据旁路，保持累加读改写语义。
+- 仿真断言检查同一个buffer/bank不会同时收到C2V和V2C读请求；冲突不通过重试或数据相关调度处理。
+- `tb_ram_accum`同时读取两个互补buffer，并检查两个方向的C2V/V2C返回值。
+- 主调度、buffer数量、访问拍数、迭代次数和固定周期表达式均保持不变。
+
+验证结果：
+
+- `make format-rtl`、`make check-format-rtl`和 `make lint-rtl`通过。
+- `make test-unit`全部通过，`tb_ram_accum`覆盖两个buffer的同时读取。
+- `make test-integration`通过；toy case固定154拍，residual 0、exact 1。
+- TRIKE-128/160/256/384/512、seed 1完整随机译码全部residual 0、exact 1；固定周期依次为
+  333,990、657,341、2,353,770、7,135,995、16,641,183。
+
+Vivado待测条件：`TRIKE_UNIFIED_PARAMS`、`L=16`、`K=3`、`COLS_PER_TILE=1168`，最大等级
+TRIKE-512，`xc7k355tffg901-2L`，Vivado 2023.2，100 MHz/10 ns，clock uncertainty 0.100 ns。需要记录
+aggregate和hierarchical utilization、`ram_accum`层级的LUT/LUTRAM、Slice、RAMB36/RAMB18，以及Routed
+setup/hold和top paths。不能根据RTL中的单次数组引用推测最终资源收益。
+
+状态：RTL和功能验证保留为待测候选；资源、时序和最终保留/撤回结论等待同条件Vivado实现报告。
 
 ## 形成的设计结论
 
