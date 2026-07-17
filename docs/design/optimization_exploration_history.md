@@ -19,8 +19,9 @@
 
 BRAM 以 `Block RAM Tile` 为主要指标，因为一个 RAMB36 占一个 Tile，两个 RAMB18 合计占一个 Tile。
 单独观察 RAMB36 或 RAMB18 数量可能误判收益。WNS 一列统一使用整体 WNS；阶段 5 的
-`decoder_clk` 内部 WNS 为 `+0.653 ns`，阶段 8 为 `+0.145 ns`。当前RTL对应阶段11的 `ram_accum`
-单读口buffer实验，placed/routed结果待测；阶段10是最近的完整placed/routed基线。
+`decoder_clk` 内部 WNS 为 `+0.653 ns`，阶段 8 为 `+0.145 ns`。当前RTL对应阶段12的 `ram_t`
+紧凑地址实验，placed/routed结果待测；阶段10是K=3最近的完整placed/routed基线，K=4组合实现结果
+单列在探索记录20中。
 
 ## 同条件实现结果总表
 
@@ -37,6 +38,7 @@ BRAM 以 `Block RAM Tile` 为主要指标，因为一个 RAMB36 占一个 Tile�
 | 9 | correction 跨 tile 重叠 | 29,099 | 11,653 | 9,327 | 521.5 | 464 | 115 | +0.309 ns | 历史重叠基线 |
 | 10 | 21-bit correction snapshot | 27,070 | 11,491 | 9,193 | 521.5 | 464 | 115 | +0.072 ns | 保留，当前完整基线 |
 | 11 | `ram_accum` 单读口buffer | 待测 | 待测 | 待测 | 待测 | 待测 | 待测 | 待测 | RTL待实现报告 |
+| 12 | `ram_t` tile-offset bank紧凑地址 | 待测 | 待测 | 待测 | 待测 | 待测 | 待测 | 待测 | RTL待实现报告 |
 
 阶段 1 到阶段 2 的累计变化为 LUT 减少 1,098、Slice 减少 480，WNS 从 `-1.165 ns` 提升至
 `+0.211 ns`。阶段 3 只改善时序，没有改变 BRAM 数量。阶段 4 将 BRAM Tile 减少到 505；阶段 5
@@ -539,6 +541,100 @@ aggregate和hierarchical utilization、`ram_accum`层级的LUT/LUTRAM、Slice、
 setup/hold和top paths。不能根据RTL中的单次数组引用推测最终资源收益。
 
 状态：RTL和功能验证保留为待测候选；资源、时序和最终保留/撤回结论等待同条件Vivado实现报告。
+
+## 20. K=4与 `ram_accum` 单读口组合实现
+
+时间：2026-07-17。
+
+目标与配置：测量K=4的资源和时序，同时包含阶段19的 `ram_accum` 单读口结构。参数为
+`TRIKE_UNIFIED_PARAMS`、`L=16`、`K=4`、`COLS_PER_TILE=1168`，最大等级TRIKE-512，器件
+`xc7k355tffg901-2L`，Vivado 2023.2，目标时钟100 MHz/10 ns。资源报告为Fully Placed，时间
+2026-07-17 10:06:47；时序报告为Routed，时间10:09:15，结果由用户提供。附件没有单列clock
+uncertainty和implementation strategy；WNS增减只在确认这些设置与K=3基线一致时作直接比较。
+
+资源结果：
+
+- Slice LUT 29,315，其中LUT as Logic 24,943、LUT as Memory 4,372。
+- Distributed RAM LUT 4,160，SRL LUT 212，Slice Register 11,917，Slice 9,927。
+- Block RAM Tile 601.5，其中RAMB36 544、RAMB18 115；DSP 0，CARRY4 1,713。
+- K=4全局记录为29 bit，物理全局K RAM为336 RAMB36；相对K=3的256 RAMB36增加80，符合
+  `16 banks × 5 segments × 1 slot` 的原生几何推导。
+
+与阶段10的K=3完整基线相比，该结果同时包含K从3增至4和 `ram_accum` 单读口两个变化：
+
+- Slice LUT增加2,245（8.29%），LUT as Logic增加2,502（11.15%）。
+- LUT as Memory减少257（5.55%），Distributed RAM LUT减少256（5.80%）。
+- FF增加426（3.71%），Slice增加734（7.98%），CARRY4增加49（2.94%）。
+- RAMB36增加80，RAMB18不变，Block RAM Tile增加80至601.5，利用率84.13%。
+
+阶段10层级报告确认全部4,416个distributed RAM LUT由 `ram_k_tile` 的2,368个和 `ram_accum` 的
+2,048个组成。K=4多一个11-bit工作槽和7-bit snapshot槽，aggregate总量可按当前映射反推为：
+
+```text
+ram_k_tile(K=4)  = 3,136 distributed RAM LUT
+ram_accum        = 1,024 distributed RAM LUT
+total            = 4,160 distributed RAM LUT
+```
+
+因此总量与 `ram_accum` LUTRAM减半、K=4 tile LUTRAM增加768的预期完全闭合。该归属尚缺K=4
+hierarchical utilization直接确认，不能把反推值当作层级报告原始数据。
+
+时序结果：setup WNS/TNS为 `+0.818 ns / 0.000 ns`，hold WHS/THS为
+`+0.037 ns / 0.000 ns`，WPWS/TPWS为 `+4.232 ns / 0.000 ns`，100 MHz全部满足。最差setup路径从
+`ram_k_tile` bank 7的snapshot输出寄存器到 `ram_sign_delta` pair 1、bank 8的旁路valid寄存器，数据路径
+8.859 ns，其中logic 1.196 ns、route 7.663 ns，route占86.50%，包含11级逻辑。内部endpoint全部受约束；
+69个输入和7个输出没有I/O delay，另有1个输入由false path覆盖。
+
+功能验证：使用 `BIKE_K_SIGN_K=4` 的 `make test-unit`全部通过，`tb_k_sign_update`报告K=4。统一TRIKE
+K=4完整随机译码和固定周期回归待运行，Vivado实现通过不能替代该验证。
+
+状态：K=4组合实现的placed资源和routed时序结果保留为独立可选配置基线；`ram_accum`单读口的资源归因
+得到aggregate总量支持，等待K=4 hierarchical utilization或K=3同条件实现直接确认。
+
+## 21. `ram_t` tile-offset bank紧凑地址实验
+
+时间：2026-07-17。
+
+目标与假设：阶段10层级报告显示 `ram_t` 使用64个RAMB36和32个RAMB18。最大配置下每个
+buffer/lane bank的逻辑深度为 `W × Q_TILE = 111 × 76 = 8436`、宽度5 bit，跨过8192深度边界。
+若把guard拍从存储地址中消除并把有效边压到 `W × Q_BASE = 8103`，按Kintex-7原生宽深模式推导，每个
+bank可由2个RAMB36和1个RAMB18缩减为1个RAMB36和1个RAMB18。
+
+地址有效性分析：不能直接把原始 `lane_group_idx` 的stride从 `Q_TILE`改成 `Q_BASE`。当
+`edge_addr_gen`在模 `R` 回绕处拆成pre/post两拍时，两拍可能在同一check-row bank中各含不同有效边；而且
+`R mod L != 0`使单个check-row bank在一个完整tile中最多收到 `Q_BASE+1` 条边。TRIKE-512、`L=16`时，
+实际范围为每bank 72至74条，不能装入73地址而保持原bank映射。
+
+关键实现：
+
+- 物理bank由 `tile_offset mod L`确定，bank内地址为
+  `diag_idx_local × Q_BASE + floor(tile_offset/L)`；每个对角线的地址数严格不超过 `Q_BASE`。
+- C2V写请求和V2C读请求分别使用组合桶形旋转从check-row lane路由到tile-offset bank；同步BRAM读回使用
+  延迟一拍的shift旋转回原lane。
+- fill/active双buffer、BRAM同步读延迟、主调度、guard拍、迭代次数和固定周期表达式保持不变。
+- 仿真断言检查所有valid tile offset的bank内地址小于 `Q_BASE`；`tb_ram_t`覆盖非零旋转、最大diag、
+  最大group、地址隔离和两个buffer。
+
+验证结果：
+
+- `make format-rtl`、`make check-format-rtl`和 `make lint-rtl`通过。
+- `make test-unit`和 `make test-integration`通过；toy case固定154拍，residual 0、exact 1。
+- 统一TRIKE-128/160/256/384/512、`L=16`、`COLS_PER_TILE=1168`、K=3、seed 1完整随机译码全部
+  residual 0、exact 1；固定周期依次为333,990、657,341、2,353,770、7,135,995、16,641,183。
+- 相同五档、seed 1的K=4完整随机译码也全部residual 0、exact 1，固定周期与K=3一致。回归入口和
+  Vivado脚本增加显式 `TRIKE_UNIFIED_KSIGN_K`/`BIKE_K_SIGN_K`参数，避免K=4验证与实现配置脱节。
+
+Vivado待测条件：`TRIKE_UNIFIED_PARAMS`、`L=16`、`K=3`、`COLS_PER_TILE=1168`，最大等级
+TRIKE-512，`xc7k355tffg901-2L`，Vivado 2023.2，100 MHz/10 ns，clock uncertainty 0.100 ns。需要记录
+aggregate和hierarchical utilization，特别是 `ram_t` 的RAMB36/RAMB18、三个旋转网络的LUT/FF、整体
+Slice，以及Routed setup/hold、BRAM输入路径和读返回路径。
+
+理论目标仅为BRAM原生几何推导：K=3的Block RAM Tile由521.5降至489.5、RAMB36由464降至432；
+在阶段20的K=4组合实现上则由601.5降至569.5、RAMB36由544降至512，RAMB18均保持115。新增旋转网络的
+LUT、Slice和时序代价未知，不能把这些目标写成实现结果。
+
+状态：RTL和功能验证保留为待测候选；是否正式保留等待同条件Fully Placed/Routed报告。若RAMB36未按
+目标下降、100 MHz不满足或新增路由代价过大，则撤回该实验。
 
 ## 形成的设计结论
 

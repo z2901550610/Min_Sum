@@ -9,7 +9,8 @@ BIKE_SYNTH_COLS_PER_TILE ?=
 VERILATOR_FLAGS ?= --binary --sv -DBIKE_TOY_PARAMS -DBIKE_PARALLEL_L=$(BIKE_TOY_PARALLEL_L) -DBIKE_SIM_DEBUG -Wall -Wno-fatal -I./tb -I./rtl
 SIM ?= ./scripts/run_quiet.py
 VIVADO ?= vivado
-VIVADO_BUILD_DIR ?= build/vivado
+VIVADO_RUN_TAG ?= $(shell date +%Y%m%d-%H%M%S)
+VIVADO_BUILD_DIR ?= build/vivado/$(VIVADO_RUN_TAG)
 CC ?= cc
 CFLAGS ?= -O3 -std=c11 -Wall -Wextra -Wpedantic -pthread
 MODEL_BUILD_DIR ?= build/model
@@ -41,6 +42,7 @@ BIKE_UNIFIED_RANDOM_COLS_PER_TILE ?= 576
 BIKE_UNIFIED_RANDOM_TIMEOUT_CYCLES ?= 40000000
 TRIKE_UNIFIED_KSIGN_PARALLEL_L ?= 16
 TRIKE_UNIFIED_KSIGN_COLS_PER_TILE ?= 1168
+TRIKE_UNIFIED_KSIGN_K ?= 3
 TRIKE_UNIFIED_KSIGN_PARAM_SETS ?= trike128 trike160 trike256 trike384 trike512
 TRIKE_UNIFIED_KSIGN_TIMEOUT_CYCLES ?= 40000000
 
@@ -72,7 +74,7 @@ test-unit:
 	@$(SIM) ./obj_dir/Vtb_k_sign_update +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_accum rtl/bike_pkg.sv rtl/barrel_rotate.sv rtl/ram_accum.sv tb/tb_ram_accum.sv
 	@$(SIM) ./obj_dir/Vtb_ram_accum +verilator+quiet
-	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_t rtl/bike_pkg.sv rtl/ram_bram.sv rtl/ram_t.sv tb/tb_ram_t.sv
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_t rtl/bike_pkg.sv rtl/barrel_rotate.sv rtl/ram_bram.sv rtl/ram_t.sv tb/tb_ram_t.sv
 	@$(SIM) ./obj_dir/Vtb_ram_t +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_decision rtl/bike_pkg.sv rtl/ram_bram.sv rtl/ram_decision.sv tb/tb_ram_decision.sv
 	@$(SIM) ./obj_dir/Vtb_ram_decision +verilator+quiet
@@ -97,7 +99,7 @@ test-bike-unified-random:
 
 test-trike-unified-ksign-random:
 	@for param_set in $(TRIKE_UNIFIED_KSIGN_PARAM_SETS); do \
-		python3 scripts/run_bike_random.py --unified --param-set $$param_set --base-seed $(BIKE_RANDOM_BASE_SEED) --trials $(BIKE_RANDOM_TRIALS) $(BIKE_RANDOM_ERROR_ARG) --parallel-l $(TRIKE_UNIFIED_KSIGN_PARALLEL_L) --cols-per-tile $(TRIKE_UNIFIED_KSIGN_COLS_PER_TILE) --timeout-cycles $(TRIKE_UNIFIED_KSIGN_TIMEOUT_CYCLES) --out-dir tb/generated/trike_unified_ksign/$$param_set --verilator $(VERILATOR); \
+		python3 scripts/run_bike_random.py --unified --param-set $$param_set --base-seed $(BIKE_RANDOM_BASE_SEED) --trials $(BIKE_RANDOM_TRIALS) $(BIKE_RANDOM_ERROR_ARG) --parallel-l $(TRIKE_UNIFIED_KSIGN_PARALLEL_L) --cols-per-tile $(TRIKE_UNIFIED_KSIGN_COLS_PER_TILE) --k-sign-k $(TRIKE_UNIFIED_KSIGN_K) --timeout-cycles $(TRIKE_UNIFIED_KSIGN_TIMEOUT_CYCLES) --out-dir tb/generated/trike_unified_ksign/k$(TRIKE_UNIFIED_KSIGN_K)/$$param_set --verilator $(VERILATOR); \
 	done
 
 model-min-sum: $(MIN_SUM_MODEL)
@@ -139,9 +141,9 @@ lint-rtl:
 
 vivado-synth:
 	@mkdir -p $(VIVADO_BUILD_DIR)
-	@BIKE_PARAM_DEFINE=$(BIKE_SYNTH_PARAM) BIKE_PARALLEL_L=$(BIKE_SYNTH_PARALLEL_L) $(if $(BIKE_SYNTH_COLS_PER_TILE),BIKE_COLS_PER_TILE=$(BIKE_SYNTH_COLS_PER_TILE),) $(VIVADO) -mode batch -source scripts/vivado_synth.tcl -tclargs $(VIVADO_BUILD_DIR)
+	@BIKE_PARAM_DEFINE=$(BIKE_SYNTH_PARAM) BIKE_PARALLEL_L=$(BIKE_SYNTH_PARALLEL_L) BIKE_K_SIGN_K=$(TRIKE_UNIFIED_KSIGN_K) $(if $(BIKE_SYNTH_COLS_PER_TILE),BIKE_COLS_PER_TILE=$(BIKE_SYNTH_COLS_PER_TILE),) $(VIVADO) -mode batch -source scripts/vivado_synth.tcl -tclargs $(VIVADO_BUILD_DIR)
 
 vivado-synth-trike-unified-ksign:
-	@$(MAKE) vivado-synth BIKE_SYNTH_PARAM=TRIKE_UNIFIED_PARAMS BIKE_SYNTH_PARALLEL_L=$(TRIKE_UNIFIED_KSIGN_PARALLEL_L) BIKE_SYNTH_COLS_PER_TILE=$(TRIKE_UNIFIED_KSIGN_COLS_PER_TILE) VIVADO_BUILD_DIR=$(VIVADO_BUILD_DIR)/trike_unified_ksign_l$(TRIKE_UNIFIED_KSIGN_PARALLEL_L)
+	@$(MAKE) vivado-synth BIKE_SYNTH_PARAM=TRIKE_UNIFIED_PARAMS BIKE_SYNTH_PARALLEL_L=$(TRIKE_UNIFIED_KSIGN_PARALLEL_L) BIKE_SYNTH_COLS_PER_TILE=$(TRIKE_UNIFIED_KSIGN_COLS_PER_TILE) VIVADO_BUILD_DIR=$(VIVADO_BUILD_DIR)/trike_unified_ksign_l$(TRIKE_UNIFIED_KSIGN_PARALLEL_L)_k$(TRIKE_UNIFIED_KSIGN_K)
 
 sim: test

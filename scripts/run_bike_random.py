@@ -892,6 +892,7 @@ def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int
                 f"-DBIKE_PARALLEL_L={args.parallel_l}",
                 f"-DBIKE_COLS_PER_TILE={args.cols_per_tile}",
                 f"-DBIKE_MSG_BITS={args.msg_bits}",
+                f"-DBIKE_K_SIGN_K={args.k_sign_k}",
                 "-DBIKE_SIM_DEBUG",
                 "-Wall",
                 "-Wno-fatal",
@@ -959,6 +960,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--i-max", type=int, default=None)
     parser.add_argument("--c-val", type=int, default=None)
     parser.add_argument("--msg-bits", type=int, default=None)
+    parser.add_argument("--k-sign-k", type=int, default=3)
     parser.add_argument("--alpha-shift-0", type=int, default=None)
     parser.add_argument("--alpha-shift-1", type=int, default=None)
     parser.add_argument("--parallel-l", type=int, default=8)
@@ -995,6 +997,10 @@ def main() -> int:
         raise ValueError("--cols-per-tile must be a multiple of --parallel-l")
     if args.msg_bits < 2:
         raise ValueError("--msg-bits must be at least 2")
+    if args.k_sign_k < 1:
+        raise ValueError("--k-sign-k must be positive")
+    if not args.unified and args.k_sign_k != 3:
+        raise ValueError("--k-sign-k is supported by the unified RTL package flow")
     if args.c_val < 0 or args.c_val > ((1 << (args.msg_bits - 1)) - 1):
         raise ValueError("--c-val must fit in the configured sign-magnitude message magnitude")
     if args.unified and (args.param_set not in UNIFIED_PROFILE_IDS):

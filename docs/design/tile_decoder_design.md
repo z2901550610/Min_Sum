@@ -89,7 +89,7 @@ lane_group_idx > wrap_lane_group_idx + 1 : lane_group_idx_eff = lane_group_idx -
 | compressed check state | `comp_pair[pair][check_row_idx]` |
 | V2C sign | `sign_mem[diag_idx_global][check_row_idx]` |
 | tile raw C2V sum | `ram_accum[buf][tile_offset]` |
-| tile raw C2V edge | `ram_t[buf][lane][diag_idx_local * Q_TILE + lane_group_idx]` |
+| tile raw C2V edge | `ram_t[buf][tile_offset mod L][diag_idx_local * Q_BASE + floor(tile_offset/L)]` |
 | decision bit | `ram_decision[col_idx]` |
 
 `ram_accum` 和 `ram_t` 使用 `fill_buf/active_buf` 双缓冲。两个buffer选择恒为互补，`ram_accum` 的每个
@@ -106,7 +106,7 @@ comp = first_iter ? FIRST_ITER_C2V_COMP : comp_or_init(comp_read_pair_sel, check
 c2v  = cnu_b(comp, sign_mem[diag_idx_global][check_row_idx], syndrome_mem[check_row_idx], diag_idx_global)
 raw  = signmag_to_tc(c2v)
 ram_accum[fill_buf][tile_offset] += raw
-ram_t[fill_buf][lane][t_addr]       = raw
+ram_t[fill_buf][tile_offset mod L][t_addr] = raw
 ```
 
 `diag_idx_local==0` 时 accumulator 从 0 开始。
@@ -117,9 +117,13 @@ ram_t[fill_buf][lane][t_addr]       = raw
 
 ```text
 raw_sum   = ram_accum[active_buf][tile_offset]
-raw_edge  = ram_t[active_buf][lane][t_addr]
+raw_edge  = ram_t[active_buf][tile_offset mod L][t_addr]
 posterior = C_VAL + scale(raw_sum)
 v2c       = C_VAL + scale(raw_sum - raw_edge)
 ```
+
+其中 `t_addr = diag_idx_local * Q_BASE + floor(tile_offset/L)`。C2V写请求和V2C读请求先按
+`tile_offset mod L`旋转到物理bank；同步BRAM读回后使用同一拍保存的旋转量返回原lane。guard拍和跨模
+拆分拍只影响valid及请求路由，不占用独立的RAM地址。
 
 `v2c` 饱和编码后进入 CNU_A 规则，更新下一轮 compressed check state。最后一轮 `diag_idx_local==0` 用 posterior sign 写入 `ram_decision[col_idx]`。

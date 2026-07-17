@@ -9,6 +9,7 @@ set synth_directive [expr {[info exists ::env(VIVADO_SYNTH_DIRECTIVE)] ? $::env(
 set flatten_hierarchy [expr {[info exists ::env(VIVADO_FLATTEN_HIERARCHY)] ? $::env(VIVADO_FLATTEN_HIERARCHY) : "rebuilt"}]
 set xdc_file [expr {[info exists ::env(VIVADO_XDC)] ? $::env(VIVADO_XDC) : "constraints/decoder_top.xdc"}]
 set parallel_l [expr {[info exists ::env(BIKE_PARALLEL_L)] ? $::env(BIKE_PARALLEL_L) : "32"}]
+set k_sign_k [expr {[info exists ::env(BIKE_K_SIGN_K)] ? $::env(BIKE_K_SIGN_K) : "3"}]
 set cols_per_tile [expr {[info exists ::env(BIKE_COLS_PER_TILE)] ? $::env(BIKE_COLS_PER_TILE) : ""}]
 set param_define [expr {[info exists ::env(BIKE_PARAM_DEFINE)] ? $::env(BIKE_PARAM_DEFINE) : ""}]
 set top "decoder_top"
@@ -63,7 +64,7 @@ set rtl_files [list \
 ]
 
 run_step "read_verilog" {
-  set define_args [list "BIKE_PARALLEL_L=$parallel_l"]
+  set define_args [list "BIKE_PARALLEL_L=$parallel_l" "BIKE_K_SIGN_K=$k_sign_k"]
   if {$param_define ne ""} {
     lappend define_args $param_define
   }

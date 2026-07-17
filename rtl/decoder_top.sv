@@ -118,7 +118,6 @@ module decoder_top
   logic                                c2v_phase_a;
   logic        [       TILE_IDX_W-1:0] c2v_tile_idx_a;
   logic        [       DIAG_IDX_W-1:0] c2v_diag_idx_local_a;
-  logic        [ LANE_GROUP_IDX_W-1:0] c2v_lane_group_idx_a;
   logic                                c2v_fill_buf_a;
   logic                                c2v_iter_zero_a;
   logic                                comp_read_pair_sel_a;
@@ -136,7 +135,6 @@ module decoder_top
   logic        [       TILE_OFF_W-1:0] c2v_tile_offset_r[0:L-1];
   logic        [       TILE_IDX_W-1:0] c2v_tile_idx_r;
   logic        [       DIAG_IDX_W-1:0] c2v_diag_idx_local_r;
-  logic        [ LANE_GROUP_IDX_W-1:0] c2v_lane_group_idx_r;
   logic                                c2v_fill_buf_r;
   logic                                c2v_iter_zero_r;
   logic                                comp_read_pair_sel_r;
@@ -146,7 +144,6 @@ module decoder_top
   logic signed [            ACC_W-1:0] old_c2v_sum_q[0:L-1];
   logic                                c2v_syndrome_q[0:L-1];
   logic        [       DIAG_IDX_W-1:0] c2v_diag_idx_local_q;
-  logic        [ LANE_GROUP_IDX_W-1:0] c2v_lane_group_idx_q;
   logic                                c2v_fill_buf_q;
   logic                                c2v_iter_zero_q;
   logic                                c2v_valid_s[0:L-1];
@@ -156,7 +153,6 @@ module decoder_top
   logic        [       COMP_C2V_W-1:0] c2v_comp_s[0:L-1];
   logic                                c2v_syndrome_s[0:L-1];
   logic        [       DIAG_IDX_W-1:0] c2v_diag_idx_local_s;
-  logic        [ LANE_GROUP_IDX_W-1:0] c2v_lane_group_idx_s;
   logic                                c2v_fill_buf_s;
   logic                                c2v_iter_zero_s;
   logic                                c2v_valid_c[0:L-1];
@@ -167,13 +163,11 @@ module decoder_top
   logic                                c2v_sign_c[0:L-1];
   logic                                c2v_syndrome_c[0:L-1];
   logic        [       DIAG_IDX_W-1:0] c2v_diag_idx_local_c;
-  logic        [ LANE_GROUP_IDX_W-1:0] c2v_lane_group_idx_c;
   logic                                c2v_fill_buf_c;
   logic                                c2v_iter_zero_c;
   logic                                c2v_valid_p[0:L-1];
   logic        [       TILE_OFF_W-1:0] c2v_tile_offset_p[0:L-1];
   logic        [       DIAG_IDX_W-1:0] c2v_diag_idx_local_p;
-  logic        [ LANE_GROUP_IDX_W-1:0] c2v_lane_group_idx_p;
   logic                                c2v_fill_buf_p;
   logic signed [            MSG_W-1:0] c2v_tc_p[0:L-1];
   logic signed [            ACC_W-1:0] old_c2v_sum_p[0:L-1];
@@ -182,7 +176,6 @@ module decoder_top
   logic                                c2v_write_valid[0:L-1];
   logic        [       TILE_OFF_W-1:0] c2v_write_tile_offset[0:L-1];
   logic        [       DIAG_IDX_W-1:0] c2v_write_diag_idx_local;
-  logic        [ LANE_GROUP_IDX_W-1:0] c2v_write_lane_group_idx;
   logic                                c2v_write_fill_buf;
   logic signed [            MSG_W-1:0] c2v_write_tc[0:L-1];
   logic signed [            ACC_W-1:0] updated_c2v_sum[0:L-1];
@@ -514,11 +507,9 @@ module decoder_top
     if (C2V_WRITE_PIPELINE) begin
       c2v_write_fill_buf = c2v_fill_buf_p;
       c2v_write_diag_idx_local = c2v_diag_idx_local_p;
-      c2v_write_lane_group_idx = c2v_lane_group_idx_p;
     end else begin
       c2v_write_fill_buf = c2v_fill_buf_c;
       c2v_write_diag_idx_local = c2v_diag_idx_local_c;
-      c2v_write_lane_group_idx = c2v_lane_group_idx_c;
     end
   end
 
@@ -805,12 +796,12 @@ module decoder_top
       .i_fill_buf(c2v_write_fill_buf),
       .i_c2v_write_valid(c2v_write_valid),
       .i_c2v_write_diag_idx_local(c2v_write_diag_idx_local),
-      .i_c2v_write_lane_group_idx(c2v_write_lane_group_idx),
+      .i_c2v_write_tile_offset(c2v_write_tile_offset),
       .i_c2v_tc(c2v_write_tc),
       .i_active_buf(v2c_active_buf_r),
       .i_v2c_valid(v2c_valid_r),
       .i_v2c_diag_idx_local(v2c_diag_idx_local_r),
-      .i_v2c_lane_group_idx(v2c_lane_group_idx_r),
+      .i_v2c_tile_offset(v2c_tile_offset_r),
       .o_c2v_edge(vnu_c2v_edge_narrow)
   );
 
@@ -856,19 +847,15 @@ module decoder_top
     if (!rst_n_sync) begin
       param_level <= PROFILE_DEFAULT;
       c2v_diag_idx_local_q <= '0;
-      c2v_lane_group_idx_q <= '0;
       c2v_fill_buf_q <= 1'b0;
       c2v_iter_zero_q <= 1'b0;
       c2v_diag_idx_local_s <= '0;
-      c2v_lane_group_idx_s <= '0;
       c2v_fill_buf_s <= 1'b0;
       c2v_iter_zero_s <= 1'b0;
       c2v_diag_idx_local_c <= '0;
-      c2v_lane_group_idx_c <= '0;
       c2v_fill_buf_c <= 1'b0;
       c2v_iter_zero_c <= 1'b0;
       c2v_diag_idx_local_p <= '0;
-      c2v_lane_group_idx_p <= '0;
       c2v_fill_buf_p <= 1'b0;
       c2v_phase_h <= 1'b0;
       c2v_h_block_idx_h <= '0;
@@ -890,12 +877,10 @@ module decoder_top
       c2v_phase_a <= 1'b0;
       c2v_tile_idx_a <= '0;
       c2v_diag_idx_local_a <= '0;
-      c2v_lane_group_idx_a <= '0;
       c2v_fill_buf_a <= 1'b0;
       c2v_iter_zero_a <= 1'b0;
       comp_read_pair_sel_a <= 1'b0;
       c2v_diag_idx_local_r <= '0;
-      c2v_lane_group_idx_r <= '0;
       c2v_tile_idx_r <= '0;
       c2v_fill_buf_r <= 1'b0;
       c2v_iter_zero_r <= 1'b0;
@@ -1075,30 +1060,24 @@ module decoder_top
       c2v_phase_a <= c2v_phase_e;
       c2v_tile_idx_a <= c2v_tile_idx_e;
       c2v_diag_idx_local_a <= c2v_diag_idx_local_e;
-      c2v_lane_group_idx_a <= c2v_lane_group_idx_e;
       c2v_fill_buf_a <= c2v_fill_buf_e;
       c2v_iter_zero_a <= c2v_iter_zero_e;
       comp_read_pair_sel_a <= comp_read_pair_sel_e;
       c2v_diag_idx_local_r <= c2v_diag_idx_local_a;
-      c2v_lane_group_idx_r <= c2v_lane_group_idx_a;
       c2v_tile_idx_r <= c2v_tile_idx_a;
       c2v_fill_buf_r <= c2v_fill_buf_a;
       c2v_iter_zero_r <= c2v_iter_zero_a;
       comp_read_pair_sel_r <= comp_read_pair_sel_a;
       c2v_diag_idx_local_q <= c2v_diag_idx_local_r;
-      c2v_lane_group_idx_q <= c2v_lane_group_idx_r;
       c2v_fill_buf_q <= c2v_fill_buf_r;
       c2v_iter_zero_q <= c2v_iter_zero_r;
       c2v_diag_idx_local_s <= c2v_diag_idx_local_q;
-      c2v_lane_group_idx_s <= c2v_lane_group_idx_q;
       c2v_fill_buf_s <= c2v_fill_buf_q;
       c2v_iter_zero_s <= c2v_iter_zero_q;
       c2v_diag_idx_local_c <= c2v_diag_idx_local_s;
-      c2v_lane_group_idx_c <= c2v_lane_group_idx_s;
       c2v_fill_buf_c <= c2v_fill_buf_s;
       c2v_iter_zero_c <= c2v_iter_zero_s;
       c2v_diag_idx_local_p <= c2v_diag_idx_local_c;
-      c2v_lane_group_idx_p <= c2v_lane_group_idx_c;
       c2v_fill_buf_p <= c2v_fill_buf_c;
 
       v2c_phase_h <= v2c_phase_active;

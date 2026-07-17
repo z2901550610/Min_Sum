@@ -280,8 +280,9 @@ POS_W = 7
 | K | 每变量 bit | 总 bit | 约 MiB |
 | ---: | ---: | ---: | ---: |
 | 3 | 22 | 7,166,742 | 0.85 |
+| 4 | 29 | 9,447,069 | 1.13 |
 
-BRAM 数量由目标器件的 SDP primitive、bank 深度和 Vivado memory mapping 共同决定。统一 TRIKE、`L=16` 的全局记录总容量为 7,166,742 bit，综合时以目标器件报告为准。
+BRAM数量由目标器件的SDP primitive、bank深度和Vivado memory mapping共同决定。
 
 完整符号存储参考约为 1.0k BRAM36。K-sign 长期存储的主收益来自把每变量 `W_MAX=111` 个符号位压缩为 `1+K*7` bit。
 
@@ -290,12 +291,17 @@ Tile 内 selector 工作状态按 `COLS_PER_TILE=1168`、`D=4` 估算：
 | K | 工作记录 | correction snapshot | 合计 |
 | ---: | ---: | ---: | ---: |
 | 3 | 34 bit × 1168 = 39,712 bit | 21 bit × 1168 = 24,528 bit | 64,240 bit |
+| 4 | 45 bit × 1168 = 52,560 bit | 28 bit × 1168 = 32,704 bit | 85,264 bit |
 
-工作RAM保存 `base_sign` 和K个无序 `(dev_pos, magnitude)` 槽；snapshot只保存correction需要的K个 `dev_pos`，invalid仍由位置哨兵表达。两份RAM均按变量列bank化。全局K-sign RAM的逻辑记录宽度为 `1+K*POS_W` bit，物理上使用独立的 `base_sign` 字段，三个 `dev_pos` 槽分别使用窄BRAM字段。`dev_pos` 字段按RAMB36的4K×9原生几何划分深度段，并使用相同的逻辑bank地址和读写使能。C2V完成一个tile的记录读取后，落后一窗口的V2C对同一tile原地提交记录。
+工作RAM保存 `base_sign` 和K个无序 `(dev_pos, magnitude)` 槽；snapshot只保存correction需要的K个
+`dev_pos`，invalid仍由位置哨兵表达。两份RAM均按变量列bank化。全局K-sign RAM的逻辑记录宽度为
+`1+K*POS_W` bit，物理上使用独立的 `base_sign` 字段，K个 `dev_pos` 槽分别使用窄BRAM字段。
+`dev_pos` 字段按RAMB36的4K×9原生几何划分深度段，并使用相同的逻辑bank地址和读写使能。C2V完成一个
+tile的记录读取后，落后一窗口的V2C对同一tile原地提交记录。
 
 `ram_sign_delta` 保存两个 iteration pair、每个 pair `R` bit 的 `dev_xor`，逻辑容量为 `2*R_MAX=217,174 bit`。它按 L 个 row bank 组织，物理 BRAM 数量以 Vivado 报告为准。
 
-统一 TRIKE、`L=16`、K=3 的 RTL 实现和 Vivado 资源结果见
+统一TRIKE、`L=16`的K=3和K=4 RTL实现及Vivado资源结果见
 [implementation_status.md](implementation_status.md)。
 
 ## 仿真观察
