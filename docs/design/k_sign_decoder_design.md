@@ -354,7 +354,7 @@ TRIKE512：
 
 K-sign 数据通路由以下模块组成：
 
-1. `ram_k_global`：每个变量列的一份全局原地更新记录，`base_sign` 使用独立字段，三个 `dev_pos` 使用独立窄 BRAM 字段。
+1. `ram_k_global`：每个变量列的一份全局原地更新记录，`base_sign` 使用独立字段，三个 `dev_pos` 使用独立窄 BRAM 字段；译码完成后由同一读口输出最终错误判决。
 2. `ram_k_tile`：一份34-bit候选工作RAM和一份21-bit correction位置snapshot RAM。
 3. `k_sign_update`：无序候选槽的最差项归约树和单槽更新组合逻辑。
 4. `k_sign_selector`：变量列bank路由、工作RAM读改写、snapshot读写和全局压缩记录提交。
@@ -362,7 +362,7 @@ K-sign 数据通路由以下模块组成：
 6. `k_sign_overlap_scheduler`：按公开参数生成重叠 correction 的 tile、对角线和列组坐标。
 7. `ram_sign_delta`：保存每个 check row 的 deviation parity，支持同步读取、清空和翻转 RMW。
 
-最后一个对角线在该变量列的全部记录读取完成后，将压缩记录写回同一地址。C2V 通过 `base_sign XOR hit(dev_pos == diag_idx_local)` 重建变量边符号。主 V2C 把 base-sign 累积到 `ram_m`，重叠 correction 把命中位置的奇偶性累积到 `ram_sign_delta`；下一轮 C2V 将两部分异或后送入 CNU B。
+最后一个对角线在该变量列的全部记录读取完成后，将压缩记录写回同一地址。C2V 通过 `base_sign XOR hit(dev_pos == diag_idx_local)` 重建变量边符号。主 V2C 把 base-sign 累积到 `ram_m`，重叠 correction 把命中位置的奇偶性累积到 `ram_sign_delta`；下一轮 C2V 将两部分异或后送入 CNU B。最后一轮提交的 `base_sign` 等于变量节点的最终posterior sign；主流水结束后，外部列地址复用空闲的全局K记录读口，并将该位作为同步串行错误向量输出。
 
 ## 主要风险
 
@@ -372,7 +372,7 @@ K-sign 数据通路由以下模块组成：
 | selector 布线 | `COLS_PER_TILE*K` 候选状态分布在 tile 内 | 将 selector 状态按 lane/bank 分区，靠近 VNU 输出放置 |
 | K=3 余量 | 小 K 对 DFR margin 更敏感 | 使用多 seed 和更低 DFR 区确认 |
 | sign_xor 语义 | C2V 与 CNU A 必须使用同一近似符号定义 | C model、RTL 和测试向量共享 tie-break 规则 |
-| 重叠路径时序 | snapshot写入路径的跨bank布线占比较高 | 100 MHz routed WNS为+0.072 ns，setup/hold均收敛 |
+| 重叠路径时序 | snapshot写入路径的跨bank布线占比较高 | 对当前RTL运行100 MHz placed/routed检查 |
 
 ## RTL 配置
 

@@ -444,6 +444,13 @@ module decoder_top
       c2v_tile_offset[lane_idx] = c2v_corr_tile_offset[lane_idx];
       ksign_read_valid[lane_idx] = c2v_valid_r[lane_idx];
       ksign_read_col_idx[lane_idx] = c2v_col_idx_r[lane_idx];
+      // The final posterior sign is the base-sign field of the committed
+      // global K-sign record.  Once decoding is complete, the C2V read port
+      // is idle and serves the external serial decision interface.
+      if (K_SIGN_ENABLE && ctrl_done_final && (lane_idx == 0)) begin
+        ksign_read_valid[lane_idx]   = 1'b1;
+        ksign_read_col_idx[lane_idx] = i_e_read_col_idx;
+      end
       c2v_tc_ext[lane_idx] = '0;
       v2c_comp_next[lane_idx] = COMP_C2V_INIT;
       v2c_sign_wdata[lane_idx] = v2c_cnu_a_sign[lane_idx];
@@ -818,14 +825,20 @@ module decoder_top
       .o_v2c_tc(v2c_tc_next)
   );
 
-  ram_decision u_ram_decision (
-      .i_clk(i_clk),
-      .i_we(decision_we_p),
-      .i_write_col_idx(v2c_col_idx_p),
-      .i_wdata(posterior_sign_p),
-      .i_read_col_idx(i_e_read_col_idx),
-      .o_rdata(o_e_rdata)
-  );
+  generate
+    if (K_SIGN_ENABLE) begin : g_ksign_decision_read
+      assign o_e_rdata = c2v_ksign_record_mem[0][0];
+    end else begin : g_full_sign_decision_read
+      ram_decision u_ram_decision (
+          .i_clk(i_clk),
+          .i_we(decision_we_p),
+          .i_write_col_idx(v2c_col_idx_p),
+          .i_wdata(posterior_sign_p),
+          .i_read_col_idx(i_e_read_col_idx),
+          .o_rdata(o_e_rdata)
+      );
+    end
+  endgenerate
 
 `ifndef SYNTHESIS
   always_ff @(posedge i_clk) begin
