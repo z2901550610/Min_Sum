@@ -4,6 +4,7 @@ module ram_syndrome
   import bike_pkg::*;
 (
     input  logic                   i_clk,
+    input  logic                   i_rst_n,
     input  logic                   i_we,
     input  logic [  ROW_IDX_W-1:0] i_wr_addr,
     input  logic                   i_wr_data,
@@ -47,11 +48,29 @@ module ram_syndrome
           .o_rdata(bank_rdata[bank_idx])
       );
 
-      always_ff @(posedge i_clk) begin
-        read_valid_q[bank_idx] <= i_rd_valid[bank_idx];
+      always_ff @(posedge i_clk or negedge i_rst_n) begin
+        if (!i_rst_n) begin
+          read_valid_q[bank_idx] <= 1'b0;
+        end else begin
+          read_valid_q[bank_idx] <= i_rd_valid[bank_idx];
+        end
       end
 
       assign o_rd_data[bank_idx] = read_valid_q[bank_idx] ? bank_rdata[bank_idx] : 1'b0;
     end
   endgenerate
+
+`ifndef SYNTHESIS
+  always @(posedge i_clk) begin
+    if (i_we && (int'(i_wr_addr) >= R)) begin
+      $fatal(1, "ram_syndrome write address out of range addr=%0d", i_wr_addr);
+    end
+    for (int bank_idx = 0; bank_idx < L; bank_idx++) begin
+      if (i_rd_valid[bank_idx] && (int'(i_rd_row_addr[bank_idx]) >= ROW_SEG_SIZE)) begin
+        $fatal(1, "ram_syndrome read address out of range bank=%0d addr=%0d", bank_idx,
+               i_rd_row_addr[bank_idx]);
+      end
+    end
+  end
+`endif
 endmodule

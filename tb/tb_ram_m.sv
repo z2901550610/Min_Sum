@@ -86,8 +86,8 @@ module tb_ram_m;
     rst_n = 1'b0;
     clear_inputs();
     repeat (2) @(posedge clk);
+    @(negedge clk);
     rst_n = 1'b1;
-    @(posedge clk);
 
     v2c_write_pair_sel = 1'b1;
     v2c_write_valid[0] = 1'b1;

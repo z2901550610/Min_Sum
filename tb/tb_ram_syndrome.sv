@@ -4,6 +4,7 @@ module tb_ram_syndrome;
   import bike_pkg::*;
 
   logic                   clk;
+  logic                   rst_n;
   logic                   we;
   logic [  ROW_IDX_W-1:0] wr_addr;
   logic                   wr_data;
@@ -13,6 +14,7 @@ module tb_ram_syndrome;
 
   ram_syndrome dut (
       .i_clk        (clk),
+      .i_rst_n      (rst_n),
       .i_we         (we),
       .i_wr_addr    (wr_addr),
       .i_wr_data    (wr_data),
@@ -55,19 +57,20 @@ module tb_ram_syndrome;
     logic [ROW_BANK_AW-1:0] local_addr;
 
     clear_inputs();
+    rst_n = 1'b0;
+    repeat (2) @(negedge clk);
+    rst_n = 1'b1;
 
     // Write value 1 to address 5.
     test_addr = ROW_IDX_W'(5);
     bank = row_bank_of(test_addr);
     local_addr = row_addr_of(test_addr);
 
-    @(posedge clk);
-    #1;
+    @(negedge clk);
     we = 1'b1;
     wr_addr = test_addr;
     wr_data = 1'b1;
-    @(posedge clk);
-    #1;
+    @(negedge clk);
     clear_inputs();
 
     // Read back: assert valid for the target bank, check data.

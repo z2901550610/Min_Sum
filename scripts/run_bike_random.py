@@ -21,7 +21,6 @@ RTL_CORE = [
     "rtl/ram_s.sv",
     "rtl/k_sign_update.sv",
     "rtl/k_sign_reconstruct.sv",
-    "rtl/k_sign_correction.sv",
     "rtl/k_sign_overlap_scheduler.sv",
     "rtl/ram_k_tile.sv",
     "rtl/k_sign_selector.sv",
@@ -616,15 +615,15 @@ module tb_bike_decoder_random;
   task automatic load_syndrome;
     begin
       for (int row_idx = 0; row_idx < TEST_R; row_idx++) begin
+        @(negedge clk);
         syndrome_we = 1'b1;
         syndrome_addr = ROW_IDX_W'(row_idx);
         syndrome_wdata = syndrome_bit_at(row_idx);
-        @(posedge clk);
       end
+      @(negedge clk);
       syndrome_we = 1'b0;
       syndrome_addr = '0;
       syndrome_wdata = 1'b0;
-      @(posedge clk);
     end
   endtask
 
@@ -632,13 +631,14 @@ module tb_bike_decoder_random;
     begin
       for (int h_block_idx = 0; h_block_idx < N0; h_block_idx++) begin
         for (int diag_idx_local = 0; diag_idx_local < TEST_W; diag_idx_local++) begin
+          @(negedge clk);
           h_we = 1'b1;
           h_load_block_idx = H_BLOCK_W'(h_block_idx);
           h_load_diag_idx_local = DIAG_IDX_W'(diag_idx_local);
           h_base_row_idx = ROW_IDX_W'(TEST_H_BASE_ROW_IDXS[h_block_idx][diag_idx_local]);
-          @(posedge clk);
         end
       end
+      @(negedge clk);
       h_we = 1'b0;
       while (!h_loaded && !h_error) begin
         @(posedge clk);
@@ -714,20 +714,23 @@ module tb_bike_decoder_random;
     syndrome_wdata = 1'b0;
     e_read_col_idx = '0;
     repeat (2) @(posedge clk);
+    @(negedge clk);
     rst_n = 1'b1;
     repeat (3) @(posedge clk);
 
     load_h_matrix();
     load_syndrome();
 
+    @(negedge clk);
     start = 1'b1;
-    @(posedge clk);
+    @(negedge clk);
     start = 1'b0;
 
     cycles = 0;
     while ((done !== 1'b1) && (cycles < TIMEOUT_CYCLES)) begin
-      cycles += 1;
       @(posedge clk);
+      #1;
+      cycles += 1;
     end
     if (done !== 1'b1) begin
       $fatal(1, "seed=%0d timeout after %0d cycles", TEST_SEED, cycles);

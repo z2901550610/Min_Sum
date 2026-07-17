@@ -372,7 +372,7 @@ K-sign 数据通路由以下模块组成：
 | selector 布线 | `COLS_PER_TILE*K` 候选状态分布在 tile 内 | 将 selector 状态按 lane/bank 分区，靠近 VNU 输出放置 |
 | K=3 余量 | 小 K 对 DFR margin 更敏感 | 使用多 seed 和更低 DFR 区确认 |
 | sign_xor 语义 | C2V 与 CNU A 必须使用同一近似符号定义 | C model、RTL 和测试向量共享 tie-break 规则 |
-| 重叠路径时序 | snapshot写入路径的跨bank布线占比较高 | 对当前RTL运行100 MHz placed/routed检查 |
+| 重叠路径时序 | snapshot写入路径的跨bank布线占比较高 | K=3/K=4主时钟WNS分别为+0.862/+0.717 ns |
 
 ## RTL 配置
 

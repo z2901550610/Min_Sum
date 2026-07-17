@@ -182,4 +182,25 @@ module ram_accum
       o_c2v_sum[lane_idx] = i_v2c_valid[lane_idx] ? $signed(v2c_lane_rdata[lane_idx]) : '0;
     end
   end
+
+`ifndef SYNTHESIS
+  always @(posedge i_clk) begin
+    for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
+      if (i_c2v_read_valid[lane_idx] &&
+          ((int'(i_c2v_read_tile_offset[lane_idx]) >> L_SHIFT) >= Q_BASE)) begin
+        $fatal(1, "ram_accum C2V read offset out of range lane=%0d offset=%0d", lane_idx,
+               i_c2v_read_tile_offset[lane_idx]);
+      end
+      if (i_c2v_write_valid[lane_idx] &&
+          ((int'(i_c2v_write_tile_offset[lane_idx]) >> L_SHIFT) >= Q_BASE)) begin
+        $fatal(1, "ram_accum C2V write offset out of range lane=%0d offset=%0d", lane_idx,
+               i_c2v_write_tile_offset[lane_idx]);
+      end
+      if (i_v2c_valid[lane_idx] && ((int'(i_v2c_tile_offset[lane_idx]) >> L_SHIFT) >= Q_BASE)) begin
+        $fatal(1, "ram_accum V2C read offset out of range lane=%0d offset=%0d", lane_idx,
+               i_v2c_tile_offset[lane_idx]);
+      end
+    end
+  end
+`endif
 endmodule

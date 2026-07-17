@@ -25,6 +25,8 @@ module ram_m
     input  logic [ROW_BANK_AW-1:0] i_flip_row_addr[0:L-1]
 );
 
+  localparam int COMP_MAG_SIGN_W = (2 * D) + 1;
+
   logic [COMP_C2V_W-1:0] bank_rdata[0:1][0:L-1];
   logic                  c2v_bank_read_valid[0:1][0:L-1];
   logic                  v2c_bank_read_valid[0:1][0:L-1];
@@ -34,21 +36,25 @@ module ram_m
   generate
     for (genvar pair_idx = 0; pair_idx < 2; pair_idx++) begin : g_pair
       for (genvar bank_idx = 0; bank_idx < L; bank_idx++) begin : g_bank
-        logic                   bank_re;
-        logic [            1:0] bank_read_kind;
-        logic [ROW_BANK_AW-1:0] bank_raddr;
-        logic                   bank_we;
-        logic [ROW_BANK_AW-1:0] bank_waddr;
-        logic [ COMP_C2V_W-1:0] bank_wdata;
-        logic                   bank_read_valid_q;
-        logic [            1:0] bank_read_kind_q;
-        logic [ROW_BANK_AW-1:0] bank_raddr_q;
-        logic [ COMP_C2V_W-1:0] mem_rdata;
-        logic                   read_bypass_valid_q;
-        logic [ COMP_C2V_W-1:0] read_bypass_data_q;
-        logic                   flip_we;
-        logic [ROW_BANK_AW-1:0] flip_waddr;
-        logic [ COMP_C2V_W-1:0] flip_wdata;
+        logic                       bank_re;
+        logic [                1:0] bank_read_kind;
+        logic [    ROW_BANK_AW-1:0] bank_raddr;
+        logic                       bank_we;
+        logic [    ROW_BANK_AW-1:0] bank_waddr;
+        logic [     COMP_C2V_W-1:0] bank_wdata;
+        logic                       bank_read_valid_q;
+        logic [                1:0] bank_read_kind_q;
+        logic [    ROW_BANK_AW-1:0] bank_raddr_q;
+        logic [COMP_MAG_SIGN_W-1:0] mem_mag_sign_rdata;
+        logic [COMP_MAG_SIGN_W-1:0] mem_mag_sign_wdata;
+        logic [  DIAG_GLOBAL_W-1:0] mem_min_diag_rdata;
+        logic [  DIAG_GLOBAL_W-1:0] mem_min_diag_wdata;
+        logic [     COMP_C2V_W-1:0] mem_wdata;
+        logic                       read_bypass_valid_q;
+        logic [     COMP_C2V_W-1:0] read_bypass_data_q;
+        logic                       flip_we;
+        logic [    ROW_BANK_AW-1:0] flip_waddr;
+        logic [     COMP_C2V_W-1:0] flip_wdata;
 
         localparam logic [1:0] RAM_M_READ_NONE = 2'd0;
         localparam logic [1:0] RAM_M_READ_C2V = 2'd1;
@@ -89,6 +95,13 @@ module ram_m
             bank_waddr = i_v2c_write_row_addr[bank_idx];
             bank_wdata = i_v2c_write_data[bank_idx];
           end
+          mem_wdata = bank_we ? bank_wdata : flip_wdata;
+          mem_mag_sign_wdata = {
+            mem_wdata[COMP_C2V_SIGN_XOR_BIT],
+            mem_wdata[COMP_C2V_MIN2_LSB+:D],
+            mem_wdata[COMP_C2V_MIN1_LSB+:D]
+          };
+          mem_min_diag_wdata = mem_wdata[COMP_C2V_MIN_DIAG_GLOBAL_LSB+:DIAG_GLOBAL_W];
         end
 
         always_ff @(posedge i_clk or negedge i_rst_n) begin
@@ -108,21 +121,39 @@ module ram_m
         end
 
         ram_bram #(
-            .DATA_W(COMP_C2V_W),
+            .DATA_W(COMP_MAG_SIGN_W),
             .DEPTH (ROW_SEG_SIZE),
             .ADDR_W(ROW_BANK_AW)
-        ) u_mem (
+        ) u_mag_sign_mem (
             .i_clk  (i_clk),
             .i_we   (bank_we || flip_we),
             .i_waddr(bank_we ? bank_waddr : flip_waddr),
-            .i_wdata(bank_we ? bank_wdata : flip_wdata),
+            .i_wdata(mem_mag_sign_wdata),
             .i_re   (bank_re),
             .i_raddr(bank_raddr),
-            .o_rdata(mem_rdata)
+            .o_rdata(mem_mag_sign_rdata)
+        );
+
+        ram_bram #(
+            .DATA_W(DIAG_GLOBAL_W),
+            .DEPTH (ROW_SEG_SIZE),
+            .ADDR_W(ROW_BANK_AW)
+        ) u_min_diag_mem (
+            .i_clk  (i_clk),
+            .i_we   (bank_we || flip_we),
+            .i_waddr(bank_we ? bank_waddr : flip_waddr),
+            .i_wdata(mem_min_diag_wdata),
+            .i_re   (bank_re),
+            .i_raddr(bank_raddr),
+            .o_rdata(mem_min_diag_rdata)
         );
 
         assign bank_rdata[pair_idx][bank_idx] = read_bypass_valid_q ? read_bypass_data_q :
-                                               mem_rdata;
+                                               {
+                                                 mem_mag_sign_rdata[COMP_MAG_SIGN_W-1],
+                                                 mem_min_diag_rdata,
+                                                 mem_mag_sign_rdata[COMP_MAG_SIGN_W-2:0]
+                                               };
         assign c2v_bank_read_valid[pair_idx][bank_idx] =
             bank_read_valid_q && (bank_read_kind_q == RAM_M_READ_C2V);
         assign v2c_bank_read_valid[pair_idx][bank_idx] =

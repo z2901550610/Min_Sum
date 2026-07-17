@@ -54,8 +54,7 @@ module decoder_top
   logic                                c2v_phase_active;
   logic                                v2c_phase_active;
   /* verilator lint_off UNUSEDSIGNAL */
-  logic                                ksign_corr_phase_active;
-  logic                                ksign_corr_direct;
+  logic                                unused_ksign_corr_phase_active;
   /* verilator lint_on UNUSEDSIGNAL */
   logic                                ksign_overlap_start;
   logic                                ksign_overlap_done;
@@ -77,6 +76,8 @@ module decoder_top
   logic                                comp_clear_valid;
   logic        [      ROW_BANK_AW-1:0] comp_clear_addr;
   logic                                decode_start;
+  logic                                decode_idle;
+  logic                                h_load_write_enable;
   logic                                rst_n_sync;
   logic        [          CFG_R_W-1:0] cfg_r;
   logic        [          CFG_W_W-1:0] cfg_w;
@@ -87,6 +88,8 @@ module decoder_top
   logic        [CFG_ALPHA_SHIFT_W-1:0] cfg_alpha_shift_1;
   logic        [     PROFILE_ID_W-1:0] param_level;
   logic        [     PROFILE_ID_W-1:0] param_level_in;
+  logic        [     PROFILE_ID_W-1:0] profile_config_level;
+  logic                                profile_locked;
 
   logic        [        ROW_IDX_W-1:0] c2v_h_base_row_idx;
   logic        [        ROW_IDX_W-1:0] v2c_h_base_row_idx;
@@ -283,10 +286,6 @@ module decoder_top
   logic                                v2c_bypass_valid_b[0:L-1];
   logic        [      ROW_BANK_AW-1:0] v2c_bypass_row_addr_b[0:L-1];
   logic        [       COMP_C2V_W-1:0] v2c_bypass_comp_b[0:L-1];
-  /* verilator lint_off UNUSEDSIGNAL */
-  logic        [K_SIGN_SLOT_IDX_W-1:0] ksign_corr_slot_idx;
-  logic        [       LANE_IDX_W-1:0] ksign_corr_lane_idx;
-  /* verilator lint_on UNUSEDSIGNAL */
   logic                                ksign_scan_phase_h;
   logic        [        H_BLOCK_W-1:0] ksign_scan_h_block_idx_h;
   logic        [       TILE_IDX_W-1:0] ksign_scan_tile_idx_h;
@@ -316,6 +315,9 @@ module decoder_top
   logic        [      ROW_BANK_AW-1:0] comp_flip_row_addr[0:L-1];
 
   logic                                syndrome_rdata[0:L-1];
+  logic                                syndrome_loaded;
+  logic                                syndrome_write_enable;
+  logic        [        ROW_IDX_W-1:0] syndrome_expected_addr;
   logic                                comp_read_pair_sel;
   logic                                comp_write_pair_sel;
   logic        [       COMP_C2V_W-1:0] c2v_comp_mem[0:L-1];
@@ -367,8 +369,13 @@ module decoder_top
   logic                                ctrl_done_final;
 
   assign param_level_in = PROFILE_RUNTIME_SELECT ? i_param_level : PROFILE_DEFAULT;
+  assign profile_config_level = profile_locked ? param_level : param_level_in;
 
-  assign decode_start = i_start && o_h_loaded && !o_h_error;
+  assign decode_idle = (state == DEC_WAIT_START) || ((state == DEC_DONE) && ctrl_done_final);
+  assign h_load_write_enable = i_h_we && decode_idle && !o_h_loaded && !o_h_error;
+  assign syndrome_write_enable = i_syndrome_we && decode_idle && !syndrome_loaded &&
+      (CFG_R_W'(i_syndrome_addr) < cfg_r) && (i_syndrome_addr == syndrome_expected_addr);
+  assign decode_start = i_start && decode_idle && o_h_loaded && !o_h_error && syndrome_loaded;
   assign o_done = ctrl_done_final;
 
   reset_sync u_reset_sync (
@@ -378,7 +385,7 @@ module decoder_top
   );
 
   decoder_profile_config u_decoder_profile_config (
-      .i_param_level(param_level),
+      .i_param_level(profile_config_level),
       .o_r(cfg_r),
       .o_w(cfg_w),
       .o_tile_count(cfg_tile_count),
@@ -524,7 +531,7 @@ module decoder_top
       .i_clk(i_clk),
       .i_rst_n(rst_n_sync),
       .i_clear(1'b0),
-      .i_we(i_h_we),
+      .i_we(h_load_write_enable),
       .i_h_block_idx(i_h_block_idx),
       .i_diag_idx_local(i_h_diag_idx_local),
       .i_base_row_idx(i_h_base_row_idx),
@@ -554,10 +561,7 @@ module decoder_top
       .o_state(state),
       .o_c2v_valid(c2v_phase_active),
       .o_v2c_valid(v2c_phase_active),
-      .o_ksign_corr_valid(ksign_corr_phase_active),
-      .o_ksign_corr_direct(ksign_corr_direct),
-      .o_ksign_corr_slot_idx(ksign_corr_slot_idx),
-      .o_ksign_corr_lane_idx(ksign_corr_lane_idx),
+      .o_ksign_corr_valid(unused_ksign_corr_phase_active),
       .o_c2v_tile_linear(unused_c2v_tile_linear),
       .o_v2c_tile_linear(v2c_tile_linear),
       .o_c2v_h_block_idx(c2v_h_block_idx),
@@ -800,6 +804,7 @@ module decoder_top
 
   ram_t u_ram_t (
       .i_clk(i_clk),
+      .i_rst_n(rst_n_sync),
       .i_fill_buf(c2v_write_fill_buf),
       .i_c2v_write_valid(c2v_write_valid),
       .i_c2v_write_diag_idx_local(c2v_write_diag_idx_local),
@@ -831,6 +836,7 @@ module decoder_top
     end else begin : g_full_sign_decision_read
       ram_decision u_ram_decision (
           .i_clk(i_clk),
+          .i_rst_n(rst_n_sync),
           .i_we(decision_we_p),
           .i_write_col_idx(v2c_col_idx_p),
           .i_wdata(posterior_sign_p),
@@ -842,6 +848,13 @@ module decoder_top
 
 `ifndef SYNTHESIS
   always_ff @(posedge i_clk) begin
+    if (rst_n_sync && i_h_we && !h_load_write_enable) begin
+      $fatal(1, "decoder_top rejected H write outside the initial idle load window");
+    end
+    if (rst_n_sync && i_syndrome_we && !syndrome_write_enable) begin
+      $fatal(1, "decoder_top rejected syndrome write addr=%0d expected=%0d idle=%0b loaded=%0b",
+             i_syndrome_addr, syndrome_expected_addr, decode_idle, syndrome_loaded);
+    end
     for (int lhs = 0; lhs < L; lhs++) begin
       for (int rhs = lhs + 1; rhs < L; rhs++) begin
         if (c2v_valid[lhs] && c2v_valid[rhs] && (c2v_row_bank[lhs] == c2v_row_bank[rhs])) begin
@@ -859,6 +872,7 @@ module decoder_top
   always_ff @(posedge i_clk or negedge rst_n_sync) begin
     if (!rst_n_sync) begin
       param_level <= PROFILE_DEFAULT;
+      profile_locked <= 1'b0;
       c2v_diag_idx_local_q <= '0;
       c2v_fill_buf_q <= 1'b0;
       c2v_iter_zero_q <= 1'b0;
@@ -1049,8 +1063,11 @@ module decoder_top
         ksign_scan_row_addr_r[lane_idx] <= '0;
       end
     end else begin
-      if ((state == DEC_WAIT_START) || ((state == DEC_DONE) && ctrl_done_final)) begin
+      if (!profile_locked) begin
         param_level <= param_level_in;
+        if (h_load_write_enable || syndrome_write_enable) begin
+          profile_locked <= 1'b1;
+        end
       end
 
       c2v_phase_h <= c2v_phase_active;
@@ -1164,12 +1181,21 @@ module decoder_top
       ksign_scan_diag_idx_local_a <= ksign_scan_diag_idx_local_e;
       ksign_scan_diag_idx_local_r <= ksign_scan_diag_idx_local_a;
       ksign_read_diag_idx_local_q <= ksign_read_diag_idx_local;
-      ctrl_done_r <= ctrl_done;
-      ctrl_done_q <= ctrl_done_r;
-      ctrl_done_s <= ctrl_done_q;
-      ctrl_done_p <= ctrl_done_s;
-      ctrl_done_out <= ctrl_done_p;
-      ctrl_done_final <= ctrl_done_out;
+      if (decode_start) begin
+        ctrl_done_r <= 1'b0;
+        ctrl_done_q <= 1'b0;
+        ctrl_done_s <= 1'b0;
+        ctrl_done_p <= 1'b0;
+        ctrl_done_out <= 1'b0;
+        ctrl_done_final <= 1'b0;
+      end else begin
+        ctrl_done_r <= ctrl_done;
+        ctrl_done_q <= ctrl_done_r;
+        ctrl_done_s <= ctrl_done_q;
+        ctrl_done_p <= ctrl_done_s;
+        ctrl_done_out <= ctrl_done_p;
+        ctrl_done_final <= ctrl_done_out;
+      end
       for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
         c2v_valid_r[lane_idx] <= c2v_valid[lane_idx];
         c2v_col_idx_r[lane_idx] <= c2v_col_idx[lane_idx];
@@ -1248,7 +1274,8 @@ module decoder_top
 
   ram_syndrome u_ram_syndrome (
       .i_clk        (i_clk),
-      .i_we         (i_syndrome_we),
+      .i_rst_n      (rst_n_sync),
+      .i_we         (syndrome_write_enable),
       .i_wr_addr    (i_syndrome_addr),
       .i_wr_data    (i_syndrome_wdata),
       .i_rd_valid   (c2v_valid),
@@ -1258,15 +1285,30 @@ module decoder_top
 
   always_ff @(posedge i_clk or negedge rst_n_sync) begin
     if (!rst_n_sync) begin
+      syndrome_loaded <= 1'b0;
+      syndrome_expected_addr <= '0;
+    end else if (decode_start) begin
+      syndrome_loaded <= 1'b0;
+      syndrome_expected_addr <= '0;
+    end else if (syndrome_write_enable) begin
+      if ((CFG_R_W'(i_syndrome_addr) + CFG_R_W'(1)) == cfg_r) begin
+        syndrome_loaded <= 1'b1;
+        syndrome_expected_addr <= '0;
+      end else begin
+        syndrome_expected_addr <= syndrome_expected_addr + ROW_IDX_W'(1);
+      end
+    end
+  end
+
+  always_ff @(posedge i_clk or negedge rst_n_sync) begin
+    if (!rst_n_sync) begin
       comp_read_pair_sel  <= 1'b0;
       comp_write_pair_sel <= 1'b1;
     end else begin
       if (decode_start) begin
         comp_read_pair_sel  <= 1'b0;
         comp_write_pair_sel <= 1'b1;
-      end
-
-      if (iter_last_cycle) begin
+      end else if (iter_last_cycle) begin
         comp_read_pair_sel  <= comp_write_pair_sel;
         comp_write_pair_sel <= comp_read_pair_sel;
       end

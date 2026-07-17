@@ -3,112 +3,98 @@
 module tile_scheduler
   import bike_pkg::*;
 (
-    input  logic                         i_clk,
-    input  logic                         i_rst_n,
-    input  logic                         i_start,
-    input  logic                         i_ksign_corr_done,
-    input  logic [          CFG_W_W-1:0] i_cfg_w,
-    input  logic [       TILE_IDX_W-1:0] i_cfg_tile_count,
-    input  logic [      ROW_BANK_AW-1:0] i_cfg_row_seg_size,
-    output logic [      DEC_STATE_W-1:0] o_state,
-    output logic                         o_c2v_valid,
-    output logic                         o_v2c_valid,
-    output logic                         o_ksign_corr_valid,
-    output logic                         o_ksign_corr_direct,
-    output logic [K_SIGN_SLOT_IDX_W-1:0] o_ksign_corr_slot_idx,
-    output logic [       LANE_IDX_W-1:0] o_ksign_corr_lane_idx,
-    output logic [        TILE_ID_W-1:0] o_c2v_tile_linear,
-    output logic [        TILE_ID_W-1:0] o_v2c_tile_linear,
-    output logic [        H_BLOCK_W-1:0] o_c2v_h_block_idx,
-    output logic [       TILE_IDX_W-1:0] o_c2v_tile_idx,
-    output logic [        H_BLOCK_W-1:0] o_v2c_h_block_idx,
-    output logic [       TILE_IDX_W-1:0] o_v2c_tile_idx,
-    output logic [       DIAG_IDX_W-1:0] o_diag_idx_local,
-    output logic [ LANE_GROUP_IDX_W-1:0] o_lane_group_idx,
-    output logic                         o_clear_valid,
-    output logic [      ROW_BANK_AW-1:0] o_clear_addr,
-    output logic                         o_fill_buf,
-    output logic                         o_active_buf,
-    output logic                         o_final_iter,
-    output logic                         o_iter_first_cycle,
-    output logic                         o_iter_last_cycle,
-    output logic                         o_done,
-    output logic [           ITER_W-1:0] o_iter_count
+    input  logic                        i_clk,
+    input  logic                        i_rst_n,
+    input  logic                        i_start,
+    input  logic                        i_ksign_corr_done,
+    input  logic [         CFG_W_W-1:0] i_cfg_w,
+    input  logic [      TILE_IDX_W-1:0] i_cfg_tile_count,
+    input  logic [     ROW_BANK_AW-1:0] i_cfg_row_seg_size,
+    output logic [     DEC_STATE_W-1:0] o_state,
+    output logic                        o_c2v_valid,
+    output logic                        o_v2c_valid,
+    output logic                        o_ksign_corr_valid,
+    output logic [       TILE_ID_W-1:0] o_c2v_tile_linear,
+    output logic [       TILE_ID_W-1:0] o_v2c_tile_linear,
+    output logic [       H_BLOCK_W-1:0] o_c2v_h_block_idx,
+    output logic [      TILE_IDX_W-1:0] o_c2v_tile_idx,
+    output logic [       H_BLOCK_W-1:0] o_v2c_h_block_idx,
+    output logic [      TILE_IDX_W-1:0] o_v2c_tile_idx,
+    output logic [      DIAG_IDX_W-1:0] o_diag_idx_local,
+    output logic [LANE_GROUP_IDX_W-1:0] o_lane_group_idx,
+    output logic                        o_clear_valid,
+    output logic [     ROW_BANK_AW-1:0] o_clear_addr,
+    output logic                        o_fill_buf,
+    output logic                        o_active_buf,
+    output logic                        o_final_iter,
+    output logic                        o_iter_first_cycle,
+    output logic                        o_iter_last_cycle,
+    output logic                        o_done,
+    output logic [          ITER_W-1:0] o_iter_count
 );
 
   localparam int WINDOW_COUNT = TILES_TOTAL + 1;
   localparam int WINDOW_IDX_W = (WINDOW_COUNT > 1) ? $clog2(WINDOW_COUNT) : 1;
-  localparam int KSIGN_CORR_GUARD_CYCLES = 8;
-  localparam int KSIGN_CORR_GUARD_W = $clog2(KSIGN_CORR_GUARD_CYCLES + 1);
   localparam logic [LANE_GROUP_IDX_W-1:0] LANE_GROUP_IDX_LAST = LANE_GROUP_IDX_W'(Q_TILE - 1);
   localparam logic [ITER_W-1:0] ITER_LAST = ITER_W'(I_MAX - 1);
 
-  logic                          running_q;
-  logic                          clear_q;
-  logic                          ksign_corr_q;
-  logic [KSIGN_CORR_GUARD_W-1:0] ksign_corr_guard_q;
-  logic [ K_SIGN_SLOT_IDX_W-1:0] ksign_corr_slot_idx_q;
-  logic [        LANE_IDX_W-1:0] ksign_corr_lane_idx_q;
-  logic [       ROW_BANK_AW-1:0] clear_addr_q;
-  logic [      WINDOW_IDX_W-1:0] window_idx_q;
-  logic [        DIAG_IDX_W-1:0] diag_idx_local_q;
-  logic [  LANE_GROUP_IDX_W-1:0] lane_group_idx_q;
-  logic [            ITER_W-1:0] iter_count_q;
-  logic                          c2v_tile_active_q;
-  logic                          v2c_tile_active_q;
-  logic [         TILE_ID_W-1:0] c2v_tile_linear_state_q;
-  logic [         TILE_ID_W-1:0] v2c_tile_linear_state_q;
-  logic [         H_BLOCK_W-1:0] c2v_h_block_state_q;
-  logic [        TILE_IDX_W-1:0] c2v_tile_idx_state_q;
-  logic [         H_BLOCK_W-1:0] v2c_h_block_state_q;
-  logic [        TILE_IDX_W-1:0] v2c_tile_idx_state_q;
-  logic                          done_q;
+  logic                        running_q;
+  logic                        clear_q;
+  logic                        ksign_corr_q;
+  logic [     ROW_BANK_AW-1:0] clear_addr_q;
+  logic [    WINDOW_IDX_W-1:0] window_idx_q;
+  logic [      DIAG_IDX_W-1:0] diag_idx_local_q;
+  logic [LANE_GROUP_IDX_W-1:0] lane_group_idx_q;
+  logic [          ITER_W-1:0] iter_count_q;
+  logic                        c2v_tile_active_q;
+  logic                        v2c_tile_active_q;
+  logic [       TILE_ID_W-1:0] c2v_tile_linear_state_q;
+  logic [       TILE_ID_W-1:0] v2c_tile_linear_state_q;
+  logic [       H_BLOCK_W-1:0] c2v_h_block_state_q;
+  logic [      TILE_IDX_W-1:0] c2v_tile_idx_state_q;
+  logic [       H_BLOCK_W-1:0] v2c_h_block_state_q;
+  logic [      TILE_IDX_W-1:0] v2c_tile_idx_state_q;
+  logic                        done_q;
 
-  logic                          running_d;
-  logic                          clear_d;
-  logic                          ksign_corr_d;
-  logic [KSIGN_CORR_GUARD_W-1:0] ksign_corr_guard_d;
-  logic [ K_SIGN_SLOT_IDX_W-1:0] ksign_corr_slot_idx_d;
-  logic [        LANE_IDX_W-1:0] ksign_corr_lane_idx_d;
-  logic [       ROW_BANK_AW-1:0] clear_addr_d;
-  logic [      WINDOW_IDX_W-1:0] window_idx_d;
-  logic [        DIAG_IDX_W-1:0] diag_idx_local_d;
-  logic [  LANE_GROUP_IDX_W-1:0] lane_group_idx_d;
-  logic [            ITER_W-1:0] iter_count_d;
-  logic                          c2v_tile_active_d;
-  logic                          v2c_tile_active_d;
-  logic [         TILE_ID_W-1:0] c2v_tile_linear_state_d;
-  logic [         TILE_ID_W-1:0] v2c_tile_linear_state_d;
-  logic [         H_BLOCK_W-1:0] c2v_h_block_state_d;
-  logic [        TILE_IDX_W-1:0] c2v_tile_idx_state_d;
-  logic [         H_BLOCK_W-1:0] v2c_h_block_state_d;
-  logic [        TILE_IDX_W-1:0] v2c_tile_idx_state_d;
-  logic                          done_d;
+  logic                        running_d;
+  logic                        clear_d;
+  logic                        ksign_corr_d;
+  logic [     ROW_BANK_AW-1:0] clear_addr_d;
+  logic [    WINDOW_IDX_W-1:0] window_idx_d;
+  logic [      DIAG_IDX_W-1:0] diag_idx_local_d;
+  logic [LANE_GROUP_IDX_W-1:0] lane_group_idx_d;
+  logic [          ITER_W-1:0] iter_count_d;
+  logic                        c2v_tile_active_d;
+  logic                        v2c_tile_active_d;
+  logic [       TILE_ID_W-1:0] c2v_tile_linear_state_d;
+  logic [       TILE_ID_W-1:0] v2c_tile_linear_state_d;
+  logic [       H_BLOCK_W-1:0] c2v_h_block_state_d;
+  logic [      TILE_IDX_W-1:0] c2v_tile_idx_state_d;
+  logic [       H_BLOCK_W-1:0] v2c_h_block_state_d;
+  logic [      TILE_IDX_W-1:0] v2c_tile_idx_state_d;
+  logic                        done_d;
 
-  logic [       DEC_STATE_W-1:0] state_d;
-  logic                          c2v_valid_d;
-  logic                          v2c_valid_d;
-  logic [         TILE_ID_W-1:0] c2v_tile_linear_d;
-  logic [         TILE_ID_W-1:0] v2c_tile_linear_d;
-  logic [         H_BLOCK_W-1:0] c2v_h_block_idx_d;
-  logic [        TILE_IDX_W-1:0] c2v_tile_idx_d;
-  logic [         H_BLOCK_W-1:0] v2c_h_block_idx_d;
-  logic [        TILE_IDX_W-1:0] v2c_tile_idx_d;
-  logic                          clear_valid_d;
-  logic                          ksign_corr_valid_d;
-  logic                          ksign_corr_direct_d;
-  logic [ K_SIGN_SLOT_IDX_W-1:0] ksign_corr_slot_idx_out_d;
-  logic [        LANE_IDX_W-1:0] ksign_corr_lane_idx_out_d;
-  logic [       ROW_BANK_AW-1:0] clear_addr_out_d;
-  logic                          fill_buf_d;
-  logic                          active_buf_d;
-  logic                          final_iter_d;
-  logic                          iter_first_cycle_d;
-  logic                          iter_last_cycle_d;
-  logic [        DIAG_IDX_W-1:0] cfg_w_last;
-  logic [         TILE_ID_W-1:0] cfg_tile_linear_last;
-  logic [        TILE_IDX_W-1:0] cfg_tile_count_last;
-  logic [       ROW_BANK_AW-1:0] cfg_row_seg_last;
+  logic [     DEC_STATE_W-1:0] state_d;
+  logic                        c2v_valid_d;
+  logic                        v2c_valid_d;
+  logic [       TILE_ID_W-1:0] c2v_tile_linear_d;
+  logic [       TILE_ID_W-1:0] v2c_tile_linear_d;
+  logic [       H_BLOCK_W-1:0] c2v_h_block_idx_d;
+  logic [      TILE_IDX_W-1:0] c2v_tile_idx_d;
+  logic [       H_BLOCK_W-1:0] v2c_h_block_idx_d;
+  logic [      TILE_IDX_W-1:0] v2c_tile_idx_d;
+  logic                        clear_valid_d;
+  logic                        ksign_corr_valid_d;
+  logic [     ROW_BANK_AW-1:0] clear_addr_out_d;
+  logic                        fill_buf_d;
+  logic                        active_buf_d;
+  logic                        final_iter_d;
+  logic                        iter_first_cycle_d;
+  logic                        iter_last_cycle_d;
+  logic [      DIAG_IDX_W-1:0] cfg_w_last;
+  logic [       TILE_ID_W-1:0] cfg_tile_linear_last;
+  logic [      TILE_IDX_W-1:0] cfg_tile_count_last;
+  logic [     ROW_BANK_AW-1:0] cfg_row_seg_last;
 
   function automatic logic [TILE_ID_W-1:0] next_tile_linear(
       input  logic [TILE_ID_W-1:0] tile_linear);
@@ -133,9 +119,6 @@ module tile_scheduler
     running_d = running_q;
     clear_d = clear_q;
     ksign_corr_d = ksign_corr_q;
-    ksign_corr_guard_d = ksign_corr_guard_q;
-    ksign_corr_slot_idx_d = ksign_corr_slot_idx_q;
-    ksign_corr_lane_idx_d = ksign_corr_lane_idx_q;
     clear_addr_d = clear_addr_q;
     window_idx_d = window_idx_q;
     diag_idx_local_d = diag_idx_local_q;
@@ -163,9 +146,6 @@ module tile_scheduler
       running_d = 1'b1;
       clear_d = 1'b1;
       ksign_corr_d = 1'b0;
-      ksign_corr_guard_d = '0;
-      ksign_corr_slot_idx_d = '0;
-      ksign_corr_lane_idx_d = '0;
       clear_addr_d = '0;
       window_idx_d = '0;
       diag_idx_local_d = '0;
@@ -200,8 +180,6 @@ module tile_scheduler
           window_idx_d = '0;
           diag_idx_local_d = '0;
           lane_group_idx_d = '0;
-          ksign_corr_slot_idx_d = '0;
-          ksign_corr_lane_idx_d = '0;
           iter_count_d = iter_count_q + ITER_W'(1);
           c2v_tile_active_d = 1'b1;
           v2c_tile_active_d = 1'b0;
@@ -213,16 +191,13 @@ module tile_scheduler
           v2c_tile_idx_state_d = '0;
         end
       end else if (ksign_corr_q) begin
-        ksign_corr_guard_d = '0;
+        // The overlap scheduler owns correction progress until it raises done.
       end else if (current_last_cycle) begin
         if (K_SIGN_ENABLE) begin
           ksign_corr_d = 1'b1;
-          ksign_corr_guard_d = '0;
           window_idx_d = '0;
           diag_idx_local_d = '0;
           lane_group_idx_d = '0;
-          ksign_corr_slot_idx_d = '0;
-          ksign_corr_lane_idx_d = '0;
           c2v_tile_active_d = 1'b0;
           v2c_tile_active_d = 1'b0;
           c2v_tile_linear_state_d = '0;
@@ -238,8 +213,6 @@ module tile_scheduler
           window_idx_d = '0;
           diag_idx_local_d = '0;
           lane_group_idx_d = '0;
-          ksign_corr_slot_idx_d = '0;
-          ksign_corr_lane_idx_d = '0;
           iter_count_d = iter_count_q + ITER_W'(1);
           c2v_tile_active_d = 1'b1;
           v2c_tile_active_d = 1'b0;
@@ -280,9 +253,6 @@ module tile_scheduler
     clear_active_d = running_q && clear_q;
     ksign_corr_last_active = K_SIGN_ENABLE && running_q && ksign_corr_q && i_ksign_corr_done;
     ksign_corr_valid_d = running_d && !i_start && !clear_active_d && ksign_corr_d;
-    ksign_corr_direct_d = 1'b0;
-    ksign_corr_slot_idx_out_d = ksign_corr_valid_d ? ksign_corr_slot_idx_d : '0;
-    ksign_corr_lane_idx_out_d = ksign_corr_valid_d ? ksign_corr_lane_idx_d : '0;
     c2v_valid_d = running_d && !i_start && !clear_active_d && !ksign_corr_valid_d &&
         c2v_tile_active_d;
     v2c_valid_d = running_d && !i_start && !clear_active_d && !ksign_corr_valid_d &&
@@ -325,9 +295,6 @@ module tile_scheduler
       running_q <= 1'b0;
       clear_q <= 1'b0;
       ksign_corr_q <= 1'b0;
-      ksign_corr_guard_q <= '0;
-      ksign_corr_slot_idx_q <= '0;
-      ksign_corr_lane_idx_q <= '0;
       clear_addr_q <= '0;
       window_idx_q <= '0;
       diag_idx_local_q <= '0;
@@ -346,9 +313,6 @@ module tile_scheduler
       o_c2v_valid <= 1'b0;
       o_v2c_valid <= 1'b0;
       o_ksign_corr_valid <= 1'b0;
-      o_ksign_corr_direct <= 1'b0;
-      o_ksign_corr_slot_idx <= '0;
-      o_ksign_corr_lane_idx <= '0;
       o_c2v_tile_linear <= '0;
       o_v2c_tile_linear <= '0;
       o_c2v_h_block_idx <= '0;
@@ -370,9 +334,6 @@ module tile_scheduler
       running_q <= running_d;
       clear_q <= clear_d;
       ksign_corr_q <= ksign_corr_d;
-      ksign_corr_guard_q <= ksign_corr_guard_d;
-      ksign_corr_slot_idx_q <= ksign_corr_slot_idx_d;
-      ksign_corr_lane_idx_q <= ksign_corr_lane_idx_d;
       clear_addr_q <= clear_addr_d;
       window_idx_q <= window_idx_d;
       diag_idx_local_q <= diag_idx_local_d;
@@ -391,9 +352,6 @@ module tile_scheduler
       o_c2v_valid <= c2v_valid_d;
       o_v2c_valid <= v2c_valid_d;
       o_ksign_corr_valid <= ksign_corr_valid_d;
-      o_ksign_corr_direct <= ksign_corr_direct_d;
-      o_ksign_corr_slot_idx <= ksign_corr_slot_idx_out_d;
-      o_ksign_corr_lane_idx <= ksign_corr_lane_idx_out_d;
       o_c2v_tile_linear <= c2v_tile_linear_d;
       o_v2c_tile_linear <= v2c_tile_linear_d;
       o_c2v_h_block_idx <= c2v_h_block_idx_d;

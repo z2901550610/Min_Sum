@@ -4,6 +4,7 @@ module ram_t
   import bike_pkg::*;
 (
     input  logic                         i_clk,
+    input  logic                         i_rst_n,
     input  logic                         i_fill_buf,
     input  logic                         i_c2v_write_valid[0:L-1],
     input  logic        [DIAG_IDX_W-1:0] i_c2v_write_diag_idx_local,
@@ -95,9 +96,14 @@ module ram_t
       .o_data (lane_rdata)
   );
 
-  always_ff @(posedge i_clk) begin
-    read_shift_q <= read_shift;
-    read_buf_q   <= i_active_buf;
+  always_ff @(posedge i_clk or negedge i_rst_n) begin
+    if (!i_rst_n) begin
+      read_shift_q <= '0;
+      read_buf_q   <= 1'b0;
+    end else begin
+      read_shift_q <= read_shift;
+      read_buf_q   <= i_active_buf;
+    end
   end
 
   generate
@@ -117,8 +123,12 @@ module ram_t
           bank_waddr = routed_write_addr[bank_idx];
         end
 
-        always_ff @(posedge i_clk) begin
-          bank_read_valid_q <= bank_re;
+        always_ff @(posedge i_clk or negedge i_rst_n) begin
+          if (!i_rst_n) begin
+            bank_read_valid_q <= 1'b0;
+          end else begin
+            bank_read_valid_q <= bank_re;
+          end
         end
 
         ram_bram #(

@@ -16,8 +16,16 @@ module k_sign_overlap_scheduler
     output logic                        o_done
 );
 
-  localparam int DRAIN_CYCLES = 7;
+  localparam int DRAIN_CYCLES = K_SIGN_OVERLAP_DRAIN_CYCLES;
   localparam int DRAIN_W = $clog2(DRAIN_CYCLES + 1);
+
+`ifndef SYNTHESIS
+  initial begin
+    if (DRAIN_CYCLES <= 0) begin
+      $fatal(1, "k_sign_overlap_scheduler requires a positive drain length");
+    end
+  end
+`endif
 
   logic                        active_q;
   logic [       H_BLOCK_W-1:0] h_block_idx_q;

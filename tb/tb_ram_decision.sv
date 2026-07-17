@@ -4,6 +4,7 @@ module tb_ram_decision;
   import bike_pkg::*;
 
   logic             clk;
+  logic             rst_n;
   logic             we[0:L-1];
   logic [COL_W-1:0] write_col_idx[0:L-1];
   logic             wdata[0:L-1];
@@ -12,6 +13,7 @@ module tb_ram_decision;
 
   ram_decision dut (
       .i_clk(clk),
+      .i_rst_n(rst_n),
       .i_we(we),
       .i_write_col_idx(write_col_idx),
       .i_wdata(wdata),
@@ -39,7 +41,10 @@ module tb_ram_decision;
 
   initial begin
     clear_inputs();
+    rst_n = 1'b0;
     read_col_idx = '0;
+    repeat (2) @(negedge clk);
+    rst_n = 1'b1;
 
     we[0] = 1'b1;
     write_col_idx[0] = COL_W'(3);

@@ -52,18 +52,19 @@ module tb_ram_i;
     diag_idx_local = '0;
     base_row_idx = '0;
     repeat (2) @(posedge clk);
+    @(negedge clk);
     rst_n = 1'b1;
-    @(posedge clk);
 
     for (int h = 0; h < N0; h++) begin
       for (int k = 0; k < W; k++) begin
+        @(negedge clk);
         we = 1'b1;
         h_block_idx = H_BLOCK_W'(h);
         diag_idx_local = DIAG_IDX_W'(k);
         base_row_idx = ROW_IDX_W'((h * W + k) % R);
-        @(posedge clk);
       end
     end
+    @(negedge clk);
     we = 1'b0;
     while (!loaded && !error) begin
       @(posedge clk);
@@ -75,11 +76,13 @@ module tb_ram_i;
     if (v2c_base_row_idx != ROW_IDX_W'(((N0 - 1) * W + (W - 1)) % R))
       $fatal(1, "ram_i v2c read mismatch");
 
+    @(negedge clk);
     clear = 1'b1;
-    @(posedge clk);
+    @(negedge clk);
     clear = 1'b0;
     for (int h = 0; h < N0; h++) begin
       for (int k = 0; k < W; k++) begin
+        @(negedge clk);
         we = 1'b1;
         h_block_idx = H_BLOCK_W'(h);
         diag_idx_local = DIAG_IDX_W'(k);
@@ -88,9 +91,9 @@ module tb_ram_i;
         end else begin
           base_row_idx = ROW_IDX_W'((h * W + k) % R);
         end
-        @(posedge clk);
       end
     end
+    @(negedge clk);
     we = 1'b0;
     while (!error) begin
       @(posedge clk);

@@ -182,6 +182,28 @@ module ram_k_global
 `ifndef SYNTHESIS
   always @(posedge i_clk) begin
     for (int bank_idx = 0; bank_idx < L; bank_idx++) begin
+      if (i_read_valid[bank_idx] && (int'(i_read_col_idx[bank_idx]) >= N)) begin
+        $fatal(1, "ram_k_global read column out of range lane=%0d col=%0d", bank_idx,
+               i_read_col_idx[bank_idx]);
+      end
+      if (i_write_valid[bank_idx] && (int'(i_write_col_idx[bank_idx]) >= N)) begin
+        $fatal(1, "ram_k_global write column out of range lane=%0d col=%0d", bank_idx,
+               i_write_col_idx[bank_idx]);
+      end
+      if (i_write_valid[bank_idx] && (col_bank(
+              i_write_col_idx[bank_idx]
+          ) != LANE_IDX_W'(bank_idx))) begin
+        $fatal(1, "ram_k_global write lane/bank mismatch lane=%0d col=%0d", bank_idx,
+               i_write_col_idx[bank_idx]);
+      end
+      if (routed_read_valid[bank_idx] && (int'(routed_read_addr[bank_idx]) >= KSIGN_BANK_DEPTH)) begin
+        $fatal(1, "ram_k_global routed read address out of range bank=%0d addr=%0d", bank_idx,
+               routed_read_addr[bank_idx]);
+      end
+      if (write_valid_q[bank_idx] && (int'(write_addr_q[bank_idx]) >= KSIGN_BANK_DEPTH)) begin
+        $fatal(1, "ram_k_global routed write address out of range bank=%0d addr=%0d", bank_idx,
+               write_addr_q[bank_idx]);
+      end
       if (routed_read_valid[bank_idx] && write_valid_q[bank_idx] &&
           (routed_read_addr[bank_idx] == write_addr_q[bank_idx])) begin
         $fatal(1, "ram_k_global in-place read/write collision bank=%0d addr=%0d", bank_idx,

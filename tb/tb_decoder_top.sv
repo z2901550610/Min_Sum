@@ -70,6 +70,7 @@ module tb_decoder_top;
       checks_active = 1'b0;
       decode_cycles = 0;
       repeat (2) @(posedge clk);
+      @(negedge clk);
       rst_n = 1'b1;
       repeat (3) @(posedge clk);
       checks_active = 1'b1;
@@ -80,13 +81,14 @@ module tb_decoder_top;
     begin
       for (int h_block_idx = 0; h_block_idx < N0; h_block_idx++) begin
         for (int diag_idx_local = 0; diag_idx_local < W; diag_idx_local++) begin
+          @(negedge clk);
           h_we = 1'b1;
           h_load_block_idx = H_BLOCK_W'(h_block_idx);
           h_load_diag_idx_local = DIAG_IDX_W'(diag_idx_local);
           h_base_row_idx = ROW_IDX_W'(TOY_CASE_H_BASE_ROWS[h_block_idx][diag_idx_local]);
-          @(posedge clk);
         end
       end
+      @(negedge clk);
       h_we = 1'b0;
       while (!h_loaded && !h_error) begin
         @(posedge clk);
@@ -99,15 +101,15 @@ module tb_decoder_top;
   task automatic load_syndrome(input  logic [R-1:0] syndrome);
     begin
       for (int row_idx = 0; row_idx < R; row_idx++) begin
+        @(negedge clk);
         syndrome_we = 1'b1;
         syndrome_addr = ROW_IDX_W'(row_idx);
         syndrome_wdata = syndrome[row_idx];
-        @(posedge clk);
       end
+      @(negedge clk);
       syndrome_we = 1'b0;
       syndrome_addr = '0;
       syndrome_wdata = 1'b0;
-      @(posedge clk);
     end
   endtask
 
@@ -184,15 +186,35 @@ module tb_decoder_top;
       $fatal(1, "toy fixture parameter mismatch");
     end
     load_h_matrix();
+
+    @(negedge clk);
+    start = 1'b1;
+    @(negedge clk);
+    start = 1'b0;
+    if (dut.state != DEC_WAIT_START || done) begin
+      $fatal(1, "decoder accepted start before syndrome load completed");
+    end
+
     load_syndrome(TOY_CASE_SYNDROME);
 
+    @(negedge clk);
     start = 1'b1;
-    @(posedge clk);
+    @(negedge clk);
     start = 1'b0;
 
+    fork
+      begin
+        repeat (10) @(negedge clk);
+        start = 1'b1;
+        @(negedge clk);
+        start = 1'b0;
+      end
+    join_none
+
     while (done !== 1'b1) begin
-      decode_cycles++;
       @(posedge clk);
+      #1;
+      decode_cycles++;
     end
 
     read_error_vector(e_out);
@@ -210,6 +232,23 @@ module tb_decoder_top;
              decode_cycles);
     if (final_residual != '0) $fatal(1, "toy case residual check failed");
     if (!exact_match) $fatal(1, "toy case exact check failed");
+
+    load_syndrome(TOY_CASE_SYNDROME);
+    decode_cycles = 0;
+    @(negedge clk);
+    start = 1'b1;
+    @(negedge clk);
+    start = 1'b0;
+    if (done) $fatal(1, "decoder done did not clear on restart");
+    while (done !== 1'b1) begin
+      @(posedge clk);
+      #1;
+      decode_cycles++;
+    end
+    if (decode_cycles != expected_main_cycles) begin
+      $fatal(1, "restart fixed cycle mismatch: got %0d exp %0d", decode_cycles,
+             expected_main_cycles);
+    end
 
     $display("tb_decoder_top PASS");
     $finish;

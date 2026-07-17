@@ -235,6 +235,7 @@ module tb_edge_addr_gen;
     base_row_idx = '0;
     diag_idx_local = '0;
     repeat (2) @(posedge clk);
+    @(negedge clk);
     rst_n = 1'b1;
     @(posedge clk);
     #1;

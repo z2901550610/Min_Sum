@@ -4,6 +4,7 @@ module ram_decision
   import bike_pkg::*;
 (
     input  logic             i_clk,
+    input  logic             i_rst_n,
     input  logic             i_we[0:L-1],
     input  logic [COL_W-1:0] i_write_col_idx[0:L-1],
     input  logic             i_wdata[0:L-1],
@@ -68,9 +69,27 @@ module ram_decision
     end
   endgenerate
 
-  always_ff @(posedge i_clk) begin
-    read_bank_q <= col_bank(i_read_col_idx);
+  always_ff @(posedge i_clk or negedge i_rst_n) begin
+    if (!i_rst_n) begin
+      read_bank_q <= '0;
+    end else begin
+      read_bank_q <= col_bank(i_read_col_idx);
+    end
   end
 
   assign o_rdata = bank_rdata[read_bank_q];
+
+`ifndef SYNTHESIS
+  always @(posedge i_clk) begin
+    if (int'(i_read_col_idx) >= N) begin
+      $fatal(1, "ram_decision read column out of range col=%0d", i_read_col_idx);
+    end
+    for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
+      if (i_we[lane_idx] && (int'(i_write_col_idx[lane_idx]) >= N)) begin
+        $fatal(1, "ram_decision write column out of range lane=%0d col=%0d", lane_idx,
+               i_write_col_idx[lane_idx]);
+      end
+    end
+  end
+`endif
 endmodule

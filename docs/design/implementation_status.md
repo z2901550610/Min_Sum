@@ -23,7 +23,7 @@
 | Vivado | 2023.2 |
 | 目标时钟 | 100 MHz，周期 10 ns |
 | 时钟不确定度 | 0.100 ns |
-| 报告阶段 | 全局 K-sign `base_sign` 最终判决复用；功能回归完成，Fully Placed / Routed 待测 |
+| 报告阶段 | 全局 K-sign `base_sign` 最终判决复用的K=3与K=4 Fully Placed / Routed；`ram_m`字段拆分及装载/启动协议修复完成，当前RTL实现待测 |
 
 统一硬件使用最大参数确定存储和计数器几何。`i_param_level` 是公开输入，各参数等级使用公开固定的
 `R`、`W`、tile 数和周期预算。
@@ -43,6 +43,9 @@
   全局K记录读口。
 - `ram_sign_delta` 的翻转读改写和连续同地址访问使用固定旁路规则。
 - `k_sign_overlap_scheduler` 使用公开固定 tile/diag/lane 扫描深度。
+- 参数等级在首个有效H或syndrome写请求时锁定，H校验、syndrome容量和主调度共用同一公开配置。
+- syndrome按地址 `0..R-1` 顺序完整写入后置为就绪；启动同时要求H校验通过、syndrome就绪且控制器空闲。
+- 译码运行期间的重复启动和配置写请求不进入调度器或配置RAM；主循环状态和pair选择保持连续。
 - invalid lane、invalid K 槽、syndrome、H 第一列内容和译码结果只控制 valid/写使能，不改变调度深度。
 - 主循环固定执行 `I_MAX` 轮，不使用提前终止。
 
@@ -52,9 +55,9 @@
 | --- | --- | --- |
 | `ram_bram` | XPM 简单双口 block RAM；tile 工作存储可选择 distributed RAM | 同步写、同步读，read-first 语义 |
 | `ram_i` | 三份 H 第一列 `base_row_idx` BRAM | C2V/V2C/correction 三读视图；加载后执行固定周期合法性校验 |
-| `ram_m` | `2 × L` 个压缩 check-state bank | pair 隔离；保存幅度状态和 base-sign parity |
+| `ram_m` | `2 × L` 个压缩 check-state bank；最大配置拆为9-bit `{sign_xor,min2,min1}` 和9-bit `min_diag_global` 字段 | 两字段共享地址、读写使能和旁路；pair 隔离 |
 | `ram_sign_delta` | `2 × L` 个 1-bit row-parity bank | pair 隔离；同步读、清空和 flip RMW |
-| `ram_syndrome` | `L` 个 syndrome bit BRAM bank | 外部写入，C2V 同步读 |
+| `ram_syndrome` | `L` 个 syndrome bit BRAM bank | 顺序完整装载后允许启动；C2V同步读，读valid控制位复位 |
 | `ram_accum` | 两组单读口 banked distributed RAM | 每个物理buffer在C2V/V2C之间共享一个读地址；C2V读改写 |
 | `ram_t` | 每个buffer、每个tile-offset bank一份深度 `W × Q_BASE` 的BRAM | 请求按tile offset旋转；C2V写fill buffer，V2C读active buffer |
 | `ram_k_tile` | `L` 个34-bit工作bank和 `L` 个21-bit snapshot bank | 工作RAM维护候选；snapshot供correction读取位置 |
@@ -131,30 +134,73 @@ T_DECODE     = 7 × 2377311 + 6 = 16641183
 
 ## Vivado 资源占用
 
-当前RTL的Fully Placed aggregate/hierarchical utilization待测。K-sign配置不实例化独立最终判决RAM，
-结构目标是K=3和K=4各减少16个RAMB36/Block RAM Tile。对应的物理资源目标为：
+最近完整K=3基线的2026-07-17 Fully Placed aggregate utilization如下：
 
-| 配置 | RAMB36目标 | RAMB18目标 | Block RAM Tile目标 | LUT / FF |
-| --- | ---: | ---: | ---: | --- |
-| K=3 | 416 | 115 | 473.5 | 待测 |
-| K=4 | 496 | 115 | 553.5 | 待测 |
+| 资源 | 使用量 | 器件可用量 | 利用率 |
+| --- | ---: | ---: | ---: |
+| Slice LUT | 26,637 | 222,600 | 11.97% |
+| LUT as Logic | 23,085 | 222,600 | 10.37% |
+| LUT as Memory | 3,552 | 81,400 | 4.36% |
+| Distributed RAM LUT | 3,392 | — | — |
+| SRL LUT | 160 | — | — |
+| Slice Register | 11,083 | 445,200 | 2.49% |
+| Slice | 9,133 | 55,650 | 16.41% |
+| Block RAM Tile | 473.5 | 715 | 66.22% |
+| RAMB36E1 | 416 | 715 | 58.18% |
+| RAMB18E1 | 115 | 1,430 | 8.04% |
+| DSP | 0 | 1,440 | 0.00% |
+| CARRY4 | 1,787 | — | — |
 
-上述RAM数量是由删除16-bank判决存储得到的物理映射目标，不是Vivado实测结果。需要检查Slice LUT、
-LUT as Logic、LUT as Memory、Distributed RAM LUT、FF、Slice、Block RAM Tile、RAMB36、RAMB18、DSP
-和CARRY4，并在hierarchical utilization中确认K-sign配置没有 `ram_decision` 实例。此前完整实现数据和
-逐阶段比较保存在[optimization_exploration_history.md](optimization_exploration_history.md)。
+K=3 aggregate结果确认最终判决复用配置使用416个RAMB36和473.5个Block RAM Tile。hierarchical
+utilization仍需确认 `ram_decision` 实例和对应写入网络的层级裁剪结果。此前完整实现数据和逐阶段比较
+保存在[optimization_exploration_history.md](optimization_exploration_history.md)。
 
 ### K=4可选配置
 
 K=4的全局记录宽度为29 bit，tile工作记录为45 bit，correction snapshot为28 bit。全局K RAM使用
 336个RAMB36，其中16个保存base sign，320个保存四个位置字段。最终判决由这16个base-sign RAMB36
-直接提供，不额外分配判决存储。
+直接提供，不额外分配判决存储。2026-07-17 Fully Placed aggregate utilization如下：
+
+| 资源 | 使用量 | 器件可用量 | 利用率 |
+| --- | ---: | ---: | ---: |
+| Slice LUT | 29,013 | 222,600 | 13.03% |
+| LUT as Logic | 24,692 | 222,600 | 11.09% |
+| LUT as Memory | 4,321 | 81,400 | 5.31% |
+| Distributed RAM LUT | 4,160 | — | — |
+| SRL LUT | 161 | — | — |
+| Slice Register | 11,494 | 445,200 | 2.58% |
+| Slice | 10,070 | 55,650 | 18.10% |
+| Block RAM Tile | 553.5 | 715 | 77.41% |
+| RAMB36E1 | 496 | 715 | 69.37% |
+| RAMB18E1 | 115 | 1,430 | 8.04% |
+| DSP | 0 | 1,440 | 0.00% |
+| CARRY4 | 1,803 | — | — |
 
 ## Vivado 时序状态
 
-当前RTL的Routed timing待测。目标约束为10.000 ns周期和0.100 ns clock uncertainty；需要检查整体
-WNS/TNS、WHS/THS、WPWS、全局K记录读出、snapshot写入以及 `ram_t` 返回旋转路径。最终判决读只发生在
-`o_done` 后，不进入固定译码窗口，但新增的外部地址选择仍需由placed/routed报告确认没有影响主读路径。
+最近完整K=3基线的2026-07-17 Routed timing满足内部100 MHz约束。整体setup WNS/TNS为
+`+0.451 ns / 0.000 ns`，其中最差路径属于 `**async_default**` 异步复位释放组；`decoder_clk` 组的
+setup WNS/TNS为 `+0.862 ns / 0.000 ns`。hold WHS/THS为 `+0.026 ns / 0.000 ns`，WPWS/TPWS为
+`+4.232 ns / 0.000 ns`。
+
+最差主时钟路径从 `ram_t` bank 11的RAMB36读口到 `u_vnu/v2c_scaled_q_reg[9][15]`，数据路径
+8.626 ns，其中logic 3.050 ns、route 5.576 ns，共11级逻辑。最差异步路径从同步复位寄存器到
+`ram_k_global` 的segment读选择寄存器CLR端，数据路径9.164 ns，其中route占95.995%。
+
+内部endpoint全部受约束；69个普通输入和7个输出没有I/O delay，另有1个输入由false path覆盖。
+`ram_k_global` base-sign RAM到 `o_e_rdata` 的未约束外部输出路径数据延迟为11.902 ns。该路径不影响固定
+译码周期和内部100 MHz结论，但外部错误向量若要求同一100 MHz时钟下一拍在器件引脚采样，需要补充真实
+output delay约束并重新签核，或为输出增加寄存器并明确接口读延迟。
+
+最近完整K=4基线的2026-07-17 Routed timing满足内部100 MHz约束。整体setup WNS/TNS为
+`+0.535 ns / 0.000 ns`，最差路径属于 `**async_default**` 异步复位释放组；`decoder_clk` 组setup
+WNS/TNS为 `+0.717 ns / 0.000 ns`。hold WHS/THS为 `+0.022 ns / 0.000 ns`，WPWS/TPWS为
+`+4.232 ns / 0.000 ns`。
+
+最差主时钟路径从 `ram_k_tile` snapshot读寄存器到 `ram_sign_delta` pair 1、bank 2的旁路valid寄存器，
+数据路径9.054 ns，其中logic 1.241 ns、route 7.813 ns，共12级逻辑。最差异步路径从同步复位寄存器到
+`c2v_comp_c_reg[13][12]` 的CLR端，数据路径9.197 ns，其中route占96.325%。全局base-sign RAM到
+`o_e_rdata` 的未约束外部输出路径数据延迟为12.209 ns；接口签核要求与K=3相同。
 
 ## 验证状态
 
@@ -164,9 +210,12 @@ WNS/TNS、WHS/THS、WPWS、全局K记录读出、snapshot写入以及 `ram_t` �
 make test-unit
 make test-integration
 make test-trike-unified-ksign-random BIKE_RANDOM_TRIALS=1
+make test-trike-unified-ksign-random BIKE_RANDOM_TRIALS=1 TRIKE_UNIFIED_KSIGN_K=4
 ```
 
-维护范围内的RTL和testbench通过Verible格式检查与lint。
+维护范围内的RTL和testbench通过Verible格式检查与lint。toy集成测试同时检查syndrome未完成时不接受
+启动、译码运行期间的重复 `i_start` 不重启固定调度，以及同一H下第二帧启动时 `o_done` 清除并保持154拍
+固定周期。
 
 使用 `BIKE_K_SIGN_K=4` 的全部unit test通过，`tb_k_sign_update`报告 `K=4`。K=4统一TRIKE五档、seed 1
 完整随机译码均为residual 0、exact 1，固定周期与K=3相同。
@@ -210,8 +259,9 @@ make vivado-synth-trike-unified-ksign TRIKE_UNIFIED_KSIGN_K=4
 批处理入口按启动时间创建 `build/vivado/<timestamp>/..._k3` 或 `..._k4` 目录；可以用
 `VIVADO_RUN_TAG=<label>`指定可读实验标签。不同K值和不同运行不会覆盖已有报告。
 
-当前RTL的K=3和K=4 Fully Placed aggregate/hierarchical utilization、Routed timing summary、
-methodology、CDC和完整messages报告待运行。
+全局K记录最终判决复用阶段的K=3和K=4 Fully Placed aggregate utilization及Routed timing summary
+已记录；`ram_m` 9+9 bit字段拆分的Vivado实现，以及hierarchical utilization、最新methodology、CDC和
+完整messages报告待补充。
 
 ## 实现判据
 

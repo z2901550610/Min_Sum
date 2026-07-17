@@ -147,6 +147,7 @@ module tb_k_sign_update;
       v2c_msg_lane[0] = {sign, mag};
       v2c_base_sign[0] = 1'b0;
       @(posedge clk);
+      #1;
       v2c_valid[0] = 1'b0;
       @(posedge clk);
     end
@@ -209,6 +210,7 @@ module tb_k_sign_update;
     end
 
     repeat (2) @(posedge clk);
+    @(negedge clk);
     rst_n = 1'b1;
     repeat (2) @(posedge clk);
 

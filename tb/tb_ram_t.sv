@@ -4,6 +4,7 @@ module tb_ram_t;
   import bike_pkg::*;
 
   logic                         clk;
+  logic                         rst_n;
   logic                         fill_buf;
   logic                         c2v_write_valid[0:L-1];
   logic        [DIAG_IDX_W-1:0] c2v_write_diag_idx_local;
@@ -17,6 +18,7 @@ module tb_ram_t;
 
   ram_t dut (
       .i_clk(clk),
+      .i_rst_n(rst_n),
       .i_fill_buf(fill_buf),
       .i_c2v_write_valid(c2v_write_valid),
       .i_c2v_write_diag_idx_local(c2v_write_diag_idx_local),
@@ -106,6 +108,9 @@ module tb_ram_t;
 
   initial begin
     clear_inputs();
+    rst_n = 1'b0;
+    repeat (2) @(negedge clk);
+    rst_n = 1'b1;
 
     write_frame(1'b0, DIAG_IDX_W'(1), 0, 1 % L, 3);
     write_frame(1'b0, DIAG_IDX_W'(W - 1), Q_BASE - 1, (L - 1) % L, 6);
