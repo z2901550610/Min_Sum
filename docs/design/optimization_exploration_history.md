@@ -967,6 +967,63 @@ hold WHS均为待测。删除的 `k_sign_correction` 未被 `decoder_top` 实例
 状态：RTL与验证修补保留。主译码固定周期和存储访问序列未改变；当前RTL的资源、时序、methodology和CDC
 结果待K=3、K=4独立Vivado实现检查。
 
+## 27. `ram_m` 9+9 bit字段拆分的K=3实现结果与撤回
+
+时间：2026-07-17。
+
+目标与假设：验证阶段25把每个18-bit压缩check-state记录拆成两个9-bit物理字段后，Vivado是否会把
+`ROW_SEG_SIZE=6787` 的尾部容量吸收到RAMB36，从而删除32个RAMB18、减少16个Block RAM Tile。该检查点
+同时包含阶段26的装载/启动协议与控制RTL修补，因此只有与RAM原生几何直接对应的BRAM变化可归因于字段
+拆分；LUT、FF、Slice和时序变化不能在缺少独立检查点时强行归因。
+
+报告配置：`TRIKE_UNIFIED_PARAMS`、`L=16`、`K=3`、`COLS_PER_TILE=1168`、最大等级TRIKE-512，器件
+`xc7k355tffg901-2L`，Vivado 2023.2 build 4029153，100 MHz/10 ns，user clock uncertainty 0.100 ns。
+aggregate utilization为Fully Placed，报告时间2026-07-17 16:19:26；timing summary为Routed，报告时间
+16:21:35；结果由用户提供。对照为阶段24的同器件、同参数、同约束K=3检查点。
+
+资源结果：
+
+| 资源 | 阶段24基线 | 9+9 bit检查点 | 变化 |
+| --- | ---: | ---: | ---: |
+| Slice LUT | 26,637 | 26,125 | -512（-1.92%） |
+| LUT as Logic | 23,085 | 22,575 | -510（-2.21%） |
+| LUT as Memory | 3,552 | 3,550 | -2（-0.06%） |
+| Distributed RAM LUT | 3,392 | 3,392 | 0 |
+| SRL LUT | 160 | 158 | -2 |
+| Slice Register | 11,083 | 11,078 | -5（-0.05%） |
+| Slice | 9,133 | 9,071 | -62（-0.68%） |
+| Block RAM Tile | 473.5 | 489.5 | +16（+3.38%） |
+| RAMB36 | 416 | 416 | 0 |
+| RAMB18 | 115 | 147 | +32（+27.83%） |
+| DSP | 0 | 0 | 0 |
+| CARRY4 | 1,787 | 1,803 | +16（+0.90%） |
+
+Vivado没有把两个9-bit字段的尾部共同装入同一物理Tile：RAMB36保持416，RAMB18精确增加32，Block RAM
+Tile增加16。结果与阶段25预期的RAMB18减少32方向相反；说明在该XPM实例边界和端口组织下，每个9-bit
+字段分别产生尾部RAMB18，拆分使每个pair/bank的尾部primitive数量翻倍。
+
+Routed timing结果：
+
+| 指标 | 阶段24基线 | 9+9 bit检查点 | 变化 |
+| --- | ---: | ---: | ---: |
+| 整体setup WNS/TNS | +0.451 ns / 0.000 ns | +0.862 ns / 0.000 ns | WNS +0.411 ns |
+| `decoder_clk` setup WNS/TNS | +0.862 ns / 0.000 ns | +1.143 ns / 0.000 ns | WNS +0.281 ns |
+| hold WHS/THS | +0.026 ns / 0.000 ns | +0.039 ns / 0.000 ns | WHS +0.013 ns |
+| WPWS/TPWS | +4.232 ns / 0.000 ns | +4.232 ns / 0.000 ns | 0 |
+| 未约束 `o_e_rdata` 数据路径 | 11.902 ns | 12.958 ns | +1.056 ns（+8.87%） |
+
+全部已定义约束满足。最差主时钟路径从K-sign selector的bank 0局部位置索引寄存器到 `ram_k_tile` bank 4
+snapshot distributed RAM写入口，数据路径8.470 ns，其中logic 1.503 ns、route 6.967 ns，共15级逻辑。
+报告仍有TIMING-18告警：69个普通输入和7个输出缺少I/O delay，另有1个输入由false path覆盖；内部未约束
+endpoint为0。全局base-sign RAM到 `o_e_rdata` 的12.958 ns路径仍不能作为板级一拍100 MHz接口签核。
+
+结论与状态：9+9 bit字段拆分撤回，`ram_m` 恢复为每个pair/bank一个完整18-bit记录的 `ram_bram`。K=3
+已经给出精确且显著的BRAM反向结果，因此不继续消耗一次K=4实现来验证同一实例几何。LUT、FF和同步WNS
+改善可能来自阶段26控制修补、实现随机性或两者共同作用，待使用撤回字段拆分后的独立检查点确认。撤回不改
+变逻辑记录、读写时序、固定调度或译码周期。撤回后 `make format-rtl`、`make check-format-rtl` 和
+`make lint-rtl` 通过；`make test` 通过全部14个单元测试及集成测试，toy case为residual 0、exact 1、
+固定154周期。撤回后K=3/K=4随机大参数回归与Vivado实现待测。
+
 ## 形成的设计结论
 
 1. 存储优化必须以目标器件的原生宽深模式和 BRAM Tile 为依据；只改数组声明或逻辑字段宽度不能保证映射。

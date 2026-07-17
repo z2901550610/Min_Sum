@@ -23,7 +23,7 @@
 | Vivado | 2023.2 |
 | 目标时钟 | 100 MHz，周期 10 ns |
 | 时钟不确定度 | 0.100 ns |
-| 报告阶段 | 全局 K-sign `base_sign` 最终判决复用的K=3与K=4 Fully Placed / Routed；`ram_m`字段拆分及装载/启动协议修复完成，当前RTL实现待测 |
+| 报告阶段 | 全局 K-sign `base_sign` 最终判决复用的K=3与K=4 Fully Placed / Routed；装载/启动协议修复完成，当前RTL实现待测 |
 
 统一硬件使用最大参数确定存储和计数器几何。`i_param_level` 是公开输入，各参数等级使用公开固定的
 `R`、`W`、tile 数和周期预算。
@@ -55,7 +55,7 @@
 | --- | --- | --- |
 | `ram_bram` | XPM 简单双口 block RAM；tile 工作存储可选择 distributed RAM | 同步写、同步读，read-first 语义 |
 | `ram_i` | 三份 H 第一列 `base_row_idx` BRAM | C2V/V2C/correction 三读视图；加载后执行固定周期合法性校验 |
-| `ram_m` | `2 × L` 个压缩 check-state bank；最大配置拆为9-bit `{sign_xor,min2,min1}` 和9-bit `min_diag_global` 字段 | 两字段共享地址、读写使能和旁路；pair 隔离 |
+| `ram_m` | `2 × L` 个18-bit压缩 check-state bank | 完整记录同步读写和固定旁路；pair 隔离 |
 | `ram_sign_delta` | `2 × L` 个 1-bit row-parity bank | pair 隔离；同步读、清空和 flip RMW |
 | `ram_syndrome` | `L` 个 syndrome bit BRAM bank | 顺序完整装载后允许启动；C2V同步读，读valid控制位复位 |
 | `ram_accum` | 两组单读口 banked distributed RAM | 每个物理buffer在C2V/V2C之间共享一个读地址；C2V读改写 |
@@ -260,8 +260,8 @@ make vivado-synth-trike-unified-ksign TRIKE_UNIFIED_KSIGN_K=4
 `VIVADO_RUN_TAG=<label>`指定可读实验标签。不同K值和不同运行不会覆盖已有报告。
 
 全局K记录最终判决复用阶段的K=3和K=4 Fully Placed aggregate utilization及Routed timing summary
-已记录；`ram_m` 9+9 bit字段拆分的Vivado实现，以及hierarchical utilization、最新methodology、CDC和
-完整messages报告待补充。
+已记录。当前 `ram_m` 使用完整18-bit记录，装载/启动协议修复后的RTL仍需独立Vivado实现；资源优化实验
+及定量结果保存在探索记录。hierarchical utilization、最新methodology、CDC和完整messages报告待补充。
 
 ## 实现判据
 
