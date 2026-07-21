@@ -7,6 +7,9 @@
 
 ## 基线配置
 
+仓库统一TRIKE K-sign默认构建配置为 `L=32`、`K=4`、`COLS_PER_TILE=1152`。该配置已完成功能验证、
+Fully Placed资源报告和Routed时序报告。
+
 | 项目 | 配置 |
 | --- | --- |
 | 参数族 | `TRIKE_UNIFIED_PARAMS` |
@@ -14,16 +17,16 @@
 | `N0 / R / W` | `3 / 108587 / 111` |
 | 迭代数 `I_MAX` | 7 |
 | message width | 5 bit，幅值 `D=4` bit |
-| lane 并行度 `L` | 16 |
-| `COLS_PER_TILE` | 1168 |
-| `Q_BASE / Q_TILE` | `73 / 76` |
-| `TILE_COUNT / TILES_TOTAL` | `93 / 279` |
-| K-sign `K / POS_W` | `3 / 7` |
+| lane 并行度 `L` | 32 |
+| `COLS_PER_TILE` | 1152 |
+| `Q_BASE / Q_TILE` | `36 / 39` |
+| `TILE_COUNT / TILES_TOTAL` | `95 / 285` |
+| K-sign `K / POS_W` | `4 / 7` |
 | FPGA | `xc7k355tffg901-2L` |
 | Vivado | 2023.2 |
 | 目标时钟 | 100 MHz，周期 10 ns |
 | 时钟不确定度 | 0.100 ns |
-| 报告阶段 | 全局 K-sign `base_sign` 最终判决复用的K=3与K=4 Fully Placed / Routed；装载/启动协议修复完成，当前RTL实现待测 |
+| 报告阶段 | 2026-07-20 Fully Placed资源 / Routed时序 |
 
 统一硬件使用最大参数确定存储和计数器几何。`i_param_level` 是公开输入，各参数等级使用公开固定的
 `R`、`W`、tile 数和周期预算。
@@ -100,7 +103,7 @@ read-first语义。
 
 ### K=3 更新器
 
-`k_sign_update` 保存三个无序候选槽。每拍执行：
+`k_sign_update` 保存K个无序候选槽。每拍执行：
 
 1. 根据 `v2c_sign XOR base_sign` 生成候选 valid。
 2. 平衡归约树按 valid、magnitude、`diag_idx_local` 和 slot index 选出最差槽。
@@ -114,23 +117,23 @@ read-first语义。
 TRIKE-512 参数：
 
 ```text
-ROW_SEG_SIZE = ceil(108587 / 16) = 6787
-T_MAIN       = (279 + 1) × 111 × 76 = 2362080
-T_TILE       = 111 × 76 = 8436
-T_ITER       = 6787 + 2362080 + 8 + 8436 = 2377311
-T_DECODE     = 7 × 2377311 + 6 = 16641183
+ROW_SEG_SIZE = ceil(108587 / 32) = 3394
+T_MAIN       = (285 + 1) × 111 × 39 = 1238094
+T_TILE       = 111 × 39 = 4329
+T_ITER       = 3394 + 1238094 + 8 + 4329 = 1245825
+T_DECODE     = 7 × 1245825 + 6 = 8720781
 ```
 
-16,641,183 拍由公开参数完全确定。H 第一列、syndrome、错误模式、候选位置、候选幅值和 residual
+8,720,781 拍由公开参数完全确定。H 第一列、syndrome、错误模式、候选位置、候选幅值和 residual
 不改变该周期数。
 
 | 参数等级 | 固定周期 | 100 MHz 延时 |
 | --- | ---: | ---: |
-| TRIKE128 | 333,990 | 3.33990 ms |
-| TRIKE160 | 657,341 | 6.57341 ms |
-| TRIKE256 | 2,353,770 | 23.53770 ms |
-| TRIKE384 | 7,135,995 | 71.35995 ms |
-| TRIKE512 | 16,641,183 | 166.41183 ms |
+| TRIKE128 | 193,486 | 1.93486 ms |
+| TRIKE160 | 365,945 | 3.65945 ms |
+| TRIKE256 | 1,207,716 | 12.07716 ms |
+| TRIKE384 | 3,729,550 | 37.29550 ms |
+| TRIKE512 | 8,720,781 | 87.20781 ms |
 
 ## Vivado 资源占用
 
@@ -138,22 +141,22 @@ T_DECODE     = 7 × 2377311 + 6 = 16641183
 
 | 资源 | 使用量 | 器件可用量 | 利用率 |
 | --- | ---: | ---: | ---: |
-| Slice LUT | 26,637 | 222,600 | 11.97% |
-| LUT as Logic | 23,085 | 222,600 | 10.37% |
-| LUT as Memory | 3,552 | 81,400 | 4.36% |
+| Slice LUT | 26,117 | 222,600 | 11.73% |
+| LUT as Logic | 22,566 | 222,600 | 10.14% |
+| LUT as Memory | 3,551 | 81,400 | 4.36% |
 | Distributed RAM LUT | 3,392 | — | — |
-| SRL LUT | 160 | — | — |
-| Slice Register | 11,083 | 445,200 | 2.49% |
-| Slice | 9,133 | 55,650 | 16.41% |
+| SRL LUT | 159 | — | — |
+| Slice Register | 11,078 | 445,200 | 2.49% |
+| Slice | 9,331 | 55,650 | 16.77% |
 | Block RAM Tile | 473.5 | 715 | 66.22% |
 | RAMB36E1 | 416 | 715 | 58.18% |
 | RAMB18E1 | 115 | 1,430 | 8.04% |
 | DSP | 0 | 1,440 | 0.00% |
-| CARRY4 | 1,787 | — | — |
+| CARRY4 | 1,803 | — | — |
 
-K=3 aggregate结果确认最终判决复用配置使用416个RAMB36和473.5个Block RAM Tile。hierarchical
-utilization仍需确认 `ram_decision` 实例和对应写入网络的层级裁剪结果。此前完整实现数据和逐阶段比较
-保存在[optimization_exploration_history.md](optimization_exploration_history.md)。
+K=3 aggregate结果确认当前配置使用416个RAMB36和473.5个Block RAM Tile。hierarchical utilization
+仍需确认各存储模块和协议控制的资源归属。完整实现数据和逐阶段比较保存在
+[optimization_exploration_history.md](optimization_exploration_history.md)。
 
 ### K=4可选配置
 
@@ -163,52 +166,117 @@ K=4的全局记录宽度为29 bit，tile工作记录为45 bit，correction snaps
 
 | 资源 | 使用量 | 器件可用量 | 利用率 |
 | --- | ---: | ---: | ---: |
-| Slice LUT | 29,013 | 222,600 | 13.03% |
-| LUT as Logic | 24,692 | 222,600 | 11.09% |
-| LUT as Memory | 4,321 | 81,400 | 5.31% |
+| Slice LUT | 28,243 | 222,600 | 12.69% |
+| LUT as Logic | 23,924 | 222,600 | 10.75% |
+| LUT as Memory | 4,319 | 81,400 | 5.31% |
 | Distributed RAM LUT | 4,160 | — | — |
-| SRL LUT | 161 | — | — |
-| Slice Register | 11,494 | 445,200 | 2.58% |
-| Slice | 10,070 | 55,650 | 18.10% |
+| SRL LUT | 159 | — | — |
+| Slice Register | 11,489 | 445,200 | 2.58% |
+| Slice | 9,911 | 55,650 | 17.81% |
 | Block RAM Tile | 553.5 | 715 | 77.41% |
 | RAMB36E1 | 496 | 715 | 69.37% |
 | RAMB18E1 | 115 | 1,430 | 8.04% |
 | DSP | 0 | 1,440 | 0.00% |
-| CARRY4 | 1,803 | — | — |
+| CARRY4 | 1,819 | — | — |
+
+### K=4、L=32可选配置
+
+该配置使用 `COLS_PER_TILE=1184`，最大等级的 `Q_BASE/Q_TILE=37/40`、`TILE_COUNT=92`、
+`TILES_TOTAL=276`。TRIKE-512固定周期为8,664,060，100 MHz固定译码时间为86.64060 ms。
+2026-07-20 Fully Placed aggregate utilization如下：
+
+| 资源 | 使用量 | 器件可用量 | 利用率 |
+| --- | ---: | ---: | ---: |
+| Slice LUT | 50,805 | 222,600 | 22.82% |
+| LUT as Logic | 46,357 | 222,600 | 20.83% |
+| LUT as Memory | 4,448 | 81,400 | 5.46% |
+| Distributed RAM LUT | 4,160 | — | — |
+| SRL LUT | 288 | — | — |
+| Slice Register | 20,947 | 445,200 | 4.71% |
+| Slice | 17,311 | 55,650 | 31.11% |
+| Block RAM Tile | 673.5 | 715 | 94.20% |
+| RAMB36E1 | 576 | 715 | 80.56% |
+| RAMB18E1 | 195 | 1,430 | 13.64% |
+| DSP | 0 | 1,440 | 0.00% |
+| CARRY4 | 3,078 | — | — |
+
+该配置剩余41.5个Block RAM Tile。后续存储扩展、额外缓冲和系统集成必须重新检查BRAM容量与布局可行性。
+
+### K=4、L=32、1152列默认配置
+
+该配置的最大等级 `Q_BASE/Q_TILE=36/39`、`TILE_COUNT=95`、`TILES_TOTAL=285`。TRIKE-512固定周期为
+8,720,781，100 MHz固定译码时间为87.20781 ms。五档功能回归通过。2026-07-20 Fully Placed aggregate
+utilization如下：
+
+| 资源 | 使用量 | 器件可用量 | 利用率 |
+| --- | ---: | ---: | ---: |
+| Slice LUT | 50,316 | 222,600 | 22.60% |
+| LUT as Logic | 45,868 | 222,600 | 20.61% |
+| LUT as Memory | 4,448 | 81,400 | 5.46% |
+| Distributed RAM LUT | 4,160 | — | — |
+| SRL LUT | 288 | — | — |
+| Slice Register | 20,931 | 445,200 | 4.70% |
+| Slice | 16,721 | 55,650 | 30.05% |
+| Block RAM Tile | 641.5 | 715 | 89.72% |
+| RAMB36E1 | 576 | 715 | 80.56% |
+| RAMB18E1 | 131 | 1,430 | 9.16% |
+| DSP | 0 | 1,440 | 0.00% |
+| CARRY4 | 2,998 | — | — |
+
+该配置剩余73.5个Block RAM Tile。报告为aggregate utilization；各存储实例的物理归属由XPM几何和
+总量变化交叉确认，尚无同次hierarchical utilization报告。
 
 ## Vivado 时序状态
 
 最近完整K=3基线的2026-07-17 Routed timing满足内部100 MHz约束。整体setup WNS/TNS为
-`+0.451 ns / 0.000 ns`，其中最差路径属于 `**async_default**` 异步复位释放组；`decoder_clk` 组的
-setup WNS/TNS为 `+0.862 ns / 0.000 ns`。hold WHS/THS为 `+0.026 ns / 0.000 ns`，WPWS/TPWS为
+`+0.656 ns / 0.000 ns`，其中最差路径属于 `**async_default**` 异步复位释放组；`decoder_clk` 组的
+setup WNS/TNS为 `+0.812 ns / 0.000 ns`。hold WHS/THS为 `+0.039 ns / 0.000 ns`，WPWS/TPWS为
 `+4.232 ns / 0.000 ns`。
 
-最差主时钟路径从 `ram_t` bank 11的RAMB36读口到 `u_vnu/v2c_scaled_q_reg[9][15]`，数据路径
-8.626 ns，其中logic 3.050 ns、route 5.576 ns，共11级逻辑。最差异步路径从同步复位寄存器到
-`ram_k_global` 的segment读选择寄存器CLR端，数据路径9.164 ns，其中route占95.995%。
+最差主时钟路径从 `ram_k_global` bank 6的deviation位置RAMB36读口到
+`c2v_ksign_sign_q_reg[6]`，数据路径8.667 ns，其中logic 2.144 ns、route 6.523 ns，共8级逻辑。最差
+异步路径从同步复位寄存器到 `v2c_comp_c_reg[15]` 的CLR端，数据路径9.237 ns，其中route占96.308%。
 
 内部endpoint全部受约束；69个普通输入和7个输出没有I/O delay，另有1个输入由false path覆盖。
-`ram_k_global` base-sign RAM到 `o_e_rdata` 的未约束外部输出路径数据延迟为11.902 ns。该路径不影响固定
+`ram_k_global` base-sign RAM到 `o_e_rdata` 的未约束外部输出路径数据延迟为11.823 ns。该路径不影响固定
 译码周期和内部100 MHz结论，但外部错误向量若要求同一100 MHz时钟下一拍在器件引脚采样，需要补充真实
 output delay约束并重新签核，或为输出增加寄存器并明确接口读延迟。
 
-最近完整K=4基线的2026-07-17 Routed timing满足内部100 MHz约束。整体setup WNS/TNS为
-`+0.535 ns / 0.000 ns`，最差路径属于 `**async_default**` 异步复位释放组；`decoder_clk` 组setup
-WNS/TNS为 `+0.717 ns / 0.000 ns`。hold WHS/THS为 `+0.022 ns / 0.000 ns`，WPWS/TPWS为
+最近完整K=4基线的2026-07-17 Routed timing满足内部100 MHz约束。整体及 `decoder_clk` 组setup
+WNS/TNS均为 `+0.547 ns / 0.000 ns`。hold WHS/THS为 `+0.027 ns / 0.000 ns`，WPWS/TPWS为
 `+4.232 ns / 0.000 ns`。
 
-最差主时钟路径从 `ram_k_tile` snapshot读寄存器到 `ram_sign_delta` pair 1、bank 2的旁路valid寄存器，
-数据路径9.054 ns，其中logic 1.241 ns、route 7.813 ns，共12级逻辑。最差异步路径从同步复位寄存器到
-`c2v_comp_c_reg[13][12]` 的CLR端，数据路径9.197 ns，其中route占96.325%。全局base-sign RAM到
-`o_e_rdata` 的未约束外部输出路径数据延迟为12.209 ns；接口签核要求与K=3相同。
+最差主时钟路径从K-sign selector的bank 0局部位置索引寄存器到 `ram_k_tile` bank 10的snapshot
+distributed RAM写入口，数据路径9.013 ns，其中logic 1.245 ns、route 7.768 ns，共12级逻辑。最差异步
+路径从同步复位寄存器到 `ram_k_global` bank 6的segment选择寄存器CLR端，数据路径8.858 ns，其中route
+占96.207%。全局base-sign RAM到 `o_e_rdata` 的未约束外部输出路径数据延迟为12.743 ns；接口签核要求
+与K=3相同。
+
+K=4、L=32可选配置的2026-07-20 Routed timing满足内部100 MHz约束。整体及 `decoder_clk` 组setup
+WNS/TNS均为 `+0.226 ns / 0.000 ns`，hold WHS/THS为 `+0.033 ns / 0.000 ns`，WPWS/TPWS为
+`+4.232 ns / 0.000 ns`。最差主时钟路径从 `v2c_tile_offset_c_reg[13][7]` 到 `ram_k_tile` bank 9工作
+distributed RAM的读数据寄存器，数据路径9.533 ns，其中route为9.267 ns、占97.210%。最差异步复位
+释放路径WNS为+3.243 ns。
+
+该配置内部未约束endpoint为0；69个普通输入和7个输出没有I/O delay，另有1个输入由false path覆盖。
+`o_e_rdata` 的未约束外部输出路径数据延迟为14.597 ns，板级接口签核要求与其他配置相同。
+
+K=4、`L=32`、`COLS_PER_TILE=1152` 默认配置的2026-07-20 Routed timing满足内部100 MHz约束。整体及
+`decoder_clk` 组setup WNS/TNS均为 `+0.062 ns / 0.000 ns`，hold WHS/THS为
+`+0.026 ns / 0.000 ns`，WPWS/TPWS为 `+4.232 ns / 0.000 ns`；异步复位释放路径WNS为
+`+2.222 ns`。最差主时钟路径从 `v2c_tile_offset_c_reg[13][9]` 到 `ram_k_tile` bank 28工作
+distributed RAM的读数据寄存器，数据路径9.731 ns，其中route为9.465 ns、占97.267%。
+
+该配置内部未约束endpoint为0；TIMING-18报告76项，69个普通输入和7个输出没有I/O delay，另有1个输入
+由false path覆盖。`o_e_rdata` 的未约束外部输出路径数据延迟为13.791 ns，因此内部100 MHz通过不等于
+板级I/O时序已经签核。
 
 ## 验证状态
 
 当前 RTL 通过：
 
 ```sh
-make test-unit
-make test-integration
+make test
 make test-trike-unified-ksign-random BIKE_RANDOM_TRIALS=1
 make test-trike-unified-ksign-random BIKE_RANDOM_TRIALS=1 TRIKE_UNIFIED_KSIGN_K=4
 ```
@@ -217,8 +285,14 @@ make test-trike-unified-ksign-random BIKE_RANDOM_TRIALS=1 TRIKE_UNIFIED_KSIGN_K=
 启动、译码运行期间的重复 `i_start` 不重启固定调度，以及同一H下第二帧启动时 `o_done` 清除并保持154拍
 固定周期。
 
-使用 `BIKE_K_SIGN_K=4` 的全部unit test通过，`tb_k_sign_update`报告 `K=4`。K=4统一TRIKE五档、seed 1
-完整随机译码均为residual 0、exact 1，固定周期与K=3相同。
+K=3和K=4统一TRIKE五档、seed 1完整随机译码均为residual 0、exact 1，固定周期分别为333,990、
+657,341、2,353,770、7,135,995和16,641,183。
+
+K=4、`L=32`、`COLS_PER_TILE=1184` 的统一TRIKE五档seed 1随机译码均为residual 0、exact 1，固定周期
+分别为175,720、345,855、1,192,316、3,685,394和8,664,060。
+
+仓库默认的K=4、`L=32`、`COLS_PER_TILE=1152` 统一TRIKE五档seed 1随机译码均为residual 0、exact 1，
+固定周期分别为193,486、365,945、1,207,716、3,729,550和8,720,781。
 
 顶层 toy 集成结果：
 
@@ -259,9 +333,9 @@ make vivado-synth-trike-unified-ksign TRIKE_UNIFIED_KSIGN_K=4
 批处理入口按启动时间创建 `build/vivado/<timestamp>/..._k3` 或 `..._k4` 目录；可以用
 `VIVADO_RUN_TAG=<label>`指定可读实验标签。不同K值和不同运行不会覆盖已有报告。
 
-全局K记录最终判决复用阶段的K=3和K=4 Fully Placed aggregate utilization及Routed timing summary
-已记录。当前 `ram_m` 使用完整18-bit记录，装载/启动协议修复后的RTL仍需独立Vivado实现；资源优化实验
-及定量结果保存在探索记录。hierarchical utilization、最新methodology、CDC和完整messages报告待补充。
+当前K=3和K=4 RTL的Fully Placed aggregate utilization及Routed timing summary已记录。当前 `ram_m`
+使用完整18-bit记录；资源优化实验及定量结果保存在探索记录。hierarchical utilization、最新methodology、
+CDC和完整messages报告待补充。
 
 ## 实现判据
 

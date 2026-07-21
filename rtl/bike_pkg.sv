@@ -126,7 +126,7 @@ package bike_pkg;
   localparam int MSG_BITS_CONFIG = `BIKE_MSG_BITS;
 `endif
 `ifndef BIKE_K_SIGN_K
-  localparam int K_SIGN_K_CONFIG = 3;
+  localparam int K_SIGN_K_CONFIG = 4;
 `else
   localparam int K_SIGN_K_CONFIG = `BIKE_K_SIGN_K;
 `endif
@@ -148,7 +148,7 @@ package bike_pkg;
 `elsif BIKE_UNIFIED_PARAMS
   localparam int COLS_PER_TILE_CONFIG = 576;
 `elsif TRIKE_UNIFIED_PARAMS
-  localparam int COLS_PER_TILE_CONFIG = 1168;
+  localparam int COLS_PER_TILE_CONFIG = 1152;
 `elsif BIKE_TOY_PARAMS
   localparam int COLS_PER_TILE_CONFIG = 288;
 `else

@@ -324,16 +324,12 @@ module decoder_top
   logic        [       COMP_C2V_W-1:0] v2c_comp_mem[0:L-1];
   logic        [       COMP_C2V_W-1:0] v2c_comp_eff[0:L-1];
   logic                                c2v_sign_mem[0:L-1];
-  logic        [  K_SIGN_RECORD_W-1:0] c2v_ksign_record_mem[0:L-1];
   logic                                c2v_ksign_sign_mem[0:L-1];
-  /* verilator lint_off UNUSEDSIGNAL */
-  logic                                c2v_ksign_hit_mem[0:L-1];
-  /* verilator lint_on UNUSEDSIGNAL */
+  logic                                c2v_ksign_base_sign_mem[0:L-1];
   logic                                c2v_ksign_sign_q[0:L-1];
   logic                                ksign_read_valid[0:L-1];
   logic        [            COL_W-1:0] ksign_read_col_idx[0:L-1];
   logic        [       DIAG_IDX_W-1:0] ksign_read_diag_idx_local;
-  logic        [       DIAG_IDX_W-1:0] ksign_read_diag_idx_local_q;
   logic                                ksign_commit_valid[0:L-1];
   logic        [            COL_W-1:0] ksign_commit_col_idx[0:L-1];
   logic        [  K_SIGN_RECORD_W-1:0] ksign_commit_record[0:L-1];
@@ -688,6 +684,11 @@ module decoder_top
 
   generate
     if (K_SIGN_ENABLE) begin : g_sign_k
+      /* verilator lint_off UNUSEDSIGNAL */
+      logic [K_SIGN_RECORD_W-1:0] unused_ksign_read_record[0:L-1];
+      logic                       unused_ksign_read_hit[0:L-1];
+      /* verilator lint_on UNUSEDSIGNAL */
+
       k_sign_selector u_k_sign_selector (
           .i_clk             (i_clk),
           .i_rst_n           (rst_n_sync),
@@ -708,14 +709,18 @@ module decoder_top
       );
 
       ram_k_global u_ram_k_global (
-          .i_clk          (i_clk),
-          .i_rst_n        (rst_n_sync),
-          .i_read_valid   (ksign_read_valid),
-          .i_read_col_idx (ksign_read_col_idx),
-          .o_read_record  (c2v_ksign_record_mem),
-          .i_write_valid  (ksign_commit_valid),
-          .i_write_col_idx(ksign_commit_col_idx),
-          .i_write_record (ksign_commit_record)
+          .i_clk                (i_clk),
+          .i_rst_n              (rst_n_sync),
+          .i_read_valid         (ksign_read_valid),
+          .i_read_col_idx       (ksign_read_col_idx),
+          .i_read_diag_idx_local(ksign_read_diag_idx_local),
+          .o_read_record        (unused_ksign_read_record),
+          .o_read_sign          (c2v_ksign_sign_mem),
+          .o_read_hit           (unused_ksign_read_hit),
+          .o_read_base_sign     (c2v_ksign_base_sign_mem),
+          .i_write_valid        (ksign_commit_valid),
+          .i_write_col_idx      (ksign_commit_col_idx),
+          .i_write_record       (ksign_commit_record)
       );
 
       ram_sign_delta u_ram_sign_delta (
@@ -734,13 +739,6 @@ module decoder_top
       );
 
       for (genvar lane_idx = 0; lane_idx < L; lane_idx++) begin : g_sign_reconstruct
-        k_sign_reconstruct u_k_sign_reconstruct (
-            .i_record        (c2v_ksign_record_mem[lane_idx]),
-            .i_diag_idx_local(ksign_read_diag_idx_local_q),
-            .o_sign          (c2v_ksign_sign_mem[lane_idx]),
-            .o_hit           (c2v_ksign_hit_mem[lane_idx])
-        );
-
         k_sign_reconstruct u_k_sign_corr_reconstruct (
             .i_record        (ksign_scan_record[lane_idx]),
             .i_diag_idx_local(ksign_scan_diag_idx_local_r),
@@ -772,9 +770,8 @@ module decoder_top
       );
 
       for (genvar lane_idx = 0; lane_idx < L; lane_idx++) begin : g_ksign_const
-        assign c2v_ksign_record_mem[lane_idx] = '0;
         assign c2v_ksign_sign_mem[lane_idx] = 1'b0;
-        assign c2v_ksign_hit_mem[lane_idx] = 1'b0;
+        assign c2v_ksign_base_sign_mem[lane_idx] = 1'b0;
         assign ksign_commit_valid[lane_idx] = 1'b0;
         assign ksign_commit_col_idx[lane_idx] = '0;
         assign ksign_commit_record[lane_idx] = '0;
@@ -832,7 +829,7 @@ module decoder_top
 
   generate
     if (K_SIGN_ENABLE) begin : g_ksign_decision_read
-      assign o_e_rdata = c2v_ksign_record_mem[0][0];
+      assign o_e_rdata = c2v_ksign_base_sign_mem[0];
     end else begin : g_full_sign_decision_read
       ram_decision u_ram_decision (
           .i_clk(i_clk),
@@ -957,7 +954,6 @@ module decoder_top
       ksign_scan_h_base_row_idx_e <= '0;
       ksign_scan_diag_idx_local_a <= '0;
       ksign_scan_diag_idx_local_r <= '0;
-      ksign_read_diag_idx_local_q <= '0;
       v2c_phase_e <= 1'b0;
       v2c_h_block_idx_e <= '0;
       v2c_tile_idx_e <= '0;
@@ -1180,7 +1176,6 @@ module decoder_top
       ksign_scan_h_base_row_idx_e <= ksign_h_base_row_idx;
       ksign_scan_diag_idx_local_a <= ksign_scan_diag_idx_local_e;
       ksign_scan_diag_idx_local_r <= ksign_scan_diag_idx_local_a;
-      ksign_read_diag_idx_local_q <= ksign_read_diag_idx_local;
       if (decode_start) begin
         ctrl_done_r <= 1'b0;
         ctrl_done_q <= 1'b0;

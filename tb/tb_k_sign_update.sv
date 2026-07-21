@@ -20,7 +20,10 @@ module tb_k_sign_update;
   logic [               COL_W-1:0] c2v_col_idx[0:L-1];
   logic                            c2v_sign[0:L-1];
   logic                            c2v_hit[0:L-1];
-  logic [     K_SIGN_RECORD_W-1:0] c2v_record[0:L-1];
+  /* verilator lint_off UNUSEDSIGNAL */
+  logic                            c2v_base_sign[0:L-1];
+  logic [     K_SIGN_RECORD_W-1:0] unused_c2v_record[0:L-1];
+  /* verilator lint_on UNUSEDSIGNAL */
   logic                            v2c_valid[0:L-1];
   logic [               COL_W-1:0] v2c_col_idx[0:L-1];
   logic [          TILE_OFF_W-1:0] v2c_tile_offset[0:L-1];
@@ -82,26 +85,19 @@ module tb_k_sign_update;
   );
 
   ram_k_global u_ram_k_global (
-      .i_clk          (clk),
-      .i_rst_n        (rst_n),
-      .i_read_valid   (c2v_valid),
-      .i_read_col_idx (c2v_col_idx),
-      .o_read_record  (c2v_record),
-      .i_write_valid  (commit_valid),
-      .i_write_col_idx(commit_col_idx),
-      .i_write_record (commit_record)
+      .i_clk                (clk),
+      .i_rst_n              (rst_n),
+      .i_read_valid         (c2v_valid),
+      .i_read_col_idx       (c2v_col_idx),
+      .i_read_diag_idx_local(diag_idx_local),
+      .o_read_record        (unused_c2v_record),
+      .o_read_sign          (c2v_sign),
+      .o_read_hit           (c2v_hit),
+      .o_read_base_sign     (c2v_base_sign),
+      .i_write_valid        (commit_valid),
+      .i_write_col_idx      (commit_col_idx),
+      .i_write_record       (commit_record)
   );
-
-  generate
-    for (genvar lane_idx = 0; lane_idx < L; lane_idx++) begin : g_ram_reconstruct
-      k_sign_reconstruct u_k_sign_reconstruct (
-          .i_record        (c2v_record[lane_idx]),
-          .i_diag_idx_local(diag_idx_local),
-          .o_sign          (c2v_sign[lane_idx]),
-          .o_hit           (c2v_hit[lane_idx])
-      );
-    end
-  endgenerate
 
   initial clk = 1'b0;
   always #5 clk = ~clk;
