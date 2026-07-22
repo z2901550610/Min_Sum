@@ -1394,6 +1394,67 @@ as Logic、FF、Slice、布线拥塞、setup WNS/TNS和hold WHS均待测。阶�
 路由已同时存在于当前候选，因此下一份实现报告相对阶段31可确认组合净收益；若需要严格拆分LUT归因，应
 分别保留启用/禁用窄返回的实现检查点。状态：RTL候选已实现并通过功能回归，Vivado待测。
 
+## 34. L=32配对K字段与窄返回路由的组合实现检查点
+
+时间：2026-07-22。
+
+目标与范围：对阶段32的全局K记录双位置18-bit字段映射和阶段33的bank侧符号重构、3-bit窄返回路由做
+同一次物理实现，确认BRAM原生几何预测是否兑现，以及组合后的LUT和时序净结果。比较基线为阶段31的
+`L=32`、`K=4`、`COLS_PER_TILE=1152`实现；译码参数、固定周期、器件、Vivado版本和XDC保持一致。
+
+Vivado条件：Windows Vivado 2023.2，`xc7k355tffg901-2L`，`TRIKE_UNIFIED_PARAMS`，100 MHz
+`decoder_clk`、10 ns周期、0.100 ns user uncertainty；资源报告为2026-07-22 Fully Placed aggregate
+utilization，时序报告为Routed。功能验证沿用阶段32/33的格式、lint、14个单元测试、toy集成和统一TRIKE
+五档seed 1随机回归；固定周期保持193,486、365,945、1,207,716、3,729,550和8,720,781。
+
+资源实测：
+
+| 资源 | 阶段31基线 | 配对字段+窄返回 | 变化 |
+| --- | ---: | ---: | ---: |
+| Slice LUT | 50,316 | 49,147 | -1,169（-2.32%） |
+| LUT as Logic | 45,868 | 44,699 | -1,169（-2.55%） |
+| LUT as Memory | 4,448 | 4,448 | 0 |
+| Distributed RAM LUT | 4,160 | 4,160 | 0 |
+| SRL LUT | 288 | 288 | 0 |
+| Slice Register | 20,931 | 20,936 | +5（+0.02%） |
+| Slice | 16,721 | 15,899 | -822（-4.92%） |
+| Block RAM Tile | 641.5 | 561.5 | -80.0（-12.47%） |
+| RAMB36E1 | 576 | 512 | -64（-11.11%） |
+| RAMB18E1 | 131 | 99 | -32（-24.43%） |
+| DSP | 0 | 0 | 0 |
+| CARRY4 | 2,998 | 2,998 | 0 |
+
+BRAM结果精确命中阶段32预测：`ram_k_global` 的32个bank合计由384 RAMB36和32 RAMB18变为320
+RAMB36，全设计减少64个RAMB36、32个RAMB18和80个Block RAM Tile；Tile利用率从89.72%降至
+78.53%，可用Tile从73.5增至153.5。LUT减少全部来自logic LUT，LUT memory、distributed RAM和SRL
+均未变化，说明本检查点没有用LUTRAM换取BRAM。由于配对字段和窄返回在同一检查点启用，1,169个logic
+LUT只能记为组合净收益；没有关闭窄返回的同次实现报告，不能把全部LUT下降单独归因于桶型路由收窄。
+
+Routed时序实测：
+
+| 指标 | 阶段31基线 | 配对字段+窄返回 | 变化 |
+| --- | ---: | ---: | ---: |
+| 整体setup WNS/TNS | +0.062 / 0.000 ns | +0.098 / 0.000 ns | WNS +0.036 ns |
+| `decoder_clk` setup WNS/TNS | +0.062 / 0.000 ns | +0.098 / 0.000 ns | WNS +0.036 ns |
+| hold WHS/THS | +0.026 / 0.000 ns | +0.028 / 0.000 ns | WHS +0.002 ns |
+| pulse WPWS/TPWS | +4.232 / 0.000 ns | +4.232 / 0.000 ns | 0 |
+| `**async_default**` setup WNS | +2.222 ns | +1.293 ns | -0.929 ns |
+| `o_e_rdata`未约束输出路径 | 13.791 ns | 12.509 ns | -1.282 ns |
+
+内部100 MHz约束继续满足，配对字段的5段选择没有形成时序回退。最差主时钟路径从K-sign selector的
+bank 11 snapshot distributed RAM读数据寄存器到 `ram_sign_delta` pair 0、bank 0的read-bypass valid
+寄存器，数据路径9.713 ns，其中logic 0.913 ns、route 8.800 ns，route占90.600%，逻辑深度10级。
+前十条setup路径主要落在selector snapshot到 `ram_sign_delta` 地址/旁路控制，以及 `ram_t` 到VNU；
+`ram_k_global`窄返回没有出现在关键路径前列。异步复位组裕量下降但仍为正。
+
+TIMING-18仍为76项；内部未约束endpoint为0，69个普通输入和7个输出缺少I/O delay，另有1个输入由
+false path覆盖。`o_e_rdata`的12.509 ns是未约束器件输出路径，不能据此宣称板级一拍100 MHz接口通过。
+
+结论与状态：两个方案组合保留。相对阶段31，在固定周期和100 MHz内部收敛不变的条件下，实测减少
+1,169个LUT、822个Slice和80个Block RAM Tile，BRAM容量从高占用区降至78.53%，setup WNS小幅改善
+0.036 ns。该结果构成当前 `L=32`、`K=4`、`COLS_PER_TILE=1152` 的完整Fully Placed/Routed基线；若
+后续需要拆分1,169个LUT的归因，再增加仅启用配对字段的消融实现，不影响当前方案保留结论。
+
 ## 形成的设计结论
 
 1. 存储优化必须以目标器件的原生宽深模式和 BRAM Tile 为依据；只改数组声明或逻辑字段宽度不能保证映射。

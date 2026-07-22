@@ -26,7 +26,7 @@ Fully Placed资源报告和Routed时序报告。
 | Vivado | 2023.2 |
 | 目标时钟 | 100 MHz，周期 10 ns |
 | 时钟不确定度 | 0.100 ns |
-| 报告阶段 | 2026-07-20 Fully Placed资源 / Routed时序 |
+| 报告阶段 | 2026-07-22 Fully Placed资源 / Routed时序 |
 
 统一硬件使用最大参数确定存储和计数器几何。`i_param_level` 是公开输入，各参数等级使用公开固定的
 `R`、`W`、tile 数和周期预算。
@@ -205,26 +205,28 @@ K=4的全局记录宽度为29 bit，tile工作记录为45 bit，correction snaps
 ### K=4、L=32、1152列默认配置
 
 该配置的最大等级 `Q_BASE/Q_TILE=36/39`、`TILE_COUNT=95`、`TILES_TOTAL=285`。TRIKE-512固定周期为
-8,720,781，100 MHz固定译码时间为87.20781 ms。五档功能回归通过。2026-07-20 Fully Placed aggregate
+8,720,781，100 MHz固定译码时间为87.20781 ms。五档功能回归通过。2026-07-22 Fully Placed aggregate
 utilization如下：
 
 | 资源 | 使用量 | 器件可用量 | 利用率 |
 | --- | ---: | ---: | ---: |
-| Slice LUT | 50,316 | 222,600 | 22.60% |
-| LUT as Logic | 45,868 | 222,600 | 20.61% |
+| Slice LUT | 49,147 | 222,600 | 22.08% |
+| LUT as Logic | 44,699 | 222,600 | 20.08% |
 | LUT as Memory | 4,448 | 81,400 | 5.46% |
 | Distributed RAM LUT | 4,160 | — | — |
 | SRL LUT | 288 | — | — |
-| Slice Register | 20,931 | 445,200 | 4.70% |
-| Slice | 16,721 | 55,650 | 30.05% |
-| Block RAM Tile | 641.5 | 715 | 89.72% |
-| RAMB36E1 | 576 | 715 | 80.56% |
-| RAMB18E1 | 131 | 1,430 | 9.16% |
+| Slice Register | 20,936 | 445,200 | 4.70% |
+| Slice | 15,899 | 55,650 | 28.57% |
+| Block RAM Tile | 561.5 | 715 | 78.53% |
+| RAMB36E1 | 512 | 715 | 71.61% |
+| RAMB18E1 | 99 | 1,430 | 6.92% |
 | DSP | 0 | 1,440 | 0.00% |
 | CARRY4 | 2,998 | — | — |
 
-该配置剩余73.5个Block RAM Tile。报告为aggregate utilization；各存储实例的物理归属由XPM几何和
-总量变化交叉确认，尚无同次hierarchical utilization报告。
+该配置剩余153.5个Block RAM Tile。全局K记录使用两个18-bit配对字段，每个bank各实例化10个RAMB36，
+32个bank合计320个RAMB36；相对配对前配置，全设计减少64个RAMB36和32个RAMB18，精确减少80个
+Block RAM Tile。报告为aggregate utilization；物理归属由显式XPM实例几何和aggregate总量的精确变化
+交叉确认，尚无同次hierarchical utilization报告。
 
 ## Vivado 时序状态
 
@@ -261,14 +263,15 @@ distributed RAM的读数据寄存器，数据路径9.533 ns，其中route为9.26
 该配置内部未约束endpoint为0；69个普通输入和7个输出没有I/O delay，另有1个输入由false path覆盖。
 `o_e_rdata` 的未约束外部输出路径数据延迟为14.597 ns，板级接口签核要求与其他配置相同。
 
-K=4、`L=32`、`COLS_PER_TILE=1152` 默认配置的2026-07-20 Routed timing满足内部100 MHz约束。整体及
-`decoder_clk` 组setup WNS/TNS均为 `+0.062 ns / 0.000 ns`，hold WHS/THS为
-`+0.026 ns / 0.000 ns`，WPWS/TPWS为 `+4.232 ns / 0.000 ns`；异步复位释放路径WNS为
-`+2.222 ns`。最差主时钟路径从 `v2c_tile_offset_c_reg[13][9]` 到 `ram_k_tile` bank 28工作
-distributed RAM的读数据寄存器，数据路径9.731 ns，其中route为9.465 ns、占97.267%。
+K=4、`L=32`、`COLS_PER_TILE=1152` 默认配置的2026-07-22 Routed timing满足内部100 MHz约束。整体及
+`decoder_clk` 组setup WNS/TNS均为 `+0.098 ns / 0.000 ns`，hold WHS/THS为
+`+0.028 ns / 0.000 ns`，WPWS/TPWS为 `+4.232 ns / 0.000 ns`；异步复位释放路径WNS为
+`+1.293 ns`。最差主时钟路径从K-sign selector的bank 11 snapshot distributed RAM读数据寄存器到
+`ram_sign_delta` pair 0、bank 0的read-bypass valid寄存器，数据路径9.713 ns，其中route为8.800 ns、
+占90.600%。
 
 该配置内部未约束endpoint为0；TIMING-18报告76项，69个普通输入和7个输出没有I/O delay，另有1个输入
-由false path覆盖。`o_e_rdata` 的未约束外部输出路径数据延迟为13.791 ns，因此内部100 MHz通过不等于
+由false path覆盖。`o_e_rdata` 的未约束外部输出路径数据延迟为12.509 ns，因此内部100 MHz通过不等于
 板级I/O时序已经签核。
 
 ## 验证状态
