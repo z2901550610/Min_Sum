@@ -49,7 +49,6 @@ module decoder_top
   logic        [    DIAG_GLOBAL_W-1:0] unused_ksign_diag_idx_global_base;
   logic        [    DIAG_GLOBAL_W-1:0] unused_ksign_diag_idx_global[0:L-1];
   logic        [       LANE_IDX_W-1:0] unused_ksign_row_bank[0:L-1];
-  logic                                unused_ksign_corr_sign[0:L-1];
   /* verilator lint_on UNUSEDSIGNAL */
   logic                                c2v_phase_active;
   logic                                v2c_phase_active;
@@ -298,15 +297,11 @@ module decoder_top
   logic        [ LANE_GROUP_IDX_W-1:0] ksign_scan_lane_group_idx_e;
   logic        [        ROW_IDX_W-1:0] ksign_scan_h_base_row_idx_e;
   logic        [       DIAG_IDX_W-1:0] ksign_scan_diag_idx_local_a;
-  logic        [       DIAG_IDX_W-1:0] ksign_scan_diag_idx_local_r;
   logic                                ksign_scan_valid[0:L-1];
   logic        [            COL_W-1:0] ksign_scan_col_idx[0:L-1];
   logic        [      ROW_BANK_AW-1:0] ksign_scan_row_addr[0:L-1];
   logic        [       TILE_OFF_W-1:0] ksign_scan_tile_offset[0:L-1];
-  logic                                ksign_scan_valid_r[0:L-1];
   logic        [      ROW_BANK_AW-1:0] ksign_scan_row_addr_r[0:L-1];
-  logic        [  K_SIGN_RECORD_W-1:0] ksign_scan_record[0:L-1];
-  logic                                ksign_scan_hit[0:L-1];
   logic                                ksign_delta_flip_valid[0:L-1];
   logic                                ksign_delta_read_mem[0:L-1];
   logic                                ksign_delta_s[0:L-1];
@@ -686,26 +681,29 @@ module decoder_top
     if (K_SIGN_ENABLE) begin : g_sign_k
       /* verilator lint_off UNUSEDSIGNAL */
       logic [K_SIGN_RECORD_W-1:0] unused_ksign_read_record[0:L-1];
+      logic [K_SIGN_RECORD_W-1:0] unused_ksign_corr_record[0:L-1];
       logic                       unused_ksign_read_hit[0:L-1];
       /* verilator lint_on UNUSEDSIGNAL */
 
       k_sign_selector u_k_sign_selector (
-          .i_clk             (i_clk),
-          .i_rst_n           (rst_n_sync),
-          .i_cfg_w           (cfg_w),
-          .i_valid           (v2c_valid_c),
-          .i_col_idx         (v2c_col_idx_c),
-          .i_tile_offset     (v2c_tile_offset_c),
-          .i_diag_idx_local  (v2c_diag_idx_local_c),
-          .i_v2c_msg         (v2c_msg_c),
-          .i_base_sign       (v2c_ksign_base_sign),
-          .o_commit_valid    (ksign_commit_valid),
-          .o_commit_col_idx  (ksign_commit_col_idx),
-          .o_commit_record   (ksign_commit_record),
-          .i_corr_read_valid (ksign_scan_valid),
-          .i_corr_col_idx    (ksign_scan_col_idx),
-          .i_corr_tile_offset(ksign_scan_tile_offset),
-          .o_corr_read_record(ksign_scan_record)
+          .i_clk                (i_clk),
+          .i_rst_n              (rst_n_sync),
+          .i_cfg_w              (cfg_w),
+          .i_valid              (v2c_valid_c),
+          .i_col_idx            (v2c_col_idx_c),
+          .i_tile_offset        (v2c_tile_offset_c),
+          .i_diag_idx_local     (v2c_diag_idx_local_c),
+          .i_v2c_msg            (v2c_msg_c),
+          .i_base_sign          (v2c_ksign_base_sign),
+          .o_commit_valid       (ksign_commit_valid),
+          .o_commit_col_idx     (ksign_commit_col_idx),
+          .o_commit_record      (ksign_commit_record),
+          .i_corr_read_valid    (ksign_scan_valid),
+          .i_corr_col_idx       (ksign_scan_col_idx),
+          .i_corr_tile_offset   (ksign_scan_tile_offset),
+          .i_corr_diag_idx_local(ksign_scan_diag_idx_local_a),
+          .o_corr_read_record   (unused_ksign_corr_record),
+          .o_corr_read_hit      (ksign_delta_flip_valid)
       );
 
       ram_k_global u_ram_k_global (
@@ -739,16 +737,6 @@ module decoder_top
       );
 
       for (genvar lane_idx = 0; lane_idx < L; lane_idx++) begin : g_sign_reconstruct
-        k_sign_reconstruct u_k_sign_corr_reconstruct (
-            .i_record        (ksign_scan_record[lane_idx]),
-            .i_diag_idx_local(ksign_scan_diag_idx_local_r),
-            .o_sign          (unused_ksign_corr_sign[lane_idx]),
-            .o_hit           (ksign_scan_hit[lane_idx])
-        );
-
-        assign ksign_delta_flip_valid[lane_idx] =
-            ksign_scan_valid_r[lane_idx] && ksign_scan_hit[lane_idx];
-
         assign c2v_sign_mem[lane_idx] = 1'b0;
       end
     end else begin : g_sign_full
@@ -775,8 +763,6 @@ module decoder_top
         assign ksign_commit_valid[lane_idx] = 1'b0;
         assign ksign_commit_col_idx[lane_idx] = '0;
         assign ksign_commit_record[lane_idx] = '0;
-        assign ksign_scan_record[lane_idx] = '0;
-        assign ksign_scan_hit[lane_idx] = 1'b0;
         assign ksign_delta_flip_valid[lane_idx] = 1'b0;
         assign ksign_delta_read_mem[lane_idx] = 1'b0;
       end
@@ -953,7 +939,6 @@ module decoder_top
       ksign_scan_lane_group_idx_e <= '0;
       ksign_scan_h_base_row_idx_e <= '0;
       ksign_scan_diag_idx_local_a <= '0;
-      ksign_scan_diag_idx_local_r <= '0;
       v2c_phase_e <= 1'b0;
       v2c_h_block_idx_e <= '0;
       v2c_tile_idx_e <= '0;
@@ -1055,7 +1040,6 @@ module decoder_top
         v2c_bypass_valid_b[lane_idx] <= 1'b0;
         v2c_bypass_row_addr_b[lane_idx] <= '0;
         v2c_bypass_comp_b[lane_idx] <= COMP_C2V_INIT;
-        ksign_scan_valid_r[lane_idx] <= 1'b0;
         ksign_scan_row_addr_r[lane_idx] <= '0;
       end
     end else begin
@@ -1175,7 +1159,6 @@ module decoder_top
       ksign_scan_lane_group_idx_e <= ksign_scan_lane_group_idx_h;
       ksign_scan_h_base_row_idx_e <= ksign_h_base_row_idx;
       ksign_scan_diag_idx_local_a <= ksign_scan_diag_idx_local_e;
-      ksign_scan_diag_idx_local_r <= ksign_scan_diag_idx_local_a;
       if (decode_start) begin
         ctrl_done_r <= 1'b0;
         ctrl_done_q <= 1'b0;
@@ -1261,7 +1244,6 @@ module decoder_top
         v2c_bypass_valid_b[lane_idx] <= v2c_valid_p[lane_idx];
         v2c_bypass_row_addr_b[lane_idx] <= v2c_row_addr_p[lane_idx];
         v2c_bypass_comp_b[lane_idx] <= v2c_comp_p[lane_idx];
-        ksign_scan_valid_r[lane_idx] <= ksign_scan_valid[lane_idx];
         ksign_scan_row_addr_r[lane_idx] <= ksign_scan_row_addr[lane_idx];
       end
     end

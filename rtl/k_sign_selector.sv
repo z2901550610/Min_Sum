@@ -18,7 +18,9 @@ module k_sign_selector
     input  logic                       i_corr_read_valid[0:L-1],
     input  logic [          COL_W-1:0] i_corr_col_idx[0:L-1],
     input  logic [     TILE_OFF_W-1:0] i_corr_tile_offset[0:L-1],
-    output logic [K_SIGN_RECORD_W-1:0] o_corr_read_record[0:L-1]
+    input  logic [     DIAG_IDX_W-1:0] i_corr_diag_idx_local,
+    output logic [K_SIGN_RECORD_W-1:0] o_corr_read_record[0:L-1],
+    output logic                       o_corr_read_hit[0:L-1]
 );
 
   localparam int ROUTE_W = 1 + K_SIGN_WORK_AW + COL_W + MSG_W + 1;
@@ -49,12 +51,16 @@ module k_sign_selector
   logic                            corr_work_read_valid[0:L-1];
   logic [      K_SIGN_WORK_AW-1:0] corr_work_read_addr[0:L-1];
   logic [ K_SIGN_POS_RECORD_W-1:0] corr_work_read_record[0:L-1];
+  logic                            corr_read_valid_q[0:L-1];
   logic [    1+K_SIGN_WORK_AW-1:0] corr_route_in[0:L-1];
   logic [    1+K_SIGN_WORK_AW-1:0] corr_route_out[0:L-1];
   logic [     K_SIGN_RECORD_W-1:0] corr_record_bank[0:L-1];
   logic [     K_SIGN_RECORD_W-1:0] corr_record_route_out[0:L-1];
+  logic [                     0:0] corr_hit_route_in[0:L-1];
+  logic [                     0:0] corr_hit_route_out[0:L-1];
   logic [          LANE_IDX_W-1:0] corr_route_shift;
   logic [          LANE_IDX_W-1:0] corr_route_shift_q;
+  logic [          DIAG_IDX_W-1:0] corr_diag_idx_local_q;
 
   function automatic logic [LANE_IDX_W-1:0] col_bank(input  logic [COL_W-1:0] col_idx);
     begin
@@ -129,6 +135,14 @@ module k_sign_selector
       .o_data (corr_record_route_out)
   );
 
+  barrel_rotate #(
+      .DATA_W(1)
+  ) u_corr_hit_return (
+      .i_data (corr_hit_route_in),
+      .i_shift(corr_route_shift_q),
+      .o_data (corr_hit_route_out)
+  );
+
   generate
     for (genvar bank_idx = 0; bank_idx < L; bank_idx++) begin : g_bank
       k_sign_update u_k_sign_update (
@@ -168,6 +182,7 @@ module k_sign_selector
           v2c_msg_q[bank_idx] <= '0;
           base_sign_q[bank_idx] <= 1'b0;
           last_diag_q[bank_idx] <= 1'b0;
+          corr_read_valid_q[bank_idx] <= 1'b0;
         end else begin
           read_valid_q[bank_idx] <= work_read_valid[bank_idx];
           read_addr_q[bank_idx] <= work_read_addr[bank_idx];
@@ -177,14 +192,23 @@ module k_sign_selector
           base_sign_q[bank_idx] <= routed_base_sign[bank_idx];
           last_diag_q[bank_idx] <=
               DIAG_IDX_W'(i_diag_idx_local) == DIAG_IDX_W'(i_cfg_w - CFG_W_W'(1));
+          corr_read_valid_q[bank_idx] <= corr_work_read_valid[bank_idx];
         end
       end
 
       always_comb begin
-        corr_record_bank[bank_idx] = '0;
+        corr_record_bank[bank_idx]  = '0;
+        corr_hit_route_in[bank_idx] = '0;
         for (int slot_idx = 0; slot_idx < K_SIGN_K; slot_idx++) begin
           corr_record_bank[bank_idx][record_slot_lsb(slot_idx)+:DIAG_IDX_W] =
               corr_work_read_record[bank_idx][slot_idx*DIAG_IDX_W+:DIAG_IDX_W];
+          if (corr_read_valid_q[bank_idx] &&
+              (corr_work_read_record[bank_idx][slot_idx*DIAG_IDX_W+:DIAG_IDX_W] !=
+               K_SIGN_DIAG_INVALID) &&
+              (corr_work_read_record[bank_idx][slot_idx*DIAG_IDX_W+:DIAG_IDX_W] ==
+               corr_diag_idx_local_q)) begin
+            corr_hit_route_in[bank_idx][0] = 1'b1;
+          end
         end
       end
     end
@@ -193,14 +217,17 @@ module k_sign_selector
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin
       corr_route_shift_q <= '0;
+      corr_diag_idx_local_q <= '0;
     end else begin
       corr_route_shift_q <= corr_route_shift;
+      corr_diag_idx_local_q <= i_corr_diag_idx_local;
     end
   end
 
   always_comb begin
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
       o_corr_read_record[lane_idx] = corr_record_route_out[lane_idx];
+      o_corr_read_hit[lane_idx] = corr_hit_route_out[lane_idx][0];
     end
   end
 

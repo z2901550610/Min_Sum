@@ -1455,6 +1455,47 @@ false path覆盖。`o_e_rdata`的12.509 ns是未约束器件输出路径，不�
 0.036 ns。该结果构成当前 `L=32`、`K=4`、`COLS_PER_TILE=1152` 的完整Fully Placed/Routed基线；若
 后续需要拆分1,169个LUT的归因，再增加仅启用配对字段的消融实现，不影响当前方案保留结论。
 
+## 35. correction snapshot的bank侧命中与1-bit返回路由
+
+时间：2026-07-22。
+
+目标与假设：阶段34的最差主时钟路径从 `ram_k_tile` bank 11的snapshot distributed RAM读数据寄存器
+到 `ram_sign_delta` 的read-bypass valid寄存器，数据路径9.713 ns，route占90.600%。原数据流先把每个
+column bank的完整29-bit K=4记录经过5级逆桶型网络返回32条请求lane，再在lane侧实例化K路位置比较、
+invalid过滤和有效命中判断。该实验把命中判断移到snapshot所在bank，仅将已经用read-valid门控的1-bit
+命中结果逆路由回原请求lane，目标是同时缩小组合网络和改善snapshot到delta写控制的物理局部性。
+
+关键实现：
+
+- correction请求的 `diag_idx_local`、bank侧read-valid和原有逆路由shift均寄存一拍，与snapshot同步读出
+  对齐；固定RAM读延迟和correction调度拍数不变。
+- 每个snapshot bank直接对K个位置执行与 `k_sign_reconstruct`相同的比较：invalid sentinel不命中，任一
+  有效位置等于当前 `diag_idx_local` 时输出1；无效请求强制输出0。
+- 活动逆返回网络从 `29 × 32 × 5 = 4640` 个1-bit 2选1 MUX节点缩为
+  `1 × 32 × 5 = 160`个，结构上减少4480个1-bit MUX节点。完整记录返回端口仅保留给模块级等价验证，
+  顶层连接到无消费者信号，使实现工具可以裁剪原29-bit返回网络。
+- 顶层删除32个lane侧 `k_sign_reconstruct` correction实例和末端 `valid && hit`逻辑，直接把已经门控的
+  1-bit返回结果作为 `ram_sign_delta.i_flip_valid`。row地址仍按原流水寄存，RAM访问数、pair选择、连续
+  同地址翻转旁路和固定周期不变。
+- read-valid寄存器从lane侧移到column bank侧，7-bit correction位置寄存器同步移入selector，理论FF
+  数量基本不变；BRAM和LUTRAM结构不变。
+
+验证范围：
+
+- `make format-rtl`、`make check-format-rtl`、`make lint-rtl`和 `git diff --check`通过。
+- `tb_k_sign_update`同时比较保留的完整记录lane侧重构结果和新的bank侧命中结果；14个单元测试全部通过。
+- toy集成通过，residual 0、exact 1、固定154周期。
+- `L=32`、`K=4`、`COLS_PER_TILE=1152`统一TRIKE五档seed 1随机回归均为residual 0、exact 1，固定周期
+  保持193,486、365,945、1,207,716、3,729,550和8,720,781。
+- `L=16`、`K=3`、`COLS_PER_TILE=1168`统一TRIKE五档seed 1随机回归均为residual 0、exact 1，固定周期
+  保持333,990、657,341、2,353,770、7,135,995和16,641,183，覆盖非2次幂K和通用存储路径。
+
+定量状态：该候选尚未运行Vivado。相对阶段34的Slice LUT、LUT as Logic、FF、Slice、Block RAM Tile、
+setup WNS/TNS、hold WHS和top-path集合均待同器件、同XDC的Fully Placed/Routed报告。4480个MUX节点是
+RTL网络规模差，不等于4480个物理LUT；只有aggregate utilization下降才能记录LUT收益。由于阶段34的
+关键路径正穿过被重构的数据流，本实验以该路径退出前列、整体WNS不下降且固定周期不变作为保留条件。
+状态：RTL候选已实现并通过K=3/K=4五档功能回归，Vivado待测。
+
 ## 形成的设计结论
 
 1. 存储优化必须以目标器件的原生宽深模式和 BRAM Tile 为依据；只改数组声明或逻辑字段宽度不能保证映射。

@@ -36,6 +36,7 @@ module tb_k_sign_update;
   logic [               COL_W-1:0] corr_col_idx[0:L-1];
   logic [          TILE_OFF_W-1:0] corr_tile_offset[0:L-1];
   logic [     K_SIGN_RECORD_W-1:0] corr_record[0:L-1];
+  logic                            corr_read_hit[0:L-1];
   /* verilator lint_off UNUSEDSIGNAL */
   logic                            unused_corr_sign;
   /* verilator lint_on UNUSEDSIGNAL */
@@ -59,22 +60,24 @@ module tb_k_sign_update;
   );
 
   k_sign_selector u_k_sign_selector (
-      .i_clk             (clk),
-      .i_rst_n           (rst_n),
-      .i_cfg_w           (CFG_W_W'(W)),
-      .i_valid           (v2c_valid),
-      .i_col_idx         (v2c_col_idx),
-      .i_tile_offset     (v2c_tile_offset),
-      .i_diag_idx_local  (diag_idx_local),
-      .i_v2c_msg         (v2c_msg_lane),
-      .i_base_sign       (v2c_base_sign),
-      .o_commit_valid    (commit_valid),
-      .o_commit_col_idx  (commit_col_idx),
-      .o_commit_record   (commit_record),
-      .i_corr_read_valid (corr_read_valid),
-      .i_corr_col_idx    (corr_col_idx),
-      .i_corr_tile_offset(corr_tile_offset),
-      .o_corr_read_record(corr_record)
+      .i_clk                (clk),
+      .i_rst_n              (rst_n),
+      .i_cfg_w              (CFG_W_W'(W)),
+      .i_valid              (v2c_valid),
+      .i_col_idx            (v2c_col_idx),
+      .i_tile_offset        (v2c_tile_offset),
+      .i_diag_idx_local     (diag_idx_local),
+      .i_v2c_msg            (v2c_msg_lane),
+      .i_base_sign          (v2c_base_sign),
+      .o_commit_valid       (commit_valid),
+      .o_commit_col_idx     (commit_col_idx),
+      .o_commit_record      (commit_record),
+      .i_corr_read_valid    (corr_read_valid),
+      .i_corr_col_idx       (corr_col_idx),
+      .i_corr_tile_offset   (corr_tile_offset),
+      .i_corr_diag_idx_local(diag_idx_local),
+      .o_corr_read_record   (corr_record),
+      .o_corr_read_hit      (corr_read_hit)
   );
 
   k_sign_reconstruct u_corr_reconstruct (
@@ -176,6 +179,9 @@ module tb_k_sign_update;
       #1;
       if (corr_hit !== expected_hit) begin
         $fatal(1, "correction snapshot hit mismatch at edge %0d", pos);
+      end
+      if (corr_read_hit[0] !== expected_hit) begin
+        $fatal(1, "bank-side correction hit mismatch at edge %0d", pos);
       end
       @(negedge clk);
       corr_read_valid[0] = 1'b0;
