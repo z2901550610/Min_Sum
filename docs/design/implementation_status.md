@@ -42,6 +42,8 @@ Fully Placed资源报告和Routed时序报告。
 - `ram_accum` 和 `ram_t` 使用独立的 fill/active 双 buffer，使相邻 tile 的 C2V 与 V2C 重叠；两个buffer
   选择恒为互补。
 - `ram_k_tile` 使用一份候选工作RAM和一份位置snapshot，使完成tile的correction与后续tile的V2C重叠。
+- correction在snapshot所属column bank完成K路位置命中和invalid过滤，只将1-bit有效命中结果逆路由回
+  原请求lane并驱动 `ram_sign_delta` 翻转读改写。
 - 最后一轮提交到 `ram_k_global` 的 `base_sign` 是最终错误判决；`o_done` 后外部串行读口复用空闲的
   全局K记录读口。
 - `ram_sign_delta` 的翻转读改写和连续同地址访问使用固定旁路规则。
@@ -210,13 +212,13 @@ utilization如下：
 
 | 资源 | 使用量 | 器件可用量 | 利用率 |
 | --- | ---: | ---: | ---: |
-| Slice LUT | 49,147 | 222,600 | 22.08% |
-| LUT as Logic | 44,699 | 222,600 | 20.08% |
-| LUT as Memory | 4,448 | 81,400 | 5.46% |
+| Slice LUT | 48,027 | 222,600 | 21.58% |
+| LUT as Logic | 43,580 | 222,600 | 19.58% |
+| LUT as Memory | 4,447 | 81,400 | 5.46% |
 | Distributed RAM LUT | 4,160 | — | — |
-| SRL LUT | 288 | — | — |
-| Slice Register | 20,936 | 445,200 | 4.70% |
-| Slice | 15,899 | 55,650 | 28.57% |
+| SRL LUT | 287 | — | — |
+| Slice Register | 20,946 | 445,200 | 4.70% |
+| Slice | 16,053 | 55,650 | 28.85% |
 | Block RAM Tile | 561.5 | 715 | 78.53% |
 | RAMB36E1 | 512 | 715 | 71.61% |
 | RAMB18E1 | 99 | 1,430 | 6.92% |
@@ -264,14 +266,14 @@ distributed RAM的读数据寄存器，数据路径9.533 ns，其中route为9.26
 `o_e_rdata` 的未约束外部输出路径数据延迟为14.597 ns，板级接口签核要求与其他配置相同。
 
 K=4、`L=32`、`COLS_PER_TILE=1152` 默认配置的2026-07-22 Routed timing满足内部100 MHz约束。整体及
-`decoder_clk` 组setup WNS/TNS均为 `+0.098 ns / 0.000 ns`，hold WHS/THS为
-`+0.028 ns / 0.000 ns`，WPWS/TPWS为 `+4.232 ns / 0.000 ns`；异步复位释放路径WNS为
-`+1.293 ns`。最差主时钟路径从K-sign selector的bank 11 snapshot distributed RAM读数据寄存器到
-`ram_sign_delta` pair 0、bank 0的read-bypass valid寄存器，数据路径9.713 ns，其中route为8.800 ns、
-占90.600%。
+`decoder_clk` 组setup WNS/TNS均为 `+0.590 ns / 0.000 ns`，hold WHS/THS为
+`+0.027 ns / 0.000 ns`，WPWS/TPWS为 `+4.232 ns / 0.000 ns`；异步复位释放路径WNS为
+`+3.239 ns`。最差主时钟路径从 `v2c_tile_offset_c_reg[27][10]` 的布局复制寄存器到K-sign selector
+bank 29工作distributed RAM的读数据寄存器，数据路径9.303 ns，其中route为9.037 ns、占97.141%。
+correction snapshot到 `ram_sign_delta` 的路径未进入前十条setup路径。
 
 该配置内部未约束endpoint为0；TIMING-18报告76项，69个普通输入和7个输出没有I/O delay，另有1个输入
-由false path覆盖。`o_e_rdata` 的未约束外部输出路径数据延迟为12.509 ns，因此内部100 MHz通过不等于
+由false path覆盖。`o_e_rdata` 的未约束外部输出路径数据延迟为14.515 ns，因此内部100 MHz通过不等于
 板级I/O时序已经签核。
 
 ## 验证状态

@@ -1496,6 +1496,62 @@ RTL网络规模差，不等于4480个物理LUT；只有aggregate utilization下�
 关键路径正穿过被重构的数据流，本实验以该路径退出前列、整体WNS不下降且固定周期不变作为保留条件。
 状态：RTL候选已实现并通过K=3/K=4五档功能回归，Vivado待测。
 
+## 36. correction 1-bit返回路由的实现检查点
+
+时间：2026-07-22。
+
+目标与范围：对阶段35的bank侧correction命中和1-bit逆返回路由做独立物理实现。比较基线为阶段34的
+全局K配对字段与3-bit全局读返回版本；两次报告均使用 `TRIKE_UNIFIED_PARAMS`、`L=32`、`K=4`、
+`COLS_PER_TILE=1152`、Windows Vivado 2023.2、`xc7k355tffg901-2L`、100 MHz时钟和0.100 ns user
+uncertainty。资源报告为Fully Placed aggregate utilization，时序报告为Routed。
+
+资源实测：
+
+| 资源 | 阶段34基线 | correction 1-bit返回 | 变化 |
+| --- | ---: | ---: | ---: |
+| Slice LUT | 49,147 | 48,027 | -1,120（-2.28%） |
+| LUT as Logic | 44,699 | 43,580 | -1,119（-2.50%） |
+| LUT as Memory | 4,448 | 4,447 | -1 |
+| Distributed RAM LUT | 4,160 | 4,160 | 0 |
+| SRL LUT | 288 | 287 | -1 |
+| Slice Register | 20,936 | 20,946 | +10（+0.05%） |
+| Slice | 15,899 | 16,053 | +154（+0.97%） |
+| Block RAM Tile | 561.5 | 561.5 | 0 |
+| RAMB36E1 | 512 | 512 | 0 |
+| RAMB18E1 | 99 | 99 | 0 |
+| DSP | 0 | 0 | 0 |
+| CARRY4 | 2,998 | 2,998 | 0 |
+
+1,120个LUT的净下降确认完整29-bit correction返回网络和lane侧重构逻辑已被裁剪，收益量级不能由
+4480个RTL MUX节点直接换算。LUT下降没有增加distributed RAM或BRAM；FF增加10，且由于布局装箱变化，
+Slice反而增加154，因此该方案的面积结论应表述为logic LUT下降，而不是所有Slice资源同时下降。
+
+Routed时序实测：
+
+| 指标 | 阶段34基线 | correction 1-bit返回 | 变化 |
+| --- | ---: | ---: | ---: |
+| 整体setup WNS/TNS | +0.098 / 0.000 ns | +0.590 / 0.000 ns | WNS +0.492 ns |
+| `decoder_clk` setup WNS/TNS | +0.098 / 0.000 ns | +0.590 / 0.000 ns | WNS +0.492 ns |
+| hold WHS/THS | +0.028 / 0.000 ns | +0.027 / 0.000 ns | WHS -0.001 ns |
+| pulse WPWS/TPWS | +4.232 / 0.000 ns | +4.232 / 0.000 ns | 0 |
+| `**async_default**` setup WNS | +1.293 ns | +3.239 ns | +1.946 ns |
+| `o_e_rdata`未约束输出路径 | 12.509 ns | 14.515 ns | +2.006 ns |
+
+阶段35直接命中的目标成立：snapshot到 `ram_sign_delta` 的路径未进入前十条setup路径。新的最差主时钟
+路径从 `v2c_tile_offset_c_reg[27][10]` 的布局复制寄存器到K-sign selector bank 29工作distributed RAM
+读数据寄存器，数据路径9.303 ns，其中logic 0.266 ns、route 9.037 ns，route占97.141%。第二条为同源
+相邻bit；其余前列包括 `ram_t` 到VNU、selector局部位置索引到snapshot写入口和全局K RAM到C2V符号
+寄存器。整体100 MHz裕量由0.098 ns提高到0.590 ns。
+
+TIMING-18仍为76项，内部未约束endpoint为0；69个普通输入和7个输出缺少I/O delay，另有1个输入由
+false path覆盖。`o_e_rdata`未约束输出路径增至14.515 ns，因此本次内部时序收益不能扩展为板级输出
+接口收益。
+
+功能与周期沿用阶段35已经完成的K=4、L=32五档及K=3、L=16五档seed 1回归；全部residual 0、exact 1，
+固定周期不变。结论与状态：方案保留并形成新的 `L=32`、`K=4`、`COLS_PER_TILE=1152`完整基线。相对
+阶段34，实测减少1,120个LUT并提高0.492 ns setup WNS，代价为10个FF和154个Slice；BRAM和译码时间不变。
+后续时序优化目标转为 `v2c_tile_offset_c` 到K-sign工作distributed RAM的高扇出布线路径。
+
 ## 形成的设计结论
 
 1. 存储优化必须以目标器件的原生宽深模式和 BRAM Tile 为依据；只改数组声明或逻辑字段宽度不能保证映射。
