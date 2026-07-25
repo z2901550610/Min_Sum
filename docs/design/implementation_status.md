@@ -65,7 +65,7 @@ Fully Placed资源报告和Routed时序报告。
 | `ram_syndrome` | `L` 个 syndrome bit BRAM bank | 顺序完整装载后允许启动；C2V同步读，读valid控制位复位 |
 | `ram_accum` | 两组单读口 banked distributed RAM | 每个物理buffer在C2V/V2C之间共享一个读地址；C2V读改写 |
 | `ram_t` | 每个buffer、每个tile-offset bank一份深度 `W × Q_BASE` 的BRAM | 请求按tile offset旋转；C2V写fill buffer，V2C读active buffer |
-| `ram_k_tile` | `L` 个34-bit工作bank和 `L` 个21-bit snapshot bank | 工作RAM维护候选；snapshot供correction读取位置 |
+| `ram_k_tile` | `L` 个参数化工作bank和snapshot bank；K=4宽度为45/28 bit | 工作RAM维护候选；snapshot供correction读取位置 |
 | `ram_k_global` | `L` 个原地更新全局 bank | C2V 同步读，V2C提交同步写；完成后同步输出最终判决 |
 
 TRIKE K-sign 配置不实例化完整符号存储 `ram_s`。C2V 符号由全局 K-sign 记录重建。
@@ -75,31 +75,34 @@ TRIKE K-sign 配置不实例化完整符号存储 `ram_s`。C2V 符号由全局 
 每变量逻辑记录为：
 
 ```text
-base_sign : 1 bit
-dev_pos   : K × POS_W = 3 × 7 bit
-record    : 22 bit
+base_sign       : 1 bit
+dev_pos         : K × POS_W
+K=3 record      : 1 + 3 × 7 = 22 bit
+K=4 record      : 1 + 4 × 7 = 29 bit
 ```
 
 `ram_k_global` 使用以下物理映射：
 
-- `base_sign` 使用独立 1-bit 全深度字段。
-- slot 0、slot 1 和 slot 2 分别使用 7-bit 字段。
-- 三个 `dev_pos` 字段按 RAMB36 的 `4K × 9` 原生几何划分深度段。
+- `L=16/32`、`K=4`、`DIAG_IDX_W=7`时使用两个18-bit字段：field 0保存
+  `{base_sign, dev_pos[1], dev_pos[0]}`，field 1保存`{dev_pos[3], dev_pos[2]}`。
+- 两个配对字段按RAMB36的`2K × 18`原生几何划分深度段。
+- 其他参数配置使用独立1-bit `base_sign`字段和每槽独立7-bit位置字段；位置字段按RAMB36的
+  `4K × 9`原生几何划分深度段。
 - 写 valid、bank 地址和记录数据先寄存，再驱动各段写端口。
 - 读 segment 编号与同步读延迟对齐，随后完成字段组合和 lane 返回路由。
 - `o_done` 有效后，外部列地址从 lane 0 请求通道进入同一读路径，`base_sign` 位连接到 `o_e_rdata`。
 
-最大参数下：
+最大参数、`L=16`、`K=4`下：
 
 ```text
 KSIGN_BANK_DEPTH       = ceil(325761 / 16) = 20361
-DIAG_SEG_COUNT         = ceil(20361 / 4096) = 5
-dev_pos RAMB36/bank    = 3 fields × 5 segments = 15
-base_sign RAMB36/bank  = 1
-global K RAMB36        = 16 banks × (15 + 1) = 256
+PAIR_SEG_COUNT         = ceil(20361 / 2048) = 10
+paired RAMB36/bank     = 2 fields × 10 segments = 20
+global K RAMB36        = 16 banks × 20 = 320
 ```
 
-tile工作记录宽度为 `1 + 3 × (7 + 4) = 34 bit`，correction snapshot宽度为 `3 × 7 = 21 bit`，
+K=4的tile工作记录宽度为 `1 + 4 × (7 + 4) = 45 bit`，correction snapshot宽度为
+`4 × 7 = 28 bit`，
 两者深度均为 `Q_BASE=73`。最后一个对角线同时提交全局K-sign记录和snapshot；snapshot同步读写采用
 read-first语义。
 
@@ -160,26 +163,24 @@ K=3 aggregate结果确认当前配置使用416个RAMB36和473.5个Block RAM Tile
 仍需确认各存储模块和协议控制的资源归属。完整实现数据和逐阶段比较保存在
 [optimization_exploration_history.md](optimization_exploration_history.md)。
 
-### K=4可选配置
+### K=4、L=16可选配置
 
 K=4的全局记录宽度为29 bit，tile工作记录为45 bit，correction snapshot为28 bit。全局K RAM使用
-336个RAMB36，其中16个保存base sign，320个保存四个位置字段。最终判决由这16个base-sign RAMB36
-直接提供，不额外分配判决存储。2026-07-17 Fully Placed aggregate utilization如下：
+320个RAMB36组成两个18-bit配对字段，base sign保存在field 0，最终判决由同一字段直接提供，不额外
+分配判决存储。当前RTL的静态BRAM目标如下；Fully Placed资源和Routed时序待Vivado确认：
 
 | 资源 | 使用量 | 器件可用量 | 利用率 |
 | --- | ---: | ---: | ---: |
-| Slice LUT | 28,243 | 222,600 | 12.69% |
-| LUT as Logic | 23,924 | 222,600 | 10.75% |
-| LUT as Memory | 4,319 | 81,400 | 5.31% |
-| Distributed RAM LUT | 4,160 | — | — |
-| SRL LUT | 159 | — | — |
-| Slice Register | 11,489 | 445,200 | 2.58% |
-| Slice | 9,911 | 55,650 | 17.81% |
-| Block RAM Tile | 553.5 | 715 | 77.41% |
-| RAMB36E1 | 496 | 715 | 69.37% |
-| RAMB18E1 | 115 | 1,430 | 8.04% |
-| DSP | 0 | 1,440 | 0.00% |
-| CARRY4 | 1,819 | — | — |
+| Slice LUT | 待测 | 222,600 | — |
+| LUT as Logic | 待测 | 222,600 | — |
+| LUT as Memory | 待测 | 81,400 | — |
+| Slice Register | 待测 | 445,200 | — |
+| Slice | 待测 | 55,650 | — |
+| Block RAM Tile | 537.5（静态目标） | 715 | 75.17% |
+| RAMB36E1 | 480（静态目标） | 715 | 67.13% |
+| RAMB18E1 | 115（静态目标） | 1,430 | 8.04% |
+| DSP | 0（静态目标） | 1,440 | 0.00% |
+| CARRY4 | 待测 | — | — |
 
 ### K=4、L=32可选配置
 
@@ -246,15 +247,11 @@ setup WNS/TNS为 `+0.812 ns / 0.000 ns`。hold WHS/THS为 `+0.039 ns / 0.000 ns`
 译码周期和内部100 MHz结论，但外部错误向量若要求同一100 MHz时钟下一拍在器件引脚采样，需要补充真实
 output delay约束并重新签核，或为输出增加寄存器并明确接口读延迟。
 
-最近完整K=4基线的2026-07-17 Routed timing满足内部100 MHz约束。整体及 `decoder_clk` 组setup
-WNS/TNS均为 `+0.547 ns / 0.000 ns`。hold WHS/THS为 `+0.027 ns / 0.000 ns`，WPWS/TPWS为
-`+4.232 ns / 0.000 ns`。
+K=4、`L=16`、`COLS_PER_TILE=1168`的18-bit配对配置尚无Fully Placed/Routed报告。需要确认
+RAMB36是否达到480、Block RAM Tile是否达到537.5，并重新检查整体及`decoder_clk` setup、hold、
+pulse width、关键路径和TIMING-18。
 
-最差主时钟路径从K-sign selector的bank 0局部位置索引寄存器到 `ram_k_tile` bank 10的snapshot
-distributed RAM写入口，数据路径9.013 ns，其中logic 1.245 ns、route 7.768 ns，共12级逻辑。最差异步
-路径从同步复位寄存器到 `ram_k_global` bank 6的segment选择寄存器CLR端，数据路径8.858 ns，其中route
-占96.207%。全局base-sign RAM到 `o_e_rdata` 的未约束外部输出路径数据延迟为12.743 ns；接口签核要求
-与K=3相同。
+K=3配置保留用于兼容、回归验证和已有实现结果复现；后续架构、资源和时序优化以K=4配置为主要评估对象。
 
 K=4、L=32可选配置的2026-07-20 Routed timing满足内部100 MHz约束。整体及 `decoder_clk` 组setup
 WNS/TNS均为 `+0.226 ns / 0.000 ns`，hold WHS/THS为 `+0.033 ns / 0.000 ns`，WPWS/TPWS为
@@ -292,6 +289,9 @@ make test-trike-unified-ksign-random BIKE_RANDOM_TRIALS=1 TRIKE_UNIFIED_KSIGN_K=
 
 K=3和K=4统一TRIKE五档、seed 1完整随机译码均为residual 0、exact 1，固定周期分别为333,990、
 657,341、2,353,770、7,135,995和16,641,183。
+
+K=4、`L=16`、`COLS_PER_TILE=1168`的18-bit配对配置已完成统一TRIKE五档seed 1随机回归，结果均为
+residual 0、exact 1，固定周期为333,990、657,341、2,353,770、7,135,995和16,641,183。
 
 K=4、`L=32`、`COLS_PER_TILE=1184` 的统一TRIKE五档seed 1随机译码均为residual 0、exact 1，固定周期
 分别为175,720、345,855、1,192,316、3,685,394和8,664,060。

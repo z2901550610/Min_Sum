@@ -28,10 +28,10 @@ module ram_k_global
   localparam int DIAG_SEG_DEPTH = 1 << DIAG_SEG_AW;
   localparam int DIAG_SEG_COUNT = (KSIGN_BANK_DEPTH + DIAG_SEG_DEPTH - 1) / DIAG_SEG_DEPTH;
   localparam int DIAG_SEG_IDX_W = (DIAG_SEG_COUNT > 1) ? $clog2(DIAG_SEG_COUNT) : 1;
-  // For the 32-lane K=4 geometry, pair two 7-bit positions into each 18-bit RAM field.
-  // At the maximum profile this maps each 10,181-deep bank to two sets of five
-  // 2Kx18 RAMB36 segments, including base_sign in the first field.
-  localparam bit USE_K4_PAIR_FIELDS = (L == 32) && (K_SIGN_K == 4) && (DIAG_IDX_W == 7);
+  // For the 16/32-lane K=4 geometries, pair two 7-bit positions into each 18-bit RAM field.
+  // Each field uses 2Kx18 RAMB36 segments, including base_sign in the first field.
+  localparam bit USE_K4_PAIR_FIELDS =
+      ((L == 16) || (L == 32)) && (K_SIGN_K == 4) && (DIAG_IDX_W == 7);
   localparam int PAIR_FIELD_COUNT = 2;
   localparam int PAIR_FIELD_W = 18;
   localparam int PAIR_SEG_MAX_AW = 11;

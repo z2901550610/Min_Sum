@@ -354,8 +354,10 @@ TRIKE512：
 
 K-sign 数据通路由以下模块组成：
 
-1. `ram_k_global`：每个变量列的一份全局原地更新记录，`base_sign` 使用独立字段，三个 `dev_pos` 使用独立窄 BRAM 字段；译码完成后由同一读口输出最终错误判决。
-2. `ram_k_tile`：一份34-bit候选工作RAM和一份21-bit correction位置snapshot RAM。
+1. `ram_k_global`：每个变量列的一份全局原地更新记录；L=16/32、K=4使用两个18-bit配对字段保存
+   `base_sign`和四个`dev_pos`，其他配置使用独立字段；译码完成后由同一读口输出最终错误判决。
+2. `ram_k_tile`：一份参数化候选工作RAM和一份correction位置snapshot RAM；K=4时宽度分别为45 bit
+   和28 bit。
 3. `k_sign_update`：无序候选槽的最差项归约树和单槽更新组合逻辑。
 4. `k_sign_selector`：变量列bank路由、工作RAM读改写、snapshot读写和全局压缩记录提交。
 5. `k_sign_reconstruct`：根据全局压缩记录和 `diag_idx_local` 重建近似符号及命中标志。
