@@ -1662,22 +1662,124 @@ RAMB36。实验目标是在不改变29-bit逻辑记录、端口和固定调度�
 | TRIKE-384 | 7,135,995 | residual 0，exact 1 |
 | TRIKE-512 | 16,641,183 | residual 0，exact 1 |
 
-物理资源目标：
+Vivado实现条件：Windows Vivado 2023.2，`xc7k355tffg901-2L`，`TRIKE_UNIFIED_PARAMS`，`L=16`，
+`K=4`，`COLS_PER_TILE=1168`，100 MHz `decoder_clk`、10 ns周期、0.100 ns user uncertainty；
+资源报告为2026-07-25 16:03:20 Fully Placed aggregate utilization，时序报告为2026-07-25
+16:05:59 Routed。与阶段37未配对结果的器件、工具、参数、XDC和报告阶段一致。
 
-| 资源 | 阶段37未配对实测 | 18-bit配对静态目标 | 目标变化 |
+资源实测：
+
+| 资源 | 阶段37未配对 | 18-bit配对 | 变化 |
 | --- | ---: | ---: | ---: |
-| RAMB36E1 | 496 | 480 | -16 |
+| Slice LUT | 27,011 | 28,174 | +1,163（+4.31%） |
+| LUT as Logic | 22,691 | 23,854 | +1,163（+5.13%） |
+| LUT as Memory | 4,320 | 4,320 | 0 |
+| Distributed RAM LUT | 4,160 | 4,160 | 0 |
+| SRL LUT | 160 | 160 | 0 |
+| Slice Register | 11,359 | 11,370 | +11（+0.10%） |
+| Slice | 9,691 | 10,001 | +310（+3.20%） |
+| Block RAM Tile | 553.5 | 537.5 | -16（-2.89%） |
+| RAMB36E1 | 496 | 480 | -16（-3.23%） |
 | RAMB18E1 | 115 | 115 | 0 |
-| Block RAM Tile | 553.5 | 537.5 | -16 |
-| BRAM Tile利用率 | 77.41% | 75.17% | -2.24个百分点 |
+| DSP | 0 | 0 | 0 |
+| CARRY4 | 1,851 | 1,851 | 0 |
 
-上述变化来自`ram_k_global`每个bank删除一个独立base-sign RAMB36的原生几何推导，不是Vivado实测。
-Slice LUT、LUT as Logic、LUT as Memory、FF、Slice、CARRY4、实际RAMB36/RAMB18、setup WNS/TNS、
-hold WHS和top paths均待同器件、同XDC的Fully Placed/Routed报告确认。需要重点检查10段读选择是否使
-全局K RAM返回路径进入关键路径，以及bank侧窄返回路由是否继续被完整裁剪。
+BRAM结果精确命中静态预测：`ram_k_global`的16个bank各删除一个独立base-sign RAMB36，全设计减少
+16个RAMB36和16个Block RAM Tile，Tile利用率从77.41%降到75.17%。LUT memory、distributed RAM和
+SRL完全不变，说明没有用LUTRAM替代BRAM；代价集中在配对字段分段选择和控制形成的1,163个logic LUT，
+同时增加11个FF和310个Slice。
 
-结论与状态：L=16、K=4的18-bit配对RTL已实现并通过完整五档功能与固定周期回归；静态目标为减少16个
-RAMB36和16个Block RAM Tile。方案作为当前候选保留，物理资源和100 MHz时序结论待Vivado确认。
+Routed时序实测：
+
+| 指标 | 阶段37未配对 | 18-bit配对 | 变化 |
+| --- | ---: | ---: | ---: |
+| 整体setup WNS/TNS | +0.576 / 0.000 ns | +0.537 / 0.000 ns | WNS -0.039 ns |
+| `decoder_clk` setup WNS/TNS | +0.725 / 0.000 ns | +0.537 / 0.000 ns | WNS -0.188 ns |
+| hold WHS/THS | +0.028 / 0.000 ns | +0.024 / 0.000 ns | WHS -0.004 ns |
+| pulse WPWS/TPWS | +4.232 / 0.000 ns | +4.232 / 0.000 ns | 0 |
+| `**async_default**` setup WNS | +0.576 ns | +0.778 ns | +0.202 ns |
+| `o_e_rdata`未约束输出路径 | 11.388 ns | 14.243 ns | +2.855 ns |
+
+- 最差主时钟路径从`ram_t` buffer 1、bank 5的RAMB18读口到
+  `u_vnu/v2c_scaled_q_reg[15][17]/D`，数据路径8.811 ns，其中logic 3.103 ns、route 5.708 ns，
+  route占64.781%，逻辑深度11级；
+- 全局K配对RAM没有进入前十条主时钟setup路径，10段字段选择没有成为内部100 MHz瓶颈；
+- 最差异步路径从`u_reset_sync/rst_sync_n_reg`到K-sign selector bank 13的读地址寄存器CLR端，数据
+  路径8.723 ns，其中route 8.419 ns、占96.515%；
+- `o_e_rdata`路径从配对field 0、segment 7的RAMB36经过segment和bank选择到输出，逻辑深度7级，
+  数据路径14.243 ns，其中logic 4.673 ns、route 9.570 ns。该端口没有output delay约束，不能作为板级
+  同步接口签核结果；相对阶段37的增长表明配对后的深segment选择明显增加最终判决读出路径。
+
+TIMING-18仍为76项，内部未约束endpoint为0；69个普通输入和7个输出缺少I/O delay，另有1个输入由
+false path覆盖。所有已定义内部100 MHz setup、hold和pulse width约束满足。
+
+结论与状态：L=16、K=4的18-bit配对在功能、固定周期和内部100 MHz不变的条件下，实测减少16个
+RAMB36/Block RAM Tile，代价为增加1,163个LUT、11个FF和310个Slice，`decoder_clk` WNS降低
+0.188 ns但仍为正。该方案是明确的BRAM换LUT折中，而不是全资源维度同时下降；当前RTL保留，是否作为
+L=16最终配置应根据BRAM容量优先级决定。未约束`o_e_rdata`路径增长到14.243 ns，板级输出接口需要补充
+约束或输出寄存器后再签核。
+
+## 39. 按并行度选择原生宽深几何的全局K RAM整体映射
+
+时间：2026-07-25。
+
+目标与方案选择：阶段38把L=32的双18-bit字段直接推广到L=16，虽然精确减少16个BRAM Tile，但增加
+1,163个logic LUT和310个Slice。根因不是18-bit打包本身，而是L=16的bank深度20,361需要每个18-bit
+字段切成10个`2K × 18`段；两个字段共20个RAMB36，读出端需要10段选择。L=16也可以用四个
+`4K × 9`字段实现相同的20个RAMB36/bank，其中field 0打包base sign和slot 0，其余三个字段各保存一个
+位置；该组织把segment数量从10降到5，不牺牲阶段38已经得到的BRAM容量。
+
+本项把`ram_k_global`重构为按并行度选择原生宽深几何的统一映射：
+
+| 配置 | 字段组织 | 单字段段数 | RAMB36/bank | 全局K RAMB36 |
+| --- | --- | ---: | ---: | ---: |
+| `L=16, K=4` | 4个`4K × 9`字段 | 5 | 20 | 320 |
+| `L=32, K=4` | 2个`2K × 18`字段 | 5 | 10 | 320 |
+| 其他配置 | 独立base sign和位置字段 | 参数化 | 参数化 | 参数化 |
+
+关键实现：
+
+- 统一使用`USE_K4_PACKED_FIELDS`选择K=4打包路径，`USE_K4_NARROW_PACK_FIELDS`在L=16时选择9-bit
+  字段、12-bit段内地址和4096深度，在L=32时选择18-bit字段、11-bit段内地址和2048深度；
+- L=16 field 0保存`{base_sign, dev_pos[0]}`，field 1至3分别保存`dev_pos[1..3]`；
+- L=32继续使用`{base_sign, dev_pos[1], dev_pos[0]}`和`{dev_pos[3], dev_pos[2]}`两个字段；
+- 打包函数使用固定18-bit中间值，再按当前物理字段宽度显式截取，避免未激活宽字段分支在L=16编译时
+  产生越界选择；
+- RAM实例化、segment选择和字段恢复由同一参数化generate结构生成；逻辑记录格式、写回流水、bank侧
+  符号重构、窄返回路由、固定访存次数和译码周期不变。
+
+方案依据与预期：
+
+- 阶段11曾在L=16、K=3下实测`base_sign + slot 0`的9-bit打包只增加41个LUT、减少5个FF，同时减少
+  16个RAMB36；该历史结果只能作为结构依据，不能直接预测当前K=4绝对资源；
+- 相对阶段38，静态RAMB36实例数保持480、RAMB18保持115、Block RAM Tile目标保持537.5；
+- 物理目标是显著回收阶段38新增的1,163个logic LUT，并缩短由10段选择造成的14.243 ns未约束
+  `o_e_rdata`路径；实际LUT、Slice和时序必须由同条件Vivado报告确认。
+
+验证结果：
+
+- 初版函数在L=16编译时对未激活18-bit分支产生`SELRANGE`告警；在TRIKE-128功能通过后主动停止剩余
+  回归，改为固定18-bit中间值和显式字段宽度截取，告警消除；
+- 最终代码通过`make format-rtl`、`make check-format-rtl`和`make lint-rtl`；
+- `make test`通过14个单元测试和toy集成，toy case为residual 0、exact 1、固定154周期；
+- `L=16`、`K=4`、`COLS_PER_TILE=1168`统一TRIKE五档seed 1回归全部residual 0、exact 1，周期为
+  333,990、657,341、2,353,770、7,135,995和16,641,183；
+- `L=32`、`K=4`、`COLS_PER_TILE=1152`统一TRIKE五档seed 1回归全部residual 0、exact 1，周期为
+  193,486、365,945、1,207,716、3,729,550和8,720,781；
+- 当前环境没有Vivado可执行文件，Slice LUT、LUT as Logic、LUT as Memory、FF、Slice、Block RAM
+  Tile、RAMB36/RAMB18、CARRY4、setup/hold/pulse width和top paths均待测。
+
+保留标准：
+
+- BRAM必须保持`480 RAMB36 + 115 RAMB18 = 537.5 Tile`，否则9-bit字段没有兑现容量等价；
+- Slice LUT必须显著低于阶段38的28,174；若不能回收大部分1,163个新增LUT，则该结构没有达到整体优化
+  目标；
+- 内部100 MHz setup/hold必须继续通过，并检查全局K RAM是否进入前十条关键路径；
+- `o_e_rdata`仍属于未约束输出，但应比较其数据路径是否从阶段38的14.243 ns明显回落。
+
+结论与状态：按并行度选择9/18-bit原生几何的RTL候选已完成，L=16和L=32两套五档功能与固定周期回归
+均通过。该方案在结构上保持阶段38的BRAM目标并降低L=16 segment选择复杂度，作为当前整体优化候选保留；
+物理资源和时序结论待同器件、同XDC的Fully Placed/Routed报告。
 
 ## 形成的设计结论
 

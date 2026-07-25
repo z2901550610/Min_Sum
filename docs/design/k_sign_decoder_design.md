@@ -295,9 +295,10 @@ Tile 内 selector 工作状态按 `COLS_PER_TILE=1168`、`D=4` 估算：
 
 工作RAM保存 `base_sign` 和K个无序 `(dev_pos, magnitude)` 槽；snapshot只保存correction需要的K个
 `dev_pos`，invalid仍由位置哨兵表达。两份RAM均按变量列bank化。全局K-sign RAM的逻辑记录宽度为
-`1+K*POS_W` bit，物理上使用独立的 `base_sign` 字段，K个 `dev_pos` 槽分别使用窄BRAM字段。
-`dev_pos` 字段按RAMB36的4K×9原生几何划分深度段，并使用相同的逻辑bank地址和读写使能。C2V完成一个
-tile的记录读取后，落后一窗口的V2C对同一tile原地提交记录。
+`1+K*POS_W` bit。L=16、K=4时使用四个4K×9字段，field 0保存`base_sign + dev_pos[0]`，其余字段
+分别保存一个位置；L=32、K=4时使用两个2K×18字段，每个字段保存两个位置，field 0同时保存base sign。
+其他配置使用独立`base_sign`和位置字段。所有字段使用相同的逻辑bank地址和读写使能。C2V完成一个tile
+的记录读取后，落后一窗口的V2C对同一tile原地提交记录。
 
 `ram_sign_delta` 保存两个 iteration pair、每个 pair `R` bit 的 `dev_xor`，逻辑容量为 `2*R_MAX=217,174 bit`。它按 L 个 row bank 组织，物理 BRAM 数量以 Vivado 报告为准。
 
@@ -354,8 +355,8 @@ TRIKE512：
 
 K-sign 数据通路由以下模块组成：
 
-1. `ram_k_global`：每个变量列的一份全局原地更新记录；L=16/32、K=4使用两个18-bit配对字段保存
-   `base_sign`和四个`dev_pos`，其他配置使用独立字段；译码完成后由同一读口输出最终错误判决。
+1. `ram_k_global`：每个变量列的一份全局原地更新记录；L=16、K=4使用四个9-bit字段，L=32、K=4
+   使用两个18-bit字段，其他配置使用独立字段；译码完成后由同一读口输出最终错误判决。
 2. `ram_k_tile`：一份参数化候选工作RAM和一份correction位置snapshot RAM；K=4时宽度分别为45 bit
    和28 bit。
 3. `k_sign_update`：无序候选槽的最差项归约树和单槽更新组合逻辑。
@@ -374,7 +375,7 @@ K-sign 数据通路由以下模块组成：
 | selector 布线 | `COLS_PER_TILE*K` 候选状态分布在 tile 内 | 将 selector 状态按 lane/bank 分区，靠近 VNU 输出放置 |
 | K=3 余量 | 小 K 对 DFR margin 更敏感 | 使用多 seed 和更低 DFR 区确认 |
 | sign_xor 语义 | C2V 与 CNU A 必须使用同一近似符号定义 | C model、RTL 和测试向量共享 tie-break 规则 |
-| 重叠路径时序 | snapshot写入路径的跨bank布线占比较高 | K=3/K=4主时钟WNS分别为+0.862/+0.717 ns |
+| 重叠路径时序 | snapshot和存储读回路径包含跨bank布线 | L=16四字段映射需要Routed报告确认WNS和top paths |
 
 ## RTL 配置
 

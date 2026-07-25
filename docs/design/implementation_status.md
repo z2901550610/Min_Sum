@@ -83,9 +83,12 @@ K=4 record      : 1 + 4 × 7 = 29 bit
 
 `ram_k_global` 使用以下物理映射：
 
-- `L=16/32`、`K=4`、`DIAG_IDX_W=7`时使用两个18-bit字段：field 0保存
-  `{base_sign, dev_pos[1], dev_pos[0]}`，field 1保存`{dev_pos[3], dev_pos[2]}`。
-- 两个配对字段按RAMB36的`2K × 18`原生几何划分深度段。
+- `L=16`、`K=4`、`DIAG_IDX_W=7`时使用四个9-bit字段：field 0保存
+  `{base_sign, dev_pos[0]}`，field 1至3分别保存其余三个`dev_pos`；字段按RAMB36的`4K × 9`
+  原生几何划分深度段。
+- `L=32`、`K=4`、`DIAG_IDX_W=7`时使用两个18-bit字段：field 0保存
+  `{base_sign, dev_pos[1], dev_pos[0]}`，field 1保存`{dev_pos[3], dev_pos[2]}`；字段按RAMB36的
+  `2K × 18`原生几何划分深度段。
 - 其他参数配置使用独立1-bit `base_sign`字段和每槽独立7-bit位置字段；位置字段按RAMB36的
   `4K × 9`原生几何划分深度段。
 - 写 valid、bank 地址和记录数据先寄存，再驱动各段写端口。
@@ -96,8 +99,8 @@ K=4 record      : 1 + 4 × 7 = 29 bit
 
 ```text
 KSIGN_BANK_DEPTH       = ceil(325761 / 16) = 20361
-PAIR_SEG_COUNT         = ceil(20361 / 2048) = 10
-paired RAMB36/bank     = 2 fields × 10 segments = 20
+PACK_SEG_COUNT         = ceil(20361 / 4096) = 5
+packed RAMB36/bank     = 4 fields × 5 segments = 20
 global K RAMB36        = 16 banks × 20 = 320
 ```
 
@@ -166,8 +169,8 @@ K=3 aggregate结果确认当前配置使用416个RAMB36和473.5个Block RAM Tile
 ### K=4、L=16可选配置
 
 K=4的全局记录宽度为29 bit，tile工作记录为45 bit，correction snapshot为28 bit。全局K RAM使用
-320个RAMB36组成两个18-bit配对字段，base sign保存在field 0，最终判决由同一字段直接提供，不额外
-分配判决存储。当前RTL的静态BRAM目标如下；Fully Placed资源和Routed时序待Vivado确认：
+320个RAMB36组成四个9-bit字段，base sign与`dev_pos[0]`保存在field 0，最终判决由同一字段直接提供，
+不额外分配判决存储。当前字段映射的Fully Placed资源和Routed时序待Vivado确认：
 
 | 资源 | 使用量 | 器件可用量 | 利用率 |
 | --- | ---: | ---: | ---: |
@@ -247,9 +250,9 @@ setup WNS/TNS为 `+0.812 ns / 0.000 ns`。hold WHS/THS为 `+0.039 ns / 0.000 ns`
 译码周期和内部100 MHz结论，但外部错误向量若要求同一100 MHz时钟下一拍在器件引脚采样，需要补充真实
 output delay约束并重新签核，或为输出增加寄存器并明确接口读延迟。
 
-K=4、`L=16`、`COLS_PER_TILE=1168`的18-bit配对配置尚无Fully Placed/Routed报告。需要确认
-RAMB36是否达到480、Block RAM Tile是否达到537.5，并重新检查整体及`decoder_clk` setup、hold、
-pulse width、关键路径和TIMING-18。
+K=4、`L=16`、`COLS_PER_TILE=1168`的四字段`4K × 9`配置尚无Fully Placed/Routed报告。需要确认
+RAMB36保持480、Block RAM Tile保持537.5，并比较Slice LUT、LUT as Logic、FF、Slice、整体及
+`decoder_clk` setup、hold、pulse width、top paths和`o_e_rdata`未约束路径。
 
 K=3配置保留用于兼容、回归验证和已有实现结果复现；后续架构、资源和时序优化以K=4配置为主要评估对象。
 

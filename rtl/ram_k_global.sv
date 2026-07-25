@@ -28,17 +28,19 @@ module ram_k_global
   localparam int DIAG_SEG_DEPTH = 1 << DIAG_SEG_AW;
   localparam int DIAG_SEG_COUNT = (KSIGN_BANK_DEPTH + DIAG_SEG_DEPTH - 1) / DIAG_SEG_DEPTH;
   localparam int DIAG_SEG_IDX_W = (DIAG_SEG_COUNT > 1) ? $clog2(DIAG_SEG_COUNT) : 1;
-  // For the 16/32-lane K=4 geometries, pair two 7-bit positions into each 18-bit RAM field.
-  // Each field uses 2Kx18 RAMB36 segments, including base_sign in the first field.
-  localparam bit USE_K4_PAIR_FIELDS =
+  // Match the K=4 field layout to the native RAMB36 width/depth geometry.
+  // L=16 uses four 4Kx9 fields with base_sign packed into field 0.
+  // L=32 uses two 2Kx18 fields with two positions per field.
+  localparam bit USE_K4_PACKED_FIELDS =
       ((L == 16) || (L == 32)) && (K_SIGN_K == 4) && (DIAG_IDX_W == 7);
-  localparam int PAIR_FIELD_COUNT = 2;
-  localparam int PAIR_FIELD_W = 18;
-  localparam int PAIR_SEG_MAX_AW = 11;
-  localparam int PAIR_SEG_AW = (KSIGN_BANK_AW < PAIR_SEG_MAX_AW) ? KSIGN_BANK_AW : PAIR_SEG_MAX_AW;
-  localparam int PAIR_SEG_DEPTH = 1 << PAIR_SEG_AW;
-  localparam int PAIR_SEG_COUNT = (KSIGN_BANK_DEPTH + PAIR_SEG_DEPTH - 1) / PAIR_SEG_DEPTH;
-  localparam int PAIR_SEG_IDX_W = (PAIR_SEG_COUNT > 1) ? $clog2(PAIR_SEG_COUNT) : 1;
+  localparam bit USE_K4_NARROW_PACK_FIELDS = USE_K4_PACKED_FIELDS && (L == 16);
+  localparam int PACK_FIELD_COUNT = USE_K4_NARROW_PACK_FIELDS ? 4 : 2;
+  localparam int PACK_FIELD_W = USE_K4_NARROW_PACK_FIELDS ? 9 : 18;
+  localparam int PACK_SEG_MAX_AW = USE_K4_NARROW_PACK_FIELDS ? 12 : 11;
+  localparam int PACK_SEG_AW = (KSIGN_BANK_AW < PACK_SEG_MAX_AW) ? KSIGN_BANK_AW : PACK_SEG_MAX_AW;
+  localparam int PACK_SEG_DEPTH = 1 << PACK_SEG_AW;
+  localparam int PACK_SEG_COUNT = (KSIGN_BANK_DEPTH + PACK_SEG_DEPTH - 1) / PACK_SEG_DEPTH;
+  localparam int PACK_SEG_IDX_W = (PACK_SEG_COUNT > 1) ? $clog2(PACK_SEG_COUNT) : 1;
 
   logic [K_SIGN_RECORD_W-1:0] bank_rdata[0:L-1];
   // Exactly one physical layout is elaborated. Verilator otherwise reports the
@@ -47,8 +49,8 @@ module ram_k_global
   logic [0:0] bank_base_sign_rdata[0:L-1];
   logic [DIAG_IDX_W-1:0] bank_diag_rdata[0:L-1][0:K_SIGN_K-1];
   logic [DIAG_IDX_W-1:0] bank_diag_segment_rdata[0:L-1][0:K_SIGN_K-1][0:DIAG_SEG_COUNT-1];
-  logic [PAIR_FIELD_W-1:0] bank_pair_rdata[0:L-1][0:PAIR_FIELD_COUNT-1];
-  logic [PAIR_FIELD_W-1:0] bank_pair_segment_rdata[0:L-1][0:PAIR_FIELD_COUNT-1][0:PAIR_SEG_COUNT-1];
+  logic [PACK_FIELD_W-1:0] bank_pack_rdata[0:L-1][0:PACK_FIELD_COUNT-1];
+  logic [PACK_FIELD_W-1:0] bank_pack_segment_rdata[0:L-1][0:PACK_FIELD_COUNT-1][0:PACK_SEG_COUNT-1];
   logic [READ_ROUTE_W-1:0] read_route_in[0:L-1];
   logic [READ_ROUTE_W-1:0] read_route_out[0:L-1];
   logic [K_SIGN_RECORD_W-1:0] read_record_route_out[0:L-1];
@@ -67,11 +69,11 @@ module ram_k_global
   logic [DIAG_SEG_AW-1:0] diag_read_local_addr[0:L-1];
   logic [DIAG_SEG_IDX_W-1:0] diag_write_segment_idx[0:L-1];
   logic [DIAG_SEG_AW-1:0] diag_write_local_addr[0:L-1];
-  logic [PAIR_SEG_IDX_W-1:0] pair_read_segment_idx[0:L-1];
-  logic [PAIR_SEG_IDX_W-1:0] pair_read_segment_idx_q[0:L-1];
-  logic [PAIR_SEG_AW-1:0] pair_read_local_addr[0:L-1];
-  logic [PAIR_SEG_IDX_W-1:0] pair_write_segment_idx[0:L-1];
-  logic [PAIR_SEG_AW-1:0] pair_write_local_addr[0:L-1];
+  logic [PACK_SEG_IDX_W-1:0] pack_read_segment_idx[0:L-1];
+  logic [PACK_SEG_IDX_W-1:0] pack_read_segment_idx_q[0:L-1];
+  logic [PACK_SEG_AW-1:0] pack_read_local_addr[0:L-1];
+  logic [PACK_SEG_IDX_W-1:0] pack_write_segment_idx[0:L-1];
+  logic [PACK_SEG_AW-1:0] pack_write_local_addr[0:L-1];
   /* verilator lint_on UNUSEDSIGNAL */
   logic [LANE_IDX_W-1:0] read_route_shift;
   logic [LANE_IDX_W-1:0] read_route_shift_q;
@@ -95,20 +97,27 @@ module ram_k_global
     end
   endfunction
 
-  function automatic logic [PAIR_FIELD_W-1:0] pair_field_data(
-      input  logic [K_SIGN_RECORD_W-1:0] record, input int field_idx);
-    logic [PAIR_FIELD_W-1:0] result;
+  function automatic logic [17:0] pack_field_data(input  logic [K_SIGN_RECORD_W-1:0] record,
+                                                  input int field_idx);
+    logic [17:0] result;
     begin
       result = '0;
-      if (field_idx == 0) begin
-        result[0+:DIAG_IDX_W] = record[slot_lsb(0)+:DIAG_IDX_W];
-        result[DIAG_IDX_W+:DIAG_IDX_W] = record[slot_lsb(1)+:DIAG_IDX_W];
-        result[2*DIAG_IDX_W] = record[BASE_SIGN_BIT];
+      if (USE_K4_NARROW_PACK_FIELDS) begin
+        result[0+:DIAG_IDX_W] = record[slot_lsb(field_idx)+:DIAG_IDX_W];
+        if (field_idx == 0) begin
+          result[DIAG_IDX_W] = record[BASE_SIGN_BIT];
+        end
       end else begin
-        result[0+:DIAG_IDX_W] = record[slot_lsb(2)+:DIAG_IDX_W];
-        result[DIAG_IDX_W+:DIAG_IDX_W] = record[slot_lsb(3)+:DIAG_IDX_W];
+        if (field_idx == 0) begin
+          result[0+:DIAG_IDX_W] = record[slot_lsb(0)+:DIAG_IDX_W];
+          result[DIAG_IDX_W+:DIAG_IDX_W] = record[slot_lsb(1)+:DIAG_IDX_W];
+          result[2*DIAG_IDX_W] = record[BASE_SIGN_BIT];
+        end else begin
+          result[0+:DIAG_IDX_W] = record[slot_lsb(2)+:DIAG_IDX_W];
+          result[DIAG_IDX_W+:DIAG_IDX_W] = record[slot_lsb(3)+:DIAG_IDX_W];
+        end
       end
-      pair_field_data = result;
+      pack_field_data = result;
     end
   endfunction
 
@@ -124,10 +133,10 @@ module ram_k_global
       diag_read_local_addr[bank_idx] = DIAG_SEG_AW'(routed_read_addr[bank_idx]);
       diag_write_segment_idx[bank_idx] = DIAG_SEG_IDX_W'(write_addr_q[bank_idx] >> DIAG_SEG_AW);
       diag_write_local_addr[bank_idx] = DIAG_SEG_AW'(write_addr_q[bank_idx]);
-      pair_read_segment_idx[bank_idx] = PAIR_SEG_IDX_W'(routed_read_addr[bank_idx] >> PAIR_SEG_AW);
-      pair_read_local_addr[bank_idx] = PAIR_SEG_AW'(routed_read_addr[bank_idx]);
-      pair_write_segment_idx[bank_idx] = PAIR_SEG_IDX_W'(write_addr_q[bank_idx] >> PAIR_SEG_AW);
-      pair_write_local_addr[bank_idx] = PAIR_SEG_AW'(write_addr_q[bank_idx]);
+      pack_read_segment_idx[bank_idx] = PACK_SEG_IDX_W'(routed_read_addr[bank_idx] >> PACK_SEG_AW);
+      pack_read_local_addr[bank_idx] = PACK_SEG_AW'(routed_read_addr[bank_idx]);
+      pack_write_segment_idx[bank_idx] = PACK_SEG_IDX_W'(write_addr_q[bank_idx] >> PACK_SEG_AW);
+      pack_write_local_addr[bank_idx] = PACK_SEG_AW'(write_addr_q[bank_idx]);
     end
   end
 
@@ -157,49 +166,63 @@ module ram_k_global
 
   generate
     for (genvar bank_idx = 0; bank_idx < L; bank_idx++) begin : g_bank
-      if (USE_K4_PAIR_FIELDS) begin : g_pair_fields
-        for (genvar field_idx = 0; field_idx < PAIR_FIELD_COUNT; field_idx++) begin : g_field
+      if (USE_K4_PACKED_FIELDS) begin : g_pack_fields
+        for (genvar field_idx = 0; field_idx < PACK_FIELD_COUNT; field_idx++) begin : g_field
           for (
-              genvar segment_idx = 0; segment_idx < PAIR_SEG_COUNT; segment_idx++
+              genvar segment_idx = 0; segment_idx < PACK_SEG_COUNT; segment_idx++
           ) begin : g_segment
             ram_bram #(
-                .DATA_W(PAIR_FIELD_W),
-                .DEPTH (PAIR_SEG_DEPTH),
-                .ADDR_W(PAIR_SEG_AW)
-            ) u_pair_bram (
+                .DATA_W(PACK_FIELD_W),
+                .DEPTH (PACK_SEG_DEPTH),
+                .ADDR_W(PACK_SEG_AW)
+            ) u_pack_bram (
                 .i_clk(i_clk),
                 .i_we(write_valid_q[bank_idx] &&
-                      (pair_write_segment_idx[bank_idx] == PAIR_SEG_IDX_W'(segment_idx))),
-                .i_waddr(pair_write_local_addr[bank_idx]),
-                .i_wdata(pair_field_data(write_data_q[bank_idx], field_idx)),
+                      (pack_write_segment_idx[bank_idx] == PACK_SEG_IDX_W'(segment_idx))),
+                .i_waddr(pack_write_local_addr[bank_idx]),
+                .i_wdata(PACK_FIELD_W'(pack_field_data(write_data_q[bank_idx], field_idx))),
                 .i_re(routed_read_valid[bank_idx] &&
-                      (pair_read_segment_idx[bank_idx] == PAIR_SEG_IDX_W'(segment_idx))),
-                .i_raddr(pair_read_local_addr[bank_idx]),
-                .o_rdata(bank_pair_segment_rdata[bank_idx][field_idx][segment_idx])
+                      (pack_read_segment_idx[bank_idx] == PACK_SEG_IDX_W'(segment_idx))),
+                .i_raddr(pack_read_local_addr[bank_idx]),
+                .o_rdata(bank_pack_segment_rdata[bank_idx][field_idx][segment_idx])
             );
           end
         end
 
-        always_comb begin
-          bank_rdata[bank_idx] = '0;
-          for (int field_idx = 0; field_idx < PAIR_FIELD_COUNT; field_idx++) begin
-            bank_pair_rdata[bank_idx][field_idx] = '0;
-            for (int segment_idx = 0; segment_idx < PAIR_SEG_COUNT; segment_idx++) begin
-              if (pair_read_segment_idx_q[bank_idx] == PAIR_SEG_IDX_W'(segment_idx)) begin
-                bank_pair_rdata[bank_idx][field_idx] =
-                    bank_pair_segment_rdata[bank_idx][field_idx][segment_idx];
+        for (genvar field_idx = 0; field_idx < PACK_FIELD_COUNT; field_idx++) begin : g_read_mux
+          always_comb begin
+            bank_pack_rdata[bank_idx][field_idx] = '0;
+            for (int segment_idx = 0; segment_idx < PACK_SEG_COUNT; segment_idx++) begin
+              if (pack_read_segment_idx_q[bank_idx] == PACK_SEG_IDX_W'(segment_idx)) begin
+                bank_pack_rdata[bank_idx][field_idx] =
+                    bank_pack_segment_rdata[bank_idx][field_idx][segment_idx];
               end
             end
           end
-          bank_rdata[bank_idx][BASE_SIGN_BIT] = bank_pair_rdata[bank_idx][0][2*DIAG_IDX_W];
-          bank_rdata[bank_idx][slot_lsb(0)+:DIAG_IDX_W] =
-              bank_pair_rdata[bank_idx][0][0+:DIAG_IDX_W];
-          bank_rdata[bank_idx][slot_lsb(1)+:DIAG_IDX_W] =
-              bank_pair_rdata[bank_idx][0][DIAG_IDX_W+:DIAG_IDX_W];
-          bank_rdata[bank_idx][slot_lsb(2)+:DIAG_IDX_W] =
-              bank_pair_rdata[bank_idx][1][0+:DIAG_IDX_W];
-          bank_rdata[bank_idx][slot_lsb(3)+:DIAG_IDX_W] =
-              bank_pair_rdata[bank_idx][1][DIAG_IDX_W+:DIAG_IDX_W];
+        end
+
+        if (USE_K4_NARROW_PACK_FIELDS) begin : g_unpack_narrow
+          always_comb begin
+            bank_rdata[bank_idx] = '0;
+            bank_rdata[bank_idx][BASE_SIGN_BIT] = bank_pack_rdata[bank_idx][0][DIAG_IDX_W];
+            for (int slot_idx = 0; slot_idx < K_SIGN_K; slot_idx++) begin
+              bank_rdata[bank_idx][slot_lsb(slot_idx)+:DIAG_IDX_W] =
+                  bank_pack_rdata[bank_idx][slot_idx][0+:DIAG_IDX_W];
+            end
+          end
+        end else begin : g_unpack_wide
+          always_comb begin
+            bank_rdata[bank_idx] = '0;
+            bank_rdata[bank_idx][BASE_SIGN_BIT] = bank_pack_rdata[bank_idx][0][2*DIAG_IDX_W];
+            bank_rdata[bank_idx][slot_lsb(0)+:DIAG_IDX_W] =
+                bank_pack_rdata[bank_idx][0][0+:DIAG_IDX_W];
+            bank_rdata[bank_idx][slot_lsb(1)+:DIAG_IDX_W] =
+                bank_pack_rdata[bank_idx][0][DIAG_IDX_W+:DIAG_IDX_W];
+            bank_rdata[bank_idx][slot_lsb(2)+:DIAG_IDX_W] =
+                bank_pack_rdata[bank_idx][1][0+:DIAG_IDX_W];
+            bank_rdata[bank_idx][slot_lsb(3)+:DIAG_IDX_W] =
+                bank_pack_rdata[bank_idx][1][DIAG_IDX_W+:DIAG_IDX_W];
+          end
         end
       end else begin : g_slot_fields
         ram_bram #(
@@ -282,7 +305,7 @@ module ram_k_global
       read_diag_idx_local_q <= '0;
       for (int bank_idx = 0; bank_idx < L; bank_idx++) begin
         diag_read_segment_idx_q[bank_idx] <= '0;
-        pair_read_segment_idx_q[bank_idx] <= '0;
+        pack_read_segment_idx_q[bank_idx] <= '0;
         write_valid_q[bank_idx] <= 1'b0;
       end
     end else begin
@@ -290,7 +313,7 @@ module ram_k_global
       read_diag_idx_local_q <= i_read_diag_idx_local;
       for (int bank_idx = 0; bank_idx < L; bank_idx++) begin
         diag_read_segment_idx_q[bank_idx] <= diag_read_segment_idx[bank_idx];
-        pair_read_segment_idx_q[bank_idx] <= pair_read_segment_idx[bank_idx];
+        pack_read_segment_idx_q[bank_idx] <= pack_read_segment_idx[bank_idx];
         write_valid_q[bank_idx] <= routed_write_valid[bank_idx];
       end
     end
