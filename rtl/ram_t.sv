@@ -19,8 +19,8 @@ module ram_t
 
   localparam int T_DEPTH = W * Q_BASE;
   localparam int T_ADDR_W = (T_DEPTH > 1) ? $clog2(T_DEPTH) : 1;
-  localparam int READ_ROUTE_W = 1 + T_ADDR_W;
-  localparam int WRITE_ROUTE_W = READ_ROUTE_W + MSG_W;
+  localparam int READ_ROUTE_W = 1;
+  localparam int WRITE_ROUTE_W = 1 + MSG_W;
 
   logic signed [        MSG_W-1:0] bank_rdata[  0:1][0:L-1];
   logic        [ READ_ROUTE_W-1:0] read_route_in[0:L-1];
@@ -34,9 +34,9 @@ module ram_t
   logic                            read_buf_q;
   logic        [   LANE_IDX_W-1:0] write_shift;
   logic                            routed_read_valid[0:L-1];
-  logic        [     T_ADDR_W-1:0] routed_read_addr[0:L-1];
+  logic        [     T_ADDR_W-1:0] read_addr_common;
   logic                            routed_write_valid[0:L-1];
-  logic        [     T_ADDR_W-1:0] routed_write_addr[0:L-1];
+  logic        [     T_ADDR_W-1:0] write_addr_common;
   logic signed [        MSG_W-1:0] routed_write_data[0:L-1];
 
   function automatic logic [LANE_IDX_W-1:0] offset_bank(input  logic [TILE_OFF_W-1:0] tile_offset);
@@ -53,21 +53,18 @@ module ram_t
   endfunction
 
   always_comb begin
-    read_shift  = offset_bank(i_v2c_tile_offset[0]);
+    read_shift = offset_bank(i_v2c_tile_offset[0]);
     write_shift = offset_bank(i_c2v_write_tile_offset[0]);
+    // Each scheduled lane group shares floor(tile_offset / L), while both
+    // diagonal indices are scalar inputs. Only bank-dependent payload rotates.
+    read_addr_common = t_addr(i_v2c_diag_idx_local, i_v2c_tile_offset[0]);
+    write_addr_common = t_addr(i_c2v_write_diag_idx_local, i_c2v_write_tile_offset[0]);
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-      read_route_in[lane_idx] = {
-        i_v2c_valid[lane_idx], t_addr(i_v2c_diag_idx_local, i_v2c_tile_offset[lane_idx])
-      };
-      write_route_in[lane_idx] = {
-        i_c2v_write_valid[lane_idx],
-        t_addr(i_c2v_write_diag_idx_local, i_c2v_write_tile_offset[lane_idx]),
-        i_c2v_tc[lane_idx]
-      };
+      read_route_in[lane_idx][0] = i_v2c_valid[lane_idx];
+      write_route_in[lane_idx] = {i_c2v_write_valid[lane_idx], i_c2v_tc[lane_idx]};
       selected_bank_rdata[lane_idx] = bank_rdata[int'(read_buf_q)][lane_idx];
-      {routed_read_valid[lane_idx], routed_read_addr[lane_idx]} = read_route_out[lane_idx];
-      {routed_write_valid[lane_idx], routed_write_addr[lane_idx],
-       routed_write_data[lane_idx]} = write_route_out[lane_idx];
+      routed_read_valid[lane_idx] = read_route_out[lane_idx][0];
+      {routed_write_valid[lane_idx], routed_write_data[lane_idx]} = write_route_out[lane_idx];
       o_c2v_edge[lane_idx] = $signed(lane_rdata[lane_idx]);
     end
   end
@@ -118,9 +115,9 @@ module ram_t
 
         always_comb begin
           bank_re = routed_read_valid[bank_idx] && (int'(i_active_buf) == buf_idx);
-          bank_raddr = routed_read_addr[bank_idx];
+          bank_raddr = read_addr_common;
           bank_we = routed_write_valid[bank_idx] && (int'(i_fill_buf) == buf_idx);
-          bank_waddr = routed_write_addr[bank_idx];
+          bank_waddr = write_addr_common;
         end
 
         always_ff @(posedge i_clk or negedge i_rst_n) begin
@@ -151,16 +148,29 @@ module ram_t
   endgenerate
 
 `ifndef SYNTHESIS
-  always @(posedge i_clk) begin
-    for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-      if (i_c2v_write_valid[lane_idx] &&
-          ((int'(i_c2v_write_tile_offset[lane_idx]) >> L_SHIFT) >= Q_BASE)) begin
-        $fatal(1, "ram_t C2V tile offset address out of range lane=%0d offset=%0d", lane_idx,
-               i_c2v_write_tile_offset[lane_idx]);
-      end
-      if (i_v2c_valid[lane_idx] && ((int'(i_v2c_tile_offset[lane_idx]) >> L_SHIFT) >= Q_BASE)) begin
-        $fatal(1, "ram_t V2C tile offset address out of range lane=%0d offset=%0d", lane_idx,
-               i_v2c_tile_offset[lane_idx]);
+  always @(posedge i_clk or negedge i_rst_n) begin
+    if (i_rst_n) begin
+      for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
+        if (i_c2v_write_valid[lane_idx] &&
+            ((int'(i_c2v_write_tile_offset[lane_idx]) >> L_SHIFT) >= Q_BASE)) begin
+          $fatal(1, "ram_t C2V tile offset address out of range lane=%0d offset=%0d", lane_idx,
+                 i_c2v_write_tile_offset[lane_idx]);
+        end
+        if (i_v2c_valid[lane_idx] &&
+            ((int'(i_v2c_tile_offset[lane_idx]) >> L_SHIFT) >= Q_BASE)) begin
+          $fatal(1, "ram_t V2C tile offset address out of range lane=%0d offset=%0d", lane_idx,
+                 i_v2c_tile_offset[lane_idx]);
+        end
+        if (i_c2v_write_valid[lane_idx] && (t_addr(
+                i_c2v_write_diag_idx_local, i_c2v_write_tile_offset[lane_idx]
+            ) != write_addr_common)) begin
+          $fatal(1, "ram_t C2V write addresses must be common within one lane group");
+        end
+        if (i_v2c_valid[lane_idx] && (t_addr(
+                i_v2c_diag_idx_local, i_v2c_tile_offset[lane_idx]
+            ) != read_addr_common)) begin
+          $fatal(1, "ram_t V2C read addresses must be common within one lane group");
+        end
       end
     end
   end
