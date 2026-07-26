@@ -37,6 +37,8 @@ Fully Placed资源报告和Routed时序报告。
 
 - `edge_addr_gen` 使用两级地址流水，每拍接收一组 tile/diag/lane 坐标。
 - `barrel_rotate` 完成 lane 到 bank 的请求路由和读数据返回。
+- `k_sign_selector`利用同一lane group内`floor(tile_offset/L)`相同的不变量，只旋转valid、列号、消息和
+  base sign等bank相关负载；主工作RAM和correction snapshot读地址各计算一份并广播到所有bank。
 - `ram_m` 使用两个 iteration pair，C2V 读取一个 pair，V2C 更新另一个 pair。
 - `ram_sign_delta` 使用两个 iteration pair，C2V 读取 deviation parity，重叠 correction 更新另一个 pair。
 - `ram_accum` 和 `ram_t` 使用独立的 fill/active 双 buffer，使相邻 tile 的 C2V 与 V2C 重叠；两个buffer
@@ -170,20 +172,22 @@ K=3 aggregate结果确认当前配置使用416个RAMB36和473.5个Block RAM Tile
 
 K=4的全局记录宽度为29 bit，tile工作记录为45 bit，correction snapshot为28 bit。全局K RAM使用
 320个RAMB36组成四个9-bit字段，base sign与`dev_pos[0]`保存在field 0，最终判决由同一字段直接提供，
-不额外分配判决存储。当前字段映射的Fully Placed资源和Routed时序待Vivado确认：
+不额外分配判决存储。2026-07-25 Fully Placed aggregate utilization如下：
 
 | 资源 | 使用量 | 器件可用量 | 利用率 |
 | --- | ---: | ---: | ---: |
-| Slice LUT | 待测 | 222,600 | — |
-| LUT as Logic | 待测 | 222,600 | — |
-| LUT as Memory | 待测 | 81,400 | — |
-| Slice Register | 待测 | 445,200 | — |
-| Slice | 待测 | 55,650 | — |
-| Block RAM Tile | 537.5（静态目标） | 715 | 75.17% |
-| RAMB36E1 | 480（静态目标） | 715 | 67.13% |
-| RAMB18E1 | 115（静态目标） | 1,430 | 8.04% |
-| DSP | 0（静态目标） | 1,440 | 0.00% |
-| CARRY4 | 待测 | — | — |
+| Slice LUT | 27,059 | 222,600 | 12.16% |
+| LUT as Logic | 22,739 | 222,600 | 10.22% |
+| LUT as Memory | 4,320 | 81,400 | 5.31% |
+| Distributed RAM LUT | 4,160 | — | — |
+| SRL LUT | 160 | — | — |
+| Slice Register | 11,359 | 445,200 | 2.55% |
+| Slice | 9,672 | 55,650 | 17.38% |
+| Block RAM Tile | 537.5 | 715 | 75.17% |
+| RAMB36E1 | 480 | 715 | 67.13% |
+| RAMB18E1 | 115 | 1,430 | 8.04% |
+| DSP | 0 | 1,440 | 0.00% |
+| CARRY4 | 1,851 | — | — |
 
 ### K=4、L=32可选配置
 
@@ -250,9 +254,22 @@ setup WNS/TNS为 `+0.812 ns / 0.000 ns`。hold WHS/THS为 `+0.039 ns / 0.000 ns`
 译码周期和内部100 MHz结论，但外部错误向量若要求同一100 MHz时钟下一拍在器件引脚采样，需要补充真实
 output delay约束并重新签核，或为输出增加寄存器并明确接口读延迟。
 
-K=4、`L=16`、`COLS_PER_TILE=1168`的四字段`4K × 9`配置尚无Fully Placed/Routed报告。需要确认
-RAMB36保持480、Block RAM Tile保持537.5，并比较Slice LUT、LUT as Logic、FF、Slice、整体及
-`decoder_clk` setup、hold、pulse width、top paths和`o_e_rdata`未约束路径。
+K=4、`L=16`、`COLS_PER_TILE=1168`的四字段`4K × 9`配置在2026-07-25 Routed timing中满足内部
+100 MHz约束。整体setup WNS/TNS为`+0.437 ns / 0.000 ns`，`decoder_clk`组为
+`+0.656 ns / 0.000 ns`，hold WHS/THS为`+0.040 ns / 0.000 ns`，WPWS/TPWS为
+`+4.232 ns / 0.000 ns`。
+
+最差主时钟路径从K-sign selector bank 0的`diag_idx_local_q_reg[0][4]`到bank 13 snapshot
+distributed RAM写入口，数据路径8.846 ns，其中logic 1.103 ns、route 7.743 ns，共12级逻辑。
+最差异步路径从复位同步器到`ram_k_global/pack_read_segment_idx_q_reg[3][0]`的CLR端，WNS为
+`+0.437 ns`，数据路径8.973 ns，其中route占95.910%。
+
+内部未约束endpoint为0；TIMING-18报告76项，69个普通输入和7个输出没有I/O delay，另有1个输入由
+false path覆盖。field 0 RAMB36到`o_e_rdata`的未约束外部输出路径数据延迟为12.869 ns，不能据此判定
+板级同步输出时序通过。
+
+当前RTL的K-sign selector公共地址结构已完成功能回归；与该结构对应的L=16 Fully Placed资源和Routed
+时序待同条件Vivado复测。上述2026-07-25结果作为复测参考基线。
 
 K=3配置保留用于兼容、回归验证和已有实现结果复现；后续架构、资源和时序优化以K=4配置为主要评估对象。
 
@@ -275,6 +292,9 @@ correction snapshot到 `ram_sign_delta` 的路径未进入前十条setup路径�
 该配置内部未约束endpoint为0；TIMING-18报告76项，69个普通输入和7个输出没有I/O delay，另有1个输入
 由false path覆盖。`o_e_rdata` 的未约束外部输出路径数据延迟为14.515 ns，因此内部100 MHz通过不等于
 板级I/O时序已经签核。
+
+当前RTL的K-sign selector公共地址结构已完成功能回归；与该结构对应的L=32 Fully Placed资源和Routed
+时序待同条件Vivado复测。上述2026-07-22结果作为复测参考基线。
 
 ## 验证状态
 
@@ -301,6 +321,10 @@ K=4、`L=32`、`COLS_PER_TILE=1184` 的统一TRIKE五档seed 1随机译码均为
 
 仓库默认的K=4、`L=32`、`COLS_PER_TILE=1152` 统一TRIKE五档seed 1随机译码均为residual 0、exact 1，
 固定周期分别为193,486、365,945、1,207,716、3,729,550和8,720,781。
+
+K-sign selector公共地址结构通过标准格式、lint、14项单元测试、toy集成，以及
+`L=16/COLS_PER_TILE=1168`和`L=32/COLS_PER_TILE=1152`两组K=4统一TRIKE五档seed 1随机回归。另以
+toy `L=4`单独运行`tb_k_sign_update`，覆盖`Q_BASE>1`的非零group地址和非零bank旋转场景。
 
 顶层 toy 集成结果：
 

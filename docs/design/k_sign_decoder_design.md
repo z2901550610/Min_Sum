@@ -360,7 +360,8 @@ K-sign 数据通路由以下模块组成：
 2. `ram_k_tile`：一份参数化候选工作RAM和一份correction位置snapshot RAM；K=4时宽度分别为45 bit
    和28 bit。
 3. `k_sign_update`：无序候选槽的最差项归约树和单槽更新组合逻辑。
-4. `k_sign_selector`：变量列bank路由、工作RAM读改写、snapshot读写和全局压缩记录提交。
+4. `k_sign_selector`：变量列bank路由、工作RAM读改写、snapshot读写和全局压缩记录提交；同一lane
+   group共用`floor(tile_offset/L)`地址，前向旋转网络只携带valid和bank相关数据。
 5. `k_sign_reconstruct`：根据全局压缩记录和 `diag_idx_local` 重建近似符号及命中标志。
 6. `k_sign_overlap_scheduler`：按公开参数生成重叠 correction 的 tile、对角线和列组坐标。
 7. `ram_sign_delta`：保存每个 check row 的 deviation parity，支持同步读取、清空和翻转 RMW。
@@ -372,10 +373,10 @@ K-sign 数据通路由以下模块组成：
 | 风险 | 说明 | 处理方式 |
 | --- | --- | --- |
 | correction bank 冲突 | 多列 dev 位置可能映射到同一个 row bank | 扫描使用与主 edge 路径相同的 lane-to-bank 排列 |
-| selector 布线 | `COLS_PER_TILE*K` 候选状态分布在 tile 内 | 将 selector 状态按 lane/bank 分区，靠近 VNU 输出放置 |
+| selector 布线 | `COLS_PER_TILE*K` 候选状态分布在 tile 内 | 状态按lane/bank分区，group地址广播，bank相关负载旋转 |
 | K=3 余量 | 小 K 对 DFR margin 更敏感 | 使用多 seed 和更低 DFR 区确认 |
 | sign_xor 语义 | C2V 与 CNU A 必须使用同一近似符号定义 | C model、RTL 和测试向量共享 tie-break 规则 |
-| 重叠路径时序 | snapshot和存储读回路径包含跨bank布线 | L=16四字段映射需要Routed报告确认WNS和top paths |
+| 重叠路径时序 | snapshot和存储读回路径包含跨bank布线 | L=16四字段映射的主时钟WNS为+0.656 ns |
 
 ## RTL 配置
 

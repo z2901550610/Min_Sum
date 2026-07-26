@@ -130,7 +130,8 @@ module tb_k_sign_update;
   endtask
 
   task automatic write_ram_edge(input  logic [DIAG_IDX_W-1:0] pos, input  logic sign,
-                                input  logic [D-1:0] mag);
+                                input  logic [D-1:0] mag, input  logic [COL_W-1:0] col_idx,
+                                input  logic [TILE_OFF_W-1:0] tile_offset);
     begin
       for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
         v2c_valid[lane_idx] = 1'b0;
@@ -141,8 +142,8 @@ module tb_k_sign_update;
       end
       diag_idx_local = pos;
       v2c_valid[0] = 1'b1;
-      v2c_col_idx[0] = '0;
-      v2c_tile_offset[0] = '0;
+      v2c_col_idx[0] = col_idx;
+      v2c_tile_offset[0] = tile_offset;
       v2c_msg_lane[0] = {sign, mag};
       v2c_base_sign[0] = 1'b0;
       @(posedge clk);
@@ -152,7 +153,8 @@ module tb_k_sign_update;
     end
   endtask
 
-  task automatic read_ram_edge(input  logic [DIAG_IDX_W-1:0] pos, output logic sign);
+  task automatic read_ram_edge(input  logic [DIAG_IDX_W-1:0] pos, input  logic [COL_W-1:0] col_idx,
+                               output logic sign);
     begin
       for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
         c2v_valid[lane_idx]   = 1'b0;
@@ -160,7 +162,7 @@ module tb_k_sign_update;
       end
       diag_idx_local = pos;
       c2v_valid[0]   = 1'b1;
-      c2v_col_idx[0] = '0;
+      c2v_col_idx[0] = col_idx;
       @(posedge clk);
       #1;
       sign = c2v_sign[0];
@@ -168,13 +170,15 @@ module tb_k_sign_update;
     end
   endtask
 
-  task automatic read_corr_edge(input  logic [DIAG_IDX_W-1:0] pos, input  logic expected_hit);
+  task automatic read_corr_edge(input  logic [DIAG_IDX_W-1:0] pos, input  logic expected_hit,
+                                input  logic [COL_W-1:0] col_idx,
+                                input  logic [TILE_OFF_W-1:0] tile_offset);
     begin
       @(negedge clk);
       diag_idx_local = pos;
       corr_read_valid[0] = 1'b1;
-      corr_col_idx[0] = '0;
-      corr_tile_offset[0] = '0;
+      corr_col_idx[0] = col_idx;
+      corr_tile_offset[0] = tile_offset;
       @(posedge clk);
       #1;
       if (corr_hit !== expected_hit) begin
@@ -236,24 +240,39 @@ module tb_k_sign_update;
     #1;
     if (recon_sign !== 1'b1) $fatal(1, "expected hit at diag_idx_local=0");
 
-    write_ram_edge(0, 1'b1, 3);
-    write_ram_edge(1, 1'b0, 9);
-    write_ram_edge(2, 1'b1, 8);
+    write_ram_edge(0, 1'b1, 3, '0, '0);
+    write_ram_edge(1, 1'b0, 9, '0, '0);
+    write_ram_edge(2, 1'b1, 8, '0, '0);
     @(posedge clk);
 
-    read_corr_edge(0, 1'b1);
-    read_corr_edge(1, 1'b0);
-    read_corr_edge(2, 1'b1);
+    read_corr_edge(0, 1'b1, '0, '0);
+    read_corr_edge(1, 1'b0, '0, '0);
+    read_corr_edge(2, 1'b1, '0, '0);
 
-    read_ram_edge(0, sign_read);
+    read_ram_edge(0, '0, sign_read);
     if (sign_read !== 1'b1) $fatal(1, "ram sign mismatch at edge 0");
     if (c2v_hit[0] !== 1'b1) $fatal(1, "ram hit mismatch at edge 0");
-    read_ram_edge(1, sign_read);
+    read_ram_edge(1, '0, sign_read);
     if (sign_read !== 1'b0) $fatal(1, "ram sign mismatch at edge 1");
     if (c2v_hit[0] !== 1'b0) $fatal(1, "ram hit mismatch at edge 1");
-    read_ram_edge(2, sign_read);
+    read_ram_edge(2, '0, sign_read);
     if (sign_read !== 1'b1) $fatal(1, "ram sign mismatch at edge 2");
     if (c2v_hit[0] !== 1'b1) $fatal(1, "ram hit mismatch at edge 2");
+
+    if (Q_BASE > 1) begin
+      write_ram_edge(0, 1'b0, 4, COL_W'(L + 1), TILE_OFF_W'(L));
+      write_ram_edge(1, 1'b1, 10, COL_W'(L + 1), TILE_OFF_W'(L));
+      write_ram_edge(2, 1'b0, 6, COL_W'(L + 1), TILE_OFF_W'(L));
+      @(posedge clk);
+
+      read_corr_edge(0, 1'b0, COL_W'(L + 1), TILE_OFF_W'(L));
+      read_corr_edge(1, 1'b1, COL_W'(L + 1), TILE_OFF_W'(L));
+      read_corr_edge(2, 1'b0, COL_W'(L + 1), TILE_OFF_W'(L));
+
+      read_ram_edge(1, COL_W'(L + 1), sign_read);
+      if (sign_read !== 1'b1) $fatal(1, "nonzero-group ram sign mismatch");
+      if (c2v_hit[0] !== 1'b1) $fatal(1, "nonzero-group ram hit mismatch");
+    end
 
     $display("tb_k_sign_update PASS K=%0d record_w=%0d", K_SIGN_K, K_SIGN_RECORD_W);
     $finish;

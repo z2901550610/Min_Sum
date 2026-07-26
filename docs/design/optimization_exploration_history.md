@@ -1766,20 +1766,283 @@ L=16最终配置应根据BRAM容量优先级决定。未约束`o_e_rdata`路径�
   333,990、657,341、2,353,770、7,135,995和16,641,183；
 - `L=32`、`K=4`、`COLS_PER_TILE=1152`统一TRIKE五档seed 1回归全部residual 0、exact 1，周期为
   193,486、365,945、1,207,716、3,729,550和8,720,781；
-- 当前环境没有Vivado可执行文件，Slice LUT、LUT as Logic、LUT as Memory、FF、Slice、Block RAM
-  Tile、RAMB36/RAMB18、CARRY4、setup/hold/pulse width和top paths均待测。
 
-保留标准：
+Vivado实现条件：Windows Vivado 2023.2，`xc7k355tffg901-2L`，`TRIKE_UNIFIED_PARAMS`，`L=16`，
+`K=4`，`COLS_PER_TILE=1168`，100 MHz `decoder_clk`、10 ns周期、0.100 ns user uncertainty；
+资源报告为2026-07-25 16:40:35 Fully Placed aggregate utilization，时序报告为2026-07-25
+16:43:10 Routed。阶段37、38、39的器件、工具、参数、XDC和报告阶段一致。
 
-- BRAM必须保持`480 RAMB36 + 115 RAMB18 = 537.5 Tile`，否则9-bit字段没有兑现容量等价；
-- Slice LUT必须显著低于阶段38的28,174；若不能回收大部分1,163个新增LUT，则该结构没有达到整体优化
-  目标；
-- 内部100 MHz setup/hold必须继续通过，并检查全局K RAM是否进入前十条关键路径；
-- `o_e_rdata`仍属于未约束输出，但应比较其数据路径是否从阶段38的14.243 ns明显回落。
+三方案资源实测：
 
-结论与状态：按并行度选择9/18-bit原生几何的RTL候选已完成，L=16和L=32两套五档功能与固定周期回归
-均通过。该方案在结构上保持阶段38的BRAM目标并降低L=16 segment选择复杂度，作为当前整体优化候选保留；
-物理资源和时序结论待同器件、同XDC的Fully Placed/Routed报告。
+| 资源 | 阶段37独立字段 | 阶段38双18-bit字段 | 阶段39四9-bit字段 |
+| --- | ---: | ---: | ---: |
+| Slice LUT | 27,011 | 28,174 | 27,059 |
+| LUT as Logic | 22,691 | 23,854 | 22,739 |
+| LUT as Memory | 4,320 | 4,320 | 4,320 |
+| Distributed RAM LUT | 4,160 | 4,160 | 4,160 |
+| SRL LUT | 160 | 160 | 160 |
+| Slice Register | 11,359 | 11,370 | 11,359 |
+| Slice | 9,691 | 10,001 | 9,672 |
+| Block RAM Tile | 553.5 | 537.5 | 537.5 |
+| RAMB36E1 | 496 | 480 | 480 |
+| RAMB18E1 | 115 | 115 | 115 |
+| DSP | 0 | 0 | 0 |
+| CARRY4 | 1,851 | 1,851 | 1,851 |
+
+相对阶段38，四9-bit字段减少1,115个Slice LUT和logic LUT、11个FF、329个Slice，BRAM保持不变；
+回收了双18-bit字段新增1,163个LUT中的95.87%。相对阶段37独立字段，仅增加48个LUT，FF完全相同，
+Slice反而减少19，同时保留16个RAMB36/Block RAM Tile收益。LUT memory、distributed RAM和SRL均不变，
+确认该收益来自segment选择结构缩小，不是把BRAM转移到LUTRAM。
+
+三方案Routed时序：
+
+| 指标 | 阶段37独立字段 | 阶段38双18-bit字段 | 阶段39四9-bit字段 |
+| --- | ---: | ---: | ---: |
+| 整体setup WNS/TNS | +0.576 / 0.000 ns | +0.537 / 0.000 ns | +0.437 / 0.000 ns |
+| `decoder_clk` setup WNS/TNS | +0.725 / 0.000 ns | +0.537 / 0.000 ns | +0.656 / 0.000 ns |
+| hold WHS/THS | +0.028 / 0.000 ns | +0.024 / 0.000 ns | +0.040 / 0.000 ns |
+| pulse WPWS/TPWS | +4.232 / 0.000 ns | +4.232 / 0.000 ns | +4.232 / 0.000 ns |
+| `**async_default**` setup WNS | +0.576 ns | +0.778 ns | +0.437 ns |
+| `o_e_rdata`未约束输出路径 | 11.388 ns | 14.243 ns | 12.869 ns |
+
+- 阶段39最差主时钟路径从K-sign selector bank 0的`diag_idx_local_q_reg[0][4]`到bank 13 snapshot
+  distributed RAM写入口，数据路径8.846 ns，其中logic 1.103 ns、route 7.743 ns，route占87.531%，
+  逻辑深度12级；全局K RAM没有进入前十条主时钟setup路径；
+- 最差异步路径从`u_reset_sync/rst_sync_n_reg`到
+  `ram_k_global/pack_read_segment_idx_q_reg[3][0]/CLR`，数据路径8.973 ns，其中route 8.606 ns、
+  占95.910%，整体WNS由该异步复位恢复路径限制；
+- `o_e_rdata`从阶段38的14.243 ns降至12.869 ns，改善1.374 ns；其路径从field 0、segment 2的
+  RAMB36经过5段选择和bank返回到输出，逻辑深度6级。该路径仍未设置output delay，不能作为板级同步
+  接口签核结果。
+
+TIMING-18仍为76项，内部未约束endpoint为0；69个普通输入和7个输出缺少I/O delay，另有1个输入由
+false path覆盖。所有已定义内部100 MHz setup、hold和pulse width约束满足。
+
+保留标准全部满足：
+
+- `480 RAMB36 + 115 RAMB18 = 537.5 Tile`，容量与阶段38等价；
+- Slice LUT为27,059，显著低于阶段38的28,174，并接近阶段37的27,011；
+- `decoder_clk` WNS为+0.656 ns，setup/hold通过，全局K RAM未进入前十条关键路径；
+- `o_e_rdata`相对阶段38缩短1.374 ns。
+
+结论与状态：按并行度选择9/18-bit原生几何的方案保留为当前L=16/L=32统一实现。L=16四9-bit字段在
+固定周期、功能和内部100 MHz不变的条件下，获得与双18-bit字段相同的16 Tile收益，同时基本消除其LUT和
+Slice代价；相对独立字段只增加48个LUT并减少19个Slice，是当前三种L=16全局K RAM映射中的综合最优方案。
+整体WNS受异步复位恢复布线限制，但仍满足约束；板级输出时序仍需单独签核。
+
+## 40. K=4、L=16/L=32下一阶段架构联合优化审计
+
+时间：2026-07-26。
+
+目标与范围：在阶段36的L=32完整实现和阶段39的L=16完整实现基础上，审计K=4译码器是否仍存在不改变
+算法语义和固定时间性质的资源/时序优化空间，并把允许周期变化的候选统一换算为
+`固定周期 / 可实现频率`。本阶段只完成RTL、调度、RAM原生几何和既有Vivado报告的静态分析，没有修改
+RTL；候选资源数为原语几何目标或RTL网络规模，不是新的Fully Placed/Routed实测结果。
+
+当前可比基线：
+
+| 指标 | `L=16, C=1168` | `L=32, C=1152` | `L=32`相对`L=16` |
+| --- | ---: | ---: | ---: |
+| Slice LUT | 27,059 | 48,027 | +20,968（+77.49%） |
+| Slice Register | 11,359 | 20,946 | +9,587（+84.40%） |
+| Slice | 9,672 | 16,053 | +6,381（+65.97%） |
+| Block RAM Tile | 537.5 | 561.5 | +24.0（+4.47%） |
+| RAMB36E1 / RAMB18E1 | 480 / 115 | 512 / 99 | +32 / -16 |
+| `decoder_clk` WNS | +0.656 ns | +0.590 ns | -0.066 ns |
+| TRIKE-512固定周期 | 16,641,183 | 8,720,781 | -47.60% |
+| TRIKE-512@100 MHz | 166.41183 ms | 87.20781 ms | -47.60% |
+
+两份报告使用Windows Vivado 2023.2、`xc7k355tffg901-2L`、100 MHz和0.100 ns user uncertainty；
+参数中的`L`与`COLS_PER_TILE`按比较目的不同。按`10 ns - decoder_clk WNS`只作一阶频率外推时，两者
+分别约107.02 MHz和106.27 MHz；该外推不是新的时序签核。L=16若要在L=32保持100 MHz时达到同一
+TRIKE-512延时，需要约190.82 MHz，现有报告没有支持这种频率差。因此L=32仍是当前高吞吐主配置；
+L=16适合作为LUT/FF受限配置。
+
+### 候选A：tile-local公共bank地址与旋转payload收窄
+
+`edge_addr_gen`对每个固定lane group生成：
+
+```text
+tile_offset = lane_group_idx_eff * L + lane_idx
+floor(tile_offset / L) = lane_group_idx_eff
+```
+
+该等式在普通group和模`R`回绕的pre/post拆分micro-cycle中都成立；拆分的两拍使用同一个
+`lane_group_idx_eff`。因此同一拍内以下bank-local地址对所有lane相同：
+
+- `ram_accum.offset_addr = floor(tile_offset/L)`；
+- `ram_t.t_addr = diag_idx_local * Q_BASE + floor(tile_offset/L)`；
+- `k_sign_selector.work_addr = floor(tile_offset/L)`，包括主selector和correction snapshot读。
+
+当前RTL仍把这些公共地址作为每lane payload送入前向`barrel_rotate`。候选实现只旋转valid、bank相关数据
+和必须保持lane关联的元数据；公共地址计算一次后广播到目标bank，并允许综合器在bank/cluster附近复制地址
+寄存器。先只修改`k_sign_selector`，再分别扩展到`ram_t`和`ram_accum`，以保留物理归因和回退点。
+
+按`DATA_W × L × log2(L)`计算被删除的1-bit 2:1 MUX节点，不把节点数等同于物理LUT：
+
+| 模块中的地址payload | `L=16` | `L=32` |
+| --- | ---: | ---: |
+| `k_sign_selector`主读+correction读 | 896 | 1,920 |
+| `ram_accum`三条前向地址路由 | 1,344 | 2,880 |
+| `ram_t`读+写地址路由 | 1,664 | 3,840 |
+| 合计 | 3,904 | 8,640 |
+
+`ram_t`还可把当前每lane重复的`diag_idx_local * Q_BASE + group_addr`显式收敛为一份公共地址算术。该候选
+不改变RAM深度、读写次数、同步读延迟、候选tie规则、有效写次数或固定周期。阶段36的L=32最差路径正是
+`v2c_tile_offset_c`到K-sign工作distributed RAM输出寄存器，数据路径9.303 ns、route占97.141%，因此
+候选A是最直接的下一项时序实验。实际LUT、FF、Slice、fanout和WNS全部待同条件Vivado确认。
+
+### 候选B：三个9-bit字段的精确27-bit K位置编码
+
+当前K=4全局逻辑记录为`base_sign + 4*7 = 29 bit`。完整组合数rank可把最多4个有效位置压到23 bit，
+但复杂的rank/unrank没有比三个9-bit字段带来更多物理BRAM收益。更适合当前RAM原生几何的精确编码为：
+
+1. 把四个位置连同`K_SIGN_DIAG_INVALID=127`按数值排序；
+2. 每个7-bit位置拆成`group=pos[6:5]`和`low=pos[4:0]`；
+3. 四个非降序2-bit group是从4类中取4项的多重组合，共
+   `C(4+4-1,4)=35`种，用6 bit编码；
+4. 保存四个5-bit low、6-bit group code和base sign，总宽度为
+   `4*5 + 6 + 1 = 27 bit`。
+
+最大合法位置为110；127只表示invalid，同一group内按完整位置排序后可以无损恢复四个位置。全局记录的槽
+顺序不参与Top-K tie-break或C2V命中语义，因此编码/解码完全等价时不会改变DFR语义、correction snapshot
+或固定周期。工作记录和snapshot保持当前45/28 bit；编码只放在`ram_k_global`物理写入/读出边界。
+
+三个9-bit字段的静态物理目标：
+
+| 配置 | 当前全局K RAM | 27-bit目标 | 全设计Block RAM Tile静态目标 |
+| --- | ---: | ---: | ---: |
+| `L=16`，bank深20,361 | 320 RAMB36 | 240 RAMB36 | 537.5 -> 457.5（-80） |
+| `L=32`，bank深10,181 | 320 RAMB36 | 288 RAMB36 | 561.5 -> 529.5（-32） |
+
+编码端需要固定4项排序和35态映射，解码端需要6-to-8 bit group恢复；增加的logic LUT、对bank侧命中路径和
+`o_e_rdata`路径的影响待实现。保留标准是encode/decode逐项等价、K=4五档固定周期回归通过，并在
+Fully Placed/Routed后确认RAMB36目标兑现且`decoder_clk` WNS不下降到影响总延时。若`W_MAX >= 128`，
+当前invalid哨兵和本编码都必须重新设计。
+
+### 候选C：L=32 tile大小与BRAM边界联合扫描
+
+当前固定周期公式为：
+
+```text
+Q_TILE   = ceil(C/L) + 3
+T_ITER   = ceil(R/L) + (N0*ceil(R/C)+1)*W*Q_TILE + 8 + W*Q_TILE
+T_DECODE = I_MAX*T_ITER + 6
+```
+
+对统一TRIKE五档扫描`C`为32的整数倍后，`L=16,C=1168`不存在一个同时不增加五档周期且至少一档更快的
+单一tile大小，属于当前公式下的多等级Pareto点。`L=32,C=1152`不是Pareto点；若允许`ram_t`每个
+buffer/bank从一个RAMB36增加为一个RAMB36加一个RAMB18，以下点值得验证：
+
+| 配置 | `Q_BASE/Q_TILE` | TRIKE五档固定周期 | TRIKE-512变化 |
+| --- | --- | --- | ---: |
+| 当前`L=32,C=1152` | 36 / 39 | 193,486 / 365,945 / 1,207,716 / 3,729,550 / 8,720,781 | 基线 |
+| `L=32,C=1664` | 52 / 55 | 178,555 / 353,205 / 1,192,316 / 3,624,389 / 8,570,820 | -149,961（-1.72%） |
+| `L=32,C=1728` | 54 / 57 | 184,981 / 365,945 / 1,235,436 / 3,656,344 / 8,483,019 | -237,762（-2.73%） |
+
+`C=1664`同时改善五档周期，适合作为统一硬件首选扫描点；`C=1728`更偏向最大等级，TRIKE-256周期增加。
+两者的`Q_BASE <= 64`，`ram_k_tile`和`ram_accum`仍处于同一64-deep distributed RAM原生深度档；
+`ram_t`最大bank深度从3,996增至5,772或5,994，静态增加64个RAMB18，即32个Block RAM Tile。
+`C=1664`的TRIKE-512周期收益允许频率相对当前下降最多1.72%而不劣化总延时；`C=1728`对应2.73%。
+
+候选B在L=32静态节省32个Tile，候选C恰好增加32个Tile。因此先验证27-bit编码、再验证
+`C=1664`，理论上可在全设计仍为561.5 Tile的条件下把TRIKE-512周期降到8,570,820；预计RAMB36/RAMB18
+构成变为480/163，实际映射、LUT、布局拥塞和频率必须由Vivado确认。候选A应先完成，以抵消更大`ram_t`
+地址宽度和布局范围带来的时序风险。
+
+### 候选D：把每diag重复guard压成连续流
+
+当前每个diag执行`Q_BASE+3`个group。跨模拆分最坏需要`Q_BASE+1`个micro-cycle，另外两拍用于固定输入/
+写回对齐。高风险候选是在diag之间连续传递完整tag，只保留每diag的一拍拆分预算，并把流水排空集中到
+tile边界：
+
+```text
+T_WINDOW_candidate = W*(Q_BASE+1) + TILE_DRAIN
+```
+
+若静态估算`TILE_DRAIN=2`，L=32、C=1152、TRIKE-512可从8,720,781拍降到约8,278,801拍，
+减少约5.07%；即使频率下降约5.07%，总延时仍可持平。该数字只是调度上界估算，不是已实现周期。
+
+实现前必须逐项证明跨diag和tile边界的`ram_accum`读改写、`ram_t`fill/active切换、`ram_m`连续同row
+bypass、K-sign work RAM读改写、最后diag snapshot提交、correction read-first重叠、`ram_sign_delta`
+连续flip旁路及最后tile排空均保持等价。主调度器和correction调度器都必须使用同一新的固定窗口定义。
+该候选不属于layered Min-Sum，不能改变同一迭代的消息反馈语义。状态为高收益、高验证成本的后续原型，
+排在候选A至C之后。
+
+### 时序兜底与不优先方向
+
+- 若候选A后L=32关键路径仍停留在K-sign work distributed RAM，可只把45-bit work RAM切到block RAM；
+  静态代价约32个Block RAM Tile。L=16若关键路径保持在28-bit snapshot写入口，可单独测试snapshot
+  block RAM，静态代价约16个RAMB18，即8个Tile。两者同步读语义由`ram_bram`保持，但LUT节省和时序收益
+  必须实测，不能把逻辑bit数换算为LUT。
+- L=16的最差路径跨bank使用等价的`diag_idx_local_q`寄存器。若Vivado合并bank-local副本，可在不增加
+  周期的条件下测试显式cluster级寄存器复制或`MAX_FANOUT`约束；先比较top-path和FF增量，再决定是否保留。
+- 进一步折叠32-lane Top-K/CNU/VNU会让V2C吞吐下降到接近L=16；当前L=16与L=32频率接近，频率收益没有
+  足够余量抵消约1.91倍的周期比，不作为低延时方向。
+- `ram_m` 9+9拆分已经实测增加Block RAM Tile并撤回；完整组合数position rank在当前三9-bit物理目标下
+  不比27-bit分组编码少用BRAM；这两项不重复探索。
+- 真正row/block-layered Min-Sum需要posterior RAM、旧C2V删除、同迭代反馈和固定冲突归并，并会使当前
+  K-sign base/Top-K生命周期失效。它属于算法与架构联合研究，不是当前资源/时序小步优化。
+
+结论与状态：
+
+1. 当前L=32以77.49% LUT和84.40% FF增量换取47.60%固定周期下降，BRAM只增加4.47%，且主时钟频率
+   与L=16接近；在器件容量允许时继续以L=32作为性能主线。
+2. 下一步优先实现候选A的`k_sign_selector`公共地址收窄，形成独立功能/Vivado检查点；随后把同一不变量
+   扩展到`ram_t`和`ram_accum`。
+3. 资源主线验证候选B的精确27-bit物理编码；通过后用释放的32个L=32 Tile验证`C=1664`联合点。
+4. 候选D可能提供约5%周期收益，但需要调度和所有RAM边界的系统验证，放在无周期变化的候选之后。
+5. 本阶段状态为**架构审计完成，候选A至D均待实现/待功能回归/待Vivado**；没有产生新的资源或时序实测
+   基线。
+
+## 41. K-sign selector公共bank地址与旋转payload收窄
+
+时间：2026-07-26。
+
+目标与假设：实施阶段40的候选A第一步，消除`k_sign_selector`主工作RAM读和correction snapshot读前向
+旋转网络中逐lane重复的bank-local地址。调度器生成
+`tile_offset = lane_group_idx_eff * L + lane_idx`，因此同一micro-cycle内所有有效lane均满足
+`work_addr = floor(tile_offset/L) = lane_group_idx_eff`。该不变量对普通group和回绕pre/post拆分拍均
+成立。
+
+关键实现：
+
+- 主路径`ROUTE_W`删除`K_SIGN_WORK_AW`地址字段，只旋转valid、`col_idx`、V2C消息和base sign；
+- correction前向`barrel_rotate`从`1+K_SIGN_WORK_AW` bit缩为只旋转1-bit valid；
+- 主路径和correction分别从lane 0计算一份公共`work_addr`，广播到所有目标bank；
+- 添加`ifndef SYNTHESIS`保护的时钟沿检查：任一有效lane若与公共地址不一致，仿真立即失败；
+- `ram_k_tile`深度、数据宽度、同步读延迟、read-first行为、读写次数、Top-K tie规则、snapshot内容、
+  correction扫描和调度状态机均未改变。
+
+结构规模：L=16/C=1168时`K_SIGN_WORK_AW=7`，两条前向网络合计删除
+`2*7*16*log2(16)=896`个1-bit 2:1 mux节点；L=32/C=1152时`K_SIGN_WORK_AW=6`，合计删除
+`2*6*32*log2(32)=1,920`个节点。节点数只描述RTL旋转网络规模，不等同于物理LUT。
+
+验证范围与结果：
+
+- `make format-rtl`、`make check-format-rtl`、`make lint-rtl`通过；
+- 标准`make test-unit`的14项单元测试全部通过；toy `make test-integration`通过，
+  `residual=0`、`exact=1`、固定周期154；
+- `tb_k_sign_update`增加`Q_BASE>1`条件下的非零group、非零bank旋转覆盖；toy L=4定向编译运行通过；
+- 尝试运行完整toy L=4单元套件时，既有`tb_tile_scheduler`在clear address range断言处失败；
+  失败发生在K-sign单测之前，属于该非标准toy并行度的独立测试假设，因此改为定向运行
+  `tb_k_sign_update`完成本结构覆盖；
+- `L=16`、`K=4`、`COLS_PER_TILE=1168`统一TRIKE五档seed 1均
+  `residual=0`、`exact=1`，固定周期为333,990、657,341、2,353,770、7,135,995和16,641,183；
+- `L=32`、`K=4`、`COLS_PER_TILE=1152`统一TRIKE五档seed 1均
+  `residual=0`、`exact=1`，固定周期为193,486、365,945、1,207,716、3,729,550和8,720,781；
+- 两组完整调度均未触发公共地址不变量检查。
+
+周期与延时：RTL没有新增流水级或调度拍，两组固定周期逐项保持参考基线。当前环境没有Vivado可执行文件，
+Slice LUT、LUT as Logic、LUT as Memory、FF、Slice、Block RAM Tile、RAMB36/RAMB18、DSP、CARRY4、
+setup WNS/TNS、hold WHS和top paths均待测，不能据RTL节点数推测物理收益。复测条件为Windows
+Vivado 2023.2、`xc7k355tffg901-2L`、`TRIKE_UNIFIED_PARAMS`、K=4、100 MHz和相同XDC，分别使用
+`L=16/C=1168`与`L=32/C=1152`并比较对应阶段39和阶段36报告。
+
+结论与状态：公共地址收窄保留在当前RTL，功能与固定周期验证完成，物理资源和时序待测。L=32复测重点是
+`v2c_tile_offset_c`到K-sign work distributed RAM路径是否退出最差路径或route占比下降；L=16复测重点
+是snapshot写入口跨bank路径及整体/`decoder_clk` WNS。完成该独立物理检查点前，不把相同变换扩展到
+`ram_t`和`ram_accum`，以保留清晰的物理归因和回退点。
 
 ## 形成的设计结论
 

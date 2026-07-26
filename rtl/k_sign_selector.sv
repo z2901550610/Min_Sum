@@ -23,9 +23,10 @@ module k_sign_selector
     output logic                       o_corr_read_hit[0:L-1]
 );
 
-  localparam int ROUTE_W = 1 + K_SIGN_WORK_AW + COL_W + MSG_W + 1;
+  localparam int ROUTE_W = 1 + COL_W + MSG_W + 1;
 
   logic                            work_read_valid[0:L-1];
+  logic [      K_SIGN_WORK_AW-1:0] work_read_addr_common;
   logic [      K_SIGN_WORK_AW-1:0] work_read_addr[0:L-1];
   logic [K_SIGN_WORK_RECORD_W-1:0] work_read_record[0:L-1];
   logic                            work_write_valid[0:L-1];
@@ -49,11 +50,12 @@ module k_sign_selector
   logic [      K_SIGN_WORK_AW-1:0] snapshot_write_addr[0:L-1];
   logic [ K_SIGN_POS_RECORD_W-1:0] snapshot_write_record[0:L-1];
   logic                            corr_work_read_valid[0:L-1];
+  logic [      K_SIGN_WORK_AW-1:0] corr_work_read_addr_common;
   logic [      K_SIGN_WORK_AW-1:0] corr_work_read_addr[0:L-1];
   logic [ K_SIGN_POS_RECORD_W-1:0] corr_work_read_record[0:L-1];
   logic                            corr_read_valid_q[0:L-1];
-  logic [    1+K_SIGN_WORK_AW-1:0] corr_route_in[0:L-1];
-  logic [    1+K_SIGN_WORK_AW-1:0] corr_route_out[0:L-1];
+  logic [                     0:0] corr_route_in[0:L-1];
+  logic [                     0:0] corr_route_out[0:L-1];
   logic [     K_SIGN_RECORD_W-1:0] corr_record_bank[0:L-1];
   logic [     K_SIGN_RECORD_W-1:0] corr_record_route_out[0:L-1];
   logic [                     0:0] corr_hit_route_in[0:L-1];
@@ -88,16 +90,16 @@ module k_sign_selector
 
   always_comb begin
     route_shift = col_bank(i_col_idx[0]);
+    // One scheduled lane group shares floor(tile_offset / L); only bank-dependent
+    // payload crosses the rotation network.
+    work_read_addr_common = work_addr(i_tile_offset[0]);
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
       route_in[lane_idx] = {
-        i_valid[lane_idx],
-        work_addr(i_tile_offset[lane_idx]),
-        i_col_idx[lane_idx],
-        i_v2c_msg[lane_idx],
-        i_base_sign[lane_idx]
+        i_valid[lane_idx], i_col_idx[lane_idx], i_v2c_msg[lane_idx], i_base_sign[lane_idx]
       };
-      {work_read_valid[lane_idx], work_read_addr[lane_idx], routed_col_idx[lane_idx],
-       routed_v2c_msg[lane_idx], routed_base_sign[lane_idx]} = route_out[lane_idx];
+      {work_read_valid[lane_idx], routed_col_idx[lane_idx], routed_v2c_msg[lane_idx],
+       routed_base_sign[lane_idx]} = route_out[lane_idx];
+      work_read_addr[lane_idx] = work_read_addr_common;
     end
   end
 
@@ -111,16 +113,17 @@ module k_sign_selector
 
   always_comb begin
     corr_route_shift = col_bank(i_corr_col_idx[0]);
+    // Correction uses the same lane-group address invariant as the main read.
+    corr_work_read_addr_common = work_addr(i_corr_tile_offset[0]);
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-      corr_route_in[lane_idx] = {
-        i_corr_read_valid[lane_idx], work_addr(i_corr_tile_offset[lane_idx])
-      };
-      {corr_work_read_valid[lane_idx], corr_work_read_addr[lane_idx]} = corr_route_out[lane_idx];
+      corr_route_in[lane_idx][0] = i_corr_read_valid[lane_idx];
+      corr_work_read_valid[lane_idx] = corr_route_out[lane_idx][0];
+      corr_work_read_addr[lane_idx] = corr_work_read_addr_common;
     end
   end
 
   barrel_rotate #(
-      .DATA_W(1 + K_SIGN_WORK_AW)
+      .DATA_W(1)
   ) u_corr_read_route (
       .i_data (corr_route_in),
       .i_shift(LANE_IDX_W'('0 - corr_route_shift)),
@@ -246,4 +249,23 @@ module k_sign_selector
       .i_corr_read_addr       (corr_work_read_addr),
       .o_corr_read_record     (corr_work_read_record)
   );
+
+`ifndef SYNTHESIS
+  always @(posedge i_clk or negedge i_rst_n) begin
+    if (i_rst_n) begin
+      for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
+        if (i_valid[lane_idx] && (work_addr(
+                i_tile_offset[lane_idx]
+            ) != work_read_addr_common)) begin
+          $fatal(1, "K-sign work addresses must be common within one lane group");
+        end
+        if (i_corr_read_valid[lane_idx] && (work_addr(
+                i_corr_tile_offset[lane_idx]
+            ) != corr_work_read_addr_common)) begin
+          $fatal(1, "K-sign correction addresses must be common within one lane group");
+        end
+      end
+    end
+  end
+`endif
 endmodule
