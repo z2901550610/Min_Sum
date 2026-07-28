@@ -8,8 +8,8 @@
 ## 基线配置
 
 仓库统一TRIKE K-sign默认构建配置为 `L=32`、`K=4`、`COLS_PER_TILE=1152`。当前RTL已完成功能
-验证；新`r`参数下的L=16、K=4、`COLS_PER_TILE=1168`配置已取得Fully Placed资源和Routed时序报告，
-默认L=32配置的新`r`物理结果待测。
+验证；新`r`参数下的L=16、K=4、`COLS_PER_TILE=1168`配置和默认L=32配置均已取得Fully Placed资源
+和Routed时序报告。
 
 | 项目 | 配置 |
 | --- | --- |
@@ -27,7 +27,7 @@
 | Vivado | 2023.2 |
 | 目标时钟 | 100 MHz，周期 10 ns |
 | 时钟不确定度 | 0.100 ns |
-| 物理实现状态 | 新 `r` 参数集待运行 Vivado；2026-07-26 报告保留为旧 `r` 几何的历史参考 |
+| 物理实现状态 | 2026-07-28新`r`参数，Fully Placed资源 / Routed时序 |
 
 统一硬件使用最大参数确定存储和计数器几何。`i_param_level` 是公开输入，各参数等级使用公开固定的
 `R`、`W`、tile 数和周期预算。
@@ -44,6 +44,8 @@
 - `ram_sign_delta` 使用两个 iteration pair，C2V 读取 deviation parity，重叠 correction 更新另一个 pair。
 - `ram_accum` 和 `ram_t` 使用独立的 fill/active 双 buffer，使相邻 tile 的 C2V 与 V2C 重叠；两个buffer
   选择恒为互补。
+- `ram_accum`利用同一lane group内`floor(tile_offset/L)`相同的不变量，C2V读、C2V写和V2C读各自
+  计算一份公共地址并广播到所有bank；前向旋转只携带valid和C2V写数据。
 - `ram_t`利用同一lane group内`diag_idx_local*Q_BASE+floor(tile_offset/L)`相同的不变量，读侧只旋转
   valid，写侧只旋转valid和消息；读写地址各计算一份并广播到所有bank。
 - `ram_k_tile` 使用一份候选工作RAM和一份位置snapshot，使完成tile的correction与后续tile的V2C重叠。
@@ -68,7 +70,7 @@
 | `ram_m` | `2 × L` 个18-bit压缩 check-state bank | 完整记录同步读写和固定旁路；pair 隔离 |
 | `ram_sign_delta` | `2 × L` 个 1-bit row-parity bank | pair 隔离；同步读、清空和 flip RMW |
 | `ram_syndrome` | `L` 个 syndrome bit BRAM bank | 顺序完整装载后允许启动；C2V同步读，读valid控制位复位 |
-| `ram_accum` | 两组单读口 banked distributed RAM | 每个物理buffer在C2V/V2C之间共享一个读地址；C2V读改写 |
+| `ram_accum` | 两组单读口 banked distributed RAM | 公共地址广播；valid/写数据按tile offset旋转；每个物理buffer在C2V/V2C之间共享一个读地址；C2V读改写 |
 | `ram_t` | 每个buffer、每个tile-offset bank一份深度 `W × Q_BASE` 的BRAM | 公共地址广播；valid/消息按tile offset旋转；C2V写fill buffer，V2C读active buffer |
 | `ram_k_tile` | `L` 个参数化工作bank和snapshot bank；K=4宽度为45/28 bit | 工作RAM维护候选；snapshot供correction读取位置 |
 | `ram_k_global` | `L` 个原地更新全局 bank | C2V 同步读，V2C提交同步写；完成后同步输出最终判决 |
@@ -153,7 +155,7 @@ T_DECODE     = 7 × 1219794 + 6 = 8538564
 本节列出的2026-07-17至2026-07-26 Vivado结果使用旧参数
 `R={8117,12739,29501,61283,108587}`。新K=4外推参数
 `R={8291,12899,29917,63997,106781}`改变了统一硬件深度和调度边界，因此这些报告只作为历史参考。
-新参数下的L=16结果列在本节，L=32结果待测。
+新参数下的L=16和L=32结果列在本节。
 
 最近完整K=3基线的2026-07-17 Fully Placed aggregate utilization如下：
 
@@ -221,21 +223,21 @@ K=4的全局记录宽度为29 bit，tile工作记录为45 bit，correction snaps
 
 该配置剩余41.5个Block RAM Tile。后续存储扩展、额外缓冲和系统集成必须重新检查BRAM容量与布局可行性。
 
-### K=4、L=32、1152列历史物理参考
+### K=4、L=32、1152列默认配置
 
-该报告配置的最大等级 `Q_BASE/Q_TILE=36/39`、`TILE_COUNT=95`、`TILES_TOTAL=285`。TRIKE-512固定周期为
-8,720,781，100 MHz固定译码时间为87.20781 ms。旧参数五档功能回归通过。K-sign selector使用公共bank
-地址，`ram_t`读写地址各计算一份并广播到所有bank。2026-07-26 Fully Placed aggregate utilization如下：
+该配置的最大等级`Q_BASE/Q_TILE=36/39`、`TILE_COUNT=93`、`TILES_TOTAL=279`。TRIKE-512固定周期为
+8,538,564，100 MHz固定译码时间为85.38564 ms。新参数五档功能回归通过。K-sign selector使用公共bank
+地址，`ram_t`读写地址各计算一份并广播到所有bank。2026-07-28 Fully Placed aggregate utilization如下：
 
 | 资源 | 使用量 | 器件可用量 | 利用率 |
 | --- | ---: | ---: | ---: |
-| Slice LUT | 45,316 | 222,600 | 20.36% |
-| LUT as Logic | 40,868 | 222,600 | 18.36% |
+| Slice LUT | 45,309 | 222,600 | 20.35% |
+| LUT as Logic | 40,861 | 222,600 | 18.36% |
 | LUT as Memory | 4,448 | 81,400 | 5.46% |
 | Distributed RAM LUT | 4,160 | — | — |
 | SRL LUT | 288 | — | — |
-| Slice Register | 20,798 | 445,200 | 4.67% |
-| Slice | 15,392 | 55,650 | 27.66% |
+| Slice Register | 20,802 | 445,200 | 4.67% |
+| Slice | 15,406 | 55,650 | 27.68% |
 | Block RAM Tile | 561.5 | 715 | 78.53% |
 | RAMB36E1 | 512 | 715 | 71.61% |
 | RAMB18E1 | 99 | 1,430 | 6.92% |
@@ -292,22 +294,21 @@ distributed RAM的读数据寄存器，数据路径9.533 ns，其中route为9.26
 该配置内部未约束endpoint为0；69个普通输入和7个输出没有I/O delay，另有1个输入由false path覆盖。
 `o_e_rdata` 的未约束外部输出路径数据延迟为14.597 ns，板级接口签核要求与其他配置相同。
 
-旧`r`下K=4、`L=32`、`COLS_PER_TILE=1152`公共地址配置的2026-07-26 Routed timing满足内部100 MHz
-约束。整体及`decoder_clk`组setup WNS/TNS均为`+0.276 ns / 0.000 ns`，hold WHS/THS为
-`+0.034 ns / 0.000 ns`，WPWS/TPWS为`+4.232 ns / 0.000 ns`；异步复位释放路径WNS为
-`+2.875 ns`。
+新`r`下K=4、`L=32`、`COLS_PER_TILE=1152`公共地址配置的2026-07-28 Routed timing满足内部100 MHz
+约束。整体及`decoder_clk`组setup WNS/TNS均为`+0.439 ns / 0.000 ns`，hold WHS/THS为
+`+0.028 ns / 0.000 ns`，WPWS/TPWS为`+4.232 ns / 0.000 ns`；异步复位释放路径WNS为
+`+2.499 ns`。
 
-最差主时钟路径从`ram_t` buffer 0、bank 6的RAMB36读口到VNU lane 19的
-`v2c_scaled_q_reg[19][17]`，数据路径9.240 ns，其中logic 3.244 ns、route 5.996 ns、route占
-64.893%，共13级逻辑。前十条setup路径以`ram_t`到VNU路径为主。第二差路径从K-sign selector bank 0
-的`diag_idx_local_q_reg[0][1]`到`ram_k_tile` bank 23的snapshot distributed RAM输入，
-WNS为`+0.316 ns`，数据路径9.313 ns，其中route 8.222 ns、占88.285%；tile地址计算路径未进入前十条。
+最差主时钟路径从`ram_t` buffer 0、bank 22的RAMB36读口到VNU lane 13的
+`v2c_scaled_q_reg[13][17]`，数据路径8.992 ns，其中logic 3.226 ns、route 5.766 ns、route占
+64.122%，共13级逻辑。前十条setup路径全部为`ram_t`到VNU路径，WNS范围为+0.439至+0.546 ns；
+K-sign工作RAM、snapshot和`ram_m`路径均未进入前十条。
 
 该配置内部未约束endpoint为0；TIMING-18报告76项，69个普通输入和7个输出没有I/O delay，另有1个输入
-由false path覆盖。`o_e_rdata`的未约束外部输出路径数据延迟为14.315 ns，因此内部100 MHz通过不等于
+由false path覆盖。`o_e_rdata`的未约束外部输出路径数据延迟为14.105 ns，因此内部100 MHz通过不等于
 板级I/O时序已经签核。
 
-该报告作为`ram_t`公共地址配置的旧`r` L=32历史参考；新`r` L=32物理结果待测。
+该报告作为新`r`参数及当前`ram_t`公共地址配置的L=32物理基线。
 
 ## 验证状态
 
