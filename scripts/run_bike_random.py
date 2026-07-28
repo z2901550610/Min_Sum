@@ -88,7 +88,7 @@ PARAM_SETS = {
     },
     "trike128": {
         "n0": 3,
-        "r": 8117,
+        "r": 8291,
         "w": 27,
         "error_count": 201,
         "i_max": 7,
@@ -100,7 +100,7 @@ PARAM_SETS = {
     },
     "trike160": {
         "n0": 3,
-        "r": 12739,
+        "r": 12899,
         "w": 35,
         "error_count": 263,
         "i_max": 7,
@@ -112,7 +112,7 @@ PARAM_SETS = {
     },
     "trike256": {
         "n0": 3,
-        "r": 29501,
+        "r": 29917,
         "w": 55,
         "error_count": 429,
         "i_max": 7,
@@ -124,7 +124,7 @@ PARAM_SETS = {
     },
     "trike384": {
         "n0": 3,
-        "r": 61283,
+        "r": 63997,
         "w": 83,
         "error_count": 659,
         "i_max": 7,
@@ -136,7 +136,7 @@ PARAM_SETS = {
     },
     "trike512": {
         "n0": 3,
-        "r": 108587,
+        "r": 106781,
         "w": 111,
         "error_count": 877,
         "i_max": 7,

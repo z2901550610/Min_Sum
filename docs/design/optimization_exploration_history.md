@@ -2185,13 +2185,217 @@ t_addr = diag_idx_local * Q_BASE + floor(tile_offset/L)
 | hold WHS / pulse WPWS | +0.037 / +4.232 ns | +0.030 / +4.232 ns |
 | `o_e_rdata`未约束路径 | 14.651 ns | 13.694 ns |
 
-当前环境没有Vivado可执行文件。当前`ram_t`版本的Slice LUT、LUT as Logic、LUT as Memory、FF、Slice、
-Block RAM Tile、RAMB36/RAMB18、DSP、CARRY4、setup WNS/TNS、hold WHS、pulse width和top paths
-全部待同条件Vivado确认，不能用删除的mux节点数代替实测。
+用户提供的L=32同条件Vivado 2023.2报告使用`xc7k355tffg901-2L`、10 ns时钟和0.100 ns不确定度。
+资源报告为2026-07-26 22:22:26的Fully Placed Design，时序报告为22:26:09的Routed Design。与上表
+阶段41直接基线相比：
 
-结论与状态：`ram_t`公共地址收窄保留为当前RTL候选，功能和固定周期验证完成，物理结果待测。L=16复测
-重点是阶段41已成为前十条的`ram_t` BRAM到VNU路径是否改善或恶化；L=32同时检查两条`ram_t`到VNU路径、
-全局K RAM新瓶颈和aggregate LUT。完成该独立检查点前不修改`ram_accum`，以保持物理归因和回退边界。
+| L=32指标 | 阶段41 selector公共地址 | 本阶段`ram_t`公共地址 | 变化 |
+| --- | ---: | ---: | ---: |
+| Slice LUT | 47,104 | 45,316 | -1,788（-3.80%） |
+| LUT as Logic | 42,656 | 40,868 | -1,788（-4.19%） |
+| LUT as Memory | 4,448 | 4,448 | 0 |
+| Slice Register | 20,811 | 20,798 | -13（-0.06%） |
+| Slice | 15,957 | 15,392 | -565（-3.54%） |
+| Block RAM Tile | 561.5 | 561.5 | 0 |
+| RAMB36E1 / RAMB18E1 | 512 / 99 | 512 / 99 | 0 / 0 |
+| DSP | 0 | 0 | 0 |
+| CARRY4 | 2,998 | 2,812 | -186（-6.20%） |
+
+LUT as Memory和BRAM几何完全不变，资源下降来自组合地址/旋转逻辑；这与结构假设一致，但结论以
+Fully Placed实测为准。
+
+| L=32时序指标 | 阶段41 selector公共地址 | 本阶段`ram_t`公共地址 | 变化 |
+| --- | ---: | ---: | ---: |
+| 整体setup WNS/TNS | +0.505 / 0.000 ns | +0.276 / 0.000 ns | WNS -0.229 ns |
+| `decoder_clk` setup WNS/TNS | +0.505 / 0.000 ns | +0.276 / 0.000 ns | WNS -0.229 ns |
+| hold WHS/THS | +0.030 / 0.000 ns | +0.034 / 0.000 ns | WHS +0.004 ns |
+| pulse WPWS/TPWS | +4.232 / 0.000 ns | +4.232 / 0.000 ns | 0 |
+| 异步复位释放WNS | +3.594 ns | +2.875 ns | -0.719 ns |
+| `o_e_rdata`未约束路径 | 13.694 ns | 14.315 ns | +0.621 ns |
+
+最差主时钟路径从`ram_t` buffer 0、bank 6的RAMB36读口到VNU lane 19的
+`v2c_scaled_q_reg[19][17]`，WNS为+0.276 ns，数据路径9.240 ns，其中logic 3.244 ns、route
+5.996 ns，共13级逻辑。前十条路径以`ram_t`到VNU为主，说明地址旋转收窄降低了面积，但没有切断
+RAM读回后13级VNU组合链。第二差路径从selector bank 0的`diag_idx_local_q_reg[0][1]`到
+`ram_k_tile` bank 23 snapshot distributed RAM输入，WNS为+0.316 ns，数据路径9.313 ns，其中
+route 8.222 ns、占88.285%；阶段41被消除的tile地址计算路径仍未进入前十条，但snapshot数据/控制
+布线重新成为邻近瓶颈。
+
+最差异步路径从复位同步器到全局K bank 30的`pack_read_segment_idx_q_reg[30][1]` CLR端，数据路径
+7.053 ns，其中route 6.715 ns、占95.208%。内部未约束endpoint为0；TIMING-18仍报告76项，即69个
+普通输入和7个输出没有I/O delay，另有1个输入由false path覆盖。`o_e_rdata`的14.315 ns路径不属于
+板级I/O时序签核。
+
+没有新增周期，TRIKE-512在100 MHz下仍为8,720,781拍和87.20781 ms。仅用单次WNS对可达频率作一阶
+外推，本阶段约为102.84 MHz、延时约84.80 ms；阶段41约为105.32 MHz、82.80 ms，约劣化2.41%。
+该外推不是新的时钟约束或实现签核，只用于在周期不变时量化资源/频率权衡。
+
+结论与状态：L=32检查点保留。它以0 BRAM代价减少1,788 LUT和565 Slice，内部100 MHz继续收敛，
+代价是setup WNS减少0.229 ns和一阶外推延时增加约2.41%，未构成明显延时劣化。L=16当前结构的
+Slice LUT、FF、Slice、BRAM、setup/hold和top paths仍待同条件Vivado复测；完成该检查点前不修改
+`ram_accum`，以保持物理归因和回退边界。
+
+## 43. K=4有限长度外推参数写入统一TRIKE硬件
+
+时间：2026-07-28。
+
+目标与依据：把
+[K=4 Min-Sum与TRIKE BF的DFR有限长度外推说明](../verification/k4_minsum_trike_bf_fls_extrapolation.md)
+中满足TRIKE环条件的五档候选写入K-sign硬件。采用的公开参数为：
+
+| 等级 | `r` | `W` | `T` |
+| --- | ---: | ---: | ---: |
+| TRIKE128 | 8291 | 27 | 201 |
+| TRIKE160 | 12899 | 35 | 263 |
+| TRIKE256 | 29917 | 55 | 429 |
+| TRIKE384 | 63997 | 83 | 659 |
+| TRIKE512 | 106781 | 111 | 877 |
+
+五个`r`均重新检查为素数，且2是模`r`的本原元。修改范围包括`rtl/bike_pkg.sv`的统一硬件
+`P_R_VALS`、`scripts/run_bike_random.py`的随机fixture参数和`scripts/min_sum_model.c`的参考模型
+profile。`W`、`T`、5-bit消息、K=4、7次固定迭代、`L=32`和`COLS_PER_TILE=1152`保持不变。
+BF/BGF阈值没有固化到硬件参数表，相关软件路径仍按具体`r`自动计算阈值。
+
+派生几何与固定周期：
+
+| 等级 | `ROW_SEG_SIZE` | `TILE_COUNT` | 固定周期 | 100 MHz延时 |
+| --- | ---: | ---: | ---: | ---: |
+| TRIKE128 | 260 | 8 | 193,528 | 1.93528 ms |
+| TRIKE160 | 404 | 12 | 365,980 | 3.65980 ms |
+| TRIKE256 | 935 | 26 | 1,207,807 | 12.07807 ms |
+| TRIKE384 | 2000 | 56 | 3,866,092 | 38.66092 ms |
+| TRIKE512 | 3337 | 93 | 8,538,564 | 85.38564 ms |
+
+验证范围与结果：
+
+- `make format-rtl`、`make check-format-rtl`、`make lint-rtl`通过；
+- 14项单元测试全部通过；
+- toy集成测试为`residual=0`、`exact=1`、固定154周期；
+- `make test-trike-unified-ksign-random BIKE_RANDOM_TRIALS=1 TRIKE_UNIFIED_KSIGN_K=4`
+  的五档seed 1回归全部`residual=0`、`exact=1`，实测周期与上表逐项一致；
+- Python参数生成脚本通过语法编译，C参考模型通过`-Wall -Wextra -Werror`语法检查并重新构建；
+  五档profile各运行seed 1单例，均为`residual_weight=0`、`exact=yes`。
+
+物理边界：统一最大几何从`R_MAX=108587`改为106781，最大等级`TILE_COUNT`从95改为93，
+`ROW_SEG_SIZE`从3394改为3337。虽然全局K RAM的分段数量保持不变，其他RAM尾段、布局和关键路径仍可能
+变化。2026-07-17至2026-07-26的Vivado资源和时序报告只作为旧`r`历史参考；新参数下的LUT、FF、
+Slice、Block RAM Tile、RAMB36、RAMB18、setup WNS/TNS、hold WHS和I/O约束状态均为待测，不能从
+RTL深度变化直接推断。
+
+结论与状态：K=4外推候选已作为当前统一TRIKE硬件参数保留，功能和固定周期验证完成；新参数Vivado
+实现待测。
+
+## 44. 新r参数下L=16 ram_t公共地址物理检查点与下一步排序
+
+时间：2026-07-28。
+
+配置与归因边界：用户提供的报告使用Vivado 2023.2、`xc7k355tffg901-2L`、
+`TRIKE_UNIFIED_PARAMS`、`L=16`、K=4、`COLS_PER_TILE=1168`、10 ns时钟和0.100 ns不确定度。
+资源报告时间为2026-07-28 16:41:27、Design State为Fully Placed；时序报告时间为16:46:36、
+Design State为Routed。该检查点同时包含阶段42的`ram_t`公共地址结构和阶段43的新
+`R={8291,12899,29917,63997,106781}`，而阶段41参考同时使用旧`r`且尚未修改`ram_t`。因此下表差值
+表示当前成品相对旧检查点的组合变化，不能作为严格的单变量`ram_t`归因。
+
+| L=16资源 | 阶段41旧`r` selector公共地址 | 当前新`r`及`ram_t`公共地址 | 组合变化 |
+| --- | ---: | ---: | ---: |
+| Slice LUT | 27,104 | 26,034 | -1,070（-3.95%） |
+| LUT as Logic | 22,784 | 21,714 | -1,070（-4.70%） |
+| LUT as Memory | 4,320 | 4,320 | 0 |
+| Distributed RAM LUT / SRL LUT | 4,160 / 160 | 4,160 / 160 | 0 / 0 |
+| Slice Register | 11,372 | 11,365 | -7（-0.06%） |
+| Slice | 9,632 | 9,286 | -346（-3.59%） |
+| Block RAM Tile | 537.5 | 537.5 | 0 |
+| RAMB36E1 / RAMB18E1 | 480 / 115 | 480 / 115 | 0 / 0 |
+| DSP / CARRY4 | 0 / 1,851 | 0 / 1,731 | 0 / -120（-6.48%） |
+
+新旧最大几何的全局K分段数、BRAM数量、`Q_BASE=73`、tile RAM深度档和各地址位宽均未变化；同时，
+L=16的LUT、Slice和CARRY4下降比例与阶段42同结构L=32结果方向接近。因此大部分组合资源下降来自
+`ram_t`地址旋转收窄是合理推断，但缺少“新`r`、旧`ram_t`”控制组，不能把1,070 LUT全部记为
+`ram_t`的严格实测收益。
+
+| L=16时序 | 阶段41旧`r` selector公共地址 | 当前新`r`及`ram_t`公共地址 | 组合变化 |
+| --- | ---: | ---: | ---: |
+| 整体setup WNS/TNS | +0.608 / 0.000 ns | +0.611 / 0.000 ns | WNS +0.003 ns |
+| `decoder_clk` setup WNS/TNS | +0.794 / 0.000 ns | +0.667 / 0.000 ns | WNS -0.127 ns |
+| hold WHS/THS | +0.037 / 0.000 ns | +0.034 / 0.000 ns | WHS -0.003 ns |
+| pulse WPWS/TPWS | +4.232 / 0.000 ns | +4.232 / 0.000 ns | 0 |
+| 异步复位释放WNS | +0.608 ns | +0.611 ns | +0.003 ns |
+| `o_e_rdata`未约束路径 | 14.651 ns | 13.213 ns | -1.438 ns |
+
+当前最差主时钟路径从`ram_t` buffer 1、bank 3的RAMB36读口到VNU lane 11的
+`v2c_scaled_q_reg[11][17]`，WNS为+0.667 ns，数据路径8.722 ns，其中logic 2.905 ns、route
+5.817 ns，共11级逻辑。旧检查点的同类最差路径为8.519 ns、logic 3.228 ns、route 5.291 ns和13级；
+当前逻辑部分缩短0.323 ns，但布线增加0.526 ns，净数据路径增加0.203 ns。公共地址收窄位于前向请求，
+不会切断BRAM读回、逆旋转、减法和alpha缩放组成的返回路径。
+
+前十条主时钟路径中七条为`ram_t`到VNU；另外三条从`ram_m.c2v_pair_sel_q`到
+`c2v_comp_s_reg[3]`，最差同为+0.667 ns，数据路径9.310 ns中route为9.008 ns、占96.756%，只有
+1级LUT。该路径说明L=16的下一时序瓶颈还包括跨pair输出选择，而不是单独给VNU加流水即可解决。
+
+最差异步路径从复位同步器到全局K RAM的`pack_read_segment_idx_q_reg[2][2]` CLR端，数据路径
+8.914 ns，其中route 8.547 ns、占95.883%。内部未约束endpoint为0；TIMING-18仍为76项，即69个
+普通输入和7个输出缺少I/O delay，另有1个输入由false path覆盖。`o_e_rdata`的13.213 ns路径不能作为
+板级同步接口签核。
+
+新`r`下L=16固定周期为：
+
+| 等级 | `ROW_SEG_SIZE` | `TILE_COUNT` | 固定周期 | 100 MHz延时 |
+| --- | ---: | ---: | ---: | ---: |
+| TRIKE128 | 519 | 8 | 377,159 | 3.77159 ms |
+| TRIKE160 | 807 | 12 | 713,271 | 7.13271 ms |
+| TRIKE256 | 1,870 | 26 | 2,353,952 | 23.53952 ms |
+| TRIKE384 | 4,000 | 55 | 7,402,114 | 74.02114 ms |
+| TRIKE512 | 6,674 | 92 | 16,463,236 | 164.63236 ms |
+
+功能验证单独使用以下命令运行五档seed 1：
+
+```sh
+make test-trike-unified-ksign-random BIKE_RANDOM_TRIALS=1 \
+  TRIKE_UNIFIED_KSIGN_PARALLEL_L=16 \
+  TRIKE_UNIFIED_KSIGN_COLS_PER_TILE=1168 \
+  TRIKE_UNIFIED_KSIGN_K=4
+```
+
+五档全部`residual=0`、`exact=1`，实测周期与上表逐项一致。Vivado物理通过和该功能结果分别成立。
+
+相对旧`r`的L=16历史周期，五档分别变化+12.93%、+8.51%、+0.01%、+3.73%和-1.07%。这是
+`ceil(R/COLS_PER_TILE)`跨整数边界造成的固定tile数量变化；`r`更接近外推目标不等于每个等级的硬件周期
+都会下降。若L=16需要兼顾前四档延时，应按新`r`重新扫描tile大小，不能只观察TRIKE-512。
+
+仅按`10 ns - decoder_clk WNS`作一阶频率外推，当前约为107.15 MHz，TRIKE-512约153.651 ms。
+阶段41旧参数检查点约为108.62 MHz和153.199 ms；两项变化混合后的外推总延时增加约0.30%，而100 MHz
+固定延时因新`r`减少约1.07%。该计算不是Fmax签核，也不能用于拆分`r`与RTL结构的独立贡献。
+
+下一步按以下顺序推进：
+
+1. 先在不修改RTL结构的条件下取得新`r`、L=32、K=4、`COLS_PER_TILE=1152`报告。阶段42的L=32报告
+   仍使用旧`r`，缺少该报告会使后续L=32资源和总延时继续混合归因。
+2. 下一项无周期结构实验为`ram_accum`公共地址收窄。C2V读、C2V写和V2C读各自满足同拍所有有效lane
+   的`floor(tile_offset/L)`相同；L=16可把两条`1+7`读请求和一条`1+7+ACC_W`写请求中的地址移出
+   旋转网络，删除1,344个1-bit 2:1 mux节点，L=32对应2,880个节点。只广播三份公共地址，RAM深度、
+   单读口buffer、异步读、旁路和固定周期保持不变。预期目标是logic LUT/Slice下降；当前top paths
+   不经过这些前向地址，因此不预设WNS改善，并单独复测广播扇出。
+3. 独立的L=16时序实验可移除`ram_m`输出端的标量`c2v_pair_sel_q/v2c_pair_sel_q`选择，改用每个
+   pair/bank已经寄存的`c2v_bank_read_valid`和`v2c_bank_read_valid`作局部one-hot选择，并增加
+   one-hot断言。该实验不增加周期，直接针对当前三条96%以上route路径；必须与`ram_accum`分开实现和
+   复测。
+4. 资源主线仍可验证27-bit精确K位置编码。新最大`r`下L=16和L=32全局K分段档不变，静态目标仍分别
+   节省80和32个RAMB36。新`r`重新扫描L=32统一tile后，`C=1504`、`Q_BASE/Q_TILE=47/50`的五档周期为
+   190,882、358,140、1,200,107、3,819,612和8,376,171，相对`C=1152`分别减少1.37%、2.14%、
+   0.64%、1.20%和1.90%。它预计为`ram_t`增加64个RAMB18，即32个Block RAM Tile，可与27-bit编码
+   释放的32个Tile配对验证；旧参数下优先的`C=1664`不是新参数最大等级的最优联合点。
+   L=16的新`r`统一扫描只有`C=1312`同时不劣化五档，周期为373,190、672,111、2,336,627、
+   7,386,427和16,425,940；TRIKE-512只减少0.23%，而`ram_t`最大深度从8,103跨到9,102，静态预计
+   增加32个RAMB18，即16个Block RAM Tile，因此不作为最大等级低延时主线。
+5. VNU流水只在证明不会把每个diag的`Q_TILE`增加1拍时考虑。若每个diag增加1拍，新`r`的TRIKE-512
+   将增加约216,006拍（L=16，+1.31%）或218,337拍（L=32，+2.56%）。L=16移除`ram_t`路径后仍有同为
+   +0.667 ns的`ram_m`路径；旧`r` L=32的次差路径只比最差路径多0.040 ns，单独切断VNU路径的一阶
+   频率收益约0.41%，不足以抵消+2.56%周期，因此该方案不作为下一项。
+
+结论与状态：当前新`r` L=16检查点保留，内部100 MHz、BRAM、setup、hold和pulse width均满足要求；
+相对旧检查点表现为明显logic资源下降和约0.30%的一阶外推总延时变化，属于可接受权衡。下一步先补齐
+新`r` L=32物理基线，再实施`ram_accum`公共地址收窄；`ram_m`局部one-hot选择作为随后独立的零周期
+时序候选。
 
 ## 形成的设计结论
 

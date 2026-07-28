@@ -20,6 +20,7 @@ diag_idx_global = b * W + k
 
 ## 文档导航
 
+- [decoder_hardware_design_guide.md](decoder_hardware_design_guide.md)：面向硬件设计初学者、按完整译码数据流组织的架构与实现说明
 - [decoder_architecture.md](decoder_architecture.md)：模块划分、数据通路、存储职责和控制边界
 - [tile_decoder_design.md](tile_decoder_design.md)：tile 几何、guard 规则、状态组织和 C2V/V2C 公式
 - [decoder_schedule.md](decoder_schedule.md)：固定窗口调度、状态、计数器和周期预算
@@ -39,13 +40,13 @@ diag_idx_global = b * W + k
 | `BIKE_128_PARAMS` | `N0=2`, `R=12323`, `W=71`, `T=134`, `I_MAX=7` |
 | `BIKE_192_PARAMS` | `N0=2`, `R=24659`, `W=103`, `T=199`, `I_MAX=7` |
 | `BIKE_256_PARAMS` | `N0=2`, `R=40973`, `W=137`, `T=264`, `I_MAX=7` |
-| `TRIKE_128_PARAMS` | `N0=3`, `R=8117`, `W=27`, `T=201`, `I_MAX=7` |
-| `TRIKE_160_PARAMS` | `N0=3`, `R=12739`, `W=35`, `T=263`, `I_MAX=7` |
-| `TRIKE_256_PARAMS` | `N0=3`, `R=29501`, `W=55`, `T=429`, `I_MAX=7` |
-| `TRIKE_384_PARAMS` | `N0=3`, `R=61283`, `W=83`, `T=659`, `I_MAX=7` |
-| `TRIKE_512_PARAMS` | `N0=3`, `R=108587`, `W=111`, `T=877`, `I_MAX=7` |
+| `TRIKE_128_PARAMS` | `N0=3`, `R=8291`, `W=27`, `T=201`, `I_MAX=7` |
+| `TRIKE_160_PARAMS` | `N0=3`, `R=12899`, `W=35`, `T=263`, `I_MAX=7` |
+| `TRIKE_256_PARAMS` | `N0=3`, `R=29917`, `W=55`, `T=429`, `I_MAX=7` |
+| `TRIKE_384_PARAMS` | `N0=3`, `R=63997`, `W=83`, `T=659`, `I_MAX=7` |
+| `TRIKE_512_PARAMS` | `N0=3`, `R=106781`, `W=111`, `T=877`, `I_MAX=7` |
 | `BIKE_UNIFIED_PARAMS` | 最大几何为 `N0=2`, `R=40973`, `W=137`, `T=264`, `I_MAX=7` |
-| `TRIKE_UNIFIED_PARAMS` | 最大几何为 `N0=3`, `R=108587`, `W=111`, `T=877`, `I_MAX=7` |
+| `TRIKE_UNIFIED_PARAMS` | 最大几何为 `N0=3`, `R=106781`, `W=111`, `T=877`, `I_MAX=7` |
 
 覆盖宏：
 

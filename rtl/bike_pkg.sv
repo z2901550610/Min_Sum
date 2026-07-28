@@ -49,7 +49,7 @@ package bike_pkg;
 
 `ifdef DECODER_TRIKE_FAMILY
   // TRIKE profile values indexed [0:4] = {128, 160, 256, 384, 512}.
-  localparam int P_R_VALS[0:4] = '{8117, 12739, 29501, 61283, 108587};
+  localparam int P_R_VALS[0:4] = '{8291, 12899, 29917, 63997, 106781};
   localparam int P_W_VALS[0:4] = '{27, 35, 55, 83, 111};
   localparam int P_T_VALS[0:4] = '{201, 263, 429, 659, 877};
   localparam int P_C_VALS[0:4] = '{5, 5, 5, 5, 7};

@@ -18,6 +18,7 @@
 - [译码器验证](verification/decoder_verification.md)：回归入口、随机用例、检查项、日志、格式化和 lint。
 - [参数结果](verification/parameter_results.md)：参数运行摘要和结果模板。
 - [量化模型](verification/quantization_model.md)：C 模型、量化参数、fixtures 和 sweep 流程。
+- [K=4 Min-Sum 与 TRIKE BF 的 FLS 外推](verification/k4_minsum_trike_bf_fls_extrapolation.md)：外推方法、95% 置信区间、K=4 候选 `r` 和适用边界。
 
 ## 图文件
 

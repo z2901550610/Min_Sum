@@ -269,8 +269,8 @@ K-sign 实现遵守以下固定时间规则：
 
 ```text
 N0 = 3
-R_MAX = 108587
-N = N0 * R_MAX = 325761
+R_MAX = 106781
+N = N0 * R_MAX = 320343
 W_MAX = 111
 POS_W = 7
 ```
@@ -279,8 +279,8 @@ POS_W = 7
 
 | K | 每变量 bit | 总 bit | 约 MiB |
 | ---: | ---: | ---: | ---: |
-| 3 | 22 | 7,166,742 | 0.85 |
-| 4 | 29 | 9,447,069 | 1.13 |
+| 3 | 22 | 7,047,546 | 0.84 |
+| 4 | 29 | 9,289,947 | 1.11 |
 
 BRAM数量由目标器件的SDP primitive、bank深度和Vivado memory mapping共同决定。
 
@@ -300,7 +300,7 @@ Tile 内 selector 工作状态按 `COLS_PER_TILE=1168`、`D=4` 估算：
 其他配置使用独立`base_sign`和位置字段。所有字段使用相同的逻辑bank地址和读写使能。C2V完成一个tile
 的记录读取后，落后一窗口的V2C对同一tile原地提交记录。
 
-`ram_sign_delta` 保存两个 iteration pair、每个 pair `R` bit 的 `dev_xor`，逻辑容量为 `2*R_MAX=217,174 bit`。它按 L 个 row bank 组织，物理 BRAM 数量以 Vivado 报告为准。
+`ram_sign_delta` 保存两个 iteration pair、每个 pair `R` bit 的 `dev_xor`，逻辑容量为 `2*R_MAX=213,562 bit`。它按 L 个 row bank 组织，物理 BRAM 数量以 Vivado 报告为准。
 
 统一TRIKE、`L=16`的K=3和K=4 RTL实现及Vivado资源结果见
 [implementation_status.md](implementation_status.md)。
@@ -376,7 +376,7 @@ K-sign 数据通路由以下模块组成：
 | selector 布线 | `COLS_PER_TILE*K` 候选状态分布在 tile 内 | 状态按lane/bank分区，group地址广播，bank相关负载旋转 |
 | K=3 余量 | 小 K 对 DFR margin 更敏感 | 使用多 seed 和更低 DFR 区确认 |
 | sign_xor 语义 | C2V 与 CNU A 必须使用同一近似符号定义 | C model、RTL 和测试向量共享 tie-break 规则 |
-| 重叠路径时序 | snapshot和存储读回路径包含跨bank布线 | ram_t公共地址版待测；selector版参考WNS为L=16 +0.794 ns、L=32 +0.505 ns |
+| 重叠路径时序 | snapshot和存储读回路径包含跨bank布线 | 新`r`的L=16 WNS为+0.667 ns；新`r`的L=32物理结果待测 |
 
 ## RTL 配置
 
