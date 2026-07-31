@@ -88,11 +88,11 @@ PARAM_SETS = {
     },
     "trike128": {
         "n0": 3,
-        "r": 8291,
+        "r": 8243,
         "w": 27,
         "error_count": 201,
         "i_max": 7,
-        "c_val": 5,
+        "c_val": 4,
         "msg_bits": 5,
         "alpha_shift_0": 3,
         "alpha_shift_1": 4,

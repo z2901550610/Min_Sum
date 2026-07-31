@@ -1,0 +1,166 @@
+`timescale 1ns / 1ps
+
+// Fixed-schedule TRIKE generate_random_idx implementation.
+//
+// Positions are processed from WEIGHT-1 down to zero. Each position consumes
+// exactly one 32-bit random word and scans all WEIGHT stored indices. A match
+// with an already selected index chooses the public current position, matching
+// the Reference C without rejection sampling.
+module trike_fixed_weight_sampler #(
+    parameter int LENGTH = 46743,
+    parameter int WEIGHT = 263
+) (
+    input  logic                                           i_clk,
+    input  logic                                           i_rst_n,
+    input  logic                                           i_start,
+    input  logic                                           i_random_valid,
+    input  logic [                                   31:0] i_random_data,
+    output logic                                           o_random_ready,
+    output logic                                           o_index_valid,
+    output logic [((WEIGHT > 1) ? $clog2(WEIGHT) : 1)-1:0] o_index_position,
+    output logic [((LENGTH > 1) ? $clog2(LENGTH) : 1)-1:0] o_index,
+    input  logic                                           i_index_ready,
+    output logic                                           o_busy,
+    output logic                                           o_done
+);
+
+  localparam int INDEX_W = (LENGTH > 1) ? $clog2(LENGTH) : 1;
+  localparam int POSITION_W = (WEIGHT > 1) ? $clog2(WEIGHT) : 1;
+  localparam logic [POSITION_W-1:0] LAST_SCAN_IDX = POSITION_W'(WEIGHT - 1);
+  localparam logic [POSITION_W-1:0] START_POSITION = POSITION_W'(WEIGHT - 1);
+  localparam logic [31:0] LENGTH_32 = 32'(LENGTH);
+
+  typedef enum logic [1:0] {
+    ST_IDLE,
+    ST_WAIT_RANDOM,
+    ST_SCAN,
+    ST_OUTPUT
+  } state_t;
+
+  state_t                  state_q;
+
+  (* ram_style = "block" *) logic   [   INDEX_W-1:0] index_mem[0:WEIGHT-1];
+
+  logic   [POSITION_W-1:0] position_q;
+  logic   [POSITION_W-1:0] scan_issue_idx_q;
+  logic   [POSITION_W-1:0] scan_read_idx_q;
+  logic                    scan_read_valid_q;
+  logic   [   INDEX_W-1:0] scan_read_data_q;
+  logic   [   INDEX_W-1:0] candidate_q;
+  logic   [   INDEX_W-1:0] candidate_value;
+  logic                    duplicate_q;
+  logic   [   INDEX_W-1:0] output_index_q;
+
+  logic   [          31:0] position_32;
+  logic                    duplicate_match;
+  logic                    duplicate_with_match;
+
+  assign position_32 = {{(32 - POSITION_W) {1'b0}}, position_q};
+
+  trike_sampler_candidate #(
+      .OUTPUT_W(INDEX_W)
+  ) u_candidate (
+      .i_random(i_random_data),
+      .i_position(position_32),
+      .i_length(LENGTH_32),
+      .o_candidate(candidate_value)
+  );
+
+  assign duplicate_match = scan_read_valid_q && (scan_read_idx_q > position_q) &&
+                           (scan_read_data_q == candidate_q);
+  assign duplicate_with_match = duplicate_q | duplicate_match;
+
+  assign o_random_ready = (state_q == ST_WAIT_RANDOM);
+  assign o_index_valid = (state_q == ST_OUTPUT);
+  assign o_index_position = position_q;
+  assign o_index = output_index_q;
+  assign o_busy = (state_q != ST_IDLE);
+
+  always_ff @(posedge i_clk or negedge i_rst_n) begin
+    if (!i_rst_n) begin
+      state_q           <= ST_IDLE;
+      position_q        <= '0;
+      scan_issue_idx_q  <= '0;
+      scan_read_idx_q   <= '0;
+      scan_read_valid_q <= 1'b0;
+      scan_read_data_q  <= '0;
+      candidate_q       <= '0;
+      duplicate_q       <= 1'b0;
+      output_index_q    <= '0;
+      o_done            <= 1'b0;
+    end else begin
+      o_done <= 1'b0;
+
+      unique case (state_q)
+        ST_IDLE: begin
+          if (i_start) begin
+            position_q <= START_POSITION;
+            state_q    <= ST_WAIT_RANDOM;
+          end
+        end
+
+        ST_WAIT_RANDOM: begin
+          if (i_random_valid) begin
+            candidate_q       <= candidate_value;
+            duplicate_q       <= 1'b0;
+            scan_issue_idx_q  <= '0;
+            scan_read_valid_q <= 1'b0;
+            state_q           <= ST_SCAN;
+          end
+        end
+
+        ST_SCAN: begin
+          if (scan_read_valid_q) begin
+            duplicate_q <= duplicate_with_match;
+          end
+
+          if (scan_read_valid_q && (scan_read_idx_q == LAST_SCAN_IDX)) begin
+            if (duplicate_with_match) begin
+              index_mem[position_q] <= INDEX_W'(position_q);
+              output_index_q        <= INDEX_W'(position_q);
+            end else begin
+              index_mem[position_q] <= candidate_q;
+              output_index_q        <= candidate_q;
+            end
+            scan_read_valid_q <= 1'b0;
+            state_q           <= ST_OUTPUT;
+          end else begin
+            scan_read_data_q  <= index_mem[scan_issue_idx_q];
+            scan_read_idx_q   <= scan_issue_idx_q;
+            scan_read_valid_q <= 1'b1;
+            if (scan_issue_idx_q != LAST_SCAN_IDX) begin
+              scan_issue_idx_q <= scan_issue_idx_q + 1'b1;
+            end
+          end
+        end
+
+        ST_OUTPUT: begin
+          if (i_index_ready) begin
+            if (position_q == 0) begin
+              o_done  <= 1'b1;
+              state_q <= ST_IDLE;
+            end else begin
+              position_q <= position_q - 1'b1;
+              state_q    <= ST_WAIT_RANDOM;
+            end
+          end
+        end
+
+        default: begin
+          state_q <= ST_IDLE;
+        end
+      endcase
+    end
+  end
+
+`ifndef SYNTHESIS
+  initial begin
+    if (LENGTH < 1) $error("trike_fixed_weight_sampler LENGTH must be at least 1");
+    if (WEIGHT < 1) $error("trike_fixed_weight_sampler WEIGHT must be at least 1");
+    if (WEIGHT > LENGTH) $error("trike_fixed_weight_sampler WEIGHT must not exceed LENGTH");
+    if (POSITION_W > 32) $error("trike_fixed_weight_sampler WEIGHT width must fit 32 bits");
+    if (INDEX_W > 32) $error("trike_fixed_weight_sampler LENGTH width must fit 32 bits");
+  end
+`endif
+
+endmodule

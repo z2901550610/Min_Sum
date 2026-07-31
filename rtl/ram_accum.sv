@@ -20,8 +20,8 @@ module ram_accum
 
   localparam int ACCUM_BANK_DEPTH = Q_BASE;
   localparam int ACCUM_BANK_AW = (ACCUM_BANK_DEPTH > 1) ? $clog2(ACCUM_BANK_DEPTH) : 1;
-  localparam int READ_ROUTE_W = 1;
-  localparam int WRITE_ROUTE_W = 1 + ACC_W;
+  localparam int READ_ROUTE_W = 1 + ACCUM_BANK_AW;
+  localparam int WRITE_ROUTE_W = READ_ROUTE_W + ACC_W;
 
   logic signed [        ACC_W-1:0] c2v_bank_rdata[  0:1][0:L-1];
   logic signed [        ACC_W-1:0] v2c_bank_rdata[  0:1][0:L-1];
@@ -38,13 +38,13 @@ module ram_accum
   logic        [   LANE_IDX_W-1:0] c2v_read_shift;
   logic        [   LANE_IDX_W-1:0] c2v_write_shift;
   logic        [   LANE_IDX_W-1:0] v2c_read_shift;
-  logic        [ACCUM_BANK_AW-1:0] c2v_read_addr_common;
-  logic        [ACCUM_BANK_AW-1:0] c2v_write_addr_common;
-  logic        [ACCUM_BANK_AW-1:0] v2c_read_addr_common;
   logic                            routed_c2v_read_valid[0:L-1];
+  logic        [ACCUM_BANK_AW-1:0] routed_c2v_read_addr[0:L-1];
   logic                            routed_c2v_write_valid[0:L-1];
+  logic        [ACCUM_BANK_AW-1:0] routed_c2v_write_addr[0:L-1];
   logic signed [        ACC_W-1:0] routed_c2v_write_data[0:L-1];
   logic                            routed_v2c_read_valid[0:L-1];
+  logic        [ACCUM_BANK_AW-1:0] routed_v2c_read_addr[0:L-1];
 
   function automatic logic [LANE_IDX_W-1:0] offset_bank(input  logic [TILE_OFF_W-1:0] tile_offset);
     begin
@@ -60,22 +60,29 @@ module ram_accum
   endfunction
 
   always_comb begin
-    c2v_read_shift = offset_bank(i_c2v_read_tile_offset[0]);
+    c2v_read_shift  = offset_bank(i_c2v_read_tile_offset[0]);
     c2v_write_shift = offset_bank(i_c2v_write_tile_offset[0]);
-    v2c_read_shift = offset_bank(i_v2c_tile_offset[0]);
-    c2v_read_addr_common = offset_addr(i_c2v_read_tile_offset[0]);
-    c2v_write_addr_common = offset_addr(i_c2v_write_tile_offset[0]);
-    v2c_read_addr_common = offset_addr(i_v2c_tile_offset[0]);
+    v2c_read_shift  = offset_bank(i_v2c_tile_offset[0]);
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
-      c2v_read_route_in[lane_idx] = i_c2v_read_valid[lane_idx];
-      c2v_write_route_in[lane_idx] = {i_c2v_write_valid[lane_idx], i_updated_c2v_sum[lane_idx]};
-      v2c_read_route_in[lane_idx] = i_v2c_valid[lane_idx];
+      c2v_read_route_in[lane_idx] = {
+        i_c2v_read_valid[lane_idx], offset_addr(i_c2v_read_tile_offset[lane_idx])
+      };
+      c2v_write_route_in[lane_idx] = {
+        i_c2v_write_valid[lane_idx],
+        offset_addr(i_c2v_write_tile_offset[lane_idx]),
+        i_updated_c2v_sum[lane_idx]
+      };
+      v2c_read_route_in[lane_idx] = {
+        i_v2c_valid[lane_idx], offset_addr(i_v2c_tile_offset[lane_idx])
+      };
       c2v_selected_bank_rdata[lane_idx] = c2v_bank_rdata[int'(i_c2v_read_buf)][lane_idx];
       v2c_selected_bank_rdata[lane_idx] = v2c_bank_rdata[int'(i_active_buf)][lane_idx];
-      routed_c2v_read_valid[lane_idx] = c2v_read_route_out[lane_idx];
-      {routed_c2v_write_valid[lane_idx], routed_c2v_write_data[lane_idx]} =
-          c2v_write_route_out[lane_idx];
-      routed_v2c_read_valid[lane_idx] = v2c_read_route_out[lane_idx];
+      {routed_c2v_read_valid[lane_idx], routed_c2v_read_addr[lane_idx]} =
+          c2v_read_route_out[lane_idx];
+      {routed_c2v_write_valid[lane_idx], routed_c2v_write_addr[lane_idx],
+       routed_c2v_write_data[lane_idx]} = c2v_write_route_out[lane_idx];
+      {routed_v2c_read_valid[lane_idx], routed_v2c_read_addr[lane_idx]} =
+          v2c_read_route_out[lane_idx];
     end
   end
 
@@ -136,13 +143,13 @@ module ram_accum
 
         always_comb begin
           c2v_bank_re = routed_c2v_read_valid[bank_idx] && (int'(i_c2v_read_buf) == buf_idx);
-          c2v_bank_raddr = c2v_read_addr_common;
+          c2v_bank_raddr = routed_c2v_read_addr[bank_idx];
           v2c_bank_re = routed_v2c_read_valid[bank_idx] && (int'(i_active_buf) == buf_idx);
-          v2c_bank_raddr = v2c_read_addr_common;
+          v2c_bank_raddr = routed_v2c_read_addr[bank_idx];
           bank_re = c2v_bank_re || v2c_bank_re;
           bank_raddr = c2v_bank_re ? c2v_bank_raddr : v2c_bank_raddr;
           c2v_bank_we = routed_c2v_write_valid[bank_idx] && (int'(i_c2v_write_buf) == buf_idx);
-          c2v_bank_waddr = c2v_write_addr_common;
+          c2v_bank_waddr = routed_c2v_write_addr[bank_idx];
           c2v_bank_wdata = routed_c2v_write_data[bank_idx];
         end
 
@@ -184,31 +191,13 @@ module ram_accum
         $fatal(1, "ram_accum C2V read offset out of range lane=%0d offset=%0d", lane_idx,
                i_c2v_read_tile_offset[lane_idx]);
       end
-      if (i_c2v_read_valid[lane_idx] && (offset_addr(
-              i_c2v_read_tile_offset[lane_idx]
-          ) != c2v_read_addr_common)) begin
-        $fatal(1, "ram_accum C2V read address is not common lane=%0d offset=%0d", lane_idx,
-               i_c2v_read_tile_offset[lane_idx]);
-      end
       if (i_c2v_write_valid[lane_idx] &&
           ((int'(i_c2v_write_tile_offset[lane_idx]) >> L_SHIFT) >= Q_BASE)) begin
         $fatal(1, "ram_accum C2V write offset out of range lane=%0d offset=%0d", lane_idx,
                i_c2v_write_tile_offset[lane_idx]);
       end
-      if (i_c2v_write_valid[lane_idx] && (offset_addr(
-              i_c2v_write_tile_offset[lane_idx]
-          ) != c2v_write_addr_common)) begin
-        $fatal(1, "ram_accum C2V write address is not common lane=%0d offset=%0d", lane_idx,
-               i_c2v_write_tile_offset[lane_idx]);
-      end
       if (i_v2c_valid[lane_idx] && ((int'(i_v2c_tile_offset[lane_idx]) >> L_SHIFT) >= Q_BASE)) begin
         $fatal(1, "ram_accum V2C read offset out of range lane=%0d offset=%0d", lane_idx,
-               i_v2c_tile_offset[lane_idx]);
-      end
-      if (i_v2c_valid[lane_idx] && (offset_addr(
-              i_v2c_tile_offset[lane_idx]
-          ) != v2c_read_addr_common)) begin
-        $fatal(1, "ram_accum V2C read address is not common lane=%0d offset=%0d", lane_idx,
                i_v2c_tile_offset[lane_idx]);
       end
     end

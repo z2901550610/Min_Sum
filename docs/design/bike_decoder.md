@@ -40,7 +40,7 @@ diag_idx_global = b * W + k
 | `BIKE_128_PARAMS` | `N0=2`, `R=12323`, `W=71`, `T=134`, `I_MAX=7` |
 | `BIKE_192_PARAMS` | `N0=2`, `R=24659`, `W=103`, `T=199`, `I_MAX=7` |
 | `BIKE_256_PARAMS` | `N0=2`, `R=40973`, `W=137`, `T=264`, `I_MAX=7` |
-| `TRIKE_128_PARAMS` | `N0=3`, `R=8291`, `W=27`, `T=201`, `I_MAX=7` |
+| `TRIKE_128_PARAMS` | `N0=3`, `R=8243`, `W=27`, `T=201`, `I_MAX=7` |
 | `TRIKE_160_PARAMS` | `N0=3`, `R=12899`, `W=35`, `T=263`, `I_MAX=7` |
 | `TRIKE_256_PARAMS` | `N0=3`, `R=29917`, `W=55`, `T=429`, `I_MAX=7` |
 | `TRIKE_384_PARAMS` | `N0=3`, `R=63997`, `W=83`, `T=659`, `I_MAX=7` |
@@ -61,7 +61,9 @@ Vivado GUI 工程可直接添加 RTL 源文件并使用默认 Verilog define 设
 
 BIKE 官方参数表中的 `w` 为整行权重；RTL 中 `W` 表示每个 circulant block 的第一列非零数。BIKE 三档 profile 的整行权重为 `N0*W = 142/206/274`，TRIKE 五档 profile 的整行权重为 `N0*W = 81/105/165/249/333`。
 
-BIKE profile 和 TRIKE-128/160/256 使用 `C_VAL=5`、`alpha=0.1875`。TRIKE-384 使用 `C_VAL=5`、`alpha=0.140625`。TRIKE-512 使用 `C_VAL=7`、`alpha=0.0625`。
+TRIKE-128 使用 `C_VAL=4`、`alpha=0.1875`。BIKE profile 和 TRIKE-160/256 使用
+`C_VAL=5`、`alpha=0.1875`。TRIKE-384 使用 `C_VAL=5`、`alpha=0.140625`。
+TRIKE-512 使用 `C_VAL=7`、`alpha=0.0625`。
 
 ## 顶层输入输出
 

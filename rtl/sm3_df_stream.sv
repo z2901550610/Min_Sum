@@ -1,0 +1,164 @@
+`timescale 1ns / 1ps
+
+// ICCS SM3 derivation function with a fixed public input length.
+//
+// The input stream is consumed twice. o_input_pass identifies the requested
+// pass so that an upstream seed memory can replay the same bytes without this
+// module buffering a parameter-dependent message.
+module sm3_df_stream #(
+    parameter int INPUT_BYTES = 32
+) (
+    input  logic         i_clk,
+    input  logic         i_rst_n,
+    input  logic         i_start,
+    input  logic         i_input_valid,
+    input  logic [  7:0] i_input_data,
+    output logic         o_input_ready,
+    output logic         o_input_pass,
+    output logic         o_busy,
+    output logic         o_done,
+    output logic [439:0] o_seed
+);
+
+  localparam int INPUT_COUNT_W = (INPUT_BYTES > 1) ? $clog2(INPUT_BYTES) : 1;
+  localparam logic [INPUT_COUNT_W-1:0] INPUT_LAST = INPUT_COUNT_W'(INPUT_BYTES - 1);
+
+  typedef enum logic [2:0] {
+    ST_IDLE,
+    ST_HASH_START,
+    ST_PREFIX,
+    ST_INPUT,
+    ST_HASH_WAIT
+  } state_t;
+
+  state_t                     state_q;
+
+  logic                       pass_q;
+  logic   [              2:0] prefix_idx_q;
+  logic   [INPUT_COUNT_W-1:0] input_count_q;
+  logic   [            255:0] first_digest_q;
+
+  logic                       hash_start;
+  logic                       hash_input_valid;
+  logic   [              7:0] hash_input_data;
+  logic                       hash_input_ready;
+  logic                       hash_done;
+  logic   [            255:0] hash_digest;
+
+  function automatic logic [7:0] prefix_byte(input  logic pass, input  logic [2:0] byte_idx);
+    begin
+      unique case (byte_idx)
+        3'd0: prefix_byte = pass ? 8'h02 : 8'h01;
+        3'd1: prefix_byte = 8'h00;
+        3'd2: prefix_byte = 8'h00;
+        3'd3: prefix_byte = 8'h01;
+        default: prefix_byte = 8'hb8;
+      endcase
+    end
+  endfunction
+
+  assign o_input_ready = (state_q == ST_INPUT) && hash_input_ready;
+  assign o_input_pass = pass_q;
+
+  assign hash_start = (state_q == ST_HASH_START);
+  assign hash_input_valid = (state_q == ST_PREFIX) || ((state_q == ST_INPUT) && i_input_valid);
+  assign hash_input_data = (state_q == ST_PREFIX) ? prefix_byte(
+      pass_q, prefix_idx_q
+  ) : i_input_data;
+
+  /* verilator lint_off PINCONNECTEMPTY */
+  sm3_hash_stream #(
+      .INPUT_BYTES(INPUT_BYTES + 5)
+  ) u_hash (
+      .i_clk        (i_clk),
+      .i_rst_n      (i_rst_n),
+      .i_start      (hash_start),
+      .i_input_valid(hash_input_valid),
+      .i_input_data (hash_input_data),
+      .o_input_ready(hash_input_ready),
+      .o_busy       (),
+      .o_done       (hash_done),
+      .o_digest     (hash_digest)
+  );
+  /* verilator lint_on PINCONNECTEMPTY */
+
+  always_ff @(posedge i_clk or negedge i_rst_n) begin
+    if (!i_rst_n) begin
+      state_q        <= ST_IDLE;
+      pass_q         <= 1'b0;
+      prefix_idx_q   <= '0;
+      input_count_q  <= '0;
+      first_digest_q <= '0;
+      o_busy         <= 1'b0;
+      o_done         <= 1'b0;
+      o_seed         <= '0;
+    end else begin
+      o_done <= 1'b0;
+
+      unique case (state_q)
+        ST_IDLE: begin
+          if (i_start) begin
+            pass_q        <= 1'b0;
+            prefix_idx_q  <= '0;
+            input_count_q <= '0;
+            o_busy        <= 1'b1;
+            state_q       <= ST_HASH_START;
+          end
+        end
+
+        ST_HASH_START: begin
+          prefix_idx_q <= '0;
+          state_q      <= ST_PREFIX;
+        end
+
+        ST_PREFIX: begin
+          if (hash_input_valid && hash_input_ready) begin
+            if (prefix_idx_q == 3'd4) begin
+              input_count_q <= '0;
+              state_q       <= ST_INPUT;
+            end else begin
+              prefix_idx_q <= prefix_idx_q + 1'b1;
+            end
+          end
+        end
+
+        ST_INPUT: begin
+          if (i_input_valid && o_input_ready) begin
+            if (input_count_q == INPUT_LAST) begin
+              state_q <= ST_HASH_WAIT;
+            end else begin
+              input_count_q <= input_count_q + 1'b1;
+            end
+          end
+        end
+
+        ST_HASH_WAIT: begin
+          if (hash_done) begin
+            if (!pass_q) begin
+              first_digest_q <= hash_digest;
+              pass_q         <= 1'b1;
+              state_q        <= ST_HASH_START;
+            end else begin
+              o_seed  <= {first_digest_q, hash_digest[255:72]};
+              o_busy  <= 1'b0;
+              o_done  <= 1'b1;
+              state_q <= ST_IDLE;
+            end
+          end
+        end
+
+        default: begin
+          o_busy  <= 1'b0;
+          state_q <= ST_IDLE;
+        end
+      endcase
+    end
+  end
+
+`ifndef SYNTHESIS
+  initial begin
+    if (INPUT_BYTES < 1) $error("sm3_df_stream INPUT_BYTES must be at least 1");
+  end
+`endif
+
+endmodule

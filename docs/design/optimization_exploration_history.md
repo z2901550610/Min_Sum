@@ -2499,13 +2499,353 @@ L=16作为逻辑资源受限配置。
 | L=32，K=4，C=1152 | 45,309 | 20,802 | 15,406 | 561.5 | 512/99 | 整体及`decoder_clk`+0.439 ns | +0.028 ns |
 
 两组基线均为Vivado 2023.2、`xc7k355tffg901-2L`、10 ns时钟和0.100 ns不确定度；L=16详见阶段44，
-L=32详见阶段45。当前`ram_accum`版本的LUT、FF、Slice、Block RAM Tile、RAMB36、RAMB18、
-setup WNS/TNS、hold WHS、pulse width、top paths和I/O约束状态均为待测。公共地址广播增加扇出，
-且阶段44/45最差主时钟路径不经过这些前向地址网络，因此不预设WNS改善。
+L=32详见阶段45。
 
-结论与状态：RTL候选保留，功能与固定周期验证完成，物理收益待定。下一步对L=16和L=32分别进行同器件、
-同XDC、同Vivado版本的placed/routed复测，并同时比较`cycles/Fmax`或一阶外推总延时。为保持单变量归因，
-取得两组报告前不实施`ram_m`局部one-hot输出选择。
+L=32物理结果：用户提供的报告时间为2026-07-28 22:31:33（Fully Placed资源）和22:39:32
+（Routed时序），器件、速度等级、Vivado版本、XDC及公开参数与阶段45相同，阶段46的`ram_accum`
+是两次报告间唯一RTL结构变化，可直接比较。
+
+| L=32资源 | 阶段45基线 | `ram_accum`公共地址 | 变化 |
+| --- | ---: | ---: | ---: |
+| Slice LUT | 45,309 | 45,266 | -43（-0.09%） |
+| LUT as Logic | 40,861 | 40,819 | -42（-0.10%） |
+| LUT as Memory | 4,448 | 4,447 | -1 |
+| Distributed RAM LUT / SRL LUT | 4,160 / 288 | 4,160 / 287 | 0 / -1 |
+| Slice Register | 20,802 | 20,820 | +18（+0.09%） |
+| Slice | 15,406 | 14,770 | -636（-4.13%） |
+| Block RAM Tile | 561.5 | 561.5 | 0 |
+| RAMB36E1 / RAMB18E1 | 512 / 99 | 512 / 99 | 0 / 0 |
+| DSP / CARRY4 | 0 / 2,812 | 0 / 2,812 | 0 / 0 |
+
+前向旋转减少2,880个1-bit mux节点后，aggregate logic LUT只减少42，说明这些选择大部分被综合共享、
+折叠或未映射为独立LUT；结构节点数不能作为LUT收益。Placed Slice减少636，但LUT总量近似不变，收益
+主要表现为装箱与布局密度变化。缺少不同placer seed或重复实现，不能确认该Slice降幅的稳定性。
+
+| L=32时序 | 阶段45基线 | `ram_accum`公共地址 | 变化 |
+| --- | ---: | ---: | ---: |
+| 整体及`decoder_clk` setup WNS/TNS | +0.439 / 0.000 ns | +0.306 / 0.000 ns | WNS -0.133 ns |
+| hold WHS/THS | +0.028 / 0.000 ns | +0.032 / 0.000 ns | WHS +0.004 ns |
+| pulse WPWS/TPWS | +4.232 / 0.000 ns | +4.232 / 0.000 ns | 0 |
+| 异步复位释放WNS | +2.499 ns | +2.863 ns | +0.364 ns |
+| `o_e_rdata`未约束路径 | 14.105 ns | 15.134 ns | +1.029 ns |
+
+最差主时钟路径仍为`ram_t` BRAM读口到VNU，当前从buffer 0、bank 14到lane 14的
+`v2c_scaled_q_reg[14][17]`，数据路径9.083 ns，其中logic 3.332 ns、route 5.751 ns，共13级。
+相对阶段45，数据路径增加0.091 ns，其中logic增加0.106 ns而route减少0.015 ns；前十条仍全部为
+`ram_t`到VNU，说明`ram_accum`前向地址网络不是当前top-path瓶颈。WNS下降还包含布局后时钟偏斜变化，
+不能只由数据路径差值解释。内部100 MHz、hold和pulse width均通过；TIMING-18仍为76项，板级I/O约束
+边界未改变。
+
+固定周期保持8,538,564。按`10 ns - WNS`作一阶外推，估算频率从104.59 MHz降至103.16 MHz，
+TRIKE-512延时从81.637 ms增至82.773 ms，约退化1.39%；该计算不是Fmax签核。在固定100 MHz目标下周期
+和85.38564 ms延时均不变。
+
+L=16物理结果：用户提供的报告时间为2026-07-29 00:17:56（Fully Placed资源）和00:22:51
+（Routed时序），器件、速度等级、Vivado版本、XDC及公开参数与阶段44相同，阶段46的`ram_accum`
+是两次报告间唯一RTL结构变化，可直接比较。
+
+| L=16资源 | 阶段44基线 | `ram_accum`公共地址 | 变化 |
+| --- | ---: | ---: | ---: |
+| Slice LUT | 26,034 | 26,430 | +396（+1.52%） |
+| LUT as Logic | 21,714 | 22,111 | +397（+1.83%） |
+| LUT as Memory | 4,320 | 4,319 | -1 |
+| Distributed RAM LUT / SRL LUT | 4,160 / 160 | 4,160 / 159 | 0 / -1 |
+| Slice Register | 11,365 | 11,366 | +1（+0.01%） |
+| Slice | 9,286 | 9,443 | +157（+1.69%） |
+| Block RAM Tile | 537.5 | 537.5 | 0 |
+| RAMB36E1 / RAMB18E1 | 480 / 115 | 480 / 115 | 0 / 0 |
+| DSP / CARRY4 | 0 / 1,731 | 0 / 1,731 | 0 / 0 |
+
+L=16删除1,344个1-bit旋转mux节点后，Logic LUT和Slice均增加，说明公共地址广播及其布局代价超过
+被综合移除的选择逻辑；该结构在资源受限配置上没有收益。
+
+| L=16时序 | 阶段44基线 | `ram_accum`公共地址 | 变化 |
+| --- | ---: | ---: | ---: |
+| 整体setup WNS/TNS | +0.611 / 0.000 ns | +0.363 / 0.000 ns | WNS -0.248 ns |
+| `decoder_clk` setup WNS/TNS | +0.667 / 0.000 ns | +0.363 / 0.000 ns | WNS -0.304 ns |
+| hold WHS/THS | +0.034 / 0.000 ns | +0.026 / 0.000 ns | WHS -0.008 ns |
+| pulse WPWS/TPWS | +4.232 / 0.000 ns | +4.232 / 0.000 ns | 0 |
+| 异步复位释放WNS | +0.611 ns | +0.568 ns | -0.043 ns |
+| `o_e_rdata`未约束路径 | 13.213 ns | 13.152 ns | -0.061 ns |
+
+当前前十条主时钟路径全部从`u_ram_m.c2v_pair_sel_q`到lane 10的`c2v_comp_s`寄存器，最差数据路径
+9.426 ns，其中logic 0.302 ns、route 9.124 ns、route占96.796%，只有1级LUT。阶段44中同类路径
+数据延迟为9.310 ns、route为9.008 ns，公共地址改动引起的整体布局变化使该高扇出选择路径route增加
+0.116 ns，并取代`ram_t`到VNU成为唯一的前十条瓶颈。内部100 MHz、hold和pulse width仍通过；
+TIMING-18仍为76项。
+
+固定周期保持16,463,236。按`10 ns - decoder_clk WNS`作一阶外推，估算频率从107.15 MHz降至
+103.77 MHz，TRIKE-512延时从153.651 ms增至158.656 ms，约退化3.26%；该计算不是Fmax签核。
+在固定100 MHz目标下周期和164.63236 ms延时均不变。
+
+双并行度决策：L=32只减少43 LUT，同时WNS下降0.133 ns、外推延时增加1.39%；L=16增加396 LUT和
+157 Slice，同时WNS下降0.304 ns、外推延时增加3.26%。该方案未形成稳定的资源收益，且两个并行度的
+时序均退化，因此撤回阶段46。
+
+回退与验证：`rtl/ram_accum.sv`恢复为阶段46之前的逐lane地址旋转结构，并与提交`7efdabc`中的文件
+逐字一致；`make format-rtl`、`make check-format-rtl`、`make lint-rtl`、14项`make test-unit`和
+`make test-integration`全部通过，toy结果为`residual=0`、`exact=1`、固定154周期。新`r`的五档
+L=16/L=32固定周期与译码结果直接继承阶段44/45已经验证的相同RTL检查点。
+
+结论与状态：阶段46撤回，当前成品恢复阶段44/45的`ram_accum`结构和物理基线。下一项独立候选为
+`ram_m`局部one-hot输出选择，直接针对L=16当前96%以上route占比的高扇出pair选择路径；实施前保留本次
+回退点，并单独验证连续同row访问、旁路、pair隔离、固定周期以及L=16/L=32物理结果。
+
+### 阶段47：TRIKE KEM公共密码核首批RTL（2026-07-30）
+
+目标与假设：在TRIKE字节级哈希实例化、固定重量采样和参数表尚未冻结的条件下，先实现不会绑定上述选择的
+公共核。Keccak-f[1600]状态置换、标准SHAKE256 sponge以及隐式拒绝比较/选择可以由后续
+`H1/H2/H3/H4/K/L`共享。
+
+关键实现：
+
+- `keccak_f1600`保存1600-bit状态，每拍组合执行一轮Theta、Rho、Pi、Chi和Iota，固定24轮完成；
+- `shake256_stream`使用136-byte rate、`0x1f/0x80` padding和8-bit valid/ready接口，
+  `INPUT_BYTES/OUTPUT_BYTES`由公开参数在elaboration时确定；
+- absorb消息恰好结束于rate边界时先置换完整消息块，再吸收独立padding block；
+- squeeze超过一个rate block时对当前sponge状态继续置换；
+- `kem_ct_compare_select`对完整比较向量做XOR归约，并用全宽mask选择正常或拒绝数据；
+- Makefile增加`test-kem-unit`，并将其纳入`test-unit`依赖。
+
+验证范围：
+
+- `tb_keccak_f1600`对拍全零输入的25个标准输出lane，并检查24轮busy周期；
+- `tb_shake256_stream`对拍独立软件SHAKE256：272-byte顺序消息和200-byte输出覆盖两个完整absorb
+  block、独立padding block、第二个squeeze block和输出backpressure；
+- `tb_kem_ct_compare_select`覆盖全相等、257个单bit不等和100组随机数据选择；
+- `make format-rtl`、`make check-format-rtl`、`make lint-rtl`和`make test-kem-unit`通过。
+
+定量结果：Keccak置换固定24轮；SHAKE接口在无停顿时的absorb/squeeze字节数由公开参数固定。LUT、FF、
+Slice、BRAM、DSP、setup WNS/TNS和hold WHS均为待测，尚未运行Vivado综合或布局布线。
+
+结论与状态：保留。公共核不写入TRIKE函数标签、序列化、奇偶环映射、固定重量采样或各等级`l`，因此当前
+结果只确认FIPS 202公共数据通路和隐式拒绝选择功能，不构成完整TRIKE KEM硬件签核。
+
+### 阶段48：TRIKE随包SM3链调研与首批RTL（2026-07-30）
+
+目标与假设：以`trike-电子版材料0629`的四档KAT、Reference C和Optimized C为实现依据，识别KEM实际
+哈希链，并建立可独立对拍的SM3/HMAC硬件基线。BIKE多项式硬件论文用于后续乘法与求逆架构，AWS
+`bike-kem`用于软件控制流参考。
+
+调研结果：
+
+- 四档KAT与随包Reference C生成结果逐byte一致，参数为
+  `r={15581,35363,69691,114043}`、`d={35,55,83,111}`、`t={263,429,659,877}`；
+- H1/H2/H3和H4使用ICCS SM3-DRNG，K和L使用ICCS `pseudohash512`；
+- `pseudohash512`由HMAC-SM3与SM3级联组成，固定HMAC key为64 byte；
+- AWS `bike-kem`为Apache-2.0 CPU软件，不含RTL；Racing BIKE提供可迁移的稀疏乘法和divstep/extGCD
+  求逆架构，其Keccak随机预言机不用于随包TRIKE哈希链；
+- 公开`ljgibbslf/SM3_core`具有32/64-bit RTL和随机对拍环境，但仓库页面未给出明确许可证声明，因此
+  本阶段只参考接口与性能，不复制RTL。
+
+关键实现：
+
+- `sm3_compress`保存68个32-bit schedule word，用52周期生成`W[16]..W[67]`，再固定执行64轮；
+- `sm3_hash_stream`使用公开`INPUT_BYTES`和8-bit valid/ready输入，复用一个压缩核完成多block
+  chaining、`0x80`padding和64-bit big-endian长度；
+- `hmac_sm3_64byte_key_stream`实现`(K xor ipad)||message`和
+  `(K xor opad)||inner_digest`，使用两个固定长度SM3实例；
+- Makefile的`test-kem-unit`加入三个SM3/HMAC testbench。
+
+验证范围：
+
+- `tb_sm3_compress`对拍`SM3("abc")`，并检查116个busy周期；
+- `tb_sm3_hash_stream`对拍`"abc"`和55/56/64/65-byte顺序消息，覆盖单padding block、双padding
+  block和整block末尾；
+- `tb_hmac_sm3_64byte_key_stream`使用ICCS固定key和`02 00 || "abc"`，对拍独立软件HMAC-SM3；
+- `make test-kem-unit`的SM3、HMAC、Keccak、SHAKE和比较选择共6项测试通过。
+
+定量结果：SM3单block压缩固定116个busy周期。连续供数时，流式SM3和HMAC的block数由公开输入长度
+固定。LUT、FF、Slice、BRAM、DSP、setup WNS/TNS和hold WHS均为待测，尚未运行Vivado综合或
+布局布线。
+
+结论与状态：保留。首批核建立了随包TRIKE实际SM3数据通路；下一阶段实现`SM3_df`、55-byte DRNG状态
+算术和Generate，并用随包C生成的中间状态fixture对拍。
+
+### 阶段49：SM3-DRNG与pseudohash512公共核（2026-07-31）
+
+目标与假设：在阶段48的SM3/HMAC基础上实现随包TRIKE实际调用的`SM3_df`、Instantiate、Generate和
+`pseudohash512`，使用可重放输入流承载最大参数档的大消息，避免巨型寄存器缓存。
+
+关键实现：
+
+- `sm3_df_stream`计算两次`SM3(counter || 0x000001b8 || input)`并拼接55-byte输出；
+- `trike_sm3_drng_instantiate_stream`生成55-byte大端`V/C/reseed_counter`；
+- `trike_sm3_drng_generate_stream`按32-byte block输出，块间递增55-byte`data`，并执行
+  `V = V + (0^184 || SM3(0x03 || V)) + C + reseed_counter mod 2^440`；
+- `trike_pseudohash512_stream`执行固定ICCS key的HMAC-SM3、suffix SM3和`SM3(k1 || h1)`级联；
+- `SM3_df`和pseudohash消息均通过pass信号请求上层重放，接口存储量不随KEM消息长度增长。
+
+验证范围：
+
+- 从随包Reference C直接导出32-byte顺序seed的`SM3_df`、Instantiate状态、64-byte Generate结果、
+  Generate更新状态和pseudohash512结果；
+- `tb_sm3_df_stream`逐byte对拍55-byte输出，连续输入下固定314个busy周期；
+- `tb_trike_sm3_drng_instantiate_stream`对拍`V/C/reseed_counter`，固定916个busy周期；
+- `tb_trike_sm3_drng_generate_stream`对拍64-byte输出和更新后的`V/C/reseed_counter`，连续接收下固定
+  708个busy周期；
+- `tb_trike_pseudohash512_stream`对拍完整512-bit输出，连续输入下固定1,128个busy周期。
+
+定量结果：上述周期只对应TB公开参数`SEED_BYTES=32`、`OUTPUT_BYTES=64`和`MESSAGE_BYTES=32`。
+其他公开长度的周期由哈希block数和固定控制开销决定。LUT、FF、Slice、BRAM、DSP、setup WNS/TNS和
+hold WHS均为待测，尚未运行Vivado综合或布局布线。
+
+结论与状态：保留。K/L和H1/H2/H3/H4所需的公共伪随机与pseudohash路径已经具备；下一项实现
+H1/H2/H3环元素padding/奇偶映射，以及H4固定重量位置采样。
+
+### 阶段50：H1/H2/H3奇偶映射与H4固定扫描采样（2026-07-31）
+
+目标与假设：按随包Reference C补齐`set_hamming_weight`和`generate_random_idx`公共核，并将H4
+碰撞处理写成固定存储访问调度。给定公开`R/LENGTH/WEIGHT`且接口连续传输时，控制路径和busy周期不依赖
+输入向量、随机数或碰撞模式。
+
+关键实现：
+
+- `trike_parity_map_stream`顺序缓存`ceil(R/8)`个byte，清除最后有效系数以上的padding，重新设置
+  系数`R-1`以形成H1/H2所需偶校验或H3所需奇校验，再顺序读出同一byte RAM；
+- `trike_sampler_candidate`计算
+  `pos + high32(random * (length - pos))`；
+- `trike_fixed_weight_sampler`从`WEIGHT-1`降序处理位置，每个候选固定读取全部`WEIGHT`个index RAM
+  槽位；`j<=pos`读取以dummy mask屏蔽，碰撞时写入`pos`，无碰撞时写入candidate；
+- 每个候选只接收一个32-bit随机数，没有数据相关重抽；上层H4控制器需要按Reference C执行固定
+  `WEIGHT`次Generate(4 byte)，每次Generate后的DRNG状态更新不能合并；
+- valid/ready在停顿期间保持输出payload稳定。固定周期KEM顶层需要连续驱动接口，或用公开的固定等待
+  预算封装。
+
+验证范围：
+
+- `tb_trike_parity_map_stream`使用`R=13`覆盖偶/奇目标、padding bit清零、输出停顿保持和连续流固定周期；
+- `tb_trike_sampler_candidate`覆盖零随机数、最大随机数、碰撞候选和TRIKE-2长度边界；
+- `tb_trike_fixed_weight_sampler`使用`LENGTH=17, WEIGHT=5`分别运行碰撞密集和无碰撞输入，两者输出
+  正确且busy周期均为40；额外输出停顿4拍时busy周期只增加4拍，payload保持稳定；
+- `make test-kem-unit`包含13项KEM公共核testbench并全部通过。
+
+定量结果：奇偶映射连续流busy周期为`2*R_BYTES+1`。固定扫描采样连续流busy周期为
+`WEIGHT*(WEIGHT+3)`，四档H4为69,958、185,328、436,258和771,760拍，不包含各候选
+Generate(4 byte)周期。index RAM逻辑容量分别为4,208、7,293、11,862和16,663 bit。LUT、FF、
+Slice、BRAM、DSP、setup WNS/TNS和hold WHS均为待测，没有运行Vivado综合或布局布线。
+
+常数时间边界：上述模块的状态路径和存储访问次数由公开参数固定；输入valid空拍和输出ready停顿会延长
+接口总周期，普通FPGA数据通路的翻转活动也随数据变化。Reference C `generate_secret_key`包含由
+`weak_key_test`结果控制的重采样循环，因此完整KeyGen固定周期策略仍需设计和KAT/失败概率验证。
+
+结论与状态：保留。H1/H2/H3的后处理与H4的无重抽固定扫描公共核具备功能和周期回归；下一个独立实现项为
+循环二元多项式乘法器与求逆器，H1/H2/H3/H4组合控制器在多项式RAM接口确定后接入。
+
+### 阶段51：TRIKE KEM统一流程与共享模块划分（2026-07-31）
+
+目标与假设：将KeyGen、Encaps和Decaps的算法步骤映射到RTL模块，识别三条流程中不并发的哈希、DRNG、
+采样、多项式和存储资源，形成面积优先的完整KEM模块边界。统一微程序必须保持公开固定调度，资源复用不能
+引入秘密数据相关仲裁、重试或RAM访问次数。
+
+架构分析：
+
+- 当前DF、DRNG、HMAC和pseudohash控制器顺序发起SM3调用；完成态可使用一个物理`sm3_compress`，
+  由block-builder/context RAM和固定command序列服务全部逻辑函数。该面积基线放弃pseudohash
+  `k1/h1`的可选并行机会；
+- H1/H2/H3、H4、秘密h采样使用同一DRNG状态算术；一个context寄存器组按阶段装载和覆盖；
+- 秘密采样与H4采用相同`generate_random_idx`，一个按最大`t`配置、运行时装载公开`length/weight`的
+  采样核和临时index RAM覆盖全部调用；
+- 一个循环移位/XOR accumulator支持稀疏×稠密与稠密×稠密模式，覆盖KeyGen的`t0/r2`、Encaps的
+  `u/v`和Decaps的syndrome；Decaps使用`s=h0*u+t0*(u+v)`减少为一次稀疏和一次稠密乘法；
+- 多项式求逆保留独立固定轮divstep/extGCD控制，但与乘法核时分共享scratch RAM；
+- `decoder_top`保持独立物理边界，不与KEM乘法核共享其lane路由、`ram_m`或`ram_t`；
+- 大错误向量验证采用固定word数流式XOR归约，不能形成最大34万bit单拍比较树；
+- H1/H2/H3、H4、KeyGen/Encaps/Decaps表现为统一`trike_kem_top`中的微程序段，不分别拥有算术实例；
+  pk/sk/ct序列化由一个IO控制器和公开格式描述符完成。
+
+RAM生命周期：
+
+- 持久key/ct RAM在一次操作内保留；
+- t1/t2/r1、h1/h2临时值、u/v/s和乘法accumulator使用静态liveness分配的scratch bank；
+- 采样index RAM在每组结果流出后覆盖；
+- Decaps写完`s`后回收`u/v/t1/t2/r1`的scratch空间，`e'`保持到L和流式比较完成；
+- decoder内部RAM保持独占，避免跨几何复用引入大mux和时序风险。
+
+验证范围：本阶段只更新
+[TRIKE KEM硬件架构、公共核与复用设计](trike_kem_common_cores.md)，没有修改RTL，没有运行新的功能仿真、
+Vivado综合或布局布线。阶段50的公共核功能和固定周期结果继续作为已有验证边界。
+
+定量结果：共享实例数目标为一个SM3压缩数据通路、一个DRNG context、一个固定重量采样核、一个多模式
+循环乘法核、一个求逆核和一个`decoder_top`。LUT、FF、Slice、BRAM、DSP、端到端固定周期、setup
+WNS/TNS和hold WHS均为待测，不能据逻辑实例数直接推测资源收益。
+
+结论与状态：目标架构待实现。优先次序为共享循环多项式乘法核、求逆核、SM3服务化、统一采样服务和KEM
+微程序控制器。每次只改变一个物理共享边界，保留独立TB和四档KAT回退点；只有在端到端
+`cycles/Fmax`证明单实例成为主要瓶颈后才增加第二个lane。
+
+### 阶段52：TRIKE128固定点对验证参数集成（2026-07-31）
+
+目标与假设：将预声明固定点对验证得到的TRIKE128 K=4参数写入统一译码器。验证配置固定为
+5-bit、K=4、`high_mag_dev`、`low_index`、`alpha=0.1875`和`C_VAL=4`；两点在仿真前固定，
+不进行参数重选或事后点对筛选。
+
+统计依据：
+
+- `r=7050`运行10000次，失败508次，DFR为`5.08e-2`，95% Clopper-Pearson区间为
+  `[4.65774849e-2, 5.52864844e-2]`；
+- `r=7300`运行2000000次，失败14次，DFR为`7.00e-6`，95% Clopper-Pearson区间为
+  `[3.82697026e-6, 1.17447827e-5]`；
+- 目标`2^-128`的连续交点为`r*=8234.272`；首个合法值8237的模型余量为0.46 bit，最终采用
+  下一个合法值8243，其置信DFR上界为`2^-129.48`。
+
+关键实现：统一RTL参数表、随机回归生成器、C参考模型和软件KEM配置同步采用
+`R=8243/C_VAL=4`；myTRIKE命名参数集和tie比较默认初始LLR同步为4。L=32、K=4、
+`COLS_PER_TILE=1152`的TRIKE128固定周期预算为193514；L=16、K=4、
+`COLS_PER_TILE=1168`的预算为377138。
+
+验证范围：
+
+- C模型TRIKE128 seed 1得到`residual_weight=0`、`exact=yes`；
+- 软件KEM TRIKE128自测通过，正常密文有效，篡改密文执行隐式拒绝；
+- myTRIKE使用`PARAM_SET=trike128`编译并通过全部C单元测试，配置输出确认`r=8243`且BF/BGF阈值
+  继续针对每个`r`自动计算；
+- 统一TRIKE五档、seed 1、K=4在L=32/`COLS_PER_TILE=1152`和
+  L=16/`COLS_PER_TILE=1168`两组回归均为`residual=0`、`exact=1`，实测周期与预算一致；
+- `make test-unit`和`make test-integration`通过；
+- RTL格式检查和Verible lint通过。
+
+Vivado LUT、FF、Slice、BRAM、DSP、setup WNS/TNS和hold WHS均为待测；2026-07-28的资源和时序
+报告使用`R=8291/C_VAL=5`，只作为历史物理参考。
+
+结论与状态：保留。TRIKE128公开参数采用`R=8243`，译码初始值采用`C_VAL=4`。若后续改变Top-K
+等幅值规则，需要在新规则下重新完成参数确认和固定样本FLS验证。
+
+### 阶段53：最新四档KAT软件基线与循环多项式乘法功能核（2026-07-31）
+
+目标与假设：把`trike-电子版材料0629`的TRIKE-2/5/7/9 Reference C和官方KAT设为完整KEM
+golden，并建立一个固定调度的循环二元多项式乘法功能基线。首版优先锁定系数顺序、非word对齐折返、
+稠密/稀疏输入语义和数据无关周期；BRAM映射与稀疏模式延时优化作为后续独立物理实验。
+
+关键实现：
+
+- `scripts/run_trike_reference_kat.py`使用本机C编译器直接构建四档随包Reference C，各运行10组
+  KeyGen/Encaps/Decaps，并在CRLF/LF归一化后逐byte比较官方KAT；
+- `trike_poly_mul_core`按little-endian coefficient word接收操作数，使用`DIGIT_W`位carryless
+  digit乘法累加双长度product，再按$x^r-1$固定word数折返；
+- 稠密模式固定接收`WORDS`个A word；稀疏模式固定清零A存储、接收`SPARSE_WEIGHT`个index并展开，
+  两者共享同一主乘法和reduction调度；
+- 输出valid/ready停顿期间保持word和last稳定；busy只因公开接口停顿延长。
+
+验证范围：
+
+- TRIKE-2/5/7/9生成KAT与随包官方PK、SK、CT和SS全部匹配，每档10组；
+- `tb_trike_poly_mul_core`使用`R_BITS=13, WORD_W=8, DIGIT_W=4`覆盖非word对齐折返；
+- 同一个三项稀疏A分别通过稠密word和稀疏index输入，输出完全相同；
+- 两组不同稠密操作数busy周期均为28拍；稀疏模式为31拍；输出停顿3拍时总busy增加3拍。
+- `tb_trike_poly_mul_reference`从官方TRIKE-2 KAT第0组提取$t_0$、$r_2$和$h_0$支持集，在
+  `R_BITS=15581, WORD_W=64, DIGIT_W=8`下逐word对拍稠密$t_0r_2$和稀疏$h_0r_2$。
+
+定量结果：令`WORDS=ceil(R_BITS/WORD_W)`、`DIGITS=WORD_W/DIGIT_W`，连续流稠密周期为
+`6*WORDS+2*WORDS^2*DIGITS`，稀疏周期增加`SPARSE_WEIGHT`。该公式属于功能基线；最大四档固定周期、
+LUT、FF、Slice、BRAM、DSP、setup WNS/TNS和hold WHS均为待测。数组尚未通过Vivado证明映射到
+同步Block RAM，不能把`ram_style`属性视为资源结论。
+
+TRIKE-2真实参数回归的稠密模式固定954,040拍，稀疏模式固定954,075拍。该数字只表示首版单lane
+digit-serial功能延时，不含KeyGen/Encaps/Decaps其他步骤，也没有结合实现后Fmax。
+
+结论与状态：功能基线保留。官方四档KAT已经形成可重复的软件边界；乘法核的下一实验是在保持接口和对拍
+不变的前提下使用显式同步BRAM，并加入稀疏index直接旋转累加，比较固定`cycles/Fmax`和BRAM/LUT。
 
 ## 形成的设计结论
 

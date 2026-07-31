@@ -15,6 +15,19 @@ CC ?= cc
 CFLAGS ?= -O3 -std=c11 -Wall -Wextra -Wpedantic -pthread
 MODEL_BUILD_DIR ?= build/model
 MIN_SUM_MODEL ?= $(MODEL_BUILD_DIR)/min_sum_model
+AWS_BIKE_KEM_DIR ?= build/upstream/aws-bike-kem
+AWS_BIKE_KEM_URL ?= https://github.com/awslabs/bike-kem.git
+AWS_FIPS202_C := $(AWS_BIKE_KEM_DIR)/src/third_party_src/fips202.c
+AWS_FIPS202_INCLUDE := $(AWS_BIKE_KEM_DIR)/src/third_party_src
+TRIKE_KEM_BUILD_DIR ?= build/software/trike_kem
+TRIKE_KEM_SELFTEST ?= $(TRIKE_KEM_BUILD_DIR)/trike_kem_selftest
+TRIKE_KEM_SOURCES := software/trike_kem/trike_kem.c software/trike_kem/trike_ms_quant.c software/trike_kem/selftest.c
+TRIKE_KEM_TEST_PROFILES ?= trike128 trike160 trike256 trike384 trike512
+TRIKE_REFERENCE_SOURCE_ROOT ?= /Users/z2901550610/Documents/JiuCuoMa/TRIKE/trike-电子版材料0629/TRIKE代码和测试向量
+TRIKE_REFERENCE_BUILD_DIR ?= build/software/trike_reference
+TRIKE_REFERENCE_PARAM_SETS ?= TRIKE-2 TRIKE-5 TRIKE-7 TRIKE-9
+TRIKE_POLY_REFERENCE_KAT ?= $(TRIKE_REFERENCE_SOURCE_ROOT)/Test_Vectors/KAT_KEM_TRIKE-2.txt
+TRIKE_POLY_REFERENCE_FIXTURE ?= tb/generated/trike_poly_mul_reference_case.svh
 VERIBLE_FORMAT ?= verible-verilog-format
 VERIBLE_FORMAT_FLAGS ?= --port_declarations_alignment=align --module_net_variable_alignment=align --formal_parameters_alignment=align
 VERIBLE_LINT ?= verible-verilog-lint
@@ -46,7 +59,7 @@ TRIKE_UNIFIED_KSIGN_K ?= 4
 TRIKE_UNIFIED_KSIGN_PARAM_SETS ?= trike128 trike160 trike256 trike384 trike512
 TRIKE_UNIFIED_KSIGN_TIMEOUT_CYCLES ?= 40000000
 
-.PHONY: all sim test test-unit test-integration test-bike-random test-bike-unified-random test-trike-unified-ksign-random model-min-sum run-model-min-sum sweep-min-sum optimum-min-sum campaign-min-sum confirm-min-sum check-model-rtl check-model-rtl-bike128 format-rtl check-format-rtl lint-rtl vivado-synth vivado-synth-trike-unified-ksign FORCE
+.PHONY: all sim test test-unit test-kem-unit test-trike-poly-reference test-integration test-bike-random test-bike-unified-random test-trike-unified-ksign-random model-min-sum run-model-min-sum sweep-min-sum optimum-min-sum campaign-min-sum confirm-min-sum check-model-rtl check-model-rtl-bike128 software-trike-kem test-software-trike-kem test-trike-reference-kat format-rtl check-format-rtl lint-rtl vivado-synth vivado-synth-trike-unified-ksign FORCE
 
 all: test
 
@@ -55,7 +68,7 @@ $(TOY_CASE_SVH): FORCE scripts/gen_toy_case_fixture.py scripts/run_bike_random.p
 
 test: test-unit test-integration
 
-test-unit:
+test-unit: test-kem-unit
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_reset_sync rtl/reset_sync.sv tb/tb_reset_sync.sv
 	@$(SIM) ./obj_dir/Vtb_reset_sync +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_msg_codec rtl/bike_pkg.sv rtl/msg_signmag_to_tc.sv rtl/msg_tc_to_signmag_sat.sv tb/tb_msg_codec.sv
@@ -85,6 +98,45 @@ test-unit:
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_cnu_b rtl/bike_pkg.sv rtl/cnu_b.sv tb/tb_cnu_b.sv
 	@$(SIM) ./obj_dir/Vtb_cnu_b +verilator+quiet
 
+test-kem-unit:
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_sm3_compress rtl/sm3_compress.sv tb/tb_sm3_compress.sv
+	@$(SIM) ./obj_dir/Vtb_sm3_compress +verilator+quiet
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_sm3_hash_stream rtl/sm3_compress.sv rtl/sm3_hash_stream.sv tb/tb_sm3_hash_stream.sv
+	@$(SIM) ./obj_dir/Vtb_sm3_hash_stream +verilator+quiet
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_hmac_sm3_64byte_key_stream rtl/sm3_compress.sv rtl/sm3_hash_stream.sv rtl/hmac_sm3_64byte_key_stream.sv tb/tb_hmac_sm3_64byte_key_stream.sv
+	@$(SIM) ./obj_dir/Vtb_hmac_sm3_64byte_key_stream +verilator+quiet
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_sm3_df_stream rtl/sm3_compress.sv rtl/sm3_hash_stream.sv rtl/sm3_df_stream.sv tb/tb_sm3_df_stream.sv
+	@$(SIM) ./obj_dir/Vtb_sm3_df_stream +verilator+quiet
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_sm3_drng_instantiate_stream rtl/sm3_compress.sv rtl/sm3_hash_stream.sv rtl/sm3_df_stream.sv rtl/trike_sm3_drng_instantiate_stream.sv tb/tb_trike_sm3_drng_instantiate_stream.sv
+	@$(SIM) ./obj_dir/Vtb_trike_sm3_drng_instantiate_stream +verilator+quiet
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_sm3_drng_generate_stream rtl/sm3_compress.sv rtl/sm3_hash_stream.sv rtl/trike_sm3_drng_generate_stream.sv tb/tb_trike_sm3_drng_generate_stream.sv
+	@$(SIM) ./obj_dir/Vtb_trike_sm3_drng_generate_stream +verilator+quiet
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_pseudohash512_stream rtl/sm3_compress.sv rtl/sm3_hash_stream.sv rtl/hmac_sm3_64byte_key_stream.sv rtl/trike_pseudohash512_stream.sv tb/tb_trike_pseudohash512_stream.sv
+	@$(SIM) ./obj_dir/Vtb_trike_pseudohash512_stream +verilator+quiet
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_parity_map_stream rtl/trike_parity_map_stream.sv tb/tb_trike_parity_map_stream.sv
+	@$(SIM) ./obj_dir/Vtb_trike_parity_map_stream +verilator+quiet
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_sampler_candidate rtl/trike_sampler_candidate.sv tb/tb_trike_sampler_candidate.sv
+	@$(SIM) ./obj_dir/Vtb_trike_sampler_candidate +verilator+quiet
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_fixed_weight_sampler rtl/trike_sampler_candidate.sv rtl/trike_fixed_weight_sampler.sv tb/tb_trike_fixed_weight_sampler.sv
+	@$(SIM) ./obj_dir/Vtb_trike_fixed_weight_sampler +verilator+quiet
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_poly_mul_core rtl/trike_poly_mul_core.sv tb/tb_trike_poly_mul_core.sv
+	@$(SIM) ./obj_dir/Vtb_trike_poly_mul_core +verilator+quiet
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_keccak_f1600 rtl/keccak_f1600.sv tb/tb_keccak_f1600.sv
+	@$(SIM) ./obj_dir/Vtb_keccak_f1600 +verilator+quiet
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_shake256_stream rtl/keccak_f1600.sv rtl/shake256_stream.sv tb/tb_shake256_stream.sv
+	@$(SIM) ./obj_dir/Vtb_shake256_stream +verilator+quiet
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_kem_ct_compare_select rtl/kem_ct_compare_select.sv tb/tb_kem_ct_compare_select.sv
+	@$(SIM) ./obj_dir/Vtb_kem_ct_compare_select +verilator+quiet
+
+$(TRIKE_POLY_REFERENCE_FIXTURE): scripts/gen_trike_poly_mul_fixture.py $(TRIKE_POLY_REFERENCE_KAT)
+	@python3 scripts/gen_trike_poly_mul_fixture.py \
+		--kat "$(TRIKE_POLY_REFERENCE_KAT)" \
+		--output "$@"
+
+test-trike-poly-reference: $(TRIKE_POLY_REFERENCE_FIXTURE)
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_poly_mul_reference rtl/trike_poly_mul_core.sv tb/tb_trike_poly_mul_reference.sv
+	@$(SIM) ./obj_dir/Vtb_trike_poly_mul_reference +verilator+quiet
+
 test-integration: $(TOY_CASE_SVH)
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_decoder_top $(RTL) tb/tb_decoder_top.sv
 	@$(SIM) ./obj_dir/Vtb_decoder_top +verilator+quiet
@@ -110,6 +162,28 @@ $(MIN_SUM_MODEL): scripts/min_sum_model.c
 
 run-model-min-sum: model-min-sum
 	@$(MIN_SUM_MODEL) --profile bike128 --seed 1 --trials 1
+
+$(AWS_FIPS202_C):
+	@mkdir -p $(dir $(AWS_BIKE_KEM_DIR))
+	@git clone --depth 1 $(AWS_BIKE_KEM_URL) $(AWS_BIKE_KEM_DIR)
+
+software-trike-kem: $(TRIKE_KEM_SELFTEST)
+
+$(TRIKE_KEM_SELFTEST): $(TRIKE_KEM_SOURCES) software/trike_kem/trike_kem.h software/trike_kem/trike_ms_quant.h $(AWS_FIPS202_C)
+	@mkdir -p $(TRIKE_KEM_BUILD_DIR)
+	@$(CC) $(CFLAGS) -Isoftware/trike_kem -I$(AWS_FIPS202_INCLUDE) $(TRIKE_KEM_SOURCES) $(AWS_FIPS202_C) -o $@
+
+test-software-trike-kem: software-trike-kem
+	@for profile in $(TRIKE_KEM_TEST_PROFILES); do \
+		$(TRIKE_KEM_SELFTEST) $$profile 1 || exit 1; \
+	done
+
+test-trike-reference-kat:
+	@python3 scripts/run_trike_reference_kat.py \
+		--source-root "$(TRIKE_REFERENCE_SOURCE_ROOT)" \
+		--build-root "$(TRIKE_REFERENCE_BUILD_DIR)" \
+		--parameter-sets $(TRIKE_REFERENCE_PARAM_SETS) \
+		--cc "$(CC)"
 
 sweep-min-sum: model-min-sum
 	@python3 scripts/run_quantization_experiment.py sweep --model $(MIN_SUM_MODEL)
