@@ -7,33 +7,40 @@ module tb_trike_poly_mul_core;
   localparam int SPARSE_WEIGHT = 3;
   localparam int WORDS = (R_BITS + WORD_W - 1) / WORD_W;
   localparam int INDEX_W = $clog2(R_BITS);
-  localparam int DENSE_CYCLES = (6 * WORDS) + (2 * WORDS * WORDS * (WORD_W / DIGIT_W));
-  localparam int SPARSE_CYCLES = DENSE_CYCLES + SPARSE_WEIGHT;
+  localparam int DENSE_CYCLES = (11 * WORDS) + (WORDS * WORDS * (1 + (4 * WORD_W / DIGIT_W)));
+  localparam int SPARSE_CYCLES = (4 * WORDS) + (2 * SPARSE_WEIGHT) + (7 * SPARSE_WEIGHT * WORDS);
 
-  logic               clk;
-  logic               rst_n;
-  logic               start;
-  logic               sparse_a;
-  logic               a_valid;
-  logic [ WORD_W-1:0] a_data;
-  logic               a_ready;
-  logic               sparse_index_valid;
-  logic [INDEX_W-1:0] sparse_index;
-  logic               sparse_index_ready;
-  logic               b_valid;
-  logic [ WORD_W-1:0] b_data;
-  logic               b_ready;
-  logic               result_valid;
-  logic [ WORD_W-1:0] result_data;
-  logic               result_last;
-  logic               result_ready;
-  logic               busy;
-  logic               done;
+  logic                     clk;
+  logic                     rst_n;
+  logic                     start;
+  logic                     sparse_a;
+  logic                     a_valid;
+  logic [       WORD_W-1:0] a_data;
+  logic                     a_ready;
+  logic                     sparse_index_valid;
+  logic [      INDEX_W-1:0] sparse_index;
+  logic                     sparse_index_ready;
+  logic                     b_valid;
+  logic [       WORD_W-1:0] b_data;
+  logic                     b_ready;
+  logic                     result_valid;
+  logic [       WORD_W-1:0] result_data;
+  logic                     result_last;
+  logic                     result_ready;
+  logic                     busy;
+  logic                     done;
+  logic                     ext_a_re;
+  logic [$clog2(WORDS)-1:0] ext_a_raddr;
+  logic                     ext_b_re;
+  logic [$clog2(WORDS)-1:0] ext_b_raddr;
+  logic                     ext_result_we;
+  logic [$clog2(WORDS)-1:0] ext_result_waddr;
+  logic [       WORD_W-1:0] ext_result_wdata;
 
-  logic [ WORD_W-1:0] a_words[        0:WORDS-1];
-  logic [ WORD_W-1:0] b_words[        0:WORDS-1];
-  logic [ WORD_W-1:0] expected_words[        0:WORDS-1];
-  logic [INDEX_W-1:0] sparse_indices[0:SPARSE_WEIGHT-1];
+  logic [       WORD_W-1:0] a_words[        0:WORDS-1];
+  logic [       WORD_W-1:0] b_words[        0:WORDS-1];
+  logic [       WORD_W-1:0] expected_words[        0:WORDS-1];
+  logic [      INDEX_W-1:0] sparse_indices[0:SPARSE_WEIGHT-1];
 
   trike_poly_mul_core #(
       .R_BITS       (R_BITS),
@@ -58,11 +65,27 @@ module tb_trike_poly_mul_core;
       .o_result_data       (result_data),
       .o_result_last       (result_last),
       .i_result_ready      (result_ready),
+      .o_ext_a_re          (ext_a_re),
+      .o_ext_a_raddr       (ext_a_raddr),
+      .i_ext_a_rdata       ('0),
+      .o_ext_b_re          (ext_b_re),
+      .o_ext_b_raddr       (ext_b_raddr),
+      .i_ext_b_rdata       ('0),
+      .o_ext_result_we     (ext_result_we),
+      .o_ext_result_waddr  (ext_result_waddr),
+      .o_ext_result_wdata  (ext_result_wdata),
       .o_busy              (busy),
       .o_done              (done)
   );
 
   always #5 clk = ~clk;
+
+  always @(posedge clk) begin
+    if (ext_a_re || ext_b_re || ext_result_we) begin
+      $fatal(1, "internal RAM mode drove external port a=%0d b=%0d result=%0d data=%h",
+             ext_a_raddr, ext_b_raddr, ext_result_waddr, ext_result_wdata);
+    end
+  end
 
   task automatic calculate_expected;
     int product_bit;
@@ -205,6 +228,7 @@ module tb_trike_poly_mul_core;
   int dense_cycles_a;
   int dense_cycles_b;
   int sparse_cycles;
+  int sparse_invalid_cycles;
   int stalled_cycles;
 
   initial begin
@@ -240,6 +264,15 @@ module tb_trike_poly_mul_core;
     run_case(1'b1, 0, sparse_cycles);
     if (sparse_cycles != SPARSE_CYCLES) begin
       $fatal(1, "sparse cycles=%0d expected=%0d", sparse_cycles, SPARSE_CYCLES);
+    end
+
+    a_words[0] = 8'b00001001;
+    a_words[1] = 8'b00000000;
+    sparse_indices[2] = INDEX_W'(15);
+    calculate_expected();
+    run_case(1'b1, 0, sparse_invalid_cycles);
+    if (sparse_invalid_cycles != sparse_cycles) begin
+      $fatal(1, "sparse latency depends on index range");
     end
 
     a_words[0] = 8'b11010110;

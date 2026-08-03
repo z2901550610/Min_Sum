@@ -2847,6 +2847,280 @@ digit-serial功能延时，不含KeyGen/Encaps/Decaps其他步骤，也没有结
 结论与状态：功能基线保留。官方四档KAT已经形成可重复的软件边界；乘法核的下一实验是在保持接口和对拍
 不变的前提下使用显式同步BRAM，并加入稀疏index直接旋转累加，比较固定`cycles/Fmax`和BRAM/LUT。
 
+### 阶段54：循环多项式乘法核显式同步Block RAM端口（2026-07-31）
+
+目标与假设：只改变`trike_poly_mul_core`的存储接口和读改写时序，保持digit-serial算法、word流接口、
+稠密/稀疏输入语义和golden不变。目标是建立可由Vivado识别的同步RAM结构，并把同步读取引入的所有等待拍
+纳入公开参数决定的固定预算。
+
+关键实现：
+
+- A、B、双长度product和result分别实例化公共`ram_bram`，综合分支使用
+  `xpm_memory_sdpram(MEMORY_PRIMITIVE="block", READ_LATENCY_B=1)`；
+- A/B读取、product低/高word读改写、三次归约读取和result输出均使用显式请求/使用状态；
+- 稀疏输入固定执行`WORDS`拍A RAM清零以及每个index一次读取、一次写回；越界index执行相同两拍调度并
+  对dummy地址做原值写回，不改变busy周期；
+- 数据、系数重量、index值和中间product不参与状态跳转；valid/ready外部空拍仍是唯一接口延长因素。
+
+验证范围：
+
+- `make format-rtl`、`make check-format-rtl`和`make lint-rtl`通过；
+- `tb_trike_poly_mul_core`在`R_BITS=13, WORD_W=8, DIGIT_W=4, SPARSE_WEIGHT=3`下对拍稠密/稀疏
+  环乘，检查两组不同稠密数据、越界稀疏index dummy写回的相同周期和3拍输出backpressure；
+- `tb_trike_poly_mul_reference`在`R_BITS=15581, WORD_W=64, DIGIT_W=8`下逐word对拍TRIKE-2官方
+  KAT派生的稠密$t_0r_2$和稀疏$h_0r_2$；
+- `make test-kem-unit`、`make test-unit`和`make test-integration`通过；
+- 随机fixture生成器同步`K_SIGN_POS_RECORD_W`和`K_SIGN_OVERLAP_DRAIN_CYCLES`后，
+  `make test-bike-random BIKE_RANDOM_TRIALS=1`通过，seed 1固定7轮、543,941拍、残余重量0。
+
+定量结果：令`WORDS=ceil(R_BITS/WORD_W)`、`DIGITS=WORD_W/DIGIT_W`，连续流稠密busy周期为
+`11*WORDS+WORDS^2*(1+4*DIGITS)`，稀疏busy周期增加`2*SPARSE_WEIGHT`。13-bit toy的稠密/稀疏周期
+分别为58/64拍；TRIKE-2真实参数的稠密/稀疏周期分别为1,967,372/1,967,442拍。输出ready停顿3拍时
+busy精确增加3拍。与阶段53同参数的异步数组功能基线相比，稠密增加1,013,332拍（106.2%），稀疏增加
+1,013,367拍（106.2%）；该代价来自同步A/B读取以及product逐digit读改写，必须结合实现后Fmax判断。
+
+Vivado综合和布局布线待测；LUT、FF、Slice、Block RAM Tile、RAMB36、RAMB18、DSP、setup WNS/TNS和
+hold WHS均无新报告。XPM配置只证明RTL的映射请求，不能代替目标器件上的资源和时序结果。
+
+结论与状态：保留同步RAM功能基线。下一项单变量实验是稀疏index直接循环旋转累加，保持稠密路径、接口和
+真实参数golden不变；是否保留该优化由同器件、同Vivado、同XDC、同报告阶段的固定`cycles/Fmax`、
+Block RAM Tile和LUT结果决定。
+
+### 阶段55：稀疏index直接循环移位累加（2026-07-31）
+
+目标与假设：只替换`trike_poly_mul_core`的稀疏×稠密执行路径，保持阶段54的同步RAM接口、稠密
+digit-serial路径、外部word/index协议和golden不变。利用稀疏A只有公开固定`SPARSE_WEIGHT`个非零位置，
+将稀疏复杂度从稠密$W^2D$调度降为$SW$固定扫描。
+
+关键实现：
+
+- 输入的`SPARSE_WEIGHT`个index写入独立同步index RAM；B仍按`WORDS`个little-endian word装载；
+- 每个index固定读取一次，并对全部B word逐word计算`dest=(b_word*WORD_W+index) mod R_BITS`；
+- 每个移位word先按$r$边界分成回卷前后两段，再按result word边界形成最多三个XOR贡献；
+- 每个index/B word组合固定执行一次B读取和三组result RAM读取/写回。贡献为零、不跨word和越界index
+  仍执行相同地址数量；越界index使用地址0和零贡献完成dummy读改写；
+- 稠密A/B、双长度product和四拍/word归约状态保持阶段54结构。
+
+验证范围：
+
+- `make format-rtl`、`make check-format-rtl`和`make lint-rtl`通过；
+- 13-bit toy覆盖非word对齐回卷、三个稀疏位置、越界index dummy路径、两组稠密数据和输出
+  backpressure；
+- TRIKE-2官方KAT派生的15581-bit稠密$t_0r_2$与稀疏$h_0r_2$均逐word匹配；
+- `make test-kem-unit`、`make test-unit`、`make test-integration`和一组BIKE随机回归通过。
+
+定量结果：令`WORDS=ceil(R_BITS/WORD_W)`、`DIGITS=WORD_W/DIGIT_W`、
+`S=SPARSE_WEIGHT`。稠密busy周期保持`11*WORDS+WORDS^2*(1+4*DIGITS)`；稀疏busy周期为
+`4*WORDS+2*S+7*S*WORDS`。13-bit toy稠密/稀疏为58/56拍。TRIKE-2稠密保持1,967,372拍，稀疏从
+阶段54的1,967,442拍降至60,826拍，减少1,906,616拍（96.9%），固定周期缩短约32.34倍。
+
+Vivado综合和布局布线待测；新增index RAM、可变移位/掩码逻辑和result地址路径的LUT、FF、Block RAM
+Tile、RAMB36、RAMB18、setup WNS/TNS与hold WHS均无报告。周期收益不能代替Fmax和物理资源结论。
+
+结论与状态：保留RTL功能方案，作为稀疏乘法候选基线。该路径直接覆盖Encaps的稀疏错误乘法和Decaps的
+稀疏syndrome项；进入KEM顶层前需用目标Vivado环境确认组合移位路径，并与稠密乘法核和后续求逆核的
+scratch RAM生命周期统一规划。
+
+### 阶段56：Reference C固定加法链多项式求逆核（2026-07-31）
+
+目标与假设：实现KeyGen所需的稠密多项式求逆，并保持输入系数、秘密密钥和中间多项式不影响状态路径、
+乘法次数或RAM访问次数。算法边界以最新四档Reference C为准；独立多项式Euclid只用于fixture golden，
+不进入RTL控制流。
+
+关键实现：
+
+- `trike_inv_schedule_pkg`保存TRIKE-2/5/7/9公开$r$对应的Frobenius置换步长和固定addition-chain
+  stage数，并提供13-bit toy调度；
+- `trike_poly_inv_core`使用`f/g/t`三份同步`ram_bram`，每个Frobenius映射对全部$r$个输出系数各执行
+  一次RAM读取和一次捕获，固定为`2r`拍；
+- 链内所有环乘时分复用一个稠密`trike_poly_mul_core`；A/B采用同步fetch/send，结果按固定word数写回
+  `f`或`t`；
+- 最后一轮固定对`t`执行平方置换并按little-endian coefficient word流输出；输出backpressure期间保持
+  word和last稳定；
+- `scripts/gen_trike_poly_inv_fixture.py`从官方TRIKE-2第0组KAT解析稠密$h_0$，用独立Python
+  多项式Euclid生成逆元并检查环乘为一。
+
+验证范围：
+
+- `tb_trike_poly_inv_core`在`R_BITS=13, WORD_W=8, DIGIT_W=4`下运行两组不同可逆输入，检查
+  输入与输出环乘为一、两组固定477拍，以及输出停顿只按停顿拍数增加busy；
+- `tb_trike_poly_inv_reference`在`R_BITS=15581, WORD_W=64, DIGIT_W=8`下逐word对拍官方KAT
+  派生golden，固定44,010,400拍；
+- TRIKE-2 Reference C加法链还用独立Python模型逐stage与Euclid逆元交叉检查；
+- `make format-rtl`、`make check-format-rtl`、`make lint-rtl`、`make test-kem-unit`、
+  `make test-trike-poly-reference`、`make test-trike-poly-inv-reference`、`make test-unit`、
+  `make test-integration`和一组BIKE随机回归通过；随机seed 1固定7轮、543,941拍、残余重量0。
+
+定量结果：令$W=\lceil r/\mathrm{WORD\_W}\rceil$，$C_\mathrm{mul}$为同参数稠密乘法busy周期，
+$P/M$为公开参数加法链中的Frobenius/乘法数量。连续流求逆busy周期为
+$3W+2rP+M(C_\mathrm{mul}+2W+1)$。TRIKE-2的$P=23$、$M=22$、
+$C_\mathrm{mul}=1,967,372$，总计44,010,400拍。toy的$P=6$、$M=5$、
+$C_\mathrm{mul}=58$，总计477拍。
+
+常数时间边界：stage数、置换步长、每次置换扫描长度、稠密乘法次数以及所有scratch RAM访问数均由公开
+$r$确定。输入valid空拍和输出ready停顿会延长接口总周期；普通FPGA数据翻转活动仍随秘密数据变化，本核
+未提供功耗masking或平衡逻辑。
+
+Vivado综合和布局布线待测；当前独立核包含三份外层scratch RAM以及乘法核内部A/B/product/result RAM。
+LUT、FF、Slice、Block RAM Tile、RAMB36、RAMB18、DSP、setup WNS/TNS和hold WHS均无报告，不能据
+固定周期结果推测物理面积或Fmax。
+
+结论与状态：保留功能方案。最新Reference C并未在求逆处采用数据相关迭代的extGCD，而是公开参数固定
+Frobenius加法链，因此控制与存储调度满足固定工作量要求。下一项物理实验是合并不重叠生命周期的
+operand/scratch RAM并测量相同器件、Vivado、XDC和报告阶段下的资源、Fmax及`cycles/Fmax`。
+
+### 阶段57：求逆稠密乘法外部RAM直连（2026-07-31）
+
+目标与假设：去除阶段56求逆路径中外层`f/g/t`与乘法器内部A/B/result的重复整环存储。稠密普通多项式
+乘积完成前不写回结果，因此A可直接读取`f/t`、B可直接读取`g`，归约阶段再覆盖源`f/t`，不存在读写
+生命周期冲突。
+
+关键实现：
+
+- `trike_poly_mul_core`增加elaboration-time `USE_EXTERNAL_DENSE_RAM`模式和A/B同步读、result同步写
+  端口；该模式从start直接进入product清零，不接受稀疏模式或流式operand；
+- generate分支在外部模式下不实例化A、B、result和稀疏index RAM，只保留双长度product RAM及同一套
+  digit-serial乘法/固定归约状态机；
+- `trike_poly_inv_core`把乘法A端口接到当前`f/t`、B端口接到`g`，result端口按公开目的选择写回`f/t`；
+- 乘法最后一个归约word写入的同一拍推进addition-chain，避免额外done等待；外部模式的每次稠密乘法固定
+  周期为`7*WORDS+WORDS^2*(1+4*DIGITS)`；
+- 普通流式稠密/稀疏模式的接口、RAM和周期保持阶段55结构。
+
+验证范围：
+
+- 13-bit求逆toy的两组不同可逆输入继续满足输入与输出环乘为一，固定周期由477拍降为417拍；
+- TRIKE-2官方KAT派生的15581-bit$h_0$逐word匹配独立Euclid golden，固定周期由44,010,400拍降为
+  43,978,192拍；
+- TRIKE-2普通流式乘法保持稠密1,967,372拍、稀疏60,826拍，两个golden均逐word匹配；
+- `make format-rtl`、`make check-format-rtl`、`make lint-rtl`、`make test-kem-unit`、
+  `make test-trike-poly-reference`、`make test-trike-poly-inv-reference`、`make test-unit`、
+  `make test-integration`和一组BIKE随机回归通过；随机seed 1固定7轮、543,941拍、残余重量0。
+
+定量结果：TRIKE-2的word数组逻辑容量从外层三份整环、内部A/B/result三份整环和一份双长度product，
+即`7*244*64=124,928 bit`，降为三份整环和一份双长度product，即`5*244*64=78,080 bit`，减少
+46,848 bit（37.5%）。求逆减少32,208拍（0.0732%）；乘法主项为$W^2D$，因此本实验的主要目标是RAM
+容量而非周期。13-bit toy因线性word开销占比较高，周期减少60拍（12.6%）。
+
+常数时间边界：外部模式只删除固定operand装载和result输出状态；product清零、A/B读取、所有digit乘积、
+归约写回和addition-chain次数仍由公开$r$、`WORD_W`和`DIGIT_W`决定。外部valid/ready只存在于整个
+求逆输入和最终输出边界，秘密多项式不控制内部握手。
+
+物理验证边界：当前运行环境未发现`vivado`可执行文件，没有生成新的synthesis、placed或routed报告。
+逻辑bit减少不等于Block RAM Tile按37.5%下降；LUT、FF、Slice、RAMB36、RAMB18、DSP、setup WNS/TNS
+和hold WHS均为待测，外部RAM地址mux对Fmax的影响也不能由Verilator功能回归判断。
+
+结论与状态：保留。外部RAM模式在不改变golden和固定调度的前提下消除了三份重复整环存储。取得目标
+Vivado环境后，需要使用同一器件、版本、XDC和报告阶段比较阶段56/57的Block RAM Tile、top path、
+Fmax和`cycles/Fmax`；下一项独立RTL工作为单物理SM3压缩服务。
+
+### 阶段58：单物理SM3压缩服务与KEM公共核Vivado检查点（2026-07-31）
+
+目标与假设：DF、HMAC、DRNG和pseudohash内部的多个hash阶段均按公开FSM串行执行，可让多个
+`sm3_hash_stream` context时分复用一个`sm3_compress`，减少消息扩展和压缩轮数据通路副本，同时保持
+既有接口、摘要结果和固定busy周期。求逆外部RAM模式与共享SM3路径分别建立独立Vivado top，避免两个
+架构变量混入同一资源报告。
+
+关键实现：
+
+- `sm3_hash_stream`增加`USE_EXTERNAL_COMPRESS`参数以及block、chaining state、start、busy、done和
+  返回state接口；内部模式仍封装一个`sm3_compress`；
+- `trike_sm3_service`封装单个物理`sm3_compress`，HMAC内/外层、DRNG Instantiate的两个DF、
+  DRNG Generate的输出/更新hash以及pseudohash的HMAC/h1/h2均按公开状态时分复用；
+- 复合模块的请求选择只由公开FSM阶段决定，不根据消息、摘要、秘密状态或压缩结果动态仲裁；
+- `scripts/check_trike_sm3_sharing.ys`以Yosys层次统计验证每个复合顶层只含一个`sm3_compress`；
+- `trike_poly_inv_synth_top`固定使用TRIKE-2的`R_BITS=15581, WORD_W=64, DIGIT_W=8`，
+  `trike_pseudohash_synth_top`固定32-byte消息；两个wrapper均使用同步复位释放；
+- `constraints/trike_kem_core.xdc`约束100 MHz `core_clk`、0.100 ns不确定度和2 ns实现级I/O delay；
+  `scripts/vivado_trike_kem_cores.tcl`执行synthesis、opt、place、phys_opt和route，并输出资源、层次资源、
+  setup/hold、methodology、CDC、DRC、messages和DCP。
+
+验证范围：
+
+- `make check-trike-sm3-sharing`通过；HMAC、DRNG Instantiate、DRNG Generate和pseudohash每个
+  复合顶层的`sm3_compress`层次实例数均为1；
+- `make format-rtl`、`make check-format-rtl`、`make lint-rtl`和`make test-kem-unit`通过；
+- DF、Instantiate、Generate和pseudohash512分别保持314、916、708和1,128个busy周期；
+- TRIKE-2多项式乘法与求逆reference、完整单元测试、toy集成和一组BIKE随机译码回归保持通过；随机
+  seed 1固定7轮、543,941拍、残余重量0。
+
+定量结构结果：pseudohash复合顶层的物理压缩核由HMAC内层、HMAC外层、h1和h2四个副本收敛为1个；
+HMAC、DRNG Instantiate和DRNG Generate各自由2个收敛为1个。hash context数保持算法所需数量，
+因此该计数不代表LUT按相同比例下降。固定busy周期没有增加，面积、布线和Fmax收益需要Vivado实现确认。
+
+Vivado待测条件：`xc7k355tffg901-2L`、Vivado 2023.2、100 MHz/10 ns、0.100 ns clock uncertainty、
+2 ns实现级I/O delay，分别实现TRIKE-2求逆和32-byte pseudohash。当前运行环境没有`vivado`可执行
+文件，LUT、FF、Slice、Block RAM Tile、RAMB36、RAMB18、DSP、setup WNS/TNS和hold WHS均为待测。
+wrapper未分配package pin，报告只用于公共核实现和内部时序比较。
+
+结论与状态：保留RTL并形成可运行的Vivado检查点。目标环境使用
+`make vivado-impl-trike-kem-cores VIVADO_PART=xc7k355tffg901-2L
+VIVADO_RUN_TAG=trike_kem_core_shared_sm3`生成两个独立报告目录。共享SM3的物理收益和求逆外部RAM的
+实际BRAM映射以该次post-route报告为准。
+
+### 阶段59：TRIKE160 K=4固定点对FLS参数更新（2026-08-01）
+
+目标与依据：将TRIKE-2 K=4局部寻优和预声明固定点对FLS的最新结果写入统一
+TRIKE译码参数。寻优固定`alpha=0.1875`和初始LLR 4；FLS点对为
+`r=10900`的719/10000失败与`r=11100`的2907/2000000失败，独立seed为
+`202607312801605`。连续交点为`r*=12576.529`，目标为`2^-128`。
+
+关键实现：
+
+- 向上搜索并独立检查得到首个满足素数且 2 为模`r`本原元的合法值`r=12589`；
+- `rtl/bike_pkg.sv`的TRIKE160参数更新为`R=12589`、`C_VAL=4`，`W=35`、`T=263`、
+  5-bit消息、K=4、7轮固定调度和alpha移位`3/4`保持不变；
+- 随机fixture参数、C参考模型和KEM软件profile同步同一`R/C_VAL`；
+- BF/BGF阈值未写入公开参数表，仍由软件按具体`r`自动计算。
+
+验证范围与定量结果：
+
+- `L=32`、`COLS_PER_TILE=1152`的seed 1回归为337,245拍，
+  `target_weight=263`、`output_weight=263`、`residual=0`、`exact=1`；
+- `L=16`、`COLS_PER_TILE=1168`的seed 1回归为657,271拍，输出重量、残余综合征和
+  exact结果相同；
+- 与旧`r=12899`相比，L=32固定周期由365,980降为337,245，减少28,735拍
+  （7.85%）；L=16由713,271降为657,271，减少56,000拍（7.85%）。
+
+置信与物理验证边界：合法`r`处的FLS 95% DFR上界为`1.0215e-39`，即
+`2^-129.52`。该结果是有限样本和FLS模型外推，不是在目标DFR处的直接观测。本次没有
+新的Vivado结果；LUT、FF、Slice、Block RAM Tile、RAMB36、RAMB18、DSP、setup WNS/TNS
+和hold WHS均待相同器件、Vivado、XDC和报告阶段复测。
+
+结论与状态：保留。TRIKE160当前K=4参数为`R=12589`、`C_VAL=4`；译码RTL仍执行
+由公开等级决定的7轮固定周期，仿真端的收敛提前退出不改变硬件调度。
+
+### 阶段60：TRIKE256 K=4固定点对FLS参数更新（2026-08-02）
+
+目标与依据：将TRIKE-5 K=4局部寻优和预声明固定点对FLS的最新结果写入统一
+TRIKE译码参数。寻优结果为`alpha=0.1875`、初始LLR 5；FLS点对为
+`r=24800`的154/10000失败与`r=25200`的392/2000000失败，独立seed为
+`202607312562501`。连续交点为`r*=30358.007`，目标为`2^-256`。
+
+关键实现：
+
+- 向上搜索并独立检查得到首个满足素数且 2 为模`r`本原元的合法值`r=30389`；
+- `rtl/bike_pkg.sv`的TRIKE256参数更新为`R=30389`；`C_VAL=5`、`W=55`、`T=429`、
+  5-bit消息、K=4、7轮固定调度和alpha移位`3/4`保持不变；
+- 随机fixture参数、C参考模型和KEM软件profile同步同一`R/C_VAL`；
+- BF/BGF阈值未写入公开参数表，仍由软件按具体`r`自动计算。
+
+验证范围与定量结果：
+
+- `L=32`、`COLS_PER_TILE=1152`的seed 1回归为1,252,957拍，
+  `target_weight=429`、`output_weight=429`、`residual=0`、`exact=1`；
+- `L=16`、`COLS_PER_TILE=1168`的seed 1回归为2,441,942拍，输出重量、残余综合征和
+  exact结果相同；
+- 与旧`r=29917`相比，L=32固定周期由1,207,807增加为1,252,957，增加45,150拍
+  （3.74%）；L=16由2,353,952增加为2,441,942，增加87,990拍（3.74%）。
+
+置信与物理验证边界：合法`r`处的FLS 95% DFR上界为`1.8200e-78`，即
+`2^-258.25`。该结果是有限样本和FLS模型外推，不是在目标DFR处的直接观测。本次没有
+新的Vivado结果；LUT、FF、Slice、Block RAM Tile、RAMB36、RAMB18、DSP、setup WNS/TNS
+和hold WHS均待相同器件、Vivado、XDC和报告阶段复测。
+
+结论与状态：保留。TRIKE256当前K=4参数为`R=30389`、`C_VAL=5`；译码RTL仍执行
+由公开等级决定的7轮固定周期，仿真端的收敛提前退出不改变硬件调度。
+
 ## 形成的设计结论
 
 1. 存储优化必须以目标器件的原生宽深模式和 BRAM Tile 为依据；只改数组声明或逻辑字段宽度不能保证映射。

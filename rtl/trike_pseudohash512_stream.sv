@@ -6,7 +6,8 @@
 // HMAC-SM3(key, 0x02 || 0x00 || message), and pass 1 computes
 // SM3(message || 0x02 || 0x00). The final digest is h1 || SM3(k1 || h1).
 module trike_pseudohash512_stream #(
-    parameter int MESSAGE_BYTES = 32
+    parameter int MESSAGE_BYTES         = 32,
+    parameter bit USE_EXTERNAL_COMPRESS = 1'b0
 ) (
     input  logic         i_clk,
     input  logic         i_rst_n,
@@ -17,7 +18,13 @@ module trike_pseudohash512_stream #(
     output logic         o_input_pass,
     output logic         o_busy,
     output logic         o_done,
-    output logic [511:0] o_digest
+    output logic [511:0] o_digest,
+    output logic         o_compress_start,
+    output logic [511:0] o_compress_block,
+    output logic [255:0] o_compress_state,
+    input  logic         i_compress_busy,
+    input  logic         i_compress_done,
+    input  logic [255:0] i_compress_state
 );
 
   localparam int MESSAGE_COUNT_W = (MESSAGE_BYTES > 1) ? $clog2(MESSAGE_BYTES) : 1;
@@ -71,6 +78,22 @@ module trike_pseudohash512_stream #(
   logic                         h2_done;
   logic   [              255:0] h2_digest;
 
+  logic                         hmac_compress_start;
+  logic   [              511:0] hmac_compress_block;
+  logic   [              255:0] hmac_compress_state;
+  logic                         h1_compress_start;
+  logic   [              511:0] h1_compress_block;
+  logic   [              255:0] h1_compress_state;
+  logic                         h2_compress_start;
+  logic   [              511:0] h2_compress_block;
+  logic   [              255:0] h2_compress_state;
+  logic                         shared_compress_busy;
+  logic                         shared_compress_done;
+  logic   [              255:0] shared_compress_result;
+  logic                         internal_compress_busy;
+  logic                         internal_compress_done;
+  logic   [              255:0] internal_compress_result;
+
   function automatic logic [7:0] digest_byte(input  logic [255:0] value, input  logic [5:0] byte_idx);
     begin
       digest_byte = value[255-8*byte_idx-:8];
@@ -102,50 +125,110 @@ module trike_pseudohash512_stream #(
       h1_q, h2_feed_idx_q - 6'd32
   );
 
-  /* verilator lint_off PINCONNECTEMPTY */
+  assign shared_compress_busy = USE_EXTERNAL_COMPRESS ? i_compress_busy : internal_compress_busy;
+  assign shared_compress_done = USE_EXTERNAL_COMPRESS ? i_compress_done : internal_compress_done;
+  assign shared_compress_result =
+      USE_EXTERNAL_COMPRESS ? i_compress_state : internal_compress_result;
+
+  always_comb begin
+    o_compress_start = hmac_compress_start;
+    o_compress_block = hmac_compress_block;
+    o_compress_state = hmac_compress_state;
+    if ((state_q == ST_H1_START) || (state_q == ST_H1_MESSAGE) ||
+        (state_q == ST_H1_SUFFIX) || (state_q == ST_H1_WAIT)) begin
+      o_compress_start = h1_compress_start;
+      o_compress_block = h1_compress_block;
+      o_compress_state = h1_compress_state;
+    end else if ((state_q == ST_H2_START) || (state_q == ST_H2_FEED) ||
+                 (state_q == ST_H2_WAIT)) begin
+      o_compress_start = h2_compress_start;
+      o_compress_block = h2_compress_block;
+      o_compress_state = h2_compress_state;
+    end
+  end
+
   hmac_sm3_64byte_key_stream #(
-      .MESSAGE_BYTES(MESSAGE_BYTES + 2)
+      .MESSAGE_BYTES        (MESSAGE_BYTES + 2),
+      .USE_EXTERNAL_COMPRESS(1'b1)
   ) u_hmac (
-      .i_clk        (i_clk),
-      .i_rst_n      (i_rst_n),
-      .i_start      (hmac_start),
-      .i_key        (ICCS_HMAC_KEY),
-      .i_input_valid(hmac_input_valid),
-      .i_input_data (hmac_input_data),
-      .o_input_ready(hmac_input_ready),
-      .o_busy       (),
-      .o_done       (hmac_done),
-      .o_digest     (hmac_digest)
+      .i_clk           (i_clk),
+      .i_rst_n         (i_rst_n),
+      .i_start         (hmac_start),
+      .i_key           (ICCS_HMAC_KEY),
+      .i_input_valid   (hmac_input_valid),
+      .i_input_data    (hmac_input_data),
+      .o_input_ready   (hmac_input_ready),
+      .o_busy          (),
+      .o_done          (hmac_done),
+      .o_digest        (hmac_digest),
+      .o_compress_start(hmac_compress_start),
+      .o_compress_block(hmac_compress_block),
+      .o_compress_state(hmac_compress_state),
+      .i_compress_busy (shared_compress_busy),
+      .i_compress_done (shared_compress_done),
+      .i_compress_state(shared_compress_result)
   );
 
   sm3_hash_stream #(
-      .INPUT_BYTES(MESSAGE_BYTES + 2)
+      .INPUT_BYTES          (MESSAGE_BYTES + 2),
+      .USE_EXTERNAL_COMPRESS(1'b1)
   ) u_h1 (
-      .i_clk        (i_clk),
-      .i_rst_n      (i_rst_n),
-      .i_start      (h1_start),
-      .i_input_valid(h1_input_valid),
-      .i_input_data (h1_input_data),
-      .o_input_ready(h1_input_ready),
-      .o_busy       (),
-      .o_done       (h1_done),
-      .o_digest     (h1_digest)
+      .i_clk           (i_clk),
+      .i_rst_n         (i_rst_n),
+      .i_start         (h1_start),
+      .i_input_valid   (h1_input_valid),
+      .i_input_data    (h1_input_data),
+      .o_input_ready   (h1_input_ready),
+      .o_busy          (),
+      .o_done          (h1_done),
+      .o_digest        (h1_digest),
+      .o_compress_start(h1_compress_start),
+      .o_compress_block(h1_compress_block),
+      .o_compress_state(h1_compress_state),
+      .i_compress_busy (shared_compress_busy),
+      .i_compress_done (shared_compress_done),
+      .i_compress_state(shared_compress_result)
   );
 
   sm3_hash_stream #(
-      .INPUT_BYTES(64)
+      .INPUT_BYTES          (64),
+      .USE_EXTERNAL_COMPRESS(1'b1)
   ) u_h2 (
-      .i_clk        (i_clk),
-      .i_rst_n      (i_rst_n),
-      .i_start      (h2_start),
-      .i_input_valid(state_q == ST_H2_FEED),
-      .i_input_data (h2_input_data),
-      .o_input_ready(h2_input_ready),
-      .o_busy       (),
-      .o_done       (h2_done),
-      .o_digest     (h2_digest)
+      .i_clk           (i_clk),
+      .i_rst_n         (i_rst_n),
+      .i_start         (h2_start),
+      .i_input_valid   (state_q == ST_H2_FEED),
+      .i_input_data    (h2_input_data),
+      .o_input_ready   (h2_input_ready),
+      .o_busy          (),
+      .o_done          (h2_done),
+      .o_digest        (h2_digest),
+      .o_compress_start(h2_compress_start),
+      .o_compress_block(h2_compress_block),
+      .o_compress_state(h2_compress_state),
+      .i_compress_busy (shared_compress_busy),
+      .i_compress_done (shared_compress_done),
+      .i_compress_state(shared_compress_result)
   );
-  /* verilator lint_on PINCONNECTEMPTY */
+
+  generate
+    if (!USE_EXTERNAL_COMPRESS) begin : g_internal_compress
+      trike_sm3_service u_sm3_service (
+          .i_clk  (i_clk),
+          .i_rst_n(i_rst_n),
+          .i_start(o_compress_start),
+          .i_block(o_compress_block),
+          .i_state(o_compress_state),
+          .o_busy (internal_compress_busy),
+          .o_done (internal_compress_done),
+          .o_state(internal_compress_result)
+      );
+    end else begin : g_external_compress
+      assign internal_compress_busy   = 1'b0;
+      assign internal_compress_done   = 1'b0;
+      assign internal_compress_result = '0;
+    end
+  endgenerate
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin

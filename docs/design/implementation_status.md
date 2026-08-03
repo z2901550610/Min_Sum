@@ -143,8 +143,8 @@ T_DECODE     = 7 × 1219794 + 6 = 8538564
 | 参数等级 | 固定周期 | 100 MHz 延时 |
 | --- | ---: | ---: |
 | TRIKE128 | 193,514 | 1.93514 ms |
-| TRIKE160 | 365,980 | 3.65980 ms |
-| TRIKE256 | 1,207,807 | 12.07807 ms |
+| TRIKE160 | 337,245 | 3.37245 ms |
+| TRIKE256 | 1,252,957 | 12.52957 ms |
 | TRIKE384 | 3,866,092 | 38.66092 ms |
 | TRIKE512 | 8,538,564 | 85.38564 ms |
 
@@ -153,7 +153,7 @@ T_DECODE     = 7 × 1219794 + 6 = 8538564
 本节列出的2026-07-17至2026-07-26 Vivado结果使用
 `R={8117,12739,29501,61283,108587}`。2026-07-28的L=16和L=32结果使用
 `R={8291,12899,29917,63997,106781}`。当前参数为
-`R={8243,12899,29917,63997,106781}`，因此既有报告均作为历史物理参考，不能表述为当前源码的
+`R={8243,12589,30389,63997,106781}`，因此既有报告均作为历史物理参考，不能表述为当前源码的
 资源和时序签核。
 
 最近完整K=3基线的2026-07-17 Fully Placed aggregate utilization如下：
@@ -311,11 +311,11 @@ K-sign工作RAM、snapshot和`ram_m`路径均未进入前十条。
 
 ## KEM公共核
 
-TRIKE KEM数据通路包含`sm3_compress`、`sm3_hash_stream`、
+TRIKE KEM数据通路包含`sm3_compress`、`trike_sm3_service`、`sm3_hash_stream`、
 `hmac_sm3_64byte_key_stream`、`sm3_df_stream`、`trike_sm3_drng_instantiate_stream`、
 `trike_sm3_drng_generate_stream`、`trike_pseudohash512_stream`、`trike_parity_map_stream`、
-`trike_sampler_candidate`、`trike_fixed_weight_sampler`、`trike_poly_mul_core`和
-`kem_ct_compare_select`公共RTL核。
+`trike_sampler_candidate`、`trike_fixed_weight_sampler`、`trike_poly_mul_core`、
+`trike_poly_inv_core`和`kem_ct_compare_select`公共RTL核。
 SM3压缩核固定用52周期扩展消息、64周期执行压缩；上层完成SM3-DRNG状态生成与更新、
 pseudohash512级联、H1/H2/H3奇偶映射、H4固定扫描和固定结构选择。接口、状态布局和验证边界见
 [trike_kem_common_cores.md](trike_kem_common_cores.md)。
@@ -323,19 +323,39 @@ pseudohash512级联、H1/H2/H3奇偶映射、H4固定扫描和固定结构选择
 `keccak_f1600`和`shake256_stream`作为BIKE兼容公共核保留。随包TRIKE的H1/H2/H3、H4、K和L使用
 SM3、SM3-DRNG和pseudohash路径。
 
+HMAC、DRNG Instantiate、DRNG Generate和pseudohash各自保留多个hash context控制器，并在各自
+复合顶层内共享一个`trike_sm3_service`。压缩服务选择只依赖公开FSM阶段；各复合顶层经Yosys层次检查
+均恰好包含一个`sm3_compress`。DF、Instantiate、Generate和pseudohash512的固定busy周期分别为
+314、916、708和1,128拍。
+
 奇偶映射连续流周期为`2*R_BYTES+1`；固定重量采样器对碰撞和无碰撞输入均执行
 `WEIGHT*(WEIGHT+3)`个busy周期。valid/ready外部停顿会延长接口总周期，KEM顶层需要提供公开的
 连续RAM调度或固定等待预算。Reference C KeyGen的弱密钥重采样循环是完整KEM固定周期设计中的独立
 未决项。
 
-`trike_poly_mul_core`提供稠密word流与固定数量稀疏index两种输入。两者共享digit-serial
-carryless乘法、双长度product存储和$x^r-1$固定折返。令
+`trike_poly_mul_core`提供稠密word流与固定数量稀疏index两种输入。稠密路径使用digit-serial
+carryless乘法、双长度product存储和$x^r-1$固定折返；稀疏路径逐index扫描B，并把每个循环移位word
+固定拆成三组result RAM读改写。A、B、product、result和稀疏index使用公共`ram_bram`同步端口；
+综合分支请求Block RAM XPM。令
 `WORDS=ceil(R_BITS/WORD_W)`、`DIGITS=WORD_W/DIGIT_W`，连续流稠密模式busy周期为
-`6*WORDS+2*WORDS*WORDS*DIGITS`，稀疏模式再增加公开`SPARSE_WEIGHT`拍。功能TB覆盖13-bit
-非word对齐环、两种输入、不同数据固定周期和输出backpressure。显式BRAM映射、四档周期/Fmax和资源报告
-均为待测。
+`11*WORDS+WORDS*WORDS*(1+4*DIGITS)`；令`S=SPARSE_WEIGHT`，稀疏模式busy周期为
+`4*WORDS+2*S+7*S*WORDS`。功能TB覆盖13-bit非word对齐环、两种输入、不同数据固定周期和输出
+backpressure；TRIKE-2真实参数回归的稠密/稀疏周期分别为1,967,372/60,826拍。实际Block RAM Tile、
+组合移位路径Fmax、四档周期/Fmax和资源报告均为待测。
 
-未实现范围包括多项式求逆、H1/H2/H3/H4组合控制器和KEM序列化控制器。KEM公共核未接入
+`trike_poly_inv_core`采用与最新四档Reference C相同的公开参数加法链。每个Frobenius映射固定扫描
+`R_BITS`个输出系数，每个系数执行一次同步RAM读取和一次捕获；链中所有稠密环乘复用核内一个
+`trike_poly_mul_core`。求逆连接采用外部稠密RAM模式：乘法器直接同步读取`f/t`和`g`，完成普通多项式
+乘积后将归约结果直接写回`f/t`。该模式只保留乘法器内部双长度product RAM，不实例化A、B、result或
+稀疏index RAM。
+
+令`P`为公开参数表确定的Frobenius映射数、`M`为稠密乘法数，外部RAM稠密乘法周期
+`C_EXT=7*WORDS+WORDS*WORDS*(1+4*DIGITS)`，连续输入输出求逆busy周期为
+`3*WORDS+2*R_BITS*P+M*(C_EXT+1)`。TRIKE-2的`P=23`、`M=22`，官方KAT派生的15581-bit输入
+逐word匹配独立多项式Euclid golden，固定43,978,192拍。三份外层scratch RAM和一份双长度product RAM
+的逻辑容量为78,080 bit；实际Block RAM Tile、Fmax与资源结果待目标Vivado环境验证。
+
+未实现范围包括H1/H2/H3/H4组合控制器和KEM序列化控制器。KEM公共核未接入
 `decoder_top`，其Vivado资源与时序为待测，不计入本文译码器物理基线。
 
 ## 验证状态
@@ -346,9 +366,11 @@ carryless乘法、双长度product存储和$x^r-1$固定折返。令
 make format-rtl
 make check-format-rtl
 make lint-rtl
+make check-trike-sm3-sharing
 make test-kem-unit
 make test-trike-reference-kat
 make test-trike-poly-reference
+make test-trike-poly-inv-reference
 make test-unit
 make test-integration
 make test-trike-unified-ksign-random BIKE_RANDOM_TRIALS=1 \
@@ -360,11 +382,11 @@ make test-trike-unified-ksign-random BIKE_RANDOM_TRIALS=1 \
 固定周期。
 
 仓库默认的K=4、`L=32`、`COLS_PER_TILE=1152`使用K=4外推参数，固定周期预算分别为
-193,514、365,980、1,207,807、3,866,092和8,538,564。五档seed 1随机回归均为
+193,514、337,245、1,252,957、3,866,092和8,538,564。五档seed 1随机回归均为
 residual 0、exact 1，实测周期与预算逐项一致。
 
 K=4、`L=16`、`COLS_PER_TILE=1168`使用同一外推参数，固定周期预算分别为
-377,138、713,271、2,353,952、7,402,114和16,463,236。五档seed 1随机回归均为
+377,138、657,271、2,441,942、7,402,114和16,463,236。五档seed 1随机回归均为
 residual 0、exact 1，实测周期与预算逐项一致。
 
 K-sign selector公共地址结构通过标准格式、lint、14项单元测试、toy集成，以及
@@ -413,10 +435,20 @@ Vivado 综合入口：
 ```sh
 make vivado-synth-trike-unified-ksign
 make vivado-synth-trike-unified-ksign TRIKE_UNIFIED_KSIGN_K=4
+make vivado-impl-trike-kem-cores \
+  VIVADO_PART=xc7k355tffg901-2L \
+  VIVADO_RUN_TAG=trike_kem_core_shared_sm3
 ```
 
 批处理入口按启动时间创建 `build/vivado/<timestamp>/..._k3` 或 `..._k4` 目录；可以用
 `VIVADO_RUN_TAG=<label>`指定可读实验标签。不同K值和不同运行不会覆盖已有报告。
+
+KEM公共核入口分别实现TRIKE-2求逆核和32-byte pseudohash核，输出目录为
+`build/vivado/<label>/trike_poly_inv`与`build/vivado/<label>/trike_pseudohash`。两者使用100 MHz
+`core_clk`、0.100 ns时钟不确定度和2 ns实现级I/O delay；wrapper不分配package pin，因此报告属于
+公共核实现检查点，不是板级I/O签核。报告包含post-synth/post-route utilization、hierarchical
+utilization、setup/hold top paths、timing summary、clock utilization、methodology、CDC、DRC、
+messages和DCP。
 
 当前K=3和K=4 RTL的Fully Placed aggregate utilization及Routed timing summary已记录。当前 `ram_m`
 使用完整18-bit记录；资源优化实验及定量结果保存在探索记录。hierarchical utilization、最新methodology、

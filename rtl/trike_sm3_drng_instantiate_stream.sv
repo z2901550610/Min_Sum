@@ -5,7 +5,8 @@
 // The caller replays the seed for the two SM3_df passes. V, C, and the
 // reseed counter use big-endian 55-byte integer layout.
 module trike_sm3_drng_instantiate_stream #(
-    parameter int SEED_BYTES = 32
+    parameter int SEED_BYTES            = 32,
+    parameter bit USE_EXTERNAL_COMPRESS = 1'b0
 ) (
     input  logic         i_clk,
     input  logic         i_rst_n,
@@ -18,7 +19,13 @@ module trike_sm3_drng_instantiate_stream #(
     output logic         o_done,
     output logic [439:0] o_v,
     output logic [439:0] o_c,
-    output logic [439:0] o_reseed_counter
+    output logic [439:0] o_reseed_counter,
+    output logic         o_compress_start,
+    output logic [511:0] o_compress_block,
+    output logic [255:0] o_compress_state,
+    input  logic         i_compress_busy,
+    input  logic         i_compress_done,
+    input  logic [255:0] i_compress_state
 );
 
   typedef enum logic [2:0] {
@@ -46,6 +53,20 @@ module trike_sm3_drng_instantiate_stream #(
   logic   [439:0] c_df_output;
   logic   [  7:0] c_df_input_data;
 
+  logic           seed_compress_start;
+  logic   [511:0] seed_compress_block;
+  logic   [255:0] seed_compress_state;
+  logic           c_compress_start;
+  logic   [511:0] c_compress_block;
+  logic   [255:0] c_compress_state;
+  logic           shared_compress_busy;
+  logic           shared_compress_done;
+  logic   [255:0] shared_compress_result;
+  logic           internal_compress_busy;
+  logic           internal_compress_done;
+  logic   [255:0] internal_compress_result;
+  logic           select_c_compress;
+
   function automatic logic [7:0] state_byte(input  logic [439:0] value, input  logic [5:0] byte_idx);
     begin
       state_byte = value[439-8*byte_idx-:8];
@@ -59,37 +80,77 @@ module trike_sm3_drng_instantiate_stream #(
   assign c_df_start = (state_q == ST_C_DF_START);
   assign c_df_input_data = (c_input_count_q == 0) ? 8'h00 : state_byte(v_q, c_input_count_q - 6'd1);
 
-  /* verilator lint_off PINCONNECTEMPTY */
+  assign select_c_compress = (state_q == ST_C_DF_START) || (state_q == ST_C_DF_RUN);
+  assign shared_compress_busy = USE_EXTERNAL_COMPRESS ? i_compress_busy : internal_compress_busy;
+  assign shared_compress_done = USE_EXTERNAL_COMPRESS ? i_compress_done : internal_compress_done;
+  assign shared_compress_result =
+      USE_EXTERNAL_COMPRESS ? i_compress_state : internal_compress_result;
+  assign o_compress_start = select_c_compress ? c_compress_start : seed_compress_start;
+  assign o_compress_block = select_c_compress ? c_compress_block : seed_compress_block;
+  assign o_compress_state = select_c_compress ? c_compress_state : seed_compress_state;
+
   sm3_df_stream #(
-      .INPUT_BYTES(SEED_BYTES)
+      .INPUT_BYTES          (SEED_BYTES),
+      .USE_EXTERNAL_COMPRESS(1'b1)
   ) u_seed_df (
-      .i_clk        (i_clk),
-      .i_rst_n      (i_rst_n),
-      .i_start      (seed_df_start),
-      .i_input_valid(i_seed_valid && (state_q == ST_SEED_DF_RUN)),
-      .i_input_data (i_seed_data),
-      .o_input_ready(seed_df_input_ready),
-      .o_input_pass (seed_df_input_pass),
-      .o_busy       (),
-      .o_done       (seed_df_done),
-      .o_seed       (seed_df_output)
+      .i_clk           (i_clk),
+      .i_rst_n         (i_rst_n),
+      .i_start         (seed_df_start),
+      .i_input_valid   (i_seed_valid && (state_q == ST_SEED_DF_RUN)),
+      .i_input_data    (i_seed_data),
+      .o_input_ready   (seed_df_input_ready),
+      .o_input_pass    (seed_df_input_pass),
+      .o_busy          (),
+      .o_done          (seed_df_done),
+      .o_seed          (seed_df_output),
+      .o_compress_start(seed_compress_start),
+      .o_compress_block(seed_compress_block),
+      .o_compress_state(seed_compress_state),
+      .i_compress_busy (shared_compress_busy),
+      .i_compress_done (shared_compress_done),
+      .i_compress_state(shared_compress_result)
   );
 
   sm3_df_stream #(
-      .INPUT_BYTES(56)
+      .INPUT_BYTES          (56),
+      .USE_EXTERNAL_COMPRESS(1'b1)
   ) u_c_df (
-      .i_clk        (i_clk),
-      .i_rst_n      (i_rst_n),
-      .i_start      (c_df_start),
-      .i_input_valid(state_q == ST_C_DF_RUN),
-      .i_input_data (c_df_input_data),
-      .o_input_ready(c_df_input_ready),
-      .o_input_pass (),
-      .o_busy       (),
-      .o_done       (c_df_done),
-      .o_seed       (c_df_output)
+      .i_clk           (i_clk),
+      .i_rst_n         (i_rst_n),
+      .i_start         (c_df_start),
+      .i_input_valid   (state_q == ST_C_DF_RUN),
+      .i_input_data    (c_df_input_data),
+      .o_input_ready   (c_df_input_ready),
+      .o_input_pass    (),
+      .o_busy          (),
+      .o_done          (c_df_done),
+      .o_seed          (c_df_output),
+      .o_compress_start(c_compress_start),
+      .o_compress_block(c_compress_block),
+      .o_compress_state(c_compress_state),
+      .i_compress_busy (shared_compress_busy),
+      .i_compress_done (shared_compress_done),
+      .i_compress_state(shared_compress_result)
   );
-  /* verilator lint_on PINCONNECTEMPTY */
+
+  generate
+    if (!USE_EXTERNAL_COMPRESS) begin : g_internal_compress
+      trike_sm3_service u_sm3_service (
+          .i_clk  (i_clk),
+          .i_rst_n(i_rst_n),
+          .i_start(o_compress_start),
+          .i_block(o_compress_block),
+          .i_state(o_compress_state),
+          .o_busy (internal_compress_busy),
+          .o_done (internal_compress_done),
+          .o_state(internal_compress_result)
+      );
+    end else begin : g_external_compress
+      assign internal_compress_busy   = 1'b0;
+      assign internal_compress_done   = 1'b0;
+      assign internal_compress_result = '0;
+    end
+  endgenerate
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin

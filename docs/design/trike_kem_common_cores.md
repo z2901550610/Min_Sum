@@ -67,7 +67,7 @@ flowchart TD
     GENR --> PARITY["已有：trike_parity_map_stream<br/>偶、偶、奇"]
     PARITY --> TVEC["t1、t2、r1"]
 
-    HIDX --> POLY["已有：trike_poly_mul_core功能基线<br/>待实现：trike_poly_inv_core"]
+    HIDX --> POLY["已有：trike_poly_mul_core<br/>已有：trike_poly_inv_core"]
     TVEC --> POLY
     POLY --> T0["t0=(h0*r1+h1)/(t1+r1)"]
     T0 --> R2["r2=(t0*t2+h2)/(t0+h0)"]
@@ -304,7 +304,7 @@ flowchart TD
 | DRNG服务 | `trike_drng_service` | Instantiate、Generate和55-byte状态算术；H1/H2/H3/H4/秘密采样调用 |
 | 采样服务 | `trike_weight_sampler_core` | 运行时公开`length/weight`、multiply-high、固定全扫描和index输出 |
 | 多项式服务 | `trike_poly_mul_core` | 同一循环移位/XOR累加数据通路支持稀疏×稠密与稠密×稠密 |
-| 求逆服务 | `trike_poly_inv_core` | 固定轮divstep/extGCD求逆；复用多项式scratch RAM，不与乘法核并发 |
+| 求逆服务 | `trike_poly_inv_core` | 公开参数固定Frobenius加法链；核内复用一个稠密乘法器 |
 | 译码服务 | `decoder_top` | Decaps固定7轮Min-Sum，不与KEM多项式运算并发 |
 | 验证服务 | `trike_ct_verify_stream` | 固定word数比较、累计difference并调用`kem_ct_compare_select` |
 
@@ -329,19 +329,21 @@ H1/H2/H3控制器、H4控制器、KeyGen控制器和Encaps/Decaps控制器不分
 
 ### SM3物理实例收敛
 
-当前已验证的`hmac_sm3_64byte_key_stream`包含内外层两个`sm3_hash_stream`，
-`trike_pseudohash512_stream`还包含HMAC、suffix hash和最终hash逻辑。当前控制器按HMAC、h1、h2
-顺序执行；从算法上看`k1`和`h1`可以并行，但最终`h2`依赖两者。
-完成态将`sm3_hash_stream`拆成block-builder/context控制和共享`sm3_compress`服务：
+`sm3_hash_stream`保留消息block构造、padding和chaining state控制，并通过
+`USE_EXTERNAL_COMPRESS`接口向`trike_sm3_service`提交压缩命令。`trike_sm3_service`封装唯一物理
+`sm3_compress`，上层复合模块按公开FSM阶段选择请求和返回路径：
 
-1. context RAM保存当前chaining state、消息长度、block和调用返回状态；
-2. DF、DRNG、HMAC和pseudohash以command形式提交block；
-3. 一个压缩核按固定优先级和公开微程序顺序执行；
-4. HMAC inner/outer、pseudohash的`k1/h1/h2`不复制压缩轮数据通路。
+1. HMAC内层和外层两个hash context共享一个压缩服务；
+2. DRNG Instantiate的seed DF和C DF共享一个压缩服务；
+3. DRNG Generate的输出hash和状态更新hash共享一个压缩服务；
+4. pseudohash的HMAC、suffix hash和最终hash共享一个压缩服务。
 
-该方案首先减少SM3 schedule RAM和64轮组合逻辑副本。代价是增加context mux、command控制，并放弃
-`k1/h1`等可选并行机会。面积优先基线采用单lane；是否增加第二个SM3 lane应在完整周期统计和Vivado结果
-出现后，根据减少的固定周期能否抵消新增资源判断。
+选择逻辑只依赖公开微程序状态，不使用消息、摘要或秘密状态进行动态仲裁。各hash context在收到返回前
+保持block和chaining state，复合模块不并发发起两个命令。面积优先基线为单lane，DF、DRNG
+Instantiate、DRNG Generate和pseudohash的固定busy周期分别为314、916、708和1,128拍。
+`make check-trike-sm3-sharing`使用Yosys层次统计检查
+HMAC、DRNG Instantiate、DRNG Generate和pseudohash每个复合顶层恰好包含一个`sm3_compress`。
+是否增加第二个SM3 lane需要根据完整KEM周期与同条件Vivado的资源、Fmax和`cycles/Fmax`决定。
 
 ### 采样器物理实例收敛
 
@@ -352,16 +354,21 @@ H1/H2/H3控制器、H4控制器、KeyGen控制器和Encaps/Decaps控制器不分
 
 ### 多项式数据通路收敛
 
-`trike_poly_mul_core`使用一个digit-serial carryless乘法数据通路，先生成双长度普通多项式乘积，再按
-$x^r-1$固定word数折返。输入和结果均为little-endian coefficient word流。该功能基线支持两种公开模式：
+`trike_poly_mul_core`输入和结果均为little-endian coefficient word流。A、B、双长度product、result和
+稀疏index分别连接公共`ram_bram`同步读端口；综合分支使用`xpm_memory_sdpram`并请求Block RAM。乘法核
+支持两种公开模式：
 
-- 稀疏×稠密：固定清零A存储并接收公开`SPARSE_WEIGHT`个index，展开为稠密A后调用共享乘法调度；
-- 稠密×稠密：接收固定`ceil(r/WORD_W)`个A word后调用同一乘法调度。
+- 稀疏×稠密：保存公开`SPARSE_WEIGHT`个index，对每个index固定扫描全部B word；每个移位word按
+  末word有效位和$x^r-1$回卷拆成三个result贡献，并固定执行三组同步RAM读改写；
+- 稠密×稠密：使用digit-serial carryless数据通路生成双长度普通多项式乘积，再按$x^r-1$固定word数
+  折返。
 
 连续输入输出下，令$W=\lceil r/\mathrm{WORD\_W}\rceil$、$D=\mathrm{WORD\_W}/\mathrm{DIGIT\_W}$，
-稠密模式busy周期为$6W+2W^2D$，稀疏模式增加公开的`SPARSE_WEIGHT`拍。两种模式的主乘法访问数均不
-依赖多项式系数或index值。RTL功能边界已经建立；显式同步BRAM端口、稀疏index直接旋转累加和最大四档
-`cycles/Fmax`优化需要在保持word流接口和固定周期属性的条件下继续完成。
+令$S=\mathrm{SPARSE\_WEIGHT}$，稠密模式busy周期为$11W+W^2(1+4D)$，稀疏模式为
+$4W+2S+7SW$。每个稀疏index和B word均执行一次同步读取及三次result读改写；贡献为零、index越界或
+移位不跨word时仍执行相同三组访问。两种模式的状态数和存储访问数均不依赖多项式系数或index值；
+valid/ready外部空拍按公开接口预算延长总周期。实际Block RAM Tile、组合移位路径Fmax和
+`cycles/Fmax`需要由统一器件、Vivado、XDC和报告阶段的实现结果确认。
 
 Decaps syndrome可写成
 
@@ -370,8 +377,19 @@ s=h_0u+t_0(u+v),
 $$
 
 从而使用一次稀疏×稠密和一次稠密×稠密操作。乘法核的accumulator、循环地址生成和scratch RAM在两种
-模式间共享。求逆的divstep/extGCD状态机与乘法核结构不同，保留独立算术控制，但与乘法核共享scratch RAM
-端口且不并发运行。
+模式间共享。
+
+`trike_poly_inv_core`实现最新四档Reference C的固定加法链求逆。`trike_inv_schedule_pkg`保存每档公开
+$r$对应的Frobenius置换步长；控制器在三份同步scratch RAM中维护`f/g/t`，对每个置换固定执行
+`2r`拍读取/捕获，再调用同一个稠密`trike_poly_mul_core`。链长、置换步长、乘法次数和RAM地址数量只由
+公开$r$确定，不根据输入多项式次数、系数或中间值分支。
+
+求逆实例将`trike_poly_mul_core`配置为外部稠密RAM模式。乘法状态机通过同步读地址直接访问`f/t`和`g`，
+所有word乘积完成后才进入归约，因此可以安全地将结果直接覆盖源`f/t`。该elaboration不生成乘法器内部
+A、B、result和稀疏index RAM，只保留双长度product RAM；普通KEM乘法调用继续使用完整流式接口。
+TRIKE-2求逆数据存储的RTL逻辑容量由七份word数组收敛为三份整环scratch加一份双长度product，即从
+124,928 bit降至78,080 bit。该数字不是Vivado Block RAM Tile结论，具体RAMB36/RAMB18组合和地址mux
+时序仍需目标器件综合与布局布线确认。
 
 不建议把KEM乘法核并入`decoder_top`内部的`barrel_rotate`、`ram_m`或`ram_t`。译码器包含按lane复制的
 并行路由和特定message宽度RAM，访问几何与KEM稠密多项式不一致；跨边界复用会扩大mux、破坏独立验证边界
@@ -459,10 +477,9 @@ round展开或SRL映射，并通过同一block接口保持上层不变。
 - 内层输入为`(key xor 0x36) || message`；
 - 外层输入为`(key xor 0x5c) || inner_digest`；
 - `MESSAGE_BYTES`为公开参数；
-- 两个`sm3_hash_stream`实例形成清晰的固定边界。
+- 内外层由两个独立hash context控制，并共享一个`trike_sm3_service`压缩数据通路。
 
-两个SM3实例便于功能验证和控制解耦，资源结果待Vivado测量。后续可以用一个SM3实例时分复用内外层，
-并用公开状态机保持固定周期。
+公开状态机固定先执行内层、再执行外层；消息或摘要不参与分支。该结构的物理资源结果待Vivado测量。
 
 TRIKE `pseudohash`使用固定64-byte ICCS密钥：
 
@@ -486,6 +503,8 @@ TRIKE `pseudohash`使用固定64-byte ICCS密钥：
 2. `C = SM3_df(0x00 || V)`；
 3. `reseed_counter = 1`。
 
+两个DF context按公开顺序共享一个`trike_sm3_service`。连续输入时Instantiate固定916个busy周期。
+
 `trike_sm3_drng_generate_stream`实现byte-aligned Generate：
 
 1. 从`data=V`开始，每个32-byte输出块计算`SM3(data)`，块间将55-byte大端`data`加一；
@@ -495,6 +514,7 @@ TRIKE `pseudohash`使用固定64-byte ICCS密钥：
 
 `OUTPUT_BYTES`为公开参数。输出连续接收时，SM3调用次数和更新周期只由该参数决定。TRIKE当前调用均为
 byte-aligned：32/64-byte消息、4-byte采样随机数和`R_SIZE_BYTES`多项式随机数。
+输出hash和状态更新hash共享一个`trike_sm3_service`；64-byte配置固定708个busy周期。
 
 ## pseudohash512
 
@@ -508,6 +528,8 @@ output = h1 || h2
 ```
 
 消息通过`o_input_pass`请求两遍。该接口允许顶层从KEM消息RAM重放数据，避免按最大密文长度复制寄存器。
+HMAC、suffix hash和最终hash分别保留独立context控制，按固定HMAC、h1、h2顺序共享一个
+`trike_sm3_service`；32-byte消息配置固定1,128个busy周期。
 
 ## BIKE兼容公共核
 
@@ -558,6 +580,8 @@ syndrome、摘要值或H4碰撞模式：
 | SM3/HMAC/DF/Instantiate/pseudohash | 公开消息长度决定block和pass数 | 输入`valid`空拍 |
 | DRNG Generate、parity mapper、SHAKE | 公开输出长度决定block、RAM读写和输出数 | 输出`ready`低电平；输入`valid`空拍 |
 | fixed-weight sampler | 固定`WEIGHT`个随机数和`WEIGHT^2`次index RAM读取 | 随机输入`valid`空拍；index输出`ready`低电平 |
+| `trike_poly_mul_core` | 公开`WORDS/DIGITS/SPARSE_WEIGHT`决定装载、乘法、归约和输出访问数 | 输入`valid`空拍；输出`ready`低电平 |
+| `trike_poly_inv_core` | 公开$r$的加法链决定Frobenius扫描、稠密乘法和scratch RAM访问数 | 输入`valid`空拍；输出`ready`低电平 |
 | compare/select | 固定组合XOR归约和全宽mask | 无握手 |
 
 KEM顶层需要用公开地址调度的RAM连续驱动这些接口，或把固定数量的dummy/等待拍计入公开周期预算。
@@ -585,8 +609,10 @@ Encaps/Decaps顶层的固定周期仍需在序列化、多项式核、固定7轮
 | `tb_trike_parity_map_stream` | 13-bit toy向量的偶/奇映射、padding清零、固定5拍和backpressure稳定性 |
 | `tb_trike_sampler_candidate` | multiply-high边界和Reference C候选fixture |
 | `tb_trike_fixed_weight_sampler` | 碰撞/无碰撞结果、两者固定40拍、全index输出和backpressure稳定性 |
-| `tb_trike_poly_mul_core` | 13-bit非word对齐环的稠密/稀疏乘法、数据无关周期和backpressure稳定性 |
+| `tb_trike_poly_mul_core` | 13-bit非word对齐环的稠密/稀疏乘法、越界index dummy写回、数据无关周期和backpressure稳定性 |
 | `tb_trike_poly_mul_reference` | 从官方TRIKE-2 KAT提取$t_0$、$r_2$与$h_0$支持集，在15581-bit环对拍两种输入 |
+| `tb_trike_poly_inv_core` | 13-bit非word对齐环的两组可逆输入、乘积为一、相同417拍和输出backpressure |
+| `tb_trike_poly_inv_reference` | 从官方TRIKE-2 KAT提取稠密$h_0$，逐word对拍独立Euclid逆元golden |
 | `tb_keccak_f1600` | 全零状态的25个标准输出lane；24轮固定延迟 |
 | `tb_shake256_stream` | 多absorb/squeeze block和输出backpressure |
 | `tb_kem_ct_compare_select` | 全相等、每个比较bit单独翻转和随机比较/选择 |
@@ -597,19 +623,26 @@ SM3边界预期结果由系统OpenSSL后端的`hashlib.new("sm3")`独立生成�
 当前验证属于RTL功能和固定block周期验证。LUT、FF、Slice、BRAM、DSP、setup WNS/TNS和hold WHS
 均为待测；尚未形成Vivado综合或布局布线结论。
 
+`make check-trike-sm3-sharing`对四个复合顶层运行Yosys层次检查，证明每个顶层的
+`sm3_compress`实例数为1。该检查确认RTL层次实例收敛，不代替目标Vivado的LUT、FF、Slice和时序报告。
+
 `make test-trike-reference-kat`直接编译最新材料中的TRIKE-2/5/7/9 Reference C，各生成10组完整
 KeyGen/Encaps/Decaps向量，并在统一LF换行后逐byte比较随包官方KAT。四档PK、SK、CT和SS均完全匹配。
 该入口是软件golden和后续RTL端到端对拍的权威边界；`software/trike_kem`中的五档SHAKE bring-up不作为
 最新四档KAT结论。
 
 `make test-trike-poly-reference`从TRIKE-2官方KAT第0组解析私钥中的$t_0$、$h_0$支持集以及公钥$r_2$，
-独立计算环乘golden。`WORD_W=64, DIGIT_W=8`时，稠密$t_0r_2$输出固定954,040拍，稀疏
-$h_0r_2$输出固定954,075拍，两组15581-bit结果均逐word匹配。
+独立计算环乘golden。`WORD_W=64, DIGIT_W=8`时，稠密$t_0r_2$输出固定1,967,372拍，稀疏
+$h_0r_2$输出固定60,826拍，两组15581-bit结果均逐word匹配。13-bit toy回归的稠密/稀疏周期分别为
+58/56拍；输出停顿3拍时总busy增加3拍。
+
+`make test-trike-poly-inv-reference`使用同一官方TRIKE-2 KAT中的稠密$h_0$。fixture生成器使用独立
+Python多项式Euclid计算golden并额外验证$h_0h_0^{-1}=1$；RTL使用Reference C固定Frobenius加法链，
+15581-bit结果逐word匹配，连续流busy周期固定为43,978,192拍。toy回归对两组不同可逆输入均为417拍，
+并检查结果输出停顿期间payload保持稳定、busy只增加公开停顿拍数。
 
 ## 后续实现顺序
 
-1. `trike_poly_mul_core`显式同步BRAM端口和稀疏index直接旋转累加，在相同word流接口下缩短固定周期；
-2. `trike_poly_inv_core`固定轮求逆及与乘法scratch RAM的端口约定；
-3. 单物理压缩核`trike_sm3_service`，用现有DF/DRNG/HMAC/pseudohash TB逐层回归；
-4. 运行时公开参数`trike_weight_sampler_core`以及H1/H2/H3/H4微程序；
-5. 统一IO、`trike_kem_top`、Min-Sum Decaps连接和四档KAT端到端固定周期对拍。
+1. 对求逆外部RAM模式和单SM3压缩服务运行目标Vivado实现，记录资源、Fmax和`cycles/Fmax`；
+2. 实现运行时公开参数`trike_weight_sampler_core`以及H1/H2/H3/H4微程序；
+3. 实现统一IO、`trike_kem_top`、Min-Sum Decaps连接和四档KAT端到端固定周期对拍。

@@ -6,7 +6,8 @@
 // pass so that an upstream seed memory can replay the same bytes without this
 // module buffering a parameter-dependent message.
 module sm3_df_stream #(
-    parameter int INPUT_BYTES = 32
+    parameter int INPUT_BYTES           = 32,
+    parameter bit USE_EXTERNAL_COMPRESS = 1'b0
 ) (
     input  logic         i_clk,
     input  logic         i_rst_n,
@@ -17,7 +18,13 @@ module sm3_df_stream #(
     output logic         o_input_pass,
     output logic         o_busy,
     output logic         o_done,
-    output logic [439:0] o_seed
+    output logic [439:0] o_seed,
+    output logic         o_compress_start,
+    output logic [511:0] o_compress_block,
+    output logic [255:0] o_compress_state,
+    input  logic         i_compress_busy,
+    input  logic         i_compress_done,
+    input  logic [255:0] i_compress_state
 );
 
   localparam int INPUT_COUNT_W = (INPUT_BYTES > 1) ? $clog2(INPUT_BYTES) : 1;
@@ -66,21 +73,26 @@ module sm3_df_stream #(
       pass_q, prefix_idx_q
   ) : i_input_data;
 
-  /* verilator lint_off PINCONNECTEMPTY */
   sm3_hash_stream #(
-      .INPUT_BYTES(INPUT_BYTES + 5)
+      .INPUT_BYTES          (INPUT_BYTES + 5),
+      .USE_EXTERNAL_COMPRESS(USE_EXTERNAL_COMPRESS)
   ) u_hash (
-      .i_clk        (i_clk),
-      .i_rst_n      (i_rst_n),
-      .i_start      (hash_start),
-      .i_input_valid(hash_input_valid),
-      .i_input_data (hash_input_data),
-      .o_input_ready(hash_input_ready),
-      .o_busy       (),
-      .o_done       (hash_done),
-      .o_digest     (hash_digest)
+      .i_clk           (i_clk),
+      .i_rst_n         (i_rst_n),
+      .i_start         (hash_start),
+      .i_input_valid   (hash_input_valid),
+      .i_input_data    (hash_input_data),
+      .o_input_ready   (hash_input_ready),
+      .o_busy          (),
+      .o_done          (hash_done),
+      .o_digest        (hash_digest),
+      .o_compress_start(o_compress_start),
+      .o_compress_block(o_compress_block),
+      .o_compress_state(o_compress_state),
+      .i_compress_busy (i_compress_busy),
+      .i_compress_done (i_compress_done),
+      .i_compress_state(i_compress_state)
   );
-  /* verilator lint_on PINCONNECTEMPTY */
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin

@@ -9,6 +9,8 @@ BIKE_SYNTH_COLS_PER_TILE ?=
 VERILATOR_FLAGS ?= --binary --sv -DBIKE_TOY_PARAMS -DBIKE_PARALLEL_L=$(BIKE_TOY_PARALLEL_L) -DBIKE_SIM_DEBUG -Wall -Wno-fatal -I./tb -I./rtl
 SIM ?= ./scripts/run_quiet.py
 VIVADO ?= vivado
+YOSYS ?= yosys
+VIVADO_PART ?= xc7k355tffg901-2L
 VIVADO_RUN_TAG ?= $(shell date +%Y%m%d-%H%M%S)
 VIVADO_BUILD_DIR ?= build/vivado/$(VIVADO_RUN_TAG)
 CC ?= cc
@@ -28,6 +30,8 @@ TRIKE_REFERENCE_BUILD_DIR ?= build/software/trike_reference
 TRIKE_REFERENCE_PARAM_SETS ?= TRIKE-2 TRIKE-5 TRIKE-7 TRIKE-9
 TRIKE_POLY_REFERENCE_KAT ?= $(TRIKE_REFERENCE_SOURCE_ROOT)/Test_Vectors/KAT_KEM_TRIKE-2.txt
 TRIKE_POLY_REFERENCE_FIXTURE ?= tb/generated/trike_poly_mul_reference_case.svh
+TRIKE_POLY_INV_REFERENCE_FIXTURE ?= tb/generated/trike_poly_inv_reference_case.svh
+TRIKE_KEM_SYNTH_TOP ?= trike_poly_inv_synth_top
 VERIBLE_FORMAT ?= verible-verilog-format
 VERIBLE_FORMAT_FLAGS ?= --port_declarations_alignment=align --module_net_variable_alignment=align --formal_parameters_alignment=align
 VERIBLE_LINT ?= verible-verilog-lint
@@ -41,6 +45,7 @@ TOY_CASE_SVH := tb/generated/bike_toy_case.svh
 RTL_PKG := rtl/bike_pkg.sv
 RTL_CORE := rtl/reset_sync.sv rtl/decoder_profile_config.sv rtl/ram_bram.sv rtl/ram_i.sv rtl/barrel_rotate.sv rtl/edge_addr_gen.sv rtl/tile_scheduler.sv rtl/ram_m.sv rtl/ram_s.sv rtl/k_sign_update.sv rtl/k_sign_reconstruct.sv rtl/k_sign_overlap_scheduler.sv rtl/ram_k_tile.sv rtl/k_sign_selector.sv rtl/ram_k_global.sv rtl/ram_sign_delta.sv rtl/ram_syndrome.sv rtl/ram_accum.sv rtl/ram_t.sv rtl/msg_tc_to_signmag_sat.sv rtl/vnu.sv rtl/ram_decision.sv rtl/cnu_a.sv rtl/cnu_b.sv rtl/msg_signmag_to_tc.sv rtl/decoder_top.sv
 RTL := $(RTL_PKG) $(RTL_CORE)
+SM3_COMPRESS_RTL := rtl/sm3_compress.sv rtl/trike_sm3_service.sv
 MAINTAINED_SV := $(sort $(wildcard rtl/*.sv) $(wildcard tb/*.sv))
 BIKE_RANDOM_BASE_SEED ?= 1
 BIKE_RANDOM_TRIALS ?= 1
@@ -59,7 +64,7 @@ TRIKE_UNIFIED_KSIGN_K ?= 4
 TRIKE_UNIFIED_KSIGN_PARAM_SETS ?= trike128 trike160 trike256 trike384 trike512
 TRIKE_UNIFIED_KSIGN_TIMEOUT_CYCLES ?= 40000000
 
-.PHONY: all sim test test-unit test-kem-unit test-trike-poly-reference test-integration test-bike-random test-bike-unified-random test-trike-unified-ksign-random model-min-sum run-model-min-sum sweep-min-sum optimum-min-sum campaign-min-sum confirm-min-sum check-model-rtl check-model-rtl-bike128 software-trike-kem test-software-trike-kem test-trike-reference-kat format-rtl check-format-rtl lint-rtl vivado-synth vivado-synth-trike-unified-ksign FORCE
+.PHONY: all sim test test-unit test-kem-unit test-trike-poly-reference test-trike-poly-inv-reference check-trike-sm3-sharing test-integration test-bike-random test-bike-unified-random test-trike-unified-ksign-random model-min-sum run-model-min-sum sweep-min-sum optimum-min-sum campaign-min-sum confirm-min-sum check-model-rtl check-model-rtl-bike128 software-trike-kem test-software-trike-kem test-trike-reference-kat format-rtl check-format-rtl lint-rtl vivado-synth vivado-synth-trike-unified-ksign vivado-impl-trike-kem-core vivado-impl-trike-poly-inv vivado-impl-trike-pseudohash vivado-impl-trike-kem-cores FORCE
 
 all: test
 
@@ -99,19 +104,19 @@ test-unit: test-kem-unit
 	@$(SIM) ./obj_dir/Vtb_cnu_b +verilator+quiet
 
 test-kem-unit:
-	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_sm3_compress rtl/sm3_compress.sv tb/tb_sm3_compress.sv
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_sm3_compress $(SM3_COMPRESS_RTL) tb/tb_sm3_compress.sv
 	@$(SIM) ./obj_dir/Vtb_sm3_compress +verilator+quiet
-	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_sm3_hash_stream rtl/sm3_compress.sv rtl/sm3_hash_stream.sv tb/tb_sm3_hash_stream.sv
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_sm3_hash_stream $(SM3_COMPRESS_RTL) rtl/sm3_hash_stream.sv tb/tb_sm3_hash_stream.sv
 	@$(SIM) ./obj_dir/Vtb_sm3_hash_stream +verilator+quiet
-	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_hmac_sm3_64byte_key_stream rtl/sm3_compress.sv rtl/sm3_hash_stream.sv rtl/hmac_sm3_64byte_key_stream.sv tb/tb_hmac_sm3_64byte_key_stream.sv
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_hmac_sm3_64byte_key_stream $(SM3_COMPRESS_RTL) rtl/sm3_hash_stream.sv rtl/hmac_sm3_64byte_key_stream.sv tb/tb_hmac_sm3_64byte_key_stream.sv
 	@$(SIM) ./obj_dir/Vtb_hmac_sm3_64byte_key_stream +verilator+quiet
-	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_sm3_df_stream rtl/sm3_compress.sv rtl/sm3_hash_stream.sv rtl/sm3_df_stream.sv tb/tb_sm3_df_stream.sv
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_sm3_df_stream $(SM3_COMPRESS_RTL) rtl/sm3_hash_stream.sv rtl/sm3_df_stream.sv tb/tb_sm3_df_stream.sv
 	@$(SIM) ./obj_dir/Vtb_sm3_df_stream +verilator+quiet
-	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_sm3_drng_instantiate_stream rtl/sm3_compress.sv rtl/sm3_hash_stream.sv rtl/sm3_df_stream.sv rtl/trike_sm3_drng_instantiate_stream.sv tb/tb_trike_sm3_drng_instantiate_stream.sv
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_sm3_drng_instantiate_stream $(SM3_COMPRESS_RTL) rtl/sm3_hash_stream.sv rtl/sm3_df_stream.sv rtl/trike_sm3_drng_instantiate_stream.sv tb/tb_trike_sm3_drng_instantiate_stream.sv
 	@$(SIM) ./obj_dir/Vtb_trike_sm3_drng_instantiate_stream +verilator+quiet
-	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_sm3_drng_generate_stream rtl/sm3_compress.sv rtl/sm3_hash_stream.sv rtl/trike_sm3_drng_generate_stream.sv tb/tb_trike_sm3_drng_generate_stream.sv
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_sm3_drng_generate_stream $(SM3_COMPRESS_RTL) rtl/sm3_hash_stream.sv rtl/trike_sm3_drng_generate_stream.sv tb/tb_trike_sm3_drng_generate_stream.sv
 	@$(SIM) ./obj_dir/Vtb_trike_sm3_drng_generate_stream +verilator+quiet
-	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_pseudohash512_stream rtl/sm3_compress.sv rtl/sm3_hash_stream.sv rtl/hmac_sm3_64byte_key_stream.sv rtl/trike_pseudohash512_stream.sv tb/tb_trike_pseudohash512_stream.sv
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_pseudohash512_stream $(SM3_COMPRESS_RTL) rtl/sm3_hash_stream.sv rtl/hmac_sm3_64byte_key_stream.sv rtl/trike_pseudohash512_stream.sv tb/tb_trike_pseudohash512_stream.sv
 	@$(SIM) ./obj_dir/Vtb_trike_pseudohash512_stream +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_parity_map_stream rtl/trike_parity_map_stream.sv tb/tb_trike_parity_map_stream.sv
 	@$(SIM) ./obj_dir/Vtb_trike_parity_map_stream +verilator+quiet
@@ -119,8 +124,10 @@ test-kem-unit:
 	@$(SIM) ./obj_dir/Vtb_trike_sampler_candidate +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_fixed_weight_sampler rtl/trike_sampler_candidate.sv rtl/trike_fixed_weight_sampler.sv tb/tb_trike_fixed_weight_sampler.sv
 	@$(SIM) ./obj_dir/Vtb_trike_fixed_weight_sampler +verilator+quiet
-	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_poly_mul_core rtl/trike_poly_mul_core.sv tb/tb_trike_poly_mul_core.sv
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_poly_mul_core rtl/ram_bram.sv rtl/trike_poly_mul_core.sv tb/tb_trike_poly_mul_core.sv
 	@$(SIM) ./obj_dir/Vtb_trike_poly_mul_core +verilator+quiet
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_poly_inv_core rtl/trike_inv_schedule_pkg.sv rtl/ram_bram.sv rtl/trike_poly_mul_core.sv rtl/trike_poly_inv_core.sv tb/tb_trike_poly_inv_core.sv
+	@$(SIM) ./obj_dir/Vtb_trike_poly_inv_core +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_keccak_f1600 rtl/keccak_f1600.sv tb/tb_keccak_f1600.sv
 	@$(SIM) ./obj_dir/Vtb_keccak_f1600 +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_shake256_stream rtl/keccak_f1600.sv rtl/shake256_stream.sv tb/tb_shake256_stream.sv
@@ -134,8 +141,21 @@ $(TRIKE_POLY_REFERENCE_FIXTURE): scripts/gen_trike_poly_mul_fixture.py $(TRIKE_P
 		--output "$@"
 
 test-trike-poly-reference: $(TRIKE_POLY_REFERENCE_FIXTURE)
-	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_poly_mul_reference rtl/trike_poly_mul_core.sv tb/tb_trike_poly_mul_reference.sv
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_poly_mul_reference rtl/ram_bram.sv rtl/trike_poly_mul_core.sv tb/tb_trike_poly_mul_reference.sv
 	@$(SIM) ./obj_dir/Vtb_trike_poly_mul_reference +verilator+quiet
+
+$(TRIKE_POLY_INV_REFERENCE_FIXTURE): scripts/gen_trike_poly_inv_fixture.py $(TRIKE_POLY_REFERENCE_KAT)
+	@python3 scripts/gen_trike_poly_inv_fixture.py \
+		--kat "$(TRIKE_POLY_REFERENCE_KAT)" \
+		--output "$@"
+
+test-trike-poly-inv-reference: $(TRIKE_POLY_INV_REFERENCE_FIXTURE)
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_poly_inv_reference rtl/trike_inv_schedule_pkg.sv rtl/ram_bram.sv rtl/trike_poly_mul_core.sv rtl/trike_poly_inv_core.sv tb/tb_trike_poly_inv_reference.sv
+	@$(SIM) ./obj_dir/Vtb_trike_poly_inv_reference +verilator+quiet
+
+check-trike-sm3-sharing:
+	@$(YOSYS) -Q -s scripts/check_trike_sm3_sharing.ys >/dev/null
+	@echo "TRIKE SM3 sharing PASS: one sm3_compress per composite top"
 
 test-integration: $(TOY_CASE_SVH)
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_decoder_top $(RTL) tb/tb_decoder_top.sv
@@ -219,5 +239,19 @@ vivado-synth:
 
 vivado-synth-trike-unified-ksign:
 	@$(MAKE) vivado-synth BIKE_SYNTH_PARAM=TRIKE_UNIFIED_PARAMS BIKE_SYNTH_PARALLEL_L=$(TRIKE_UNIFIED_KSIGN_PARALLEL_L) BIKE_SYNTH_COLS_PER_TILE=$(TRIKE_UNIFIED_KSIGN_COLS_PER_TILE) VIVADO_BUILD_DIR=$(VIVADO_BUILD_DIR)/trike_unified_ksign_l$(TRIKE_UNIFIED_KSIGN_PARALLEL_L)_k$(TRIKE_UNIFIED_KSIGN_K)
+
+vivado-impl-trike-kem-core:
+	@mkdir -p $(VIVADO_BUILD_DIR)
+	@TRIKE_KEM_SYNTH_TOP=$(TRIKE_KEM_SYNTH_TOP) VIVADO_PART=$(VIVADO_PART) VIVADO_XDC=constraints/trike_kem_core.xdc $(VIVADO) -mode batch -source scripts/vivado_trike_kem_cores.tcl -tclargs $(VIVADO_BUILD_DIR)
+
+vivado-impl-trike-poly-inv:
+	@$(MAKE) vivado-impl-trike-kem-core TRIKE_KEM_SYNTH_TOP=trike_poly_inv_synth_top VIVADO_BUILD_DIR=$(VIVADO_BUILD_DIR)/trike_poly_inv
+
+vivado-impl-trike-pseudohash:
+	@$(MAKE) vivado-impl-trike-kem-core TRIKE_KEM_SYNTH_TOP=trike_pseudohash_synth_top VIVADO_BUILD_DIR=$(VIVADO_BUILD_DIR)/trike_pseudohash
+
+vivado-impl-trike-kem-cores:
+	@$(MAKE) vivado-impl-trike-poly-inv VIVADO_BUILD_DIR=$(VIVADO_BUILD_DIR)
+	@$(MAKE) vivado-impl-trike-pseudohash VIVADO_BUILD_DIR=$(VIVADO_BUILD_DIR)
 
 sim: test

@@ -5,7 +5,8 @@
 // OUTPUT_BYTES is public. With continuous output acceptance, the number of
 // SM3 invocations and all state-update work are fixed by OUTPUT_BYTES.
 module trike_sm3_drng_generate_stream #(
-    parameter int OUTPUT_BYTES = 32
+    parameter int OUTPUT_BYTES          = 32,
+    parameter bit USE_EXTERNAL_COMPRESS = 1'b0
 ) (
     input  logic         i_clk,
     input  logic         i_rst_n,
@@ -20,7 +21,13 @@ module trike_sm3_drng_generate_stream #(
     output logic         o_done,
     output logic [439:0] o_v,
     output logic [439:0] o_c,
-    output logic [439:0] o_reseed_counter
+    output logic [439:0] o_reseed_counter,
+    output logic         o_compress_start,
+    output logic [511:0] o_compress_block,
+    output logic [255:0] o_compress_state,
+    input  logic         i_compress_busy,
+    input  logic         i_compress_done,
+    input  logic [255:0] i_compress_state
 );
 
   localparam int OUTPUT_COUNT_W = (OUTPUT_BYTES > 1) ? $clog2(OUTPUT_BYTES) : 1;
@@ -62,6 +69,20 @@ module trike_sm3_drng_generate_stream #(
   logic   [               7:0] update_hash_input_data;
   logic   [             439:0] update_h;
 
+  logic                        generate_compress_start;
+  logic   [             511:0] generate_compress_block;
+  logic   [             255:0] generate_compress_state;
+  logic                        update_compress_start;
+  logic   [             511:0] update_compress_block;
+  logic   [             255:0] update_compress_state;
+  logic                        shared_compress_busy;
+  logic                        shared_compress_done;
+  logic   [             255:0] shared_compress_result;
+  logic                        internal_compress_busy;
+  logic                        internal_compress_done;
+  logic   [             255:0] internal_compress_result;
+  logic                        select_update_compress;
+
   function automatic logic [7:0] state_byte(input  logic [439:0] value, input  logic [5:0] byte_idx);
     begin
       state_byte = value[439-8*byte_idx-:8];
@@ -80,35 +101,80 @@ module trike_sm3_drng_generate_stream #(
   );
   assign update_h = {184'b0, update_hash_digest};
 
-  /* verilator lint_off PINCONNECTEMPTY */
+  assign select_update_compress = (state_q == ST_UPDATE_HASH_START) ||
+                                  (state_q == ST_UPDATE_HASH_FEED) ||
+                                  (state_q == ST_UPDATE_HASH_WAIT);
+  assign shared_compress_busy = USE_EXTERNAL_COMPRESS ? i_compress_busy : internal_compress_busy;
+  assign shared_compress_done = USE_EXTERNAL_COMPRESS ? i_compress_done : internal_compress_done;
+  assign shared_compress_result =
+      USE_EXTERNAL_COMPRESS ? i_compress_state : internal_compress_result;
+  assign o_compress_start =
+      select_update_compress ? update_compress_start : generate_compress_start;
+  assign o_compress_block =
+      select_update_compress ? update_compress_block : generate_compress_block;
+  assign o_compress_state =
+      select_update_compress ? update_compress_state : generate_compress_state;
+
   sm3_hash_stream #(
-      .INPUT_BYTES(55)
+      .INPUT_BYTES          (55),
+      .USE_EXTERNAL_COMPRESS(1'b1)
   ) u_generate_hash (
-      .i_clk        (i_clk),
-      .i_rst_n      (i_rst_n),
-      .i_start      (generate_hash_start),
-      .i_input_valid(state_q == ST_GENERATE_HASH_FEED),
-      .i_input_data (generate_hash_input_data),
-      .o_input_ready(generate_hash_input_ready),
-      .o_busy       (),
-      .o_done       (generate_hash_done),
-      .o_digest     (generate_hash_digest)
+      .i_clk           (i_clk),
+      .i_rst_n         (i_rst_n),
+      .i_start         (generate_hash_start),
+      .i_input_valid   (state_q == ST_GENERATE_HASH_FEED),
+      .i_input_data    (generate_hash_input_data),
+      .o_input_ready   (generate_hash_input_ready),
+      .o_busy          (),
+      .o_done          (generate_hash_done),
+      .o_digest        (generate_hash_digest),
+      .o_compress_start(generate_compress_start),
+      .o_compress_block(generate_compress_block),
+      .o_compress_state(generate_compress_state),
+      .i_compress_busy (shared_compress_busy),
+      .i_compress_done (shared_compress_done),
+      .i_compress_state(shared_compress_result)
   );
 
   sm3_hash_stream #(
-      .INPUT_BYTES(56)
+      .INPUT_BYTES          (56),
+      .USE_EXTERNAL_COMPRESS(1'b1)
   ) u_update_hash (
-      .i_clk        (i_clk),
-      .i_rst_n      (i_rst_n),
-      .i_start      (update_hash_start),
-      .i_input_valid(state_q == ST_UPDATE_HASH_FEED),
-      .i_input_data (update_hash_input_data),
-      .o_input_ready(update_hash_input_ready),
-      .o_busy       (),
-      .o_done       (update_hash_done),
-      .o_digest     (update_hash_digest)
+      .i_clk           (i_clk),
+      .i_rst_n         (i_rst_n),
+      .i_start         (update_hash_start),
+      .i_input_valid   (state_q == ST_UPDATE_HASH_FEED),
+      .i_input_data    (update_hash_input_data),
+      .o_input_ready   (update_hash_input_ready),
+      .o_busy          (),
+      .o_done          (update_hash_done),
+      .o_digest        (update_hash_digest),
+      .o_compress_start(update_compress_start),
+      .o_compress_block(update_compress_block),
+      .o_compress_state(update_compress_state),
+      .i_compress_busy (shared_compress_busy),
+      .i_compress_done (shared_compress_done),
+      .i_compress_state(shared_compress_result)
   );
-  /* verilator lint_on PINCONNECTEMPTY */
+
+  generate
+    if (!USE_EXTERNAL_COMPRESS) begin : g_internal_compress
+      trike_sm3_service u_sm3_service (
+          .i_clk  (i_clk),
+          .i_rst_n(i_rst_n),
+          .i_start(o_compress_start),
+          .i_block(o_compress_block),
+          .i_state(o_compress_state),
+          .o_busy (internal_compress_busy),
+          .o_done (internal_compress_done),
+          .o_state(internal_compress_result)
+      );
+    end else begin : g_external_compress
+      assign internal_compress_busy   = 1'b0;
+      assign internal_compress_done   = 1'b0;
+      assign internal_compress_result = '0;
+    end
+  endgenerate
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin

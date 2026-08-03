@@ -6,7 +6,8 @@
 // one byte per valid/ready transfer. Padding and the 64-bit big-endian message
 // length are generated internally.
 module sm3_hash_stream #(
-    parameter int INPUT_BYTES = 32
+    parameter int INPUT_BYTES           = 32,
+    parameter bit USE_EXTERNAL_COMPRESS = 1'b0
 ) (
     input  logic         i_clk,
     input  logic         i_rst_n,
@@ -16,7 +17,13 @@ module sm3_hash_stream #(
     output logic         o_input_ready,
     output logic         o_busy,
     output logic         o_done,
-    output logic [255:0] o_digest
+    output logic [255:0] o_digest,
+    output logic         o_compress_start,
+    output logic [511:0] o_compress_block,
+    output logic [255:0] o_compress_state,
+    input  logic         i_compress_busy,
+    input  logic         i_compress_done,
+    input  logic [255:0] i_compress_state
 );
 
   localparam logic [255:0] SM3_INITIAL_STATE = {
@@ -59,6 +66,9 @@ module sm3_hash_stream #(
   logic                        compress_busy;
   logic                        compress_done;
   logic    [            255:0] compress_state;
+  logic                        internal_compress_busy;
+  logic                        internal_compress_done;
+  logic    [            255:0] internal_compress_state;
 
   logic    [            511:0] block_with_input;
 
@@ -111,17 +121,31 @@ module sm3_hash_stream #(
   assign o_input_ready = (state_q == ST_ABSORB);
   assign compress_start = (state_q == ST_COMPRESS_START) && !compress_busy;
   assign block_with_input = set_block_byte(block_q, block_byte_idx_q, i_input_data);
+  assign compress_busy = USE_EXTERNAL_COMPRESS ? i_compress_busy : internal_compress_busy;
+  assign compress_done = USE_EXTERNAL_COMPRESS ? i_compress_done : internal_compress_done;
+  assign compress_state = USE_EXTERNAL_COMPRESS ? i_compress_state : internal_compress_state;
+  assign o_compress_start = compress_start;
+  assign o_compress_block = block_q;
+  assign o_compress_state = chaining_state_q;
 
-  sm3_compress u_sm3_compress (
-      .i_clk  (i_clk),
-      .i_rst_n(i_rst_n),
-      .i_start(compress_start),
-      .i_block(block_q),
-      .i_state(chaining_state_q),
-      .o_busy (compress_busy),
-      .o_done (compress_done),
-      .o_state(compress_state)
-  );
+  generate
+    if (!USE_EXTERNAL_COMPRESS) begin : g_internal_compress
+      sm3_compress u_sm3_compress (
+          .i_clk  (i_clk),
+          .i_rst_n(i_rst_n),
+          .i_start(compress_start),
+          .i_block(block_q),
+          .i_state(chaining_state_q),
+          .o_busy (internal_compress_busy),
+          .o_done (internal_compress_done),
+          .o_state(internal_compress_state)
+      );
+    end else begin : g_external_compress
+      assign internal_compress_busy  = 1'b0;
+      assign internal_compress_done  = 1'b0;
+      assign internal_compress_state = '0;
+    end
+  endgenerate
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin

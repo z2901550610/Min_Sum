@@ -4,29 +4,38 @@ module tb_trike_poly_mul_reference;
   `include "generated/trike_poly_mul_reference_case.svh"
 
   localparam int REF_DENSE_CYCLES =
-      (6 * REF_WORDS) +
-      (2 * REF_WORDS * REF_WORDS * (REF_WORD_W / REF_DIGIT_W));
-  localparam int REF_SPARSE_CYCLES = REF_DENSE_CYCLES + REF_SPARSE_WEIGHT;
+      (11 * REF_WORDS) +
+      (REF_WORDS * REF_WORDS * (1 + (4 * REF_WORD_W / REF_DIGIT_W)));
+  localparam int REF_SPARSE_CYCLES =
+      (4 * REF_WORDS) + (2 * REF_SPARSE_WEIGHT) +
+      (7 * REF_SPARSE_WEIGHT * REF_WORDS);
 
-  logic                   clk;
-  logic                   rst_n;
-  logic                   start;
-  logic                   sparse_a;
-  logic                   a_valid;
-  logic [ REF_WORD_W-1:0] a_data;
-  logic                   a_ready;
-  logic                   sparse_index_valid;
-  logic [REF_INDEX_W-1:0] sparse_index;
-  logic                   sparse_index_ready;
-  logic                   b_valid;
-  logic [ REF_WORD_W-1:0] b_data;
-  logic                   b_ready;
-  logic                   result_valid;
-  logic [ REF_WORD_W-1:0] result_data;
-  logic                   result_last;
-  logic                   result_ready;
-  logic                   busy;
-  logic                   done;
+  logic                         clk;
+  logic                         rst_n;
+  logic                         start;
+  logic                         sparse_a;
+  logic                         a_valid;
+  logic [       REF_WORD_W-1:0] a_data;
+  logic                         a_ready;
+  logic                         sparse_index_valid;
+  logic [      REF_INDEX_W-1:0] sparse_index;
+  logic                         sparse_index_ready;
+  logic                         b_valid;
+  logic [       REF_WORD_W-1:0] b_data;
+  logic                         b_ready;
+  logic                         result_valid;
+  logic [       REF_WORD_W-1:0] result_data;
+  logic                         result_last;
+  logic                         result_ready;
+  logic                         busy;
+  logic                         done;
+  logic                         ext_a_re;
+  logic [$clog2(REF_WORDS)-1:0] ext_a_raddr;
+  logic                         ext_b_re;
+  logic [$clog2(REF_WORDS)-1:0] ext_b_raddr;
+  logic                         ext_result_we;
+  logic [$clog2(REF_WORDS)-1:0] ext_result_waddr;
+  logic [       REF_WORD_W-1:0] ext_result_wdata;
 
   trike_poly_mul_core #(
       .R_BITS       (REF_R_BITS),
@@ -51,11 +60,27 @@ module tb_trike_poly_mul_reference;
       .o_result_data       (result_data),
       .o_result_last       (result_last),
       .i_result_ready      (result_ready),
+      .o_ext_a_re          (ext_a_re),
+      .o_ext_a_raddr       (ext_a_raddr),
+      .i_ext_a_rdata       ('0),
+      .o_ext_b_re          (ext_b_re),
+      .o_ext_b_raddr       (ext_b_raddr),
+      .i_ext_b_rdata       ('0),
+      .o_ext_result_we     (ext_result_we),
+      .o_ext_result_waddr  (ext_result_waddr),
+      .o_ext_result_wdata  (ext_result_wdata),
       .o_busy              (busy),
       .o_done              (done)
   );
 
   always #1 clk = ~clk;
+
+  always @(posedge clk) begin
+    if (ext_a_re || ext_b_re || ext_result_we) begin
+      $fatal(1, "internal RAM mode drove external port a=%0d b=%0d result=%0d data=%h",
+             ext_a_raddr, ext_b_raddr, ext_result_waddr, ext_result_wdata);
+    end
+  end
 
   task automatic run_reference_case(input  logic use_sparse, output int busy_cycles);
     int                    a_idx;
@@ -188,7 +213,7 @@ module tb_trike_poly_mul_reference;
   end
 
   initial begin
-    repeat (2 * REF_SPARSE_CYCLES + 1000) @(posedge clk);
+    repeat (REF_DENSE_CYCLES + REF_SPARSE_CYCLES + 1000) @(posedge clk);
     $fatal(1, "tb_trike_poly_mul_reference timeout");
   end
 endmodule

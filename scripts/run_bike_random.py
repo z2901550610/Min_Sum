@@ -100,11 +100,11 @@ PARAM_SETS = {
     },
     "trike160": {
         "n0": 3,
-        "r": 12899,
+        "r": 12589,
         "w": 35,
         "error_count": 263,
         "i_max": 7,
-        "c_val": 5,
+        "c_val": 4,
         "msg_bits": 5,
         "alpha_shift_0": 3,
         "alpha_shift_1": 4,
@@ -112,7 +112,7 @@ PARAM_SETS = {
     },
     "trike256": {
         "n0": 3,
-        "r": 29917,
+        "r": 30389,
         "w": 55,
         "error_count": 429,
         "i_max": 7,
@@ -404,8 +404,10 @@ package bike_pkg;
   parameter int K_SIGN_WORK_SLOT_W = DIAG_IDX_W + D;
   parameter int K_SIGN_WORK_RECORD_W = 1 + (K_SIGN_K * K_SIGN_WORK_SLOT_W);
   parameter int K_SIGN_RECORD_W = 1 + (K_SIGN_K * DIAG_IDX_W);
+  parameter int K_SIGN_POS_RECORD_W = K_SIGN_K * DIAG_IDX_W;
   parameter int K_SIGN_WORK_DEPTH = Q_BASE;
   parameter int K_SIGN_WORK_AW = (K_SIGN_WORK_DEPTH > 1) ? $clog2(K_SIGN_WORK_DEPTH) : 1;
+  parameter int K_SIGN_OVERLAP_DRAIN_CYCLES = 7;
   localparam logic [DIAG_IDX_W-1:0] K_SIGN_DIAG_INVALID = '1;
   parameter int DIAG_GLOBAL_W = (DIAG_GLOBAL_COUNT > 1) ? $clog2(DIAG_GLOBAL_COUNT) : 1;
   parameter int ROW_IDX_W = (R > 1) ? $clog2(R) : 1;
