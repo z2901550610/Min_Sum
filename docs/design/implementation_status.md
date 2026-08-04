@@ -328,6 +328,10 @@ HMAC、DRNG Instantiate、DRNG Generate和pseudohash各自保留多个hash conte
 均恰好包含一个`sm3_compress`。DF、Instantiate、Generate和pseudohash512的固定busy周期分别为
 314、916、708和1,128拍。
 
+`trike_pseudohash_synth_top`通过64-bit result valid/ready流输出512-bit摘要，固定发送8个word。顶层不把
+512-bit摘要直接映射到package I/O；无输出停顿时，wrapper在pseudohash完成后固定增加8次结果握手。
+hierarchical utilization报告用于分离wrapper串行器与`u_pseudohash`本体资源。
+
 奇偶映射连续流周期为`2*R_BYTES+1`；固定重量采样器对碰撞和无碰撞输入均执行
 `WEIGHT*(WEIGHT+3)`个busy周期。valid/ready外部停顿会延长接口总周期，KEM顶层需要提供公开的
 连续RAM调度或固定等待预算。Reference C KeyGen的弱密钥重采样循环是完整KEM固定周期设计中的独立
@@ -353,7 +357,9 @@ backpressure；TRIKE-2真实参数回归的稠密/稀疏周期分别为1,967,372
 `C_EXT=7*WORDS+WORDS*WORDS*(1+4*DIGITS)`，连续输入输出求逆busy周期为
 `3*WORDS+2*R_BITS*P+M*(C_EXT+1)`。TRIKE-2的`P=23`、`M=22`，官方KAT派生的15581-bit输入
 逐word匹配独立多项式Euclid golden，固定43,978,192拍。三份外层scratch RAM和一份双长度product RAM
-的逻辑容量为78,080 bit；实际Block RAM Tile、Fmax与资源结果待目标Vivado环境验证。
+的逻辑容量为78,080 bit。首轮Vivado 2023.2、`xc7k355tffg901-2L`报告得到2,132 LUT、611 FF、
+720 Slice、4 RAMB36、0 DSP，100 MHz内部时钟WNS为0.364 ns、WHS为0.080 ns；该工程同时加载了旧
+`decoder.xdc`，且实现级I/O delay未生效，因此这些数字属于待干净约束复测的初步结果，不作为物理签核。
 
 未实现范围包括H1/H2/H3/H4组合控制器和KEM序列化控制器。KEM公共核未接入
 `decoder_top`，其Vivado资源与时序为待测，不计入本文译码器物理基线。
@@ -449,6 +455,10 @@ KEM公共核入口分别实现TRIKE-2求逆核和32-byte pseudohash核，输出�
 公共核实现检查点，不是板级I/O签核。报告包含post-synth/post-route utilization、hierarchical
 utilization、setup/hold top paths、timing summary、clock utilization、methodology、CDC、DRC、
 messages和DCP。
+
+Vivado工程只加载`constraints/trike_kem_core.xdc`，不同时加载译码器`decoder.xdc`。XDC使用
+`get_ports -filter`直接选择数据输入和输出，避免工程模式XDC reader忽略一般Tcl的`if`和
+`remove_from_collection`命令。
 
 当前K=3和K=4 RTL的Fully Placed aggregate utilization及Routed timing summary已记录。当前 `ram_m`
 使用完整18-bit记录；资源优化实验及定量结果保存在探索记录。hierarchical utilization、最新methodology、

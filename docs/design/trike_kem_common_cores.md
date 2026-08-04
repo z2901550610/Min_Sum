@@ -606,6 +606,7 @@ Encaps/Decaps顶层的固定周期仍需在序列化、多项式核、固定7轮
 | `tb_trike_sm3_drng_instantiate_stream` | 对拍Reference C的`V/C/reseed_counter`；固定916个busy周期 |
 | `tb_trike_sm3_drng_generate_stream` | 64-byte输出和更新后的完整状态；固定708个busy周期 |
 | `tb_trike_pseudohash512_stream` | 32-byte消息的完整512-bit输出；固定1,128个busy周期 |
+| `tb_trike_pseudohash_synth_top` | 64-bit八拍摘要输出、result backpressure、last位置和完整512-bit摘要重组 |
 | `tb_trike_parity_map_stream` | 13-bit toy向量的偶/奇映射、padding清零、固定5拍和backpressure稳定性 |
 | `tb_trike_sampler_candidate` | multiply-high边界和Reference C候选fixture |
 | `tb_trike_fixed_weight_sampler` | 碰撞/无碰撞结果、两者固定40拍、全index输出和backpressure稳定性 |
@@ -620,8 +621,10 @@ Encaps/Decaps顶层的固定周期仍需在序列化、多项式核、固定7轮
 SM3边界预期结果由系统OpenSSL后端的`hashlib.new("sm3")`独立生成。HMAC预期结果由Python
 `hmac`调用同一SM3后端生成。RTL压缩轮同时对拍随包ICCS C中的常量、word顺序和轮函数。
 
-当前验证属于RTL功能和固定block周期验证。LUT、FF、Slice、BRAM、DSP、setup WNS/TNS和hold WHS
-均为待测；尚未形成Vivado综合或布局布线结论。
+当前验证属于RTL功能和固定block周期验证。求逆核首轮Vivado实现已经完成，但工程存在重复clock XDC和
+I/O delay未生效，结果只作为待复测的初步数据。pseudohash首轮综合因旧wrapper直接导出512-bit摘要而
+需要516个输出IOB，超过目标器件300个Bonded IOB，未完成placement；实现wrapper使用64-bit八拍
+result流后，干净约束下的LUT、FF、Slice、BRAM、DSP、setup WNS/TNS和hold WHS均待复测。
 
 `make check-trike-sm3-sharing`对四个复合顶层运行Yosys层次检查，证明每个顶层的
 `sm3_compress`实例数为1。该检查确认RTL层次实例收敛，不代替目标Vivado的LUT、FF、Slice和时序报告。

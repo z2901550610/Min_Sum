@@ -3160,6 +3160,38 @@ TRIKE译码参数。硬件合法的9个alpha与整数LLR 1至9的81个粗筛候�
 结论与状态：保留。TRIKE384当前K=4参数为`R=63773`、`C_VAL=5`；译码RTL仍执行
 由公开等级决定的7轮固定周期，仿真端的收敛提前退出不改变硬件调度。
 
+### 阶段62：TRIKE KEM公共核Vivado首轮实现与pseudohash窄I/O封装（2026-08-04）
+
+目标与假设：在Vivado 2023.2、`xc7k355tffg901-2L`上实现TRIKE-2求逆核和32-byte
+pseudohash核，检查公共核资源、100 MHz时序与封装边界。实现用top需要保留完整功能逻辑，同时不能把
+内部宽状态直接映射为物理package I/O。
+
+首轮结果：
+
+- `trike_poly_inv_synth_top`完成placement和routing，报告2,132 Slice LUT、611 Slice Register、
+  720 Slice、4 Block RAM Tile（4个RAMB36E1）、0 DSP和138 Bonded IOB；
+- 10 ns时钟下setup WNS为0.364 ns、TNS为0，hold WHS为0.080 ns、THS为0；
+- 工程同时加载`decoder.xdc`和`trike_kem_core.xdc`，产生clock覆盖；KEM XDC中的`if`与
+  `remove_from_collection`被工程模式XDC reader忽略，timing summary仍有136项缺失I/O delay；
+- `trike_pseudohash_synth_top`综合得到12个IBUF和516个OBUF，共528个顶层I/O，超过器件300个
+  Bonded IOB，implementation在I/O placement阶段失败。516个输出由512-bit摘要和4个状态信号组成，
+  不是pseudohash内部运算资源耗尽。
+
+关键实现：
+
+- pseudohash实现wrapper使用64-bit result valid/ready流，按MSB优先固定输出8个word，并保留last；
+- wrapper在输出停顿时保持word、valid和last，结果全部握手后发出done；顶层I/O从528降为83；
+- `trike_kem_core.xdc`使用`get_ports -filter`静态集合表达式，对数据输入和全部输出施加2 ns delay；
+- KEM公共核工程只使用`trike_kem_core.xdc`，不加载译码器`decoder.xdc`。
+
+验证范围：pseudohash本体标准fixture继续逐bit匹配，新增wrapper测试覆盖两遍输入、64-bit八拍摘要重组、
+输出backpressure和last。RTL格式、lint、KEM单元回归和目标Vivado复跑结果分别记录；本阶段修改时后者
+仍待用户环境运行。
+
+结论与状态：保留窄I/O wrapper和工程模式兼容XDC。求逆首轮资源能够说明逻辑已被实现，但由于重复clock
+和I/O路径未约束，不作为最终Fmax或板级I/O签核。pseudohash需要在相同器件、Vivado版本、100 MHz
+约束和干净工程下重新完成route，再记录hierarchical资源与setup/hold。
+
 ## 形成的设计结论
 
 1. 存储优化必须以目标器件的原生宽深模式和 BRAM Tile 为依据；只改数组声明或逻辑字段宽度不能保证映射。
