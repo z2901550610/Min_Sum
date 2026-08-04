@@ -43,7 +43,7 @@ diag_idx_global = b * W + k
 | `TRIKE_128_PARAMS` | `N0=3`, `R=8243`, `W=27`, `T=201`, `I_MAX=7` |
 | `TRIKE_160_PARAMS` | `N0=3`, `R=12589`, `W=35`, `T=263`, `I_MAX=7` |
 | `TRIKE_256_PARAMS` | `N0=3`, `R=30389`, `W=55`, `T=429`, `I_MAX=7` |
-| `TRIKE_384_PARAMS` | `N0=3`, `R=63997`, `W=83`, `T=659`, `I_MAX=7` |
+| `TRIKE_384_PARAMS` | `N0=3`, `R=63773`, `W=83`, `T=659`, `I_MAX=7` |
 | `TRIKE_512_PARAMS` | `N0=3`, `R=106781`, `W=111`, `T=877`, `I_MAX=7` |
 | `BIKE_UNIFIED_PARAMS` | 最大几何为 `N0=2`, `R=40973`, `W=137`, `T=264`, `I_MAX=7` |
 | `TRIKE_UNIFIED_PARAMS` | 最大几何为 `N0=3`, `R=106781`, `W=111`, `T=877`, `I_MAX=7` |

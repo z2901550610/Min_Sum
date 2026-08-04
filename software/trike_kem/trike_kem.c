@@ -29,8 +29,8 @@ static const trike_kem_params_t k_trike_params[] = {
      {3U, 12589U, 35U, 7U, 5U, 4U, 3U, 4U}},
     {"trike256", 256U, 30389U, 55U, 429U,
      {3U, 30389U, 55U, 7U, 5U, 5U, 3U, 4U}},
-    {"trike384", 384U, 63997U, 83U, 659U,
-     {3U, 63997U, 83U, 7U, 5U, 5U, 3U, 6U}},
+    {"trike384", 384U, 63773U, 83U, 659U,
+     {3U, 63773U, 83U, 7U, 5U, 5U, 3U, 6U}},
     {"trike512", 512U, 106781U, 111U, 877U,
      {3U, 106781U, 111U, 7U, 5U, 7U, 4U, 0U}},
 };
