@@ -3185,12 +3185,137 @@ pseudohash核，检查公共核资源、100 MHz时序与封装边界。实现用
 - KEM公共核工程只使用`trike_kem_core.xdc`，不加载译码器`decoder.xdc`。
 
 验证范围：pseudohash本体标准fixture继续逐bit匹配，新增wrapper测试覆盖两遍输入、64-bit八拍摘要重组、
-输出backpressure和last。RTL格式、lint、KEM单元回归和目标Vivado复跑结果分别记录；本阶段修改时后者
-仍待用户环境运行。
+输出backpressure和last。RTL格式、lint和KEM单元回归通过。窄I/O wrapper在相同Vivado、器件和
+100 MHz约束下完成route，使用9,711 LUT、8,767 FF、4,029 Slice、0 Block RAM Tile、0 DSP和83
+Bonded IOB。
+
+窄I/O routed timing整体setup WNS为-2.008 ns、TNS为-118.367 ns，共70个失败端点；hold WHS为
+0.051 ns、THS为0。失败端点数与70个输出bit一致，top paths均为摘要或word选择寄存器经过LUT/MUXF7
+和OBUF到`o_result_data[*]`，并计入2 ns output delay。内部寄存器到寄存器没有出现在失败top path中，
+其精确WNS需从现有routed checkpoint用register-to-register限定报告确认。
+
+register-to-register限定报告得到WNS 0.883 ns，内部100 MHz通过；按`1/(10-0.883 ns)`估算的内部Fmax
+约109.7 MHz，对应1,128核心busy周期约10.29 us。最差内部路径从共享SM3的`o_done`到HMAC outer
+`chaining_state_q[*].CE`，数据延迟8.431 ns中逻辑0.359 ns、路由8.072 ns，扇出先为31再形成256-bit
+状态CE网。该路径表明下一项时序优化是共享完成信号的本地寄存/复制，不是增加SM3算术流水。
+
+hierarchical report中，单个`sm3_compress`占5,293 LUT/3,002逻辑FF；HMAC占2,061/2,627，H1占
+1,445/1,044，H2占766/1,043，pseudohash本层占151/1,044。flat physical report为9,711 LUT和
+8,767 Slice Register，hierarchical顶层为8,795逻辑FF；前者用于物理总量，后者只用于层次归因。
+当前0 BRAM说明message schedule与各hash context block/chaining buffer全部由FF/LUT承载。
 
 结论与状态：保留窄I/O wrapper和工程模式兼容XDC。求逆首轮资源能够说明逻辑已被实现，但由于重复clock
-和I/O路径未约束，不作为最终Fmax或板级I/O签核。pseudohash需要在相同器件、Vivado版本、100 MHz
-约束和干净工程下重新完成route，再记录hierarchical资源与setup/hold。
+和I/O路径未约束，不作为最终Fmax或板级I/O签核。pseudohash窄I/O实现解决了package IOB超限，物理
+资源结果保留；片内核100 MHz通过，带2 ns外部output delay的wrapper整体时序未通过。完整KEM把摘要
+写入片内RAM/寄存器时采用内部时序结论；若该wrapper用于板级流接口，则对64-bit输出增加寄存流水。
+面积优化优先统一四个顺序hash context，其次评估68×32-bit schedule同步RAM；时序优化优先对
+compress-done和256-bit状态CE进行本地寄存/物理复制。
+
+### 阶段63：H4错误采样与Encaps u/v共享乘法调度（2026-08-04）
+
+目标与假设：先形成可由官方公钥独立驱动的Encaps算术链，避免完整KEM顶层同时引入KeyGen弱密钥重采样
+和Decaps译码边界。H4必须保持Reference C每个candidate单独Generate(4 byte)的状态更新语义；
+`e0/e1/e2`的秘密分块重量不能改变后续乘法装载数量和执行周期。
+
+关键实现：
+
+- `trike_drng_weight_sampler`复用一个Generate context，每个candidate接收4个byte并按little-endian
+  `uint32_t`组装，完成状态更新后才向固定重量采样器提交随机数；
+- `trike_h4_error_sampler`执行Instantiate(`m || r2`)和固定`t`次Generate(4 byte)，整个组合按公开阶段
+  共享一个`trike_sm3_service`；
+- `trike_encaps_uv_core`保存`t`个全局错误位置，复用一个`trike_poly_mul_core`顺序计算
+  `e1*r1`、`e2*r2`、`e1*t1`、`e2*t2`，使用e0/u/v三个word RAM形成最终结果；
+- 四次乘法均回放全部`t`个support位置，不属于目标块的位置使用`index=R_BITS`的越界零贡献dummy。
+  有效项和dummy执行相同B扫描、result读改写和状态路径。
+
+验证范围与定量结果：
+
+- 独立Python SM3 fixture逐次检查三个Generate(4 byte)输出、候选位置和最终DRNG状态；含3拍index输出
+  backpressure的组合固定1,448拍；
+- H4 toy对拍Instantiate(`m || r2`)、三个错误位置和最终`V/C/reseed_counter`，连续输入输出固定
+  2,313拍；Yosys层次检查H4组合恰好包含一个`sm3_compress`；
+- 13-bit u/v toy用独立GF(2)循环乘法模型检查四次乘法和最终word流。`e0/e1/e2`重量分别为`2/1/2`
+  与`0/3/2`时均为384拍；3拍结果backpressure使总周期固定增加3拍；
+- RTL格式、Verible lint、全部KEM单元回归和SM3层次共享检查通过。真实TRIKE-2的H4/u/v固定周期、
+  LUT、FF、Slice、Block RAM Tile、RAMB36/RAMB18、DSP、setup WNS/TNS和hold WHS均待测。
+
+结论与状态：保留。Encaps继续按H1/H2/H3、阶段控制、L/K与序列化顺序闭环；KeyGen在固定候选预算和
+失败行为确定后实现，避免把数据相关弱密钥重试带入完整KEM固定周期基线。
+
+### 阶段64：H1/H2/H3组合向量服务（2026-08-04）
+
+目标与假设：把Encaps、KeyGen和Decaps都会调用的`generate_hash_vectors`形成独立固定调度服务，保持
+Reference C中同一DRNG context连续三次Generate(`R_BYTES`)的状态边界，并为完整KEM保留单SM3物理核
+接口。
+
+关键实现：`trike_h123_vectors`先从可重放`sigma`流执行Instantiate，再用一个Generate context依次产生
+`t1/t2/r1`。三次原始byte流通过同一个`trike_parity_map_stream`，目标parity固定为偶、偶、奇；只有前一
+次Generate状态更新与parity输出均完成后才启动下一次。Instantiate和Generate的压缩请求由公开FSM选择，
+默认独立实例包含一个`trike_sm3_service`，外部压缩端口允许完整KEM并入全局服务。
+
+验证范围与定量结果：13-bit、4-byte顺序seed的fixture由独立Python `hashlib` SM3模型生成，三组映射
+结果逐byte为`2d00`、`7908`和`210d`，最终440-bit `V/C`及`reseed_counter=4`匹配。测试加入3拍输出
+backpressure并检查payload稳定，busy固定2,281拍。Yosys层次检查组合顶层恰好包含一个`sm3_compress`；
+RTL格式、KEM单元回归和共享检查通过。真实TRIKE-2 `R_BYTES=1948`配置的固定周期、LUT、FF、Slice、
+Block RAM Tile、RAMB36/RAMB18、DSP、setup WNS/TNS和hold WHS均待测。
+
+结论与状态：保留。下一阶段从官方KAT提取Encaps输入和中间向量，连接H1/H2/H3、H4、u/v与pseudohash
+消息RAM，形成不依赖KeyGen硬件的Encaps端到端链。
+
+### 阶段65：官方TRIKE-2 Encaps组件对拍与错误向量持久存储（2026-08-05）
+
+目标与假设：在编写Encaps单顶层前，先锁定官方KAT中未直接打印的随机消息、所有中间向量、密文序列化和
+真实参数固定周期；H4的稀疏support与L所需padded dense error必须由同一组位置确定性生成。
+
+关键实现：
+
+- `gen_trike_encaps_fixture.py`解析官方Count=0的Seed/PK/CT/SS。全局DRNG在KeyGen依次生成
+  `seed/sigma2/sigma`，秘密采样使用局部DRNG，因此第四次32-byte Generate恢复Encaps消息`m`；
+- Python独立SM3/SM3-DRNG/HMAC-SM3模型重算H1/H2/H3、263个H4位置、四次环乘、三个独立1,984-byte
+  padding块、`c2`和`K(m||ct)`，生成fixture前强制逐byte匹配官方3,928-byte CT和32-byte SS；
+- `trike_error_support_store`固定清零5,952-byte dense RAM，对每个位置执行一次support写入和dense byte
+  读改写；`trike_h4_error_vector`把H4与该存储组合并保留外部SM3压缩端口；
+- 新增真实参数组件、L/K摘要、错误RAM和H4 error-vector四组Reference testbench。
+
+验证范围与定量结果：
+
+- 官方TRIKE-2 H1/H2/H3、H4与u/v逐byte/逐word匹配，连续流busy周期分别为44,640、207,017和
+  1,805,550拍；单复用稀疏乘法核的u/v是当前Encaps主要固定延时；
+- 完整5,952-byte L输入和3,960-byte `m||ct`输入的512-bit pseudohash摘要匹配独立模型，固定周期分别为
+  34,916和23,616拍；摘要前32 byte分别匹配`m xor c2`和官方SS；
+- error store逐项检查263-entry support RAM和全部5,952个dense byte，固定6,478拍；H4与store并行启动的
+  组合固定207,018拍，RAM清零被长seed Instantiate阶段覆盖；
+- RTL格式检查通过。所有周期均为连续输入输出的RTL结果；新增组合尚无Vivado LUT、FF、Slice、
+  Block RAM Tile、RAMB36/RAMB18、DSP、setup WNS/TNS和hold WHS报告。
+
+结论与状态：保留。官方Encaps算法、随机消息恢复、字节序列化和各组件真实参数行为已经锁定；下一阶段只
+剩阶段总控制、operand RAM适配、L/K重放和窄I/O密文/共享密钥串行器，不需要等待硬件KeyGen。
+
+### 阶段66：TRIKE-2完整Encaps固定调度顶层（2026-08-05）
+
+目标与假设：把阶段65锁定的组件组合为一个可综合窄I/O顶层，避免把公钥、多项式、错误向量或摘要直接
+展开为package引脚；所有片内消息重放、RAM预取和阶段选择必须只由公开参数及计数器控制。
+
+关键实现：
+
+- `trike_encaps_core`从单8-bit输入流加载官方格式`r2 || sigma || m`，使用64-bit同步word RAM保存
+  `r2/t1/t2/r1/u/v`，小型byte寄存器保存`sigma/m/c2`；
+- H123输出按little-endian聚合为word，H4 support以同步RAM一拍预取后固定回放263项，UV operand在每次
+  乘法开头预取首word并在握手边界预取下一word；
+- L从5,952-byte padded error RAM执行两遍固定重放，K从`m || u || v || c2`执行两遍固定重放；
+  `c2`按32个公开byte顺序写回，密文与共享密钥分别用8-bit valid/ready流输出；
+- H123、H4、L和K的压缩请求由公开FSM mux连接到一个`trike_sm3_service`，各阶段顺序执行。
+- `trike_encaps_synth_top`加入异步置位、同步释放reset wrapper，保留8-bit数据流边界；
+  `vivado_trike_kem_cores.tcl`加入该顶层的独立源文件清单和实现入口。
+
+验证范围与定量结果：官方TRIKE-2 Count=0从输入到输出完整运行，3,928-byte CT和32-byte SS逐byte匹配
+fixture；连续输入、连续接收时固定2,121,759个busy周期并由testbench断言。Yosys层次检查、RTL格式、
+Verible lint和KEM/官方组件回归纳入验证入口。该结果属于RTL功能与固定周期证明；目标
+`xc7k355tffg901-2L`上的LUT、FF、Slice、Block RAM Tile、RAMB36/RAMB18、DSP、setup WNS/TNS、hold
+WHS和实际Fmax均待Vivado测量。
+
+结论与状态：保留。Encaps已经形成端到端功能基线；下一项先建立窄I/O Vivado物理基线，再进入需要明确
+固定弱密钥候选预算的KeyGen。
 
 ## 形成的设计结论
 

@@ -61,11 +61,8 @@ flowchart TD
     SAMPLER --> WEAK["待实现：weak-key-test微程序"]
     WEAK --> HIDX["h0、h1、h2及稀疏索引"]
 
-    RNG --> HASHV["H1/H2/H3微程序"]
-    HASHV --> INST["已有：trike_sm3_drng_instantiate_stream"]
-    INST --> GENR["已有：trike_sm3_drng_generate_stream<br/>三次Generate(R_BYTES)"]
-    GENR --> PARITY["已有：trike_parity_map_stream<br/>偶、偶、奇"]
-    PARITY --> TVEC["t1、t2、r1"]
+    RNG --> HASHV["已有：trike_h123_vectors<br/>Instantiate + 三次Generate<br/>偶、偶、奇映射"]
+    HASHV --> TVEC["t1、t2、r1"]
 
     HIDX --> POLY["已有：trike_poly_mul_core<br/>已有：trike_poly_inv_core"]
     TVEC --> POLY
@@ -85,15 +82,14 @@ KeyGen需要采用公开固定候选批次、全量测试和无分支首个合�
 
 ```mermaid
 flowchart TD
-    PK["pk：sigma、r2"] --> HASHV["H1/H2/H3微程序<br/>已有DRNG核和parity mapper"]
+    PK["pk：sigma、r2"] --> HASHV["已有：trike_h123_vectors"]
     HASHV --> TVEC["t1、t2、r1"]
 
-    RNG["外部随机源：m"] --> H4["H4微程序<br/>Instantiate(m||r2)<br/>固定t次Generate(4 byte)"]
+    RNG["外部随机源：m"] --> H4["已有：trike_h4_error_sampler<br/>Instantiate(m||r2)<br/>固定t次Generate(4 byte)"]
     PK --> H4
-    H4 --> SAMPLE["已有：candidate/fixed-weight sampler"]
-    SAMPLE --> E["e=(e0,e1,e2)，总重量t"]
+    H4 --> E["e=(e0,e1,e2)，总重量t"]
 
-    E --> UV["已有：trike_poly_mul_core功能基线<br/>稀疏×稠密模式"]
+    E --> UV["已有：trike_encaps_uv_core<br/>共享一个稀疏×稠密乘法核"]
     TVEC --> UV
     PK --> UV
     UV --> U["u=e0+e1*r1+e2*r2"]
@@ -337,12 +333,15 @@ H1/H2/H3控制器、H4控制器、KeyGen控制器和Encaps/Decaps控制器不分
 2. DRNG Instantiate的seed DF和C DF共享一个压缩服务；
 3. DRNG Generate的输出hash和状态更新hash共享一个压缩服务；
 4. pseudohash的HMAC、suffix hash和最终hash共享一个压缩服务。
+5. H4的Instantiate和全部Generate(4 byte)共享一个压缩服务，并可接到KEM顶层外部服务端口。
+6. H1/H2/H3的Instantiate和三次Generate(`R_BYTES`)共享一个压缩服务。
 
 选择逻辑只依赖公开微程序状态，不使用消息、摘要或秘密状态进行动态仲裁。各hash context在收到返回前
 保持block和chaining state，复合模块不并发发起两个命令。面积优先基线为单lane，DF、DRNG
 Instantiate、DRNG Generate和pseudohash的固定busy周期分别为314、916、708和1,128拍。
 `make check-trike-sm3-sharing`使用Yosys层次统计检查
-HMAC、DRNG Instantiate、DRNG Generate和pseudohash每个复合顶层恰好包含一个`sm3_compress`。
+HMAC、DRNG Instantiate、DRNG Generate、pseudohash、H4和H1/H2/H3每个复合顶层恰好包含一个
+`sm3_compress`。
 是否增加第二个SM3 lane需要根据完整KEM周期与同条件Vivado的资源、Fmax和`cycles/Fmax`决定。
 
 ### 采样器物理实例收敛
@@ -552,6 +551,12 @@ H1和H2连接`i_target_parity=0`，H3连接`i_target_parity=1`。连续输入输
 `2*R_BYTES+1`，对应四档参数分别为3,897、8,843、17,425和28,513拍。每次调用的RAM写入、读取和
 奇偶累计次数只由公开参数`R`决定。
 
+`trike_h123_vectors`把函数级流程组合为一次Instantiate(`sigma`)和三次顺序
+Generate(`R_BYTES`)，三次输出共用一个`trike_parity_map_stream`并依次选择偶、偶、奇目标。每次
+Generate完成后保存更新的`V/C/reseed_counter`再启动下一次，哈希请求通过外部压缩端口并入KEM共享
+服务。13-bit、4-byte seed toy由独立Python SM3模型生成fixture，逐byte得到`2d00`、`7908`、`210d`，
+含3拍输出backpressure固定2,281拍。
+
 ## H4固定重量采样
 
 `trike_sampler_candidate`组合计算32-bit multiply-high候选。`trike_fixed_weight_sampler`按
@@ -569,6 +574,37 @@ $$
 对应69,958、185,328、436,258和771,760拍；这些数字不包含上层执行$t$次Generate(4 byte)的周期。
 index RAM逻辑容量为`WEIGHT*ceil(log2(LENGTH))` bit，实际BRAM/LUTRAM映射与Fmax需要Vivado测量。
 
+`trike_drng_weight_sampler`连接一个DRNG Generate context和固定重量采样器。每个candidate严格执行一次
+Generate(4 byte)，四个输出byte依次写入`random[7:0]`至`random[31:24]`，Generate完成的
+`V/C/reseed_counter`作为下一个candidate的输入。调用次数固定为`WEIGHT`，碰撞不触发额外Generate。
+
+`trike_h4_error_sampler`先用可重放的`m || r2` byte流完成Instantiate，再以`LENGTH=3r`、
+`WEIGHT=t`运行上述组合。Instantiate和全部Generate的压缩请求按公开FSM阶段连接同一个
+`trike_sm3_service`；外部压缩端口允许完整KEM把该请求并入全局SM3服务。默认独立层次检查恰好得到一个
+`sm3_compress`。toy独立SM3 fixture检查三个错误位置和
+最终DRNG状态，连续输入输出固定2,313拍；该数字用于模块回归，不代表真实参数H4周期。
+
+`trike_error_support_store`先固定清零三个独立padding块，再为每个H4位置执行一次support RAM写入和一次
+dense byte RAM读改写。dense地址为`block*PADDED_R_BYTES + local_index/8`，因此同一RAM可按5,952-byte
+顺序流直接重放TRIKE-2的`L(e)`输入。`trike_h4_error_vector`并行启动H4与RAM清零，随后用ready/valid
+把263个位置全部写入两种表示；TRIKE-2连续输入时固定207,018拍，仅比H4本体增加1拍完成汇合。
+
+## Encaps u/v计算
+
+`trike_encaps_uv_core`接收H4的`t`个全局位置，位置区间`[0,r)`、`[r,2r)`、`[2r,3r)`分别表示
+`e0/e1/e2`。模块复用一个`trike_poly_mul_core`，固定执行：
+
+1. `e1*r1`写入u accumulator；
+2. `e2*r2`与u accumulator、e0逐word异或；
+3. `e1*t1`写入v accumulator；
+4. `e2*t2`与v accumulator、e0逐word异或。
+
+每次乘法均从support RAM读取恰好`t`个位置。属于目标块的位置转换为块内index，其他位置转换为
+`R_BITS` dummy；TRIKE的公开$r$不是2的幂，因此该越界值可由`ceil(log2(r))` bit表示。乘法核对dummy
+仍执行相同的B扫描和三组result RAM读改写，只把贡献置零。该结构避免使用秘密的分块重量决定装载数量或
+乘法深度。13-bit toy的`2/1/2`和`0/3/2`分块重量均为384拍，独立GF(2)循环乘法模型逐bit匹配；
+3拍输出backpressure固定增加3拍。
+
 ## 固定周期与常数时间边界
 
 给定公开参数、连续输入和连续接收时，各核的控制路径、哈希调用数和存储访问数不依赖seed、密钥、
@@ -579,8 +615,13 @@ syndrome、摘要值或H4碰撞模式：
 | `sm3_compress`、`keccak_f1600` | 固定116/24个busy周期 | 无数据流停顿 |
 | SM3/HMAC/DF/Instantiate/pseudohash | 公开消息长度决定block和pass数 | 输入`valid`空拍 |
 | DRNG Generate、parity mapper、SHAKE | 公开输出长度决定block、RAM读写和输出数 | 输出`ready`低电平；输入`valid`空拍 |
+| H1/H2/H3 vectors | 一次Instantiate、三次Generate(`R_BYTES`)和偶/偶/奇映射 | seed输入`valid`空拍；vector输出`ready`低电平 |
 | fixed-weight sampler | 固定`WEIGHT`个随机数和`WEIGHT^2`次index RAM读取 | 随机输入`valid`空拍；index输出`ready`低电平 |
+| H4 error sampler | 一次Instantiate和固定`t`次Generate(4 byte)/candidate扫描 | seed输入`valid`空拍；index输出`ready`低电平 |
+| H4 error vector/store | 固定清零`3*PADDED_R_BYTES`并对`t`个位置各执行一次RAM读改写 | seed输入`valid`空拍；完成后读取端口由公开地址驱动 |
 | `trike_poly_mul_core` | 公开`WORDS/DIGITS/SPARSE_WEIGHT`决定装载、乘法、归约和输出访问数 | 输入`valid`空拍；输出`ready`低电平 |
+| `trike_encaps_uv_core` | 固定4次稀疏乘法，每次回放全部`t`个support位置 | operand输入`valid`空拍；结果`ready`低电平 |
+| `trike_encaps_core` | H123、H4、4次乘法、L、c2、K和固定长度序列化按公开FSM顺序执行 | 顶层输入`valid`空拍；密文或共享密钥输出`ready`低电平 |
 | `trike_poly_inv_core` | 公开$r$的加法链决定Frobenius扫描、稠密乘法和scratch RAM访问数 | 输入`valid`空拍；输出`ready`低电平 |
 | compare/select | 固定组合XOR归约和全宽mask | 无握手 |
 
@@ -591,7 +632,8 @@ KEM顶层需要用公开地址调度的RAM连续驱动这些接口，或把固�
 Reference C的`generate_secret_key`在`weak_key_test`失败时重复生成三组秘密多项式。该重采样次数由候选
 密钥决定，因此完整KeyGen当前不具备固定总周期。硬件KeyGen需要单独确定公开的固定候选预算、全量执行和
 无分支首个合格候选选择策略，并定义固定预算内没有合格候选时的行为；该策略需要与KAT和失败概率一起验证。
-Encaps/Decaps顶层的固定周期仍需在序列化、多项式核、固定7轮译码和重加密检查接通后整体证明。
+Encaps顶层在连续输入和连续接收条件下具有固定总周期；Decaps仍需在固定7轮译码、错误重生成和重加密
+检查接通后整体证明。
 
 ## 验证
 
@@ -608,9 +650,16 @@ Encaps/Decaps顶层的固定周期仍需在序列化、多项式核、固定7轮
 | `tb_trike_pseudohash512_stream` | 32-byte消息的完整512-bit输出；固定1,128个busy周期 |
 | `tb_trike_pseudohash_synth_top` | 64-bit八拍摘要输出、result backpressure、last位置和完整512-bit摘要重组 |
 | `tb_trike_parity_map_stream` | 13-bit toy向量的偶/奇映射、padding清零、固定5拍和backpressure稳定性 |
+| `tb_trike_h123_vectors` | 独立SM3 fixture的Instantiate/三次Generate、偶偶奇映射、最终状态和固定2,281拍 |
 | `tb_trike_sampler_candidate` | multiply-high边界和Reference C候选fixture |
 | `tb_trike_fixed_weight_sampler` | 碰撞/无碰撞结果、两者固定40拍、全index输出和backpressure稳定性 |
+| `tb_trike_drng_weight_sampler` | 独立SM3 fixture的三次Generate(4 byte)、little-endian候选、最终DRNG状态和固定1,448拍 |
+| `tb_trike_h4_error_sampler` | Instantiate(`m||r2`)至三个错误位置的完整toy链、最终DRNG状态和固定2,313拍 |
+| `tb_trike_error_support_store_reference` | 官方TRIKE-2的263个support位置、5,952-byte padded error RAM和固定6,478拍 |
+| `tb_trike_h4_error_vector_reference` | 官方TRIKE-2 H4至两种错误表示的组合服务，完整RAM逐byte/逐index对拍和固定207,018拍 |
 | `tb_trike_poly_mul_core` | 13-bit非word对齐环的稠密/稀疏乘法、越界index dummy写回、数据无关周期和backpressure稳定性 |
+| `tb_trike_encaps_uv_core` | 四次共享稀疏乘法、两种秘密分块重量相同384拍、独立u/v模型和backpressure |
+| `tb_trike_encaps_core_reference` | 官方TRIKE-2 Count=0完整Encaps，逐byte检查3,928-byte CT、32-byte SS和固定2,121,759拍 |
 | `tb_trike_poly_mul_reference` | 从官方TRIKE-2 KAT提取$t_0$、$r_2$与$h_0$支持集，在15581-bit环对拍两种输入 |
 | `tb_trike_poly_inv_core` | 13-bit非word对齐环的两组可逆输入、乘积为一、相同417拍和输出backpressure |
 | `tb_trike_poly_inv_reference` | 从官方TRIKE-2 KAT提取稠密$h_0$，逐word对拍独立Euclid逆元golden |
@@ -624,9 +673,17 @@ SM3边界预期结果由系统OpenSSL后端的`hashlib.new("sm3")`独立生成�
 当前验证属于RTL功能和固定block周期验证。求逆核首轮Vivado实现已经完成，但工程存在重复clock XDC和
 I/O delay未生效，结果只作为待复测的初步数据。pseudohash首轮综合因旧wrapper直接导出512-bit摘要而
 需要516个输出IOB，超过目标器件300个Bonded IOB，未完成placement；实现wrapper使用64-bit八拍
-result流后，干净约束下的LUT、FF、Slice、BRAM、DSP、setup WNS/TNS和hold WHS均待复测。
+result流后完成route，使用9,711 LUT、8,767 FF、4,029 Slice、0 BRAM、0 DSP和83 IOB。整体setup
+WNS为-2.008 ns、TNS为-118.367 ns，70个失败端点全部落在70-bit顶层输出边界；hold WHS为0.051 ns。
+内部寄存器路径WNS为0.883 ns，满足100 MHz；最差路径8.431 ns中8.072 ns为共享compress-done到
+HMAC outer chaining-state CE的高扇出路由。顶层输出接口需要独立流水或作为片内模块边界约束。
 
-`make check-trike-sm3-sharing`对四个复合顶层运行Yosys层次检查，证明每个顶层的
+层次资源中，`sm3_compress`为5,293 LUT/3,002逻辑FF；HMAC为2,061/2,627，H1为1,445/1,044，
+H2为766/1,043，pseudohash本层控制与摘要状态为151/1,044。后续面积优化优先把四个顺序hash context
+收敛为一套block builder/chaining-state控制，再评估将68×32-bit message schedule映射到同步RAM；
+两项都保持一个物理SM3 lane和公开固定调度。
+
+`make check-trike-sm3-sharing`对八个复合顶层运行Yosys层次检查，证明每个顶层的
 `sm3_compress`实例数为1。该检查确认RTL层次实例收敛，不代替目标Vivado的LUT、FF、Slice和时序报告。
 
 `make test-trike-reference-kat`直接编译最新材料中的TRIKE-2/5/7/9 Reference C，各生成10组完整
@@ -644,8 +701,19 @@ Python多项式Euclid计算golden并额外验证$h_0h_0^{-1}=1$；RTL使用Refer
 15581-bit结果逐word匹配，连续流busy周期固定为43,978,192拍。toy回归对两组不同可逆输入均为417拍，
 并检查结果输出停顿期间payload保持稳定、busy只增加公开停顿拍数。
 
+`make test-trike-encaps-components-reference`使用`gen_trike_encaps_fixture.py`恢复的官方Count=0中间量。
+生成器首先独立重算并验证完整CT/SS，然后RTL逐byte/逐word检查H1/H2/H3、H4和u/v；连续流固定周期分别
+为44,640、207,017和1,805,550拍。`make test-trike-encaps-hash-reference`对拍完整512-bit L/K摘要，
+固定34,916和23,616拍。fixture明确保留三个错误块各自补齐到1,984 byte的L输入布局。
+
+`make test-trike-encaps-core-reference`从8-bit输入流加载官方序列化`r2 || sigma || m`，顶层内部使用
+64-bit同步word RAM保存多项式、byte RAM保存padded error，并由公开地址计数器驱动所有预取和双pass
+重放。连续输入和连续接收时总busy周期固定为2,121,759拍，输出3,928-byte密文与32-byte共享密钥逐byte
+匹配官方Count=0。该周期包含输入加载、全部密码阶段和输出串行化，不包含外部主动施加的valid空拍或ready
+停顿。
+
 ## 后续实现顺序
 
-1. 对求逆外部RAM模式和单SM3压缩服务运行目标Vivado实现，记录资源、Fmax和`cycles/Fmax`；
-2. 实现运行时公开参数`trike_weight_sampler_core`以及H1/H2/H3/H4微程序；
-3. 实现统一IO、`trike_kem_top`、Min-Sum Decaps连接和四档KAT端到端固定周期对拍。
+1. 对窄I/O `trike_encaps_synth_top`运行Vivado并测量LUT、FF、BRAM、DSP、WNS和Fmax；
+2. 确定KeyGen弱密钥固定候选预算并实现KeyGen固定微程序；
+3. 连接Min-Sum Decaps、错误重生成、固定长度比较和隐式拒绝选择。

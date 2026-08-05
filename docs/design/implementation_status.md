@@ -314,8 +314,9 @@ K-sign工作RAM、snapshot和`ram_m`路径均未进入前十条。
 TRIKE KEM数据通路包含`sm3_compress`、`trike_sm3_service`、`sm3_hash_stream`、
 `hmac_sm3_64byte_key_stream`、`sm3_df_stream`、`trike_sm3_drng_instantiate_stream`、
 `trike_sm3_drng_generate_stream`、`trike_pseudohash512_stream`、`trike_parity_map_stream`、
-`trike_sampler_candidate`、`trike_fixed_weight_sampler`、`trike_poly_mul_core`、
-`trike_poly_inv_core`和`kem_ct_compare_select`公共RTL核。
+`trike_sampler_candidate`、`trike_fixed_weight_sampler`、`trike_drng_weight_sampler`、
+`trike_h4_error_sampler`、`trike_error_support_store`、`trike_h4_error_vector`、`trike_h123_vectors`、
+`trike_poly_mul_core`、`trike_encaps_uv_core`、`trike_poly_inv_core`和`kem_ct_compare_select`公共RTL核。
 SM3压缩核固定用52周期扩展消息、64周期执行压缩；上层完成SM3-DRNG状态生成与更新、
 pseudohash512级联、H1/H2/H3奇偶映射、H4固定扫描和固定结构选择。接口、状态布局和验证边界见
 [trike_kem_common_cores.md](trike_kem_common_cores.md)。
@@ -332,10 +333,62 @@ HMAC、DRNG Instantiate、DRNG Generate和pseudohash各自保留多个hash conte
 512-bit摘要直接映射到package I/O；无输出停顿时，wrapper在pseudohash完成后固定增加8次结果握手。
 hierarchical utilization报告用于分离wrapper串行器与`u_pseudohash`本体资源。
 
+Vivado 2023.2、`xc7k355tffg901-2L`的首轮窄I/O implementation完成route：9,711 LUT、8,767 FF、
+4,029 Slice、0 Block RAM Tile、0 DSP和83 Bonded IOB。10 ns时钟下整体setup WNS为-2.008 ns、
+TNS为-118.367 ns、70个失败端点，hold WHS为0.051 ns、THS为0。70个失败端点与wrapper的70个输出
+bit数量相同，报告top path均从摘要或word选择寄存器到`o_result_data[*]`，包含MUXF7、OBUF和2 ns
+output delay；该结果证明内部核完成布局布线，但不构成100 MHz整体时序通过。内部寄存器到寄存器WNS
+为0.883 ns，对应相同布局布线条件下约109.7 MHz的近似内部Fmax；1,128个核心busy周期对应100 MHz时
+11.28 us，按近似Fmax为10.29 us。内部最差路径从共享SM3的`o_done`到HMAC outer chaining-state CE，
+8.431 ns数据延迟中8.072 ns为路由，主要问题是31和256级扇出控制网，不是SM3轮函数组合逻辑。外部流
+接口时序与该片内核时序分开报告。
+
+hierarchical utilization显示一个物理`sm3_compress`占5,293 LUT和3,002逻辑FF；HMAC控制与两个hash
+context占2,061 LUT和2,627逻辑FF，H1、H2分别占1,445/1,044和766/1,043。物理flat report的
+Slice Register为8,767，hierarchical report的顶层逻辑FF为8,795，资源对比使用前者，层次归因使用
+后者。全部buffer和schedule均映射为FF/LUT，未使用BRAM。
+
 奇偶映射连续流周期为`2*R_BYTES+1`；固定重量采样器对碰撞和无碰撞输入均执行
 `WEIGHT*(WEIGHT+3)`个busy周期。valid/ready外部停顿会延长接口总周期，KEM顶层需要提供公开的
 连续RAM调度或固定等待预算。Reference C KeyGen的弱密钥重采样循环是完整KEM固定周期设计中的独立
 未决项。
+
+`trike_drng_weight_sampler`为每个候选单独执行一次Generate(4 byte)，按little-endian `uint32_t`组装
+随机数，并把更新后的DRNG状态传给下一次调用。`trike_h4_error_sampler`执行
+Instantiate(`m || r2`)和固定`t`次Generate，Instantiate与全部Generate顺序复用一个
+`trike_sm3_service`。toy fixture对拍完整错误support和最终`V/C/reseed_counter`；含3拍输出停顿的
+Generate/采样组合为1,448拍，连续H4组合为2,313拍。真实参数资源、时序和总周期待目标Vivado与KAT测量。
+
+`trike_encaps_uv_core`保存H4输出的`t`个全局错误位置，使用一个`trike_poly_mul_core`依次计算
+`e1*r1`、`e2*r2`、`e1*t1`和`e2*t2`，在三个word RAM中构造`e0`并累加`u/v`。每次乘法固定回放全部
+`t`个位置，不属于目标错误块的位置转换为`index>=r`的零贡献dummy；四次乘法数、support读取数和
+word RAM访问数不依赖`e0/e1/e2`各自重量。13-bit toy中两种`2/1/2`和`0/3/2`重量分布均为384拍，
+结果匹配独立环乘模型；3拍结果backpressure使接口总周期增加3拍。
+
+`trike_h123_vectors`从`sigma`执行一次Instantiate，并从同一DRNG状态连续执行三次
+Generate(`R_BYTES`)，输出依次经过偶、偶、奇`trike_parity_map_stream`。Instantiate和三次Generate
+顺序复用一个压缩服务，并提供外部压缩端口供KEM顶层进一步共享。13-bit、4-byte seed的独立SM3 toy
+fixture逐byte匹配`t1/t2/r1`和最终DRNG状态；含3拍结果停顿固定2,281拍。
+
+`scripts/gen_trike_encaps_fixture.py`从官方TRIKE-2 Count=0恢复Encaps消息`m`。KAT全局DRNG在KeyGen中
+依次生成`seed/sigma2/sigma`，秘密多项式采样使用局部DRNG，因此第四次32-byte Generate是`m`。
+生成器独立重算H1/H2/H3、H4 support、`u/v`、padded `L(e)`、`c2`和`K(m||ct)`，最终逐byte匹配官方
+3,928-byte CT和32-byte SS。
+
+真实TRIKE-2 RTL对拍得到：H1/H2/H3为44,640拍，H4为207,017拍，单乘法核`u/v`为1,805,550拍，
+`L(e)`为34,916拍，`K(m||ct)`为23,616拍。`trike_error_support_store`固定6,478拍构造263-entry support
+RAM和5,952-byte padded error RAM；与H4并行清零和顺序写入的`trike_h4_error_vector`固定207,018拍。
+这些结果是RTL连续流周期，不是目标器件的Fmax或物理时间；当前Encaps延时瓶颈是四次串行稀疏乘法。
+
+`trike_encaps_core`采用8-bit输入、密文输出和共享密钥输出接口，输入顺序为官方公钥序列化
+`r2 || sigma`后接随机消息`m`，输出顺序为`u || v || c2`和共享密钥。顶层缓存公钥与消息，依次执行
+H1/H2/H3、H4 error-vector、四次共享稀疏乘法、`L(e)`、`c2`写回和`K(m||ct)`，六个多项式word RAM
+承载`r2/t1/t2/r1/u/v`。H123 byte流按little-endian每8 byte写入64-bit word；H4 support、padded error、
+L/K双pass和密文输出均由公开计数器预取同步RAM。四个哈希/DRNG阶段经顶层mux复用一个
+`trike_sm3_service`。官方TRIKE-2 Count=0端到端测试逐byte匹配3,928-byte CT和32-byte SS；连续输入、
+连续接收时固定2,121,759个busy周期。输入`valid`空拍或输出`ready`停顿只延长外部事务，内部阶段选择、
+哈希调用数、support回放数和RAM地址序列不依赖消息、公钥或错误位置。该顶层尚无Vivado资源、Fmax和
+布局布线报告。
 
 `trike_poly_mul_core`提供稠密word流与固定数量稀疏index两种输入。稠密路径使用digit-serial
 carryless乘法、双长度product存储和$x^r-1$固定折返；稀疏路径逐index扫描B，并把每个循环移位word
@@ -361,7 +414,7 @@ backpressure；TRIKE-2真实参数回归的稠密/稀疏周期分别为1,967,372
 720 Slice、4 RAMB36、0 DSP，100 MHz内部时钟WNS为0.364 ns、WHS为0.080 ns；该工程同时加载了旧
 `decoder.xdc`，且实现级I/O delay未生效，因此这些数字属于待干净约束复测的初步结果，不作为物理签核。
 
-未实现范围包括H1/H2/H3/H4组合控制器和KEM序列化控制器。KEM公共核未接入
+未实现范围包括Encaps阶段总控制和KEM序列化控制器。KEM公共核未接入
 `decoder_top`，其Vivado资源与时序为待测，不计入本文译码器物理基线。
 
 ## 验证状态
@@ -375,6 +428,10 @@ make lint-rtl
 make check-trike-sm3-sharing
 make test-kem-unit
 make test-trike-reference-kat
+make test-trike-encaps-components-reference
+make test-trike-encaps-hash-reference
+make test-trike-error-store-reference
+make test-trike-h4-vector-reference
 make test-trike-poly-reference
 make test-trike-poly-inv-reference
 make test-unit
@@ -444,17 +501,25 @@ make vivado-synth-trike-unified-ksign TRIKE_UNIFIED_KSIGN_K=4
 make vivado-impl-trike-kem-cores \
   VIVADO_PART=xc7k355tffg901-2L \
   VIVADO_RUN_TAG=trike_kem_core_shared_sm3
+make vivado-impl-trike-encaps \
+  VIVADO_PART=xc7k355tffg901-2L \
+  VIVADO_RUN_TAG=trike_encaps_baseline
 ```
 
 批处理入口按启动时间创建 `build/vivado/<timestamp>/..._k3` 或 `..._k4` 目录；可以用
 `VIVADO_RUN_TAG=<label>`指定可读实验标签。不同K值和不同运行不会覆盖已有报告。
 
-KEM公共核入口分别实现TRIKE-2求逆核和32-byte pseudohash核，输出目录为
-`build/vivado/<label>/trike_poly_inv`与`build/vivado/<label>/trike_pseudohash`。两者使用100 MHz
+KEM公共核入口分别实现TRIKE-2求逆核、32-byte pseudohash核和完整Encaps核，输出目录为
+`build/vivado/<label>/trike_poly_inv`、`build/vivado/<label>/trike_pseudohash`与
+`build/vivado/<label>/trike_encaps`。三者使用100 MHz
 `core_clk`、0.100 ns时钟不确定度和2 ns实现级I/O delay；wrapper不分配package pin，因此报告属于
 公共核实现检查点，不是板级I/O签核。报告包含post-synth/post-route utilization、hierarchical
 utilization、setup/hold top paths、timing summary、clock utilization、methodology、CDC、DRC、
 messages和DCP。
+
+完整Encaps的Vivado GUI综合顶层为`trike_encaps_synth_top`，外部仅保留8-bit输入、8-bit密文输出、
+8-bit共享密钥输出及valid/ready控制。工程源文件清单与编译顺序由
+`scripts/vivado_trike_kem_cores.tcl`的该top分支维护，约束使用`constraints/trike_kem_core.xdc`。
 
 Vivado工程只加载`constraints/trike_kem_core.xdc`，不同时加载译码器`decoder.xdc`。XDC使用
 `get_ports -filter`直接选择数据输入和输出，避免工程模式XDC reader忽略一般Tcl的`if`和
