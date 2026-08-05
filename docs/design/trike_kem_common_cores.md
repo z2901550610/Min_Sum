@@ -554,8 +554,9 @@ H1和H2连接`i_target_parity=0`，H3连接`i_target_parity=1`。连续输入输
 `trike_h123_vectors`把函数级流程组合为一次Instantiate(`sigma`)和三次顺序
 Generate(`R_BYTES`)，三次输出共用一个`trike_parity_map_stream`并依次选择偶、偶、奇目标。每次
 Generate完成后保存更新的`V/C/reseed_counter`再启动下一次，哈希请求通过外部压缩端口并入KEM共享
-服务。13-bit、4-byte seed toy由独立Python SM3模型生成fixture，逐byte得到`2d00`、`7908`、`210d`，
-含3拍输出backpressure固定2,281拍。
+服务。Generate完成脉冲经12个本地寄存副本分别控制三份440-bit状态的四个110-bit分组，避免单个完成
+信号跨层驱动全部状态CE。13-bit、4-byte seed toy由独立Python SM3模型生成fixture，逐byte得到
+`2d00`、`7908`、`210d`，含3拍输出backpressure固定2,284拍。
 
 ## H4固定重量采样
 
@@ -605,6 +606,10 @@ dense byte RAM读改写。dense地址为`block*PADDED_R_BYTES + local_index/8`�
 乘法深度。13-bit toy的`2/1/2`和`0/3/2`分块重量均为384拍，独立GF(2)循环乘法模型逐bit匹配；
 3拍输出backpressure固定增加3拍。
 
+稀疏乘法在每个B word开始时把三个循环折返贡献及对应result地址写入寄存器，后续三次同步RAM
+读改写只使用这些寄存值。寄存级数量和访问次序由公开`WORDS`、`SPARSE_WEIGHT`决定，稀疏模式
+固定周期公式保持不变。
+
 ## 固定周期与常数时间边界
 
 给定公开参数、连续输入和连续接收时，各核的控制路径、哈希调用数和存储访问数不依赖seed、密钥、
@@ -622,6 +627,7 @@ syndrome、摘要值或H4碰撞模式：
 | `trike_poly_mul_core` | 公开`WORDS/DIGITS/SPARSE_WEIGHT`决定装载、乘法、归约和输出访问数 | 输入`valid`空拍；输出`ready`低电平 |
 | `trike_encaps_uv_core` | 固定4次稀疏乘法，每次回放全部`t`个support位置 | operand输入`valid`空拍；结果`ready`低电平 |
 | `trike_encaps_core` | H123、H4、4次乘法、L、c2、K和固定长度序列化按公开FSM顺序执行 | 顶层输入`valid`空拍；密文或共享密钥输出`ready`低电平 |
+| `trike_encaps_synth_top` | 公开2,012-byte输入缓冲及固定长度密文/共享密钥的两级寄存输出 | 外部输入`valid`空拍；外部输出`ready`低电平 |
 | `trike_poly_inv_core` | 公开$r$的加法链决定Frobenius扫描、稠密乘法和scratch RAM访问数 | 输入`valid`空拍；输出`ready`低电平 |
 | compare/select | 固定组合XOR归约和全宽mask | 无握手 |
 
@@ -650,7 +656,7 @@ Encaps顶层在连续输入和连续接收条件下具有固定总周期；Decap
 | `tb_trike_pseudohash512_stream` | 32-byte消息的完整512-bit输出；固定1,128个busy周期 |
 | `tb_trike_pseudohash_synth_top` | 64-bit八拍摘要输出、result backpressure、last位置和完整512-bit摘要重组 |
 | `tb_trike_parity_map_stream` | 13-bit toy向量的偶/奇映射、padding清零、固定5拍和backpressure稳定性 |
-| `tb_trike_h123_vectors` | 独立SM3 fixture的Instantiate/三次Generate、偶偶奇映射、最终状态和固定2,281拍 |
+| `tb_trike_h123_vectors` | 独立SM3 fixture的Instantiate/三次Generate、偶偶奇映射、最终状态和固定2,284拍 |
 | `tb_trike_sampler_candidate` | multiply-high边界和Reference C候选fixture |
 | `tb_trike_fixed_weight_sampler` | 碰撞/无碰撞结果、两者固定40拍、全index输出和backpressure稳定性 |
 | `tb_trike_drng_weight_sampler` | 独立SM3 fixture的三次Generate(4 byte)、little-endian候选、最终DRNG状态和固定1,448拍 |
@@ -660,6 +666,7 @@ Encaps顶层在连续输入和连续接收条件下具有固定总周期；Decap
 | `tb_trike_poly_mul_core` | 13-bit非word对齐环的稠密/稀疏乘法、越界index dummy写回、数据无关周期和backpressure稳定性 |
 | `tb_trike_encaps_uv_core` | 四次共享稀疏乘法、两种秘密分块重量相同384拍、独立u/v模型和backpressure |
 | `tb_trike_encaps_core_reference` | 官方TRIKE-2 Count=0完整Encaps，逐byte检查3,928-byte CT、32-byte SS和固定2,121,759拍 |
+| `tb_trike_encaps_core_reference`，`USE_SYNTH_TOP=1` | 同一官方向量经两级寄存输出wrapper，检查固定2,127,733拍及完整CT/SS |
 | `tb_trike_poly_mul_reference` | 从官方TRIKE-2 KAT提取$t_0$、$r_2$与$h_0$支持集，在15581-bit环对拍两种输入 |
 | `tb_trike_poly_inv_core` | 13-bit非word对齐环的两组可逆输入、乘积为一、相同417拍和输出backpressure |
 | `tb_trike_poly_inv_reference` | 从官方TRIKE-2 KAT提取稠密$h_0$，逐word对拍独立Euclid逆元golden |
@@ -712,8 +719,24 @@ Python多项式Euclid计算golden并额外验证$h_0h_0^{-1}=1$；RTL使用Refer
 匹配官方Count=0。该周期包含输入加载、全部密码阶段和输出串行化，不包含外部主动施加的valid空拍或ready
 停顿。
 
+`make test-trike-encaps-synth-reference`对同一官方向量运行Vivado用寄存I/O wrapper。输入使用单项寄存
+缓冲；密文和共享密钥分别经片内暂存寄存器及IOB输出寄存器，切开内部RAM/byte mux到芯片边缘的长路径。
+连续流固定2,127,733拍，完整CT/SS匹配。wrapper相对核增加5,974拍固定接口开销。
+
+用户提供的修改前Fully Routed报告使用Vivado 2023.2、`xc7k355tffg901-2L`、10 ns时钟、0.100 ns
+不确定度和2 ns I/O max delay。资源为48,575 LUT、60,982 FF、24,554 Slice、15 RAMB36、3 RAMB18、
+4 DSP和37 IOB。整体setup WNS/TNS为-3.937 ns/-214.375 ns，435个失败端点，hold WHS为+0.034 ns；
+输出RAM到byte mux/OBUF是整体最差路径。内部寄存器路径WNS为-1.534 ns，H123完成脉冲扇出1,322且
+11.158 ns路径中10.856 ns为路由；另一组内部负裕量路径从稀疏乘法B word地址到result RAM写数据，含
+34级逻辑。methodology报告的DPIR-1共49项来自采样器32x32 multiply-high输入的异步复位寄存器，
+SYNTH-10共4项对应预期的4个DSP；这两类告警不属于本次最差内部路径。
+
+当前RTL的寄存I/O边界、H123完成脉冲复制和稀疏贡献/地址寄存已经通过完整功能回归。XDC将I/O约束明确
+写为max 2 ns、min 0 ns，避免相同min/max引起的XDCH-2；Vivado脚本固定输出内部setup路径和高扇出
+报告。修改后的物理资源、整体/内部WNS、hold和关键路径迁移均待同条件重新实现确认。
+
 ## 后续实现顺序
 
-1. 对窄I/O `trike_encaps_synth_top`运行Vivado并测量LUT、FF、BRAM、DSP、WNS和Fmax；
+1. 对寄存I/O `trike_encaps_synth_top`重新运行Vivado，确认整体/内部WNS、关键路径迁移及资源变化；
 2. 确定KeyGen弱密钥固定候选预算并实现KeyGen固定微程序；
 3. 连接Min-Sum Decaps、错误重生成、固定长度比较和隐式拒绝选择。

@@ -342,7 +342,9 @@ module tb_trike_encaps_components_reference;
       run_uv();
     join
 
-    if (h123_busy_cycles != REF_H123_BUSY_CYCLES) $fatal(1, "H123 cycle mismatch");
+    if (h123_busy_cycles != REF_H123_BUSY_CYCLES) begin
+      $fatal(1, "H123 cycle mismatch got=%0d expected=%0d", h123_busy_cycles, REF_H123_BUSY_CYCLES);
+    end
     if (h4_busy_cycles != REF_H4_BUSY_CYCLES) $fatal(1, "H4 cycle mismatch");
     if (uv_busy_cycles != REF_UV_BUSY_CYCLES) $fatal(1, "UV cycle mismatch");
 

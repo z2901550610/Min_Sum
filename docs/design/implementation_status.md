@@ -367,8 +367,9 @@ word RAM访问数不依赖`e0/e1/e2`各自重量。13-bit toy中两种`2/1/2`和
 
 `trike_h123_vectors`从`sigma`执行一次Instantiate，并从同一DRNG状态连续执行三次
 Generate(`R_BYTES`)，输出依次经过偶、偶、奇`trike_parity_map_stream`。Instantiate和三次Generate
-顺序复用一个压缩服务，并提供外部压缩端口供KEM顶层进一步共享。13-bit、4-byte seed的独立SM3 toy
-fixture逐byte匹配`t1/t2/r1`和最终DRNG状态；含3拍结果停顿固定2,281拍。
+顺序复用一个压缩服务，并提供外部压缩端口供KEM顶层进一步共享。Generate完成脉冲先寄存为12组本地
+副本，分别驱动三份440-bit状态的四个110-bit分组；复制数量和捕获节拍由公开结构固定。13-bit、4-byte
+seed的独立SM3 toy fixture逐byte匹配`t1/t2/r1`和最终DRNG状态；含3拍结果停顿固定2,284拍。
 
 `scripts/gen_trike_encaps_fixture.py`从官方TRIKE-2 Count=0恢复Encaps消息`m`。KAT全局DRNG在KeyGen中
 依次生成`seed/sigma2/sigma`，秘密多项式采样使用局部DRNG，因此第四次32-byte Generate是`m`。
@@ -387,8 +388,26 @@ H1/H2/H3、H4 error-vector、四次共享稀疏乘法、`L(e)`、`c2`写回和`K
 L/K双pass和密文输出均由公开计数器预取同步RAM。四个哈希/DRNG阶段经顶层mux复用一个
 `trike_sm3_service`。官方TRIKE-2 Count=0端到端测试逐byte匹配3,928-byte CT和32-byte SS；连续输入、
 连续接收时固定2,121,759个busy周期。输入`valid`空拍或输出`ready`停顿只延长外部事务，内部阶段选择、
-哈希调用数、support回放数和RAM地址序列不依赖消息、公钥或错误位置。该顶层尚无Vivado资源、Fmax和
-布局布线报告。
+哈希调用数、support回放数和RAM地址序列不依赖消息、公钥或错误位置。
+
+`trike_encaps_synth_top`在核与package边界之间使用8-bit单项输入缓冲，以及密文和共享密钥的片内暂存加
+IOB输出两级寄存边界；输出数据、valid、last、busy和done均从IOB寄存器驱动。该wrapper按公开
+2,012-byte输入长度控制输入缓冲，并在最后一个共享密钥byte被外部接收时产生done。连续输入与连续接收的
+官方TRIKE-2端到端周期为2,127,733拍，3,928-byte密文与32-byte共享密钥逐byte匹配KAT。接口缓冲增加
+5,974个固定周期，不改变核内算法调度。
+
+用户提供的Vivado 2023.2、`xc7k355tffg901-2L`、10 ns、0.100 ns不确定度的Fully Routed Encaps
+检查点使用48,575 LUT、60,982 FF、24,554 Slice、15 RAMB36、3 RAMB18、4 DSP和37 IOB，即
+16.5 Block RAM Tile。整体setup WNS/TNS为-3.937 ns/-214.375 ns，共435个失败端点；hold WHS为
++0.034 ns。整体最差路径位于片内RAM至byte选择和OBUF的输出边界。限定寄存器到寄存器的内部WNS为
+-1.534 ns：最差内部路径为H123 Generate完成脉冲到父级440-bit状态捕获，扇出1,322、数据路径
+11.158 ns，其中10.856 ns为路由；下一组路径为稀疏乘法`b_word_idx_q`到result RAM写数据，约34级逻辑。
+层次资源中H123为17,032 LUT/27,472 FF，H4错误采样约8,072 LUT/11,137 FF，L/K分别为
+5,662/5,776和4,841/5,772，UV为3,289 LUT/632 FF及7 RAMB36/2 RAMB18。
+
+当前RTL已对上述三类边界加入输出寄存缓冲、H123完成脉冲本地复制和稀疏乘法贡献/地址寄存。XDC明确
+使用2 ns max、0 ns min输入输出延迟；实现脚本自动生成内部寄存器路径与高扇出报告。修改后的Vivado
+LUT、FF、Slice、BRAM、DSP、setup/hold和Fmax均待同条件重新实现，功能回归通过不代表时序已经收敛。
 
 `trike_poly_mul_core`提供稠密word流与固定数量稀疏index两种输入。稠密路径使用digit-serial
 carryless乘法、双长度product存储和$x^r-1$固定折返；稀疏路径逐index扫描B，并把每个循环移位word
@@ -414,8 +433,8 @@ backpressure；TRIKE-2真实参数回归的稠密/稀疏周期分别为1,967,372
 720 Slice、4 RAMB36、0 DSP，100 MHz内部时钟WNS为0.364 ns、WHS为0.080 ns；该工程同时加载了旧
 `decoder.xdc`，且实现级I/O delay未生效，因此这些数字属于待干净约束复测的初步结果，不作为物理签核。
 
-未实现范围包括Encaps阶段总控制和KEM序列化控制器。KEM公共核未接入
-`decoder_top`，其Vivado资源与时序为待测，不计入本文译码器物理基线。
+未实现范围包括KeyGen固定候选调度、Decaps阶段控制和完整KEM统一序列化控制器。KEM公共核未接入
+`decoder_top`；Encaps物理结果单列，不计入本文译码器物理基线。
 
 ## 验证状态
 
@@ -430,6 +449,8 @@ make test-kem-unit
 make test-trike-reference-kat
 make test-trike-encaps-components-reference
 make test-trike-encaps-hash-reference
+make test-trike-encaps-core-reference
+make test-trike-encaps-synth-reference
 make test-trike-error-store-reference
 make test-trike-h4-vector-reference
 make test-trike-poly-reference

@@ -54,6 +54,7 @@ module trike_h123_vectors #(
   logic   [           439:0] reseed_counter_q;
   logic                      generate_done_seen_q;
   logic                      parity_done_seen_q;
+  (* keep = "true", max_fanout = 128 *) logic   [            11:0] generate_done_rep_q;
 
   logic                      instantiate_start;
   logic                      instantiate_seed_ready;
@@ -221,12 +222,14 @@ module trike_h123_vectors #(
       reseed_counter_q <= '0;
       generate_done_seen_q <= 1'b0;
       parity_done_seen_q <= 1'b0;
+      generate_done_rep_q <= '0;
       o_done <= 1'b0;
       o_v <= '0;
       o_c <= '0;
       o_reseed_counter <= '0;
     end else begin
       o_done <= 1'b0;
+      generate_done_rep_q <= {12{generate_done}};
 
       unique case (state_q)
         ST_IDLE: begin
@@ -256,19 +259,25 @@ module trike_h123_vectors #(
 
         ST_RUN_VECTOR: begin
           if (o_vector_valid && i_vector_ready) vector_byte_q <= vector_byte_q + 1'b1;
-          if (generate_done) begin
-            v_q <= generate_v;
-            c_q <= generate_c;
-            reseed_counter_q <= generate_reseed_counter;
+          for (int state_bit = 0; state_bit < 440; state_bit++) begin
+            if (generate_done_rep_q[state_bit/110]) v_q[state_bit] <= generate_v[state_bit];
+            if (generate_done_rep_q[4+(state_bit/110)]) c_q[state_bit] <= generate_c[state_bit];
+            if (generate_done_rep_q[8+(state_bit/110)]) begin
+              reseed_counter_q[state_bit] <= generate_reseed_counter[state_bit];
+            end
+          end
+          if (generate_done_rep_q[0]) begin
             generate_done_seen_q <= 1'b1;
           end
           if (parity_done) parity_done_seen_q <= 1'b1;
 
-          if ((generate_done || generate_done_seen_q) && (parity_done || parity_done_seen_q)) begin
+          if ((generate_done_rep_q[0] || generate_done_seen_q) &&
+              (parity_done || parity_done_seen_q)) begin
             if (vector_select_q == 2'd2) begin
-              o_v <= generate_done ? generate_v : v_q;
-              o_c <= generate_done ? generate_c : c_q;
-              o_reseed_counter <= generate_done ? generate_reseed_counter : reseed_counter_q;
+              o_v <= generate_done_rep_q[0] ? generate_v : v_q;
+              o_c <= generate_done_rep_q[0] ? generate_c : c_q;
+              o_reseed_counter <= generate_done_rep_q[0] ? generate_reseed_counter :
+                  reseed_counter_q;
               o_done <= 1'b1;
               state_q <= ST_IDLE;
             end else begin

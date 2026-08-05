@@ -134,6 +134,12 @@ report_timing -delay_type max -max_paths 20 -sort_by group \
   -file [file join $build_dir post_route_setup_paths.rpt]
 report_timing -delay_type min -max_paths 20 -sort_by group \
   -file [file join $build_dir post_route_hold_paths.rpt]
+set core_registers [all_registers -clock [get_clocks core_clk]]
+report_timing -from $core_registers -to $core_registers -delay_type max \
+  -max_paths 20 -sort_by slack \
+  -file [file join $build_dir post_route_internal_setup_paths.rpt]
+report_high_fanout_nets -timing -load_types -max_nets 30 \
+  -file [file join $build_dir post_route_high_fanout.rpt]
 report_clock_utilization -file [file join $build_dir post_route_clock_utilization.rpt]
 report_methodology -file [file join $build_dir post_route_methodology.rpt]
 report_cdc -file [file join $build_dir post_route_cdc.rpt]

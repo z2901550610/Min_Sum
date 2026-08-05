@@ -5,7 +5,7 @@ module tb_trike_h123_vectors;
   localparam int M_BYTES = 4;
   localparam int R_BITS = 13;
   localparam int R_BYTES = (R_BITS + 7) / 8;
-  localparam int EXPECTED_BUSY_CYCLES = 2281;
+  localparam int EXPECTED_BUSY_CYCLES = 2284;
   localparam logic [439:0] EXPECTED_V =
       440'h48028506749d882fc3c330fe4fbcaa54bfc217d2c7ec8e8cd5a7e7e930f7e8e458d96010b5bf1d03b31a6b521100185f1f6e0b881649d4;
   localparam logic [439:0] EXPECTED_C =

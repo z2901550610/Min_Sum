@@ -13,6 +13,9 @@ set_false_path -from $core_rst_port
 # assigning package pins to this implementation-only core wrapper. XDC files
 # support collection filters, while general Tcl flow-control commands are not
 # accepted by the project-mode XDC reader.
-set_input_delay -clock core_clk 2.000 \
+set_input_delay -clock core_clk -max 2.000 \
   [get_ports -filter {DIRECTION == IN && NAME != i_clk && NAME != i_rst_n}]
-set_output_delay -clock core_clk 2.000 [get_ports -filter {DIRECTION == OUT}]
+set_input_delay -clock core_clk -min 0.000 \
+  [get_ports -filter {DIRECTION == IN && NAME != i_clk && NAME != i_rst_n}]
+set_output_delay -clock core_clk -max 2.000 [get_ports -filter {DIRECTION == OUT}]
+set_output_delay -clock core_clk -min 0.000 [get_ports -filter {DIRECTION == OUT}]

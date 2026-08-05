@@ -159,6 +159,8 @@ module trike_poly_mul_core #(
   logic   [                         (2*WORD_W)-1:0] sparse_first_wide_c;
   logic   [                             WORD_W-1:0] sparse_contribution_c[0:2];
   logic   [                        WORD_ADDR_W-1:0] sparse_result_addr_c[0:2];
+  logic   [                             WORD_W-1:0] sparse_contribution_q[0:2];
+  logic   [                        WORD_ADDR_W-1:0] sparse_result_addr_q[0:2];
 
   integer                                           sparse_sum_c;
   integer                                           sparse_dest_start_c;
@@ -458,30 +460,30 @@ module trike_poly_mul_core #(
 
       ST_SPARSE_WRITE_0: begin
         result_we = 1'b1;
-        result_waddr = sparse_result_addr_c[0];
-        result_wdata = result_rdata ^ sparse_contribution_c[0];
+        result_waddr = sparse_result_addr_q[0];
+        result_wdata = result_rdata ^ sparse_contribution_q[0];
       end
 
       ST_SPARSE_READ_1: begin
         result_re = 1'b1;
-        result_raddr = sparse_result_addr_c[1];
+        result_raddr = sparse_result_addr_q[1];
       end
 
       ST_SPARSE_WRITE_1: begin
         result_we = 1'b1;
-        result_waddr = sparse_result_addr_c[1];
-        result_wdata = result_rdata ^ sparse_contribution_c[1];
+        result_waddr = sparse_result_addr_q[1];
+        result_wdata = result_rdata ^ sparse_contribution_q[1];
       end
 
       ST_SPARSE_READ_2: begin
         result_re = 1'b1;
-        result_raddr = sparse_result_addr_c[2];
+        result_raddr = sparse_result_addr_q[2];
       end
 
       ST_SPARSE_WRITE_2: begin
         result_we = 1'b1;
-        result_waddr = sparse_result_addr_c[2];
-        result_wdata = result_rdata ^ sparse_contribution_c[2];
+        result_waddr = sparse_result_addr_q[2];
+        result_wdata = result_rdata ^ sparse_contribution_q[2];
       end
 
       ST_OUTPUT_FETCH: begin
@@ -678,6 +680,10 @@ module trike_poly_mul_core #(
         end
 
         ST_SPARSE_READ_0: begin
+          for (int contribution_idx = 0; contribution_idx < 3; contribution_idx++) begin
+            sparse_contribution_q[contribution_idx] <= sparse_contribution_c[contribution_idx];
+            sparse_result_addr_q[contribution_idx]  <= sparse_result_addr_c[contribution_idx];
+          end
           state_q <= ST_SPARSE_WRITE_0;
         end
 

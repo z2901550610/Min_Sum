@@ -1,6 +1,8 @@
 `timescale 1ns / 1ps
 
-module tb_trike_encaps_core_reference;
+module tb_trike_encaps_core_reference #(
+    parameter bit USE_SYNTH_TOP = 1'b0
+);
 
   /* verilator lint_off UNUSEDPARAM */
   `include "generated/trike_encaps_reference_case.svh"
@@ -9,6 +11,7 @@ module tb_trike_encaps_core_reference;
   localparam int REF_INPUT_BYTES = REF_R_BYTES + (2 * REF_M_BYTES);
   localparam int REF_CT_BYTES = (2 * REF_R_BYTES) + REF_M_BYTES;
   localparam int REF_BUSY_CYCLES = 2121759;
+  localparam int REF_SYNTH_BUSY_CYCLES = 2127733;
 
   logic       clk;
   logic       rst_n;
@@ -31,29 +34,52 @@ module tb_trike_encaps_core_reference;
   int         ciphertext_count;
   int         shared_secret_count;
 
-  trike_encaps_core #(
-      .M_BYTES     (REF_M_BYTES),
-      .R_BITS      (REF_R_BITS),
-      .ERROR_WEIGHT(REF_ERROR_WEIGHT),
-      .WORD_W      (64)
-  ) dut (
-      .i_clk                (clk),
-      .i_rst_n              (rst_n),
-      .i_start              (start),
-      .i_input_valid        (input_valid),
-      .i_input_data         (input_data),
-      .o_input_ready        (input_ready),
-      .o_ciphertext_valid   (ciphertext_valid),
-      .o_ciphertext_data    (ciphertext_data),
-      .o_ciphertext_last    (ciphertext_last),
-      .i_ciphertext_ready   (ciphertext_ready),
-      .o_shared_secret_valid(shared_secret_valid),
-      .o_shared_secret_data (shared_secret_data),
-      .o_shared_secret_last (shared_secret_last),
-      .i_shared_secret_ready(shared_secret_ready),
-      .o_busy               (busy),
-      .o_done               (done)
-  );
+  generate
+    if (USE_SYNTH_TOP) begin : g_synth_top
+      trike_encaps_synth_top dut (
+          .i_clk                (clk),
+          .i_rst_n              (rst_n),
+          .i_start              (start),
+          .i_input_valid        (input_valid),
+          .i_input_data         (input_data),
+          .o_input_ready        (input_ready),
+          .o_ciphertext_valid   (ciphertext_valid),
+          .o_ciphertext_data    (ciphertext_data),
+          .o_ciphertext_last    (ciphertext_last),
+          .i_ciphertext_ready   (ciphertext_ready),
+          .o_shared_secret_valid(shared_secret_valid),
+          .o_shared_secret_data (shared_secret_data),
+          .o_shared_secret_last (shared_secret_last),
+          .i_shared_secret_ready(shared_secret_ready),
+          .o_busy               (busy),
+          .o_done               (done)
+      );
+    end else begin : g_core
+      trike_encaps_core #(
+          .M_BYTES     (REF_M_BYTES),
+          .R_BITS      (REF_R_BITS),
+          .ERROR_WEIGHT(REF_ERROR_WEIGHT),
+          .WORD_W      (64)
+      ) dut (
+          .i_clk                (clk),
+          .i_rst_n              (rst_n),
+          .i_start              (start),
+          .i_input_valid        (input_valid),
+          .i_input_data         (input_data),
+          .o_input_ready        (input_ready),
+          .o_ciphertext_valid   (ciphertext_valid),
+          .o_ciphertext_data    (ciphertext_data),
+          .o_ciphertext_last    (ciphertext_last),
+          .i_ciphertext_ready   (ciphertext_ready),
+          .o_shared_secret_valid(shared_secret_valid),
+          .o_shared_secret_data (shared_secret_data),
+          .o_shared_secret_last (shared_secret_last),
+          .i_shared_secret_ready(shared_secret_ready),
+          .o_busy               (busy),
+          .o_done               (done)
+      );
+    end
+  endgenerate
 
   always #5 clk = ~clk;
 
@@ -115,6 +141,7 @@ module tb_trike_encaps_core_reference;
     repeat (3) @(posedge clk);
     @(negedge clk);
     rst_n = 1'b1;
+    if (USE_SYNTH_TOP) repeat (3) @(negedge clk);
     start = 1'b1;
     @(negedge clk);
     start = 1'b0;
@@ -140,8 +167,9 @@ module tb_trike_encaps_core_reference;
       $fatal(1, "shared-secret transfer count mismatch got=%0d expected=%0d", shared_secret_count,
              REF_M_BYTES);
     end
-    if (busy_cycles != REF_BUSY_CYCLES) begin
-      $fatal(1, "Encaps cycle mismatch got=%0d expected=%0d", busy_cycles, REF_BUSY_CYCLES);
+    if (busy_cycles != (USE_SYNTH_TOP ? REF_SYNTH_BUSY_CYCLES : REF_BUSY_CYCLES)) begin
+      $fatal(1, "Encaps cycle mismatch got=%0d expected=%0d", busy_cycles,
+             USE_SYNTH_TOP ? REF_SYNTH_BUSY_CYCLES : REF_BUSY_CYCLES);
     end
 
     $display("tb_trike_encaps_core_reference PASS cycles=%0d ct=%0d ss=%0d", busy_cycles,

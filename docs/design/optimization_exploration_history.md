@@ -3328,3 +3328,52 @@ WHS和实际Fmax均待Vivado测量。
 7. 器件、速度等级、参数、XDC 或 Vivado 版本变化后的报告不能与基线直接计算增减量。
 8. 切断一条关键路径可能把瓶颈转移到相邻流水；只有 routed top-path 集合和固定译码时间共同改善时，才能
    判定为时序性能收益。
+
+### 阶段67：完整Encaps首轮物理基线与关键路径寄存分段（2026-08-05）
+
+目标与假设：根据完整TRIKE-2 Encaps的首轮Fully Routed报告，分离package I/O边界和片内关键路径，
+用固定寄存边界切断RAM到OBUF、H123完成脉冲高扇出以及稀疏乘法组合移位到BRAM写数据三类路径。所有
+新增状态只由公开计数器、ready/valid握手或固定阶段完成脉冲控制，不引入秘密相关调度。
+
+首轮物理基线：用户提供的报告使用Windows Vivado 2023.2、`xc7k355tffg901-2L`、10 ns时钟、
+0.100 ns clock uncertainty、2 ns I/O delay，设计`trike_encaps_synth_top`为Fully Routed。
+
+| 指标 | 首轮Encaps检查点 |
+| --- | ---: |
+| LUT / FF / Slice | 48,575 / 60,982 / 24,554 |
+| RAMB36 / RAMB18 / Block RAM Tile | 15 / 3 / 16.5 |
+| DSP / IOB | 4 / 37 |
+| 整体setup WNS / TNS / failing endpoints | -3.937 ns / -214.375 ns / 435 |
+| 内部register-to-register WNS | -1.534 ns |
+| hold WHS | +0.034 ns |
+
+hierarchical utilization中H123为17,032 LUT/27,472 FF，其中Generate为7,205/5,478、共享SM3为
+6,026/3,000；H4错误采样约8,072/11,137；L和K分别为5,662/5,776和4,841/5,772；UV为
+3,289/632及7 RAMB36/2 RAMB18。整体最差路径来自片内输出RAM，经byte选择网络和OBUF到package输出。
+内部最差路径从`u_h123/u_generate/generate_done`到父级440-bit状态寄存器，扇出1,322、数据路径
+11.158 ns，其中route为10.856 ns。第二组负裕量路径从稀疏乘法`b_word_idx_q`到result RAM `DI`，
+约10.8至10.93 ns、34级逻辑，其中约7.5 ns为route、3.39 ns为logic。
+
+methodology报告共137项warning：49项DPIR-1来自采样器32x32 multiply-high的异步复位输入寄存器不能
+合入DSP输入寄存器，4项SYNTH-10对应预期DSP乘法，49项TIMING-16包含内部和I/O负裕量，35项XDCH-2
+来自输入输出min/max delay同时为2 ns。reset BUFG扇出38,244但slack为+2.516 ns，不是该检查点的
+setup瓶颈。DPIR-1的同步复位或DSP输入流水调整会改变采样器寄存边界，留待本阶段物理复测后单独探索。
+
+关键实现：
+
+- `trike_encaps_synth_top`在8-bit输入端加入单项寄存缓冲，密文和共享密钥使用片内暂存寄存器加IOB输出
+  寄存器两级边界；done只在最后一个共享密钥byte被外部接收时产生；
+- `trike_h123_vectors`将Generate完成脉冲寄存复制为12组，分别控制V/C/reseed三份440-bit状态的四个
+  110-bit分组；
+- `trike_poly_mul_core`在每个稀疏B word开始时寄存三组贡献与result地址，后续三次BRAM读改写不再经过
+  `b_word_idx_q`到循环移位和地址计算的完整组合链；FSM状态数和稀疏乘法周期公式不变；
+- XDC明确使用输入输出max 2 ns、min 0 ns；Vivado脚本增加内部register-to-register setup和高扇出报告。
+
+验证范围与定量结果：RTL格式、Verible lint、KEM单元测试、单SM3层次检查、官方组件、L/K、错误存储、
+H4向量、原始Encaps核和寄存I/O wrapper完整回归通过。H123 toy由2,281拍变为固定2,284拍，真实TRIKE-2
+H123保持44,640拍；官方多项式稠密/稀疏周期保持1,967,372/60,826拍。原始Encaps核保持2,121,759拍；
+wrapper连续流为2,127,733拍，增加5,974拍固定接口开销，3,928-byte CT与32-byte SS均匹配官方KAT。
+
+结论与状态：寄存分段RTL暂时保留，功能与固定周期验证完成；修改后的LUT、FF、Slice、RAMB36/RAMB18、
+DSP、整体/内部setup WNS/TNS、hold WHS、实际Fmax和top-path迁移均待相同器件、Vivado、XDC和报告阶段
+重新实现。首轮报告只作为本阶段优化输入，不能推测新RTL已经达到100 MHz。
