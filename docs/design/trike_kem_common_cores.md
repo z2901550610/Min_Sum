@@ -55,28 +55,47 @@ DRNG的第一个byte进入`random[7:0]`。
 
 ```mermaid
 flowchart TD
-    RNG["外部随机源<br/>seed、sigma、sigma2"] --> SECRET["秘密多项式采样<br/>待实现：secret-sample微程序"]
+    RNG["外部随机源<br/>seed、sigma、sigma2"] --> SECRET["已有：trike_keygen_secret_sampler<br/>固定16组候选"]
     SECRET --> DRNG4["已有：trike_sm3_drng_generate_stream<br/>Generate(4 byte)"]
     DRNG4 --> SAMPLER["已有：trike_sampler_candidate<br/>已有：trike_fixed_weight_sampler"]
-    SAMPLER --> WEAK["待实现：weak-key-test微程序"]
+    SAMPLER --> WEAK["已有：trike_weak_key_test<br/>6项固定距离直方图扫描"]
     WEAK --> HIDX["h0、h1、h2及稀疏索引"]
 
     RNG --> HASHV["已有：trike_h123_vectors<br/>Instantiate + 三次Generate<br/>偶、偶、奇映射"]
     HASHV --> TVEC["t1、t2、r1"]
 
-    HIDX --> POLY["已有：trike_poly_mul_core<br/>已有：trike_poly_inv_core"]
+    HIDX --> POLY["已有：trike_keygen_arith_core<br/>4次乘法 + 2次固定链求逆"]
     TVEC --> POLY
     POLY --> T0["t0=(h0*r1+h1)/(t1+r1)"]
     T0 --> R2["r2=(t0*t2+h2)/(t0+h0)"]
-    R2 --> PACK["待实现：统一IO/密钥写回控制"]
+    R2 --> PACK["已有：trike_keygen_core<br/>PK/SK窄流序列化"]
     T0 --> PACK
     HIDX --> PACK
     PACK --> PK["pk=(sigma,r2)"]
     PACK --> SK["sk：h索引、h0、t0、r2、sigma、sigma2"]
 ```
 
-Reference C的弱密钥测试失败后继续从同一DRNG上下文生成三组候选。该循环次数由候选密钥决定。固定周期
-KeyGen需要采用公开固定候选批次、全量测试和无分支首个合格候选选择，并定义批次内没有合格候选时的结果。
+`trike_keygen_secret_sampler`从同一DRNG上下文连续生成16组候选，每组固定执行三次35-weight采样和
+全部六项`trike_weak_key_test`。第一组合格候选用mask写入结果RAM，其是否合格不改变候选数、SM3调用数、
+弱检测RAM地址或复制周期。16组均不合格时仍按相同周期完成，输出`success=0`和全零support；上层将该次
+调用作为显式失败返回，不在核内执行数据相关重试。
+
+`trike_keygen_arith_core`保存三组support与`t1/t2/r1`，用一个通用`trike_poly_mul_core`顺序完成
+`h0*r1`、`t0`、`t0*t2`和`r2`四次乘法，用一个`trike_poly_inv_core`顺序完成两个分母的固定链求逆。
+分子加`h1/h2`与第二个分母加`h0`在RAM写入或读取边界直接XOR稀疏word mask。TRIKE-2连续握手固定
+93,924,706拍，逐word匹配官方`t0/r2`。该功能基线包含两个物理乘法数据通路：外层通用乘法器一条，
+求逆核内部复用的一条；收敛为单一乘法器需要给求逆核增加外部乘法服务接口并重新验证周期与时序。
+
+`trike_keygen_core`的随机输入为96 byte，顺序是`key_seed || sigma2 || sigma`，对应Reference C向外部
+随机源发出的三次32-byte请求。顶层顺序运行固定候选秘密采样、H1/H2/H3、KeyGen算术和密钥输出；秘密
+采样与H123通过公开FSM复用一个`trike_sm3_service`。PK按`r2 || sigma`输出1,980 byte，SK按三组
+32-bit little-endian support、`h0 || t0 || r2 || sigma || sigma2`输出6,328 byte。官方候选0合格和
+候选0弱/候选1合格两组输入均逐byte匹配软件golden，连续输入输出时固定98,757,463拍。`success`只报告
+16组候选内是否找到合格support，不改变H123、算术或序列化调度。
+
+`trike_keygen_synth_top`把完整核封装为可实现的窄物理边界。随机输入、PK和SK均为8-bit流，输入和两路
+输出分别设置一项片内缓冲，外部输出使用IOB寄存器；多项式word、support数组和密钥RAM不进入顶层端口。
+官方向量连续握手固定98,765,138拍，完整PK/SK逐byte匹配，层次检查仍只有一个`sm3_compress`。
 
 ### Encaps
 
@@ -623,23 +642,28 @@ syndrome、摘要值或H4碰撞模式：
 | H1/H2/H3 vectors | 一次Instantiate、三次Generate(`R_BYTES`)和偶/偶/奇映射 | seed输入`valid`空拍；vector输出`ready`低电平 |
 | fixed-weight sampler | 固定`WEIGHT`个随机数和`WEIGHT^2`次index RAM读取 | 随机输入`valid`空拍；index输出`ready`低电平 |
 | H4 error sampler | 一次Instantiate和固定`t`次Generate(4 byte)/candidate扫描 | seed输入`valid`空拍；index输出`ready`低电平 |
+| weak-key test | 固定6次直方图清零、pair更新与score扫描 | support装载与start由上层公开FSM驱动 |
+| KeyGen secret sampler | 固定16组、每组三次Generate(4 byte)序列和一次完整weak-key test | seed输入`valid`空拍；support输出`ready`低电平 |
 | H4 error vector/store | 固定清零`3*PADDED_R_BYTES`并对`t`个位置各执行一次RAM读改写 | seed输入`valid`空拍；完成后读取端口由公开地址驱动 |
 | `trike_poly_mul_core` | 公开`WORDS/DIGITS/SPARSE_WEIGHT`决定装载、乘法、归约和输出访问数 | 输入`valid`空拍；输出`ready`低电平 |
 | `trike_encaps_uv_core` | 固定4次稀疏乘法，每次回放全部`t`个support位置 | operand输入`valid`空拍；结果`ready`低电平 |
 | `trike_encaps_core` | H123、H4、4次乘法、L、c2、K和固定长度序列化按公开FSM顺序执行 | 顶层输入`valid`空拍；密文或共享密钥输出`ready`低电平 |
 | `trike_encaps_synth_top` | 公开2,012-byte输入缓冲及固定长度密文/共享密钥的两级寄存输出 | 外部输入`valid`空拍；外部输出`ready`低电平 |
 | `trike_poly_inv_core` | 公开$r$的加法链决定Frobenius扫描、稠密乘法和scratch RAM访问数 | 输入`valid`空拍；输出`ready`低电平 |
+| `trike_keygen_arith_core` | 固定4次环乘、2次公开加法链求逆及完整operand/result RAM扫描 | 输入装载在start前完成；结果`ready`低电平 |
+| `trike_keygen_core` | 固定16组秘密候选、H123、4次环乘、2次求逆和固定PK/SK长度 | 96-byte随机输入`valid`空拍；PK/SK输出`ready`低电平 |
+| `trike_keygen_synth_top` | 96-byte随机输入及固定1,980/6,328-byte PK/SK的寄存窄流边界 | 外部输入`valid`空拍；PK/SK输出`ready`低电平 |
 | compare/select | 固定组合XOR归约和全宽mask | 无握手 |
 
 KEM顶层需要用公开地址调度的RAM连续驱动这些接口，或把固定数量的dummy/等待拍计入公开周期预算。
 `valid`和`ready`不能由秘密数据、译码收敛、哈希结果或碰撞结果控制。模块保证的是固定控制流和固定存储
 访问次数；普通CMOS/FPGA逻辑的翻转活动仍随数据变化，这些核没有加入masking、dual-rail或平衡功耗结构。
 
-Reference C的`generate_secret_key`在`weak_key_test`失败时重复生成三组秘密多项式。该重采样次数由候选
-密钥决定，因此完整KeyGen当前不具备固定总周期。硬件KeyGen需要单独确定公开的固定候选预算、全量执行和
-无分支首个合格候选选择策略，并定义固定预算内没有合格候选时的行为；该策略需要与KAT和失败概率一起验证。
-Encaps顶层在连续输入和连续接收条件下具有固定总周期；Decaps仍需在固定7轮译码、错误重生成和重加密
-检查接通后整体证明。
+KeyGen秘密support阶段采用16组公开固定候选预算。官方Count=0在候选0合格；补充种子使候选0弱、候选1
+合格，两组连续握手总周期均为4,778,975拍。10,000个确定性软件样本中出现22个首候选弱密钥，最长连续
+弱候选为1；该结果只用于工程预算选择，不是16组失败概率的证明。完整KeyGen在候选0合格和候选1才合格
+两种输入下均固定98,757,463拍。Encaps顶层在连续输入和连续接收条件下具有固定总周期；Decaps仍需在
+固定7轮译码、错误重生成和重加密检查接通后整体证明。
 
 ## 验证
 
@@ -661,6 +685,13 @@ Encaps顶层在连续输入和连续接收条件下具有固定总周期；Decap
 | `tb_trike_fixed_weight_sampler` | 碰撞/无碰撞结果、两者固定40拍、全index输出和backpressure稳定性 |
 | `tb_trike_drng_weight_sampler` | 独立SM3 fixture的三次Generate(4 byte)、little-endian候选、最终DRNG状态和固定1,448拍 |
 | `tb_trike_h4_error_sampler` | Instantiate(`m||r2`)至三个错误位置的完整toy链、最终DRNG状态和固定2,313拍 |
+| `tb_trike_weak_key_test` | 两组13-bit支持集的六项分数、弱键判定和相同330拍 |
+| `tb_trike_keygen_secret_sampler_reference` | 官方TRIKE-2 Count=0的105个秘密索引、六项分数、最终DRNG状态和固定4,778,975拍 |
+| `tb_trike_keygen_secret_sampler_schedule` | 候选0为弱、候选1合格时的首合格选择、完整support和相同4,778,975拍 |
+| `tb_trike_keygen_arith_core` | 13-bit环的两组完整`t0/r2`计算、结果padding与相同925拍 |
+| `tb_trike_keygen_arith_reference` | 官方TRIKE-2的`t1/t2/r1`和三组support输入，逐word检查`t0/r2`及固定93,924,706拍 |
+| `tb_trike_keygen_core_reference` | 官方与弱首候选两组完整KeyGen，逐byte检查1,980-byte PK、6,328-byte SK及相同98,757,463拍 |
+| `tb_trike_keygen_core_reference`，`USE_SYNTH_TOP=1` | 官方向量经输入/PK/SK寄存窄流wrapper，逐byte检查完整密钥及固定98,765,138拍 |
 | `tb_trike_error_support_store_reference` | 官方TRIKE-2的263个support位置、5,952-byte padded error RAM和固定6,478拍 |
 | `tb_trike_h4_error_vector_reference` | 官方TRIKE-2 H4至两种错误表示的组合服务，完整RAM逐byte/逐index对拍和固定207,018拍 |
 | `tb_trike_poly_mul_core` | 13-bit非word对齐环的稠密/稀疏乘法、越界index dummy写回、数据无关周期和backpressure稳定性 |
@@ -690,7 +721,7 @@ H2为766/1,043，pseudohash本层控制与摘要状态为151/1,044。后续面�
 收敛为一套block builder/chaining-state控制，再评估将68×32-bit message schedule映射到同步RAM；
 两项都保持一个物理SM3 lane和公开固定调度。
 
-`make check-trike-sm3-sharing`对八个复合顶层运行Yosys层次检查，证明每个顶层的
+`make check-trike-sm3-sharing`对九个复合顶层运行Yosys层次检查，证明每个顶层的
 `sm3_compress`实例数为1。该检查确认RTL层次实例收敛，不代替目标Vivado的LUT、FF、Slice和时序报告。
 
 `make test-trike-reference-kat`直接编译最新材料中的TRIKE-2/5/7/9 Reference C，各生成10组完整
@@ -731,12 +762,23 @@ Python多项式Euclid计算golden并额外验证$h_0h_0^{-1}=1$；RTL使用Refer
 34级逻辑。methodology报告的DPIR-1共49项来自采样器32x32 multiply-high输入的异步复位寄存器，
 SYNTH-10共4项对应预期的4个DSP；这两类告警不属于本次最差内部路径。
 
-当前RTL的寄存I/O边界、H123完成脉冲复制和稀疏贡献/地址寄存已经通过完整功能回归。XDC将I/O约束明确
-写为max 2 ns、min 0 ns，避免相同min/max引起的XDCH-2；Vivado脚本固定输出内部setup路径和高扇出
-报告。修改后的物理资源、整体/内部WNS、hold和关键路径迁移均待同条件重新实现确认。
+寄存I/O边界、H123完成脉冲复制和稀疏贡献/地址寄存的同条件Vivado复测使用47,859 LUT、61,222 FF、
+23,354 Slice、15 RAMB36、3 RAMB18、4 DSP和37 IOB。整体setup WNS/TNS为+0.025 ns/0，hold
+WHS/THS为+0.050 ns/0，内部register-to-register WNS为+0.378 ns，100 MHz通过。相对修改前检查点
+减少716 LUT和1,200 Slice、增加240 FF，BRAM/DSP/IOB不变。固定2,127,733拍在100 MHz下为
+21.27733 ms。
+
+内部最差路径从共享SM3的状态寄存器到L的H2摘要寄存器，9.761 ns数据路径中9.538 ns为route、逻辑级数
+为0；H123完成脉冲和稀疏乘法写数据路径退出内部前20条。高扇出表中reset BUFG slack为+6.335 ns，
+其余1320级DRNG控制网最差slack不低于+1.638 ns。当前物理优化不需要继续给H123或乘法器加流水。
+
+Vivado工程读取的导入XDC副本仍包含不带`-max/-min`的2 ns I/O delay，因此methodology保留35项
+XDCH-2；仓库XDC已经写为max 2 ns、min 0 ns。板级I/O签核前需要替换工程约束副本并重新生成timing与
+methodology报告。49项DPIR-1来自采样器DSP输入的异步复位寄存器，4项SYNTH-10对应预期DSP乘法；两者
+均未进入当前最差路径。
 
 ## 后续实现顺序
 
-1. 对寄存I/O `trike_encaps_synth_top`重新运行Vivado，确认整体/内部WNS、关键路径迁移及资源变化；
-2. 确定KeyGen弱密钥固定候选预算并实现KeyGen固定微程序；
+1. 在Vivado工程中替换旧XDC导入副本，复核I/O min/max与methodology；
+2. 对`trike_keygen_synth_top`建立Vivado资源/时序基线并定位两个乘法数据通路和RAM的物理代价；
 3. 连接Min-Sum Decaps、错误重生成、固定长度比较和隐式拒绝选择。

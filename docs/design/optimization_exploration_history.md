@@ -3374,6 +3374,153 @@ H4向量、原始Encaps核和寄存I/O wrapper完整回归通过。H123 toy由2,
 H123保持44,640拍；官方多项式稠密/稀疏周期保持1,967,372/60,826拍。原始Encaps核保持2,121,759拍；
 wrapper连续流为2,127,733拍，增加5,974拍固定接口开销，3,928-byte CT与32-byte SS均匹配官方KAT。
 
-结论与状态：寄存分段RTL暂时保留，功能与固定周期验证完成；修改后的LUT、FF、Slice、RAMB36/RAMB18、
-DSP、整体/内部setup WNS/TNS、hold WHS、实际Fmax和top-path迁移均待相同器件、Vivado、XDC和报告阶段
-重新实现。首轮报告只作为本阶段优化输入，不能推测新RTL已经达到100 MHz。
+物理复测结果：用户提供的第二组报告使用相同Vivado 2023.2、`xc7k355tffg901-2L`、10 ns时钟、
+0.100 ns uncertainty和Fully Routed阶段。资源与时序如下：
+
+| 指标 | 首轮检查点 | 寄存分段RTL | 变化 |
+| --- | ---: | ---: | ---: |
+| LUT | 48,575 | 47,859 | -716 |
+| FF | 60,982 | 61,222 | +240 |
+| Slice | 24,554 | 23,354 | -1,200 |
+| RAMB36 / RAMB18 / Tile | 15 / 3 / 16.5 | 15 / 3 / 16.5 | 不变 |
+| DSP / IOB | 4 / 37 | 4 / 37 | 不变 |
+| 整体setup WNS / TNS | -3.937 ns / -214.375 ns | +0.025 ns / 0 | WNS +3.962 ns |
+| 内部register-to-register WNS | -1.534 ns | +0.378 ns | +1.912 ns |
+| hold WHS / THS | +0.034 ns / 0 | +0.050 ns / 0 | WHS +0.016 ns |
+
+整体最差setup路径为IOB寄存的`o_done`经OBUF到输出端口。内部最差路径从共享SM3压缩状态
+`o_state_reg[119]`到L的H2摘要寄存器，数据路径9.761 ns，其中route 9.538 ns、logic 0.223 ns、0级
+组合逻辑；H123 Generate完成脉冲与稀疏乘法BRAM写数据路径均退出内部前20条。高扇出报告中reset BUFG
+slack为+6.335 ns；其余1320级DRNG控制网络最差slack为+1.638 ns。按内部WNS作一阶外推约
+103.93 MHz，不是超频签核；2,127,733拍在100 MHz下为21.27733 ms。
+
+约束边界：该Vivado工程仍引用工程目录中旧的导入XDC副本，第16和18行分别是未区分min/max的2 ns
+input/output delay，因此methodology仍报告35项XDCH-2。仓库`constraints/trike_kem_core.xdc`已使用
+max 2 ns、min 0 ns；替换工程副本后需要重新生成timing summary和methodology。49项DPIR-1和4项
+SYNTH-10分别对应采样器异步复位DSP输入与预期的multiply-high DSP分解，不是当前top path。
+
+结论与状态：寄存分段RTL保留，功能、固定周期和片内100 MHz物理验证完成；LUT与Slice同时下降，FF小幅
+增加，BRAM/DSP不变。当前进入KeyGen固定候选预算与微程序实现；板级I/O约束状态在工程XDC更新前保持
+待签核。
+
+### 阶段68：KeyGen固定候选秘密采样与弱密钥检测（2026-08-05）
+
+目标与假设：消除Reference C在弱密钥时继续重采样产生的数据相关循环，先闭合KeyGen的
+`h0/h1/h2`生成边界。候选预算、每组采样数、六项弱检测和结果复制长度均由公开TRIKE参数决定；弱检测
+结果只允许控制首个合格候选的写mask和最终success，不进入调度状态转移条件。
+
+关键实现：
+
+- `trike_weak_key_test`使用一份8-bit、深度`r`的同步距离直方图RAM，依次执行三项自相关和三项互相关；
+  每项固定完成全RAM清零、公开pair数的读改写和固定score地址扫描，累计`sum C(count[d],2)`；
+- `trike_keygen_secret_sampler`从一个32-byte seed实例化DRNG，固定执行16组候选；每组顺序调用三次
+  weight-35采样并执行完整弱检测，DRNG状态跨全部48次采样连续传递；
+- 首个合格候选在每组固定105拍复制扫描期间通过write mask保存；后续候选仍完整运行。16组均不合格时
+  固定完成并返回`success=0`和全零support，上层不得在本次调用内转入秘密相关重试；
+- fixture生成器直接解析官方TRIKE-2 Count=0，并额外确定性搜索一组候选0弱、候选1合格的调度向量。
+
+验证范围与定量结果：13-bit toy的两组support逐项匹配六项分数和弱键判定，均固定330拍。官方
+TRIKE-2 Count=0 support分数为`28/19/16/50/48/51`，弱检测固定244,638拍。完整秘密采样器逐项匹配
+105个support索引、首个候选号、六项分数和跑满16组后的`V/C/reseed_counter`；候选0合格与候选0弱、
+候选1合格两种输入的busy周期均为4,778,975拍。10,000个确定性软件样本中首候选弱22次，最长连续弱
+候选为1；该样本不构成16组全弱失败概率的严格证明。
+
+本阶段完成RTL格式、Verible lint、KEM单元测试和两组真实参数回归。尚未运行Vivado；LUT、FF、Slice、
+Block RAM Tile、RAMB36/RAMB18、DSP、setup WNS/TNS、hold WHS和Fmax均为待测。完整KeyGen还需要接通
+H1/H2/H3、两次求逆、环乘法、sigma/sigma2保存和PK/SK序列化。
+
+结论与状态：保留固定16候选架构作为KeyGen秘密support阶段的常数周期基线。下一步实现KeyGen算术
+微程序，并保持所有乘法、求逆和RAM回放次数由公开参数固定。
+
+### 阶段69：KeyGen固定环算术微程序与官方t0/r2闭环（2026-08-06）
+
+目标与假设：在秘密support阶段之后闭合KeyGen的两个除法表达式，并复用已有环乘法和固定加法链求逆核。
+四次乘法、两次求逆、operand装载、结果写回和输出扫描均由公开`r/d/WORD_W/DIGIT_W`决定；多项式值与
+support位置只影响RAM数据和XOR mask，不改变FSM状态数或访问次数。
+
+关键实现：
+
+- `trike_keygen_arith_core`用七份word RAM保存`t1/t2/r1`、共享分子、共享逆元、`t0/r2`；三组
+  support保留为index数组，并按当前公开word地址生成稀疏mask；
+- 一个外层`trike_poly_mul_core`依次执行`h0*r1`、分子乘第一逆元、`t0*t2`和分子乘第二逆元；
+- 一个`trike_poly_inv_core`依次计算`inverse(t1+r1)`和`inverse(t0+h0)`，核内同一个乘法器复用全部
+  固定加法链乘法；
+- `h1/h2`在对应乘法结果写入共享分子RAM时XOR，`h0`在第二分母送入求逆核时XOR，避免增加独立
+  全向量加法阶段；
+- KeyGen fixture从官方Count=0恢复`t1/t2/r1/t0/r2`，同时保留秘密采样fixture的support和DRNG证据。
+
+验证范围与定量结果：13-bit、`SECRET_WEIGHT=3`的两组不同输入逐项匹配独立Python环算术，均固定925拍。
+TRIKE-2、`R_BITS=15581`、`WORD_W=64`、`DIGIT_W=8`下，从官方`t1/t2/r1`和105个support开始，输出
+244个`t0` word与244个`r2` word全部匹配KAT，连续握手busy周期固定93,924,706拍。该周期包含一次
+稀疏乘法、三次稠密乘法、两次固定链求逆和两段结果输出，不包含秘密采样、H1/H2/H3或PK/SK序列化。
+
+RTL格式、Verible lint、KEM单元回归、官方算术回归和Yosys层次解析通过。Yosys层次解析使用未提供XPM
+定义的黑盒边界，不证明Vivado Block RAM映射。尚未运行本模块Vivado；LUT、FF、Slice、Block RAM Tile、
+RAMB36/RAMB18、DSP、setup WNS/TNS、hold WHS与Fmax均为待测。
+
+资源复用边界：当前算术核有两个物理乘法数据通路，即外层通用乘法器与求逆核内部乘法器。它们在KeyGen
+中不并发；将两者收敛为一个实例需要把求逆核改成外部乘法请求/响应接口。该重构可能减少product RAM，
+但会改变求逆接口和固定周期，留到完整KeyGen顶层功能闭合后作为独立物理优化实验。
+
+结论与状态：保留当前两数据通路结构作为完整KeyGen集成前的功能和固定周期基线。下一步连接秘密采样、
+H1/H2/H3、算术结果存储和PK/SK窄流序列化。
+
+### 阶段70：完整KeyGen固定微程序与官方PK/SK闭环（2026-08-06）
+
+目标与假设：把固定候选秘密采样、H1/H2/H3、KeyGen算术和官方密钥布局连接为一条完整硬件微程序。
+外部随机源边界固定为Reference C的三次32-byte请求，所有内部阶段、RAM扫描和输出长度由公开参数决定；
+秘密候选是否合格只进入首个结果写mask和最终success状态。
+
+关键实现：
+
+- `trike_keygen_core`输入96 byte `key_seed || sigma2 || sigma`，缓存后顺序启动秘密采样、H123和算术核；
+- 秘密采样器与H123均使用外部压缩端口，顶层公开FSM将两者请求mux到一个`trike_sm3_service`；
+- 秘密support输出同时保存到顶层数组并装载算术核；H123 byte输出按little-endian每8 byte组成operand word，
+  最后一个非对齐word的未使用bit保持零；
+- 算术核的`t0/r2`输出保存到两份同步word RAM。PK固定输出`r2 || sigma`共1,980 byte；SK固定输出三组
+  32-bit little-endian support、`h0 || t0 || r2 || sigma || sigma2`共6,328 byte；
+- fixture生成器从官方KAT恢复完整随机输入和PK/SK，并独立计算一组候选0弱、候选1合格的完整密钥golden。
+
+验证范围与定量结果：官方Count=0完整1,980-byte PK和6,328-byte SK逐byte匹配；补充输入的候选0弱、
+候选1合格，完整PK/SK同样逐byte匹配独立Python环算术与序列化。两组连续输入输出busy周期均为
+98,757,463拍。该周期包含96-byte输入、固定16候选秘密采样、H123、四次外层环乘、两次固定链求逆及
+PK/SK序列化；外部主动施加的valid空拍或ready停顿不计入连续流周期。
+
+RTL格式、Verible lint、KEM单元回归、完整KeyGen双向量回归与Yosys共享层次检查通过。层次检查确认
+`trike_keygen_core`只有一个`sm3_compress`；该检查不证明XPM RAM物理映射。完整KeyGen尚未运行Vivado，
+LUT、FF、Slice、Block RAM Tile、RAMB36/RAMB18、DSP、setup WNS/TNS、hold WHS与Fmax均为待测。
+
+常数时间边界：16组均不合格时仍继续H123、算术和固定长度PK/SK输出，并通过`success=0`报告本次调用失败；
+模块不执行数据相关内部重试。普通数据翻转活动仍可能随秘密变化，本阶段没有提供功耗masking或平衡逻辑。
+
+结论与状态：完整KeyGen功能和固定周期基线保留。下一步增加窄I/O寄存wrapper及Vivado实现入口，测量两个
+物理乘法数据通路、七份算术RAM、两份输出RAM和共享SM3的实际资源与100 MHz时序。
+
+### 阶段71：完整KeyGen窄I/O物理边界与Vivado入口（2026-08-06）
+
+目标与假设：为完整KeyGen建立不会导出多项式或密钥RAM的实现顶层，避免宽输出造成Bonded IOB超限，并在
+核与实现级I/O delay之间插入明确的寄存边界。wrapper只改变公开握手流水，不改变秘密候选、哈希、环算术
+或密钥序列化算法。
+
+关键实现：
+
+- `trike_keygen_synth_top`固定TRIKE-2参数，外部使用8-bit随机输入、8-bit PK输出和8-bit SK输出；
+- 三条数据流各设置一项片内缓冲，PK/SK再经过标记`IOB=TRUE`的valid/data/last寄存器；
+- 顶层只导出时钟、复位、启动、三条窄数据流和`busy/done/success`，所有support、多项式word和结果RAM
+  保持在层次内部；
+- `scripts/vivado_trike_kem_cores.tcl`加入完整源文件分支，使用同一100 MHz、0.100 ns uncertainty、输入输出
+  max 2 ns/min 0 ns约束；Makefile提供独立KeyGen实现入口；
+- 共享SM3层次检查覆盖wrapper，确认层次内仍只有一个`sm3_compress`。
+
+验证范围与定量结果：官方Count=0的96-byte随机输入经wrapper产生完整1,980-byte PK和6,328-byte SK，
+所有byte与`last`位置逐项匹配。连续外部valid/ready下busy周期固定98,765,138拍，比核心边界增加7,675拍；
+输入/输出寄存流水与核心的同步RAM fetch空拍重叠，因此差值不等于输入和输出byte数之和。格式、Verible
+lint、wrapper参考向量和Yosys单SM3检查通过。
+
+本阶段未运行Vivado。目标器件为`xc7k355tffg901-2L`、工具目标版本Vivado 2023.2、时钟周期10 ns；
+LUT、FF、Slice、Block RAM Tile、RAMB36/RAMB18、DSP、setup WNS/TNS、hold WHS、Fmax及
+`98,765,138/Fmax`实际时间均为待测。XDC不分配package pin，结果属于实现级核心基线而非板级I/O签核。
+
+结论与状态：保留窄I/O wrapper和Vivado入口。下一步运行完整placement/routing，检查RAM推断、两个乘法
+数据通路的资源、内部register-to-register最差路径和顶层I/O约束状态，再决定是否把两个乘法器重构为单一
+共享服务。
