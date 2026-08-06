@@ -88,14 +88,15 @@ flowchart TD
 
 `trike_keygen_core`的随机输入为96 byte，顺序是`key_seed || sigma2 || sigma`，对应Reference C向外部
 随机源发出的三次32-byte请求。顶层顺序运行固定候选秘密采样、H1/H2/H3、KeyGen算术和密钥输出；秘密
-采样与H123通过公开FSM复用一个`trike_sm3_service`。PK按`r2 || sigma`输出1,980 byte，SK按三组
-32-bit little-endian support、`h0 || t0 || r2 || sigma || sigma2`输出6,328 byte。官方候选0合格和
-候选0弱/候选1合格两组输入均逐byte匹配软件golden，连续输入输出时固定98,757,463拍。`success`只报告
-16组候选内是否找到合格support，不改变H123、算术或序列化调度。
+采样与H123通过公开FSM复用一个`trike_sm3_service`。三组support同时写入稀疏视图、算术核和32-bit顺序
+输出RAM；SK阶段按公开地址fetch每个support word。PK按`r2 || sigma`输出1,980 byte，SK按三组32-bit
+little-endian support、`h0 || t0 || r2 || sigma || sigma2`输出6,328 byte。官方候选0合格和候选0弱/
+候选1合格两组输入均逐byte匹配软件golden，连续输入输出时固定98,757,568拍。`success`只报告16组候选
+内是否找到合格support，不改变H123、算术或序列化调度。
 
 `trike_keygen_synth_top`把完整核封装为可实现的窄物理边界。随机输入、PK和SK均为8-bit流，输入和两路
 输出分别设置一项片内缓冲，外部输出使用IOB寄存器；多项式word、support数组和密钥RAM不进入顶层端口。
-官方向量连续握手固定98,765,138拍，完整PK/SK逐byte匹配，层次检查仍只有一个`sm3_compress`。
+官方向量连续握手固定98,765,139拍，完整PK/SK逐byte匹配，层次检查仍只有一个`sm3_compress`。
 
 ### Encaps
 
@@ -662,7 +663,7 @@ KEM顶层需要用公开地址调度的RAM连续驱动这些接口，或把固�
 KeyGen秘密support阶段采用16组公开固定候选预算。官方Count=0在候选0合格；补充种子使候选0弱、候选1
 合格，两组连续握手总周期均为4,778,975拍。10,000个确定性软件样本中出现22个首候选弱密钥，最长连续
 弱候选为1；该结果只用于工程预算选择，不是16组失败概率的证明。完整KeyGen在候选0合格和候选1才合格
-两种输入下均固定98,757,463拍。Encaps顶层在连续输入和连续接收条件下具有固定总周期；Decaps仍需在
+两种输入下均固定98,757,568拍。Encaps顶层在连续输入和连续接收条件下具有固定总周期；Decaps仍需在
 固定7轮译码、错误重生成和重加密检查接通后整体证明。
 
 ## 验证
@@ -690,8 +691,8 @@ KeyGen秘密support阶段采用16组公开固定候选预算。官方Count=0在�
 | `tb_trike_keygen_secret_sampler_schedule` | 候选0为弱、候选1合格时的首合格选择、完整support和相同4,778,975拍 |
 | `tb_trike_keygen_arith_core` | 13-bit环的两组完整`t0/r2`计算、结果padding与相同925拍 |
 | `tb_trike_keygen_arith_reference` | 官方TRIKE-2的`t1/t2/r1`和三组support输入，逐word检查`t0/r2`及固定93,924,706拍 |
-| `tb_trike_keygen_core_reference` | 官方与弱首候选两组完整KeyGen，逐byte检查1,980-byte PK、6,328-byte SK及相同98,757,463拍 |
-| `tb_trike_keygen_core_reference`，`USE_SYNTH_TOP=1` | 官方向量经输入/PK/SK寄存窄流wrapper，逐byte检查完整密钥及固定98,765,138拍 |
+| `tb_trike_keygen_core_reference` | 官方与弱首候选两组完整KeyGen，逐byte检查1,980-byte PK、6,328-byte SK及相同98,757,568拍 |
+| `tb_trike_keygen_core_reference`，`USE_SYNTH_TOP=1` | 官方向量经输入/PK/SK寄存窄流wrapper，逐byte检查完整密钥及固定98,765,139拍 |
 | `tb_trike_error_support_store_reference` | 官方TRIKE-2的263个support位置、5,952-byte padded error RAM和固定6,478拍 |
 | `tb_trike_h4_error_vector_reference` | 官方TRIKE-2 H4至两种错误表示的组合服务，完整RAM逐byte/逐index对拍和固定207,018拍 |
 | `tb_trike_poly_mul_core` | 13-bit非word对齐环的稠密/稀疏乘法、越界index dummy写回、数据无关周期和backpressure稳定性 |
@@ -780,5 +781,5 @@ methodology报告。49项DPIR-1来自采样器DSP输入的异步复位寄存器�
 ## 后续实现顺序
 
 1. 在Vivado工程中替换旧XDC导入副本，复核I/O min/max与methodology；
-2. 对`trike_keygen_synth_top`建立Vivado资源/时序基线并定位两个乘法数据通路和RAM的物理代价；
+2. 对`trike_keygen_synth_top`复测support顺序输出RAM的映射、路径移动和100 MHz裕量；
 3. 连接Min-Sum Decaps、错误重生成、固定长度比较和隐式拒绝选择。

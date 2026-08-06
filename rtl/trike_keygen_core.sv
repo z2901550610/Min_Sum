@@ -39,6 +39,8 @@ module trike_keygen_core #(
   localparam int WORDS = (R_BITS + WORD_W - 1) / WORD_W;
   localparam int INDEX_W = (R_BITS > 1) ? $clog2(R_BITS) : 1;
   localparam int POSITION_W = (SECRET_WEIGHT > 1) ? $clog2(SECRET_WEIGHT) : 1;
+  localparam int SUPPORT_COUNT = 3 * SECRET_WEIGHT;
+  localparam int SUPPORT_ADDR_W = (SUPPORT_COUNT > 1) ? $clog2(SUPPORT_COUNT) : 1;
 
   typedef enum logic [4:0] {
     ST_IDLE,
@@ -52,7 +54,8 @@ module trike_keygen_core #(
     ST_PK_R2_FETCH,
     ST_PK_R2_DATA,
     ST_PK_SIGMA,
-    ST_SK_SUPPORT,
+    ST_SK_SUPPORT_FETCH,
+    ST_SK_SUPPORT_DATA,
     ST_SK_H0,
     ST_SK_T0_FETCH,
     ST_SK_T0_DATA,
@@ -72,8 +75,8 @@ module trike_keygen_core #(
   logic [WORD_W-1:0] h123_word_accum_q;
   integer poly_byte_q;
   integer sigma_byte_q;
-  integer support_flat_q;
-  integer support_byte_q;
+  logic [SUPPORT_ADDR_W-1:0] support_output_addr_q;
+  logic [1:0] support_output_byte_q;
 
   logic secret_start;
   logic secret_seed_ready;
@@ -129,6 +132,10 @@ module trike_keygen_core #(
   logic r2_re;
   logic [WORD_ADDR_W-1:0] r2_addr;
   logic [WORD_W-1:0] r2_rdata;
+  logic support_output_we;
+  logic support_output_re;
+  logic [SUPPORT_ADDR_W-1:0] support_output_waddr;
+  logic [31:0] support_output_rdata;
 
   logic h123_word_end_c;
   logic [WORD_W-1:0] h123_word_data_c;
@@ -305,6 +312,25 @@ module trike_keygen_core #(
       .o_rdata(r2_rdata)
   );
 
+  assign support_output_we = secret_support_valid && secret_support_ready;
+  assign support_output_re = state_q == ST_SK_SUPPORT_FETCH;
+  assign support_output_waddr = SUPPORT_ADDR_W'(secret_support_position) +
+      ((secret_support_block == 2'd1) ? SUPPORT_ADDR_W'(SECRET_WEIGHT) :
+       (secret_support_block == 2'd2) ? SUPPORT_ADDR_W'(2 * SECRET_WEIGHT) : '0);
+
+  ram_bram #(
+      .DATA_W(32),
+      .DEPTH (SUPPORT_COUNT)
+  ) u_support_output_mem (
+      .i_clk  (i_clk),
+      .i_we   (support_output_we),
+      .i_waddr(support_output_waddr),
+      .i_wdata(32'(secret_support_index)),
+      .i_re   (support_output_re),
+      .i_raddr(support_output_addr_q),
+      .o_rdata(support_output_rdata)
+  );
+
   always_comb begin
     t0_we = arith_result_valid && !arith_result_select;
     t0_re = state_q == ST_SK_T0_FETCH;
@@ -329,10 +355,9 @@ module trike_keygen_core #(
     o_sk_data  = '0;
     o_sk_last  = 1'b0;
     unique case (state_q)
-      ST_SK_SUPPORT: begin
+      ST_SK_SUPPORT_DATA: begin
         o_sk_valid = 1'b1;
-        o_sk_data = 8'(support_q[support_flat_q/SECRET_WEIGHT]
-            [support_flat_q%SECRET_WEIGHT] >> (8 * support_byte_q));
+        o_sk_data  = support_output_rdata[8*support_output_byte_q+:8];
       end
       ST_SK_H0: begin
         o_sk_valid = 1'b1;
@@ -368,8 +393,8 @@ module trike_keygen_core #(
       h123_word_accum_q <= '0;
       poly_byte_q <= 0;
       sigma_byte_q <= 0;
-      support_flat_q <= 0;
-      support_byte_q <= 0;
+      support_output_addr_q <= '0;
+      support_output_byte_q <= '0;
       o_done <= 1'b0;
       o_success <= 1'b0;
       for (int byte_index = 0; byte_index < M_BYTES; byte_index++) begin
@@ -493,27 +518,32 @@ module trike_keygen_core #(
         ST_PK_SIGMA: begin
           if (i_pk_ready) begin
             if (sigma_byte_q == (M_BYTES - 1)) begin
-              support_flat_q <= 0;
-              support_byte_q <= 0;
-              state_q <= ST_SK_SUPPORT;
+              support_output_addr_q <= '0;
+              support_output_byte_q <= '0;
+              state_q <= ST_SK_SUPPORT_FETCH;
             end else begin
               sigma_byte_q <= sigma_byte_q + 1;
             end
           end
         end
 
-        ST_SK_SUPPORT: begin
+        ST_SK_SUPPORT_FETCH: begin
+          state_q <= ST_SK_SUPPORT_DATA;
+        end
+
+        ST_SK_SUPPORT_DATA: begin
           if (i_sk_ready) begin
-            if (support_byte_q == 3) begin
-              support_byte_q <= 0;
-              if (support_flat_q == (3 * SECRET_WEIGHT - 1)) begin
+            if (support_output_byte_q == 2'd3) begin
+              support_output_byte_q <= '0;
+              if (support_output_addr_q == SUPPORT_ADDR_W'(SUPPORT_COUNT - 1)) begin
                 poly_byte_q <= 0;
                 state_q <= ST_SK_H0;
               end else begin
-                support_flat_q <= support_flat_q + 1;
+                support_output_addr_q <= support_output_addr_q + 1'b1;
+                state_q <= ST_SK_SUPPORT_FETCH;
               end
             end else begin
-              support_byte_q <= support_byte_q + 1;
+              support_output_byte_q <= support_output_byte_q + 1'b1;
             end
           end
         end

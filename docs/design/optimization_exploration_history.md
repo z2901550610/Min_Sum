@@ -3524,3 +3524,40 @@ LUT、FF、Slice、Block RAM Tile、RAMB36/RAMB18、DSP、setup WNS/TNS、hold W
 结论与状态：保留窄I/O wrapper和Vivado入口。下一步运行完整placement/routing，检查RAM推断、两个乘法
 数据通路的资源、内部register-to-register最差路径和顶层I/O约束状态，再决定是否把两个乘法器重构为单一
 共享服务。
+
+### 阶段72：KeyGen SK support顺序输出RAM切断动态索引路径（2026-08-06）
+
+目标与假设：处理完整KeyGen首轮route的最差setup路径，同时只改变SK support的公开序列化存储边界。
+秘密采样、H123、算术、共享SM3和候选调度保持不变；新增的写入与读取地址均由固定3组、每组35个support
+及每项4 byte的公开布局决定，不根据support值、候选合格位置或`success`改变访问次数。
+
+首轮物理基线来自用户提供的Vivado 2023.2报告，器件为`xc7k355tffg901-2L`，时钟周期10 ns、uncertainty
+0.100 ns、实现阶段Fully Routed，顶层为`trike_keygen_synth_top`。报告结果为48,523 LUT、55,622 FF、
+23,576 Slice、21 RAMB36、1 RAMB18、21.5 Block RAM Tile、5 DSP和38 IOB；setup WNS/TNS为
+-1.812 ns/-403.875 ns，共619个失败端点，hold WHS/THS为+0.049 ns/0。内部与I/O端点均受约束，外部
+reset输入使用false path；工程未分配package pin，因此结果属于核心实现基线而非板级I/O签核。
+
+最差路径从`support_flat_q`到wrapper的`sk_buffer_data_q`，数据路径11.478 ns，31级逻辑包含15个
+`CARRY4`，logic/route分别为4.029/7.449 ns。原序列化表达式以32-bit `integer support_flat_q`执行
+除以35、模35和二维动态索引，使105项support选择网络直接到达wrapper缓冲寄存器。前八条TIMING-16
+均为该路径到8个输出数据bit。下一组路径从秘密采样FSM到440-bit `reseed_counter_q/v_q/c_q`，WNS约
+-0.884 ns且97.5%数据延迟为route；该高扇出问题不属于本阶段修改范围。
+
+关键实现：
+
+- 秘密采样器固定输出105个support时，顶层继续写稀疏视图和算术核，同时按
+  `block*SECRET_WEIGHT+position`写入一份32-bit、深度`3*SECRET_WEIGHT`的`ram_bram`；
+- SK输出使用`ST_SK_SUPPORT_FETCH/ST_SK_SUPPORT_DATA`，按地址0至104同步读取，每个word固定输出4个
+  little-endian byte；地址计数器宽度为`clog2(3*SECRET_WEIGHT)`，byte计数器为2 bit；
+- 删除SK输出端的32-bit扁平计数、除法、取模和105项二维动态索引。新增RAM的实际RAMB18/RAMB36映射、
+  LUT/FF变化和路径移动均标记为待Vivado复测，不能由RTL容量推断。
+
+验证范围与定量结果：`make format-rtl`、`make check-format-rtl`、`make lint-rtl`和
+`make check-trike-sm3-sharing`通过，层次仍只有一个`sm3_compress`。官方Count=0与候选0弱/候选1合格
+两组完整KeyGen均逐byte匹配1,980-byte PK和6,328-byte SK，busy周期同为98,757,568拍；同步fetch使核心
+固定增加105拍。窄I/O wrapper官方向量逐byte通过，固定98,765,139拍；wrapper原有交替缓冲空拍覆盖104个
+中间fetch，边界总周期只增加1拍。
+
+结论与状态：保留顺序输出RAM结构，功能与常数周期验证通过。当前RTL的post-route LUT、FF、Slice、BRAM、
+DSP、setup WNS/TNS、hold WHS及最差路径待相同条件复测；只有复测确认原动态索引路径退出且100 MHz
+仍有负裕量后，才单独探索440-bit状态控制复制，避免在一次物理实验中混入第二个结构变量。

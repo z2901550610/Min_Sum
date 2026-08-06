@@ -467,22 +467,23 @@ TRIKE-2官方Count=0逐word匹配`t0/r2`，连续握手固定93,924,706拍。当
 
 `trike_keygen_core`从外部随机源接收`key_seed || sigma2 || sigma`共96 byte，顺序连接
 `trike_keygen_secret_sampler`、`trike_h123_vectors`和`trike_keygen_arith_core`。秘密采样与H123的压缩
-请求经公开状态mux复用一个`trike_sm3_service`；support在采样输出时同时写入顶层SK缓存视图和算术核，
-H123 byte流每8 byte组装为一个算术operand word。算术输出写入`t0/r2`结果RAM，再按官方结构输出
-1,980-byte PK和6,328-byte SK。
+请求经公开状态mux复用一个`trike_sm3_service`；support在采样输出时同时写入顶层稀疏视图、算术核和
+32-bit×`3*SECRET_WEIGHT`的SK顺序输出RAM。SK序列化按公开地址依次fetch每个support word并输出四个
+little-endian byte。H123 byte流每8 byte组装为一个算术operand word。算术输出写入`t0/r2`结果RAM，
+再按官方结构输出1,980-byte PK和6,328-byte SK。
 
 官方Count=0候选0合格；补充输入使候选0弱、候选1合格。两组完整输出均逐byte匹配软件golden，连续
-96-byte输入及连续PK/SK接收时busy周期均为98,757,463拍。`success`只控制状态输出，不控制H123、算术、
-RAM扫描或序列化状态。Yosys层次检查确认完整KeyGen顶层只有一个`sm3_compress`。完整KeyGen的Vivado
-LUT、FF、Slice、BRAM、DSP、WNS与Fmax均为待测。
+96-byte输入及连续PK/SK接收时busy周期均为98,757,568拍。`success`只控制状态输出，不控制H123、算术、
+RAM扫描或序列化状态。Yosys层次检查确认完整KeyGen顶层只有一个`sm3_compress`。当前RTL的Vivado LUT、
+FF、Slice、BRAM、DSP、WNS与Fmax待复测。
 
 `trike_keygen_synth_top`为TRIKE-2固定参数提供窄物理边界：96-byte随机输入、1,980-byte PK和
 6,328-byte SK均使用8-bit valid/ready流，`busy/done/success`为单bit寄存输出。随机输入以及PK/SK各有
 一项片内缓冲，输出端再经过IOB寄存器，不把密钥RAM或多项式word导出为顶层端口。官方向量逐byte通过，
-连续外部握手固定98,765,138拍；Yosys层次检查确认wrapper仍只有一个`sm3_compress`。Vivado资源和时序
-报告待运行。
+连续外部握手固定98,765,139拍；Yosys层次检查确认wrapper仍只有一个`sm3_compress`。当前RTL的Vivado
+资源和时序报告待运行。
 
-未实现范围包括KeyGen物理实现基线、Decaps阶段控制和完整KEM统一序列化控制器。KEM公共核未接入
+未实现范围包括当前KeyGen RTL的物理复测、Decaps阶段控制和完整KEM统一序列化控制器。KEM公共核未接入
 `decoder_top`；Encaps物理结果单列，不计入本文译码器物理基线。
 
 ## 验证状态
