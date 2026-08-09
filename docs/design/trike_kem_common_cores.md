@@ -98,6 +98,13 @@ little-endian support、`h0 || t0 || r2 || sigma || sigma2`输出6,328 byte。�
 输出分别设置一项片内缓冲，外部输出使用IOB寄存器；多项式word、support数组和密钥RAM不进入顶层端口。
 官方向量连续握手固定98,765,139拍，完整PK/SK逐byte匹配，层次检查仍只有一个`sm3_compress`。
 
+Vivado 2023.2、`xc7k355tffg901-2L`、10 ns时钟、0.100 ns uncertainty和Fully Routed下，完整KeyGen
+使用46,859 LUT、54,571 FF、21,725 Slice、21 RAMB36、2 RAMB18、5 DSP和38 IOB；support顺序输出
+RAM实际映射为1个RAMB18。整体setup WNS/TNS为+0.025 ns/0，hold WHS/THS为+0.050 ns/0，内部
+register-to-register WNS为+0.414 ns，100 MHz通过。整体最差setup路径位于`o_pk_valid`的IOB/OBUF
+边界；内部最差路径位于秘密采样FSM到440-bit状态寄存器的高扇出网络。methodology无TIMING-16，保留
+49项DPIR-1和4项SYNTH-10。无未约束路径，但未分配package pin，因此不构成板级I/O签核。
+
 ### Encaps
 
 ```mermaid
@@ -133,12 +140,13 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    CT["ct：u、v、c2"] --> SYN["待实现：syndrome微程序"]
+    CT["ct：u、v、c2"] --> SYN["已有：trike_decaps_syndrome_core<br/>固定syndrome微程序"]
     SK["sk：h索引、h0、t0、r2、sigma、sigma2"] --> SYN
     SYN --> PMUL["已有：trike_poly_mul_core功能基线"]
     PMUL --> S["s=(h0+t0)*u+t0*v"]
 
-    S --> DEC["已有：decoder_top<br/>固定7轮量化Min-Sum"]
+    S --> LOAD["已有：trike_decoder_load_adapter<br/>H与syndrome固定装载"]
+    LOAD --> DEC["已有：decoder_top<br/>固定7轮量化Min-Sum"]
     SK --> DEC
     DEC --> EP["e'=(e0',e1',e2')"]
 
@@ -148,7 +156,7 @@ flowchart TD
     MP --> H4["H4微程序<br/>重新生成e_calc"]
     SK --> H4
 
-    EP --> VERIFY["待实现：trike_ct_verify_stream<br/>固定字数流式比较"]
+    EP --> VERIFY["已有：trike_ct_verify_stream<br/>固定字数流式比较"]
     H4 --> VERIFY
     VERIFY --> SELECT["已有：kem_ct_compare_select<br/>选择m'或sigma2"]
     MP --> SELECT
@@ -162,6 +170,63 @@ flowchart TD
 `trike_ct_verify_stream`按固定公开word数从错误RAM读取`e'`和`e_calc`，执行
 `difference |= |(word_a xor word_b)`，最后把单bit比较结果交给`kem_ct_compare_select`完成
 `m'/sigma2`全宽mask选择。
+
+`trike_decaps_syndrome_core`先固定装载`h0` support、`t0/u/v`，再顺序复用一个
+`trike_poly_mul_core`计算`h0*u`和`t0*(u+v)`。第一项写入syndrome RAM，第二项在同一RAM写回边界
+执行XOR。官方TRIKE-2 Count=0的244个64-bit输出word全部匹配独立Python环乘模型，连续握手固定
+2,030,223拍。`trike_decoder_load_adapter`接受block-major原始H support，经固定排序后写入三组H，
+把little-endian syndrome word固定展开为恰好`r`次单bit写，等待H校验完成后只发一次decoder start；
+13-bit toy接口回归通过。
+
+官方KAT的TRIKE-2使用`r=15581,w=35,t=263`。当前K-sign译码参数表中相同`w/t`档位使用
+`r=12589`，属于另一个经过FLS选择的公开参数集。syndrome核和装载桥均为参数化结构，但在新增明确的
+`r=15581`译码profile并完成该profile功能/DFR验证前，不能把官方syndrome对拍与当前译码器回归合并为
+端到端Decaps KAT结论。
+
+当前完整KEM主线采用`r=12589,w=35,t=263`并建立独立的`TRIKE_MINSUM_KAT_V1`项目向量，不把官方
+BF Decaps结果作为Min-Sum golden。`scripts/gen_trike_minsum_kem_case.py`沿用官方SM3-DRNG、H123、H4和
+pseudohash字节语义，SHAKE仅用于确定性产生外层64-byte测试seed，不进入KEM内部哈希。seed 1得到候选0、
+weak score为`19/28/30/51/57/60`，PK/SK/CT长度分别为1,606/5,206/3,180 byte。H4错误重量263，
+syndrome重量4,741；固定7轮Min-Sum输出重量263、residual 0并准确恢复原始错误，正常Decaps SS与
+Encaps SS一致。固定翻转`u`或`v`首bit后分别完整运行7轮，输出residual重量6,304和6,309；固定翻转
+`c2`首bit保持原译码结果但重生成比较失败。三类密文均选择`sigma2`计算拒绝SS。
+
+项目向量同时保存SK中的原始support顺序和供decoder使用的块内升序视图。DFR搜索与RTL的`low_index`
+tie规则使用升序视图。`trike_fixed_support_sorter`逐块缓存35个坐标，每块固定执行595次相邻
+compare-swap后顺序输出；三块连续握手从start到末项输出固定1,996拍。support值只控制compare-swap
+数据mux，不改变排序轮数、地址序列或decoder启动时刻；排序器已接入`trike_decoder_load_adapter`。
+
+`trike_decoder_error_vector`在decoder完成后固定清零三块padded error RAM，再以一拍一个bit的地址序列
+读取全部`3r`项判决并按块打包。`r=12589`的padded块为1,600 byte，总存储4,800 byte，连续读接口的
+固定预算为42,569拍；13-bit toy逐byte匹配三块padded dense error布局。该存储随后可同时服务`L(e')`
+哈希输入和`e'/e_calc`流式比较。
+
+项目参数后处理已经形成三个可串联边界：`trike_decaps_message_recover`固定重放`e'`两次并恢复`m'`；
+`trike_decaps_reencrypt_verify`运行H4、完整比较4,800 byte并选择`m'/sigma2`；`trike_decaps_kdf`固定重放
+`selected_message||ciphertext`并输出K的前32 byte。seed 1项目向量下三段分别固定28,431、209,659和
+19,323拍；有效与拒绝输入的对应周期一致。当前各段在reference TB中各自使用一个SM3服务，统一Decaps
+后处理由`trike_decaps_postprocess_core`串行调度，并通过已有external-compress接口共享同一个
+`trike_sm3_service`。正常密文和`c2`首bit篡改密文均固定257,417拍，最终SS分别匹配正常与隐式拒绝
+Python golden；Yosys层次检查确认复合顶层恰好一个`sm3_compress`。
+
+Min-Sum固定7轮结束与residual为零是两个独立信号。`trike_decoder_residual_check`保存同一份排序H和
+原始syndrome，逐row执行固定`3w`次decision读取并计算`syndrome xor H*e'`。`r=12589,w=35`下完整
+检查固定2,668,869拍；项目有效判决得到0，单bit syndrome扰动得到重量1，数据不改变访问次数或完成时刻。
+
+完整Min-Sum Decaps控制由`trike_decaps_pipeline_core`形成。H输入首块在同一次valid/ready接受中送入H0
+syndrome RAM和三块support排序器；排序输出与syndrome bit分别同时写入decoder和residual checker。
+Min-Sum固定轮结束后，decision同步读口按公开FSM顺序分配给4,800-byte padded error writer和全residual
+扫描，之后由单SM3 postprocess读取error、r2和完整ciphertext。`r=12589,w=35,t=263,L=32,K=4`的
+seed 1正常与u/v/c2首bit篡改路径均固定4,727,351拍，RTL residual分别为0/6,233/6,314/0，正常路径
+输出Encaps SS，三条篡改路径均输出对应`sigma2`隐式拒绝SS。非收敛u/v样本的C模型residual为
+6,304/6,309，因此这里只对拍KEM接受/拒绝与最终byte结果，不声明失败判决bit-exact。该结果是Verilator
+功能/周期证据；外部r2/ciphertext RAM的Vivado映射和完整顶层资源、时序均待测。
+
+`trike_decaps_synth_top`把物理接口收窄为8-bit `SK || CT`输入和8-bit SS输出。输入生命周期依次为
+420-byte原始support、H0、t0、r2、sigma、sigma2、u、v和c2；H0与sigma固定消费但不存储，其他字段写入
+专用support/64-bit word/byte RAM或sigma2寄存器。连续输入和SS接收下，正常与u/v/c2篡改四条路径均
+固定4,737,077拍。该wrapper每次复位执行一项事务，Vivado入口固定使用TRIKE160、L32、K4和256-column
+tile；资源映射、routed timing和Fmax待实现报告。
 
 ## BIKE v5.2总体流程
 
@@ -654,6 +719,9 @@ syndrome、摘要值或H4碰撞模式：
 | `trike_keygen_arith_core` | 固定4次环乘、2次公开加法链求逆及完整operand/result RAM扫描 | 输入装载在start前完成；结果`ready`低电平 |
 | `trike_keygen_core` | 固定16组秘密候选、H123、4次环乘、2次求逆和固定PK/SK长度 | 96-byte随机输入`valid`空拍；PK/SK输出`ready`低电平 |
 | `trike_keygen_synth_top` | 96-byte随机输入及固定1,980/6,328-byte PK/SK的寄存窄流边界 | 外部输入`valid`空拍；PK/SK输出`ready`低电平 |
+| `trike_decaps_syndrome_core` | 固定装载H0/t0/u/v、一次稀疏乘法、一次稠密乘法和完整syndrome输出 | 输入`valid`空拍；输出`ready`低电平 |
+| `trike_decoder_load_adapter` | 固定`3w`项H写入、恰好`r`次syndrome bit写入和一次decoder start | H/syndrome输入`valid`空拍；decoder完成由固定7轮边界产生 |
+| `trike_ct_verify_stream` | 固定word数比较并累计单bit difference，再执行全宽mask选择 | 两路输入`valid`空拍 |
 | compare/select | 固定组合XOR归约和全宽mask | 无握手 |
 
 KEM顶层需要用公开地址调度的RAM连续驱动这些接口，或把固定数量的dummy/等待拍计入公开周期预算。
@@ -702,6 +770,9 @@ KeyGen秘密support阶段采用16组公开固定候选预算。官方Count=0在�
 | `tb_trike_poly_mul_reference` | 从官方TRIKE-2 KAT提取$t_0$、$r_2$与$h_0$支持集，在15581-bit环对拍两种输入 |
 | `tb_trike_poly_inv_core` | 13-bit非word对齐环的两组可逆输入、乘积为一、相同417拍和输出backpressure |
 | `tb_trike_poly_inv_reference` | 从官方TRIKE-2 KAT提取稠密$h_0$，逐word对拍独立Euclid逆元golden |
+| `tb_trike_decoder_load_adapter` | 3组H support的block/diag/row坐标、13次syndrome bit写和单次decoder start |
+| `tb_trike_ct_verify_stream` | 全相等、首/中/末word不等、decoder失败、固定接收数和输入停顿 |
+| `tb_trike_decaps_syndrome_reference` | 官方TRIKE-2 SK/CT派生syndrome的244个word及固定2,030,223拍 |
 | `tb_keccak_f1600` | 全零状态的25个标准输出lane；24轮固定延迟 |
 | `tb_shake256_stream` | 多absorb/squeeze block和输出backpressure |
 | `tb_kem_ct_compare_select` | 全相等、每个比较bit单独翻转和随机比较/选择 |
@@ -781,5 +852,5 @@ methodology报告。49项DPIR-1来自采样器DSP输入的异步复位寄存器�
 ## 后续实现顺序
 
 1. 在Vivado工程中替换旧XDC导入副本，复核I/O min/max与methodology；
-2. 对`trike_keygen_synth_top`复测support顺序输出RAM的映射、路径移动和100 MHz裕量；
+2. 若KeyGen目标高于100 MHz，分别探索440-bit状态控制扇出与稀疏乘法贡献生成，不在一次实验中混合；
 3. 连接Min-Sum Decaps、错误重生成、固定长度比较和隐式拒绝选择。

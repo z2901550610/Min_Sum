@@ -5,6 +5,7 @@ package trike_inv_schedule_pkg;
   function automatic int trike_inv_stage_count(input int r_bits);
     case (r_bits)
       13: trike_inv_stage_count = 4;
+      12589: trike_inv_stage_count = 14;
       15581: trike_inv_stage_count = 14;
       35363: trike_inv_stage_count = 16;
       69691: trike_inv_stage_count = 17;
@@ -21,6 +22,24 @@ package trike_inv_schedule_pkg;
           1: trike_inv_l0 = 7;
           2: trike_inv_l0 = 10;
           3: trike_inv_l0 = 9;
+          default: trike_inv_l0 = 0;
+        endcase
+      end
+      12589: begin
+        case (stage)
+          1: trike_inv_l0 = 6295;
+          2: trike_inv_l0 = 9442;
+          3: trike_inv_l0 = 8655;
+          4: trike_inv_l0 = 4475;
+          5: trike_inv_l0 = 9115;
+          6: trike_inv_l0 = 8414;
+          7: trike_inv_l0 = 7449;
+          8: trike_inv_l0 = 7878;
+          9: trike_inv_l0 = 11703;
+          10: trike_inv_l0 = 4478;
+          11: trike_inv_l0 = 10796;
+          12: trike_inv_l0 = 4654;
+          13: trike_inv_l0 = 6636;
           default: trike_inv_l0 = 0;
         endcase
       end
@@ -115,6 +134,17 @@ package trike_inv_schedule_pkg;
         case (stage)
           1: trike_inv_l1 = 7;
           3: trike_inv_l1 = 5;
+          default: trike_inv_l1 = 0;
+        endcase
+      end
+      12589: begin
+        case (stage)
+          1: trike_inv_l1 = 6295;
+          3: trike_inv_l1 = 4721;
+          5: trike_inv_l1 = 2133;
+          8: trike_inv_l1 = 7737;
+          12: trike_inv_l1 = 6023;
+          13: trike_inv_l1 = 11142;
           default: trike_inv_l1 = 0;
         endcase
       end

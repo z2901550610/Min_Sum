@@ -194,14 +194,30 @@ package bike_pkg;
   localparam logic [PROFILE_ID_W-1:0] PROFILE_TRIKE_256 = 3'd2;
   localparam logic [PROFILE_ID_W-1:0] PROFILE_TRIKE_384 = 3'd3;
   localparam logic [PROFILE_ID_W-1:0] PROFILE_TRIKE_512 = 3'd4;
+`ifdef TRIKE_128_PARAMS
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_DEFAULT = PROFILE_TRIKE_128;
+`elsif TRIKE_160_PARAMS
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_DEFAULT = PROFILE_TRIKE_160;
+`elsif TRIKE_256_PARAMS
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_DEFAULT = PROFILE_TRIKE_256;
+`elsif TRIKE_384_PARAMS
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_DEFAULT = PROFILE_TRIKE_384;
+`else
   localparam logic [PROFILE_ID_W-1:0] PROFILE_DEFAULT = PROFILE_TRIKE_512;
+`endif
 `else
   localparam int PROFILE_COUNT = 3;
   localparam int PROFILE_ID_W = 2;
   localparam logic [PROFILE_ID_W-1:0] PROFILE_BIKE_128 = 2'd0;
   localparam logic [PROFILE_ID_W-1:0] PROFILE_BIKE_192 = 2'd1;
   localparam logic [PROFILE_ID_W-1:0] PROFILE_BIKE_256 = 2'd2;
+`ifdef BIKE_192_PARAMS
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_DEFAULT = PROFILE_BIKE_192;
+`elsif BIKE_256_PARAMS
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_DEFAULT = PROFILE_BIKE_256;
+`else
   localparam logic [PROFILE_ID_W-1:0] PROFILE_DEFAULT = PROFILE_BIKE_128;
+`endif
 `endif
 `ifdef BIKE_UNIFIED_PARAMS
   localparam bit PROFILE_RUNTIME_SELECT = 1'b1;

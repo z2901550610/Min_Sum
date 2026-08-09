@@ -1,14 +1,16 @@
 `timescale 1ns / 1ps
 
 module tb_trike_poly_inv_reference;
+`ifdef TRIKE_MINSUM_INV_FIXTURE
+  `include "generated/trike_poly_inv_minsum_case.svh"
+`else
   `include "generated/trike_poly_inv_reference_case.svh"
+`endif
 
   localparam int REF_INV_DENSE_MUL_CYCLES =
       (7 * REF_INV_WORDS) +
       (REF_INV_WORDS * REF_INV_WORDS *
        (1 + (4 * REF_INV_WORD_W / REF_INV_DIGIT_W)));
-  localparam int REF_INV_PERMUTATIONS = 23;
-  localparam int REF_INV_MULTIPLICATIONS = 22;
   localparam int REF_INV_CYCLES =
       REF_INV_WORDS +
       (2 * REF_INV_R_BITS * REF_INV_PERMUTATIONS) +

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 from pathlib import Path
 
 
@@ -73,25 +74,65 @@ def format_word_array(name: str, words: list[int]) -> list[str]:
     return lines
 
 
-def generate_fixture(kat_path: Path, output_path: Path, r_bits: int, weight: int) -> None:
-    kat_text = kat_path.read_text(encoding="ascii")
-    secret_key = first_hex_field(kat_text, "SK")
+def deterministic_invertible_input(r_bits: int, seed: int) -> int:
     r_bytes = (r_bits + 7) // 8
-    support_bytes = 3 * weight * 4
-    h0_data = secret_key[support_bytes : support_bytes + r_bytes]
-    if len(h0_data) != r_bytes:
-        raise ValueError("secret key does not contain a complete h0 polynomial")
+    for attempt in range(256):
+        domain = f"trike-inv-r{r_bits}-seed{seed}-attempt{attempt}".encode("ascii")
+        candidate = int.from_bytes(hashlib.shake_256(domain).digest(r_bytes), "little")
+        candidate &= (1 << r_bits) - 1
+        if candidate.bit_count() % 2 == 0:
+            candidate ^= 1
+        try:
+            polynomial_inverse(candidate, r_bits)
+            return candidate
+        except ValueError:
+            continue
+    raise ValueError("could not generate an invertible deterministic input")
 
-    input_value = int.from_bytes(h0_data, "little") & ((1 << r_bits) - 1)
+
+def schedule_counts(r_bits: int) -> tuple[int, int]:
+    target = r_bits - 2
+    main_multiplications = target.bit_length() - 1
+    accumulation_multiplications = target.bit_count() - 1
+    multiplications = main_multiplications + accumulation_multiplications
+    return multiplications + 1, multiplications
+
+
+def generate_fixture(
+    kat_path: Path | None,
+    output_path: Path,
+    r_bits: int,
+    weight: int,
+    input_seed: int | None,
+) -> None:
+    r_bytes = (r_bits + 7) // 8
+    if input_seed is not None:
+        input_value = deterministic_invertible_input(r_bits, input_seed)
+        source_comment = f"deterministic seed {input_seed}"
+    elif kat_path is not None:
+        kat_text = kat_path.read_text(encoding="ascii")
+        secret_key = first_hex_field(kat_text, "SK")
+        support_bytes = 3 * weight * 4
+        h0_data = secret_key[support_bytes : support_bytes + r_bytes]
+        if len(h0_data) != r_bytes:
+            raise ValueError("secret key does not contain a complete h0 polynomial")
+        input_value = int.from_bytes(h0_data, "little") & ((1 << r_bits) - 1)
+        source_comment = "h0 in the first official TRIKE KAT record"
+    else:
+        raise ValueError("either --kat or --input-seed is required")
+
     inverse_value = polynomial_inverse(input_value, r_bits)
     word_count = (r_bits + WORD_W - 1) // WORD_W
+    permutations, multiplications = schedule_counts(r_bits)
 
     lines = [
-        "// Generated from h0 in the first official TRIKE-2 KAT record.",
+        f"// Generated from {source_comment}.",
         f"localparam int REF_INV_R_BITS = {r_bits};",
         f"localparam int REF_INV_WORD_W = {WORD_W};",
         "localparam int REF_INV_DIGIT_W = 8;",
         f"localparam int REF_INV_WORDS = {word_count};",
+        f"localparam int REF_INV_PERMUTATIONS = {permutations};",
+        f"localparam int REF_INV_MULTIPLICATIONS = {multiplications};",
         "",
     ]
     lines.extend(
@@ -113,7 +154,9 @@ def generate_fixture(kat_path: Path, output_path: Path, r_bits: int, weight: int
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--kat", type=Path, required=True)
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--kat", type=Path)
+    source.add_argument("--input-seed", type=int)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--r-bits", type=int, default=15581)
     parser.add_argument("--weight", type=int, default=35)
@@ -122,7 +165,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    generate_fixture(args.kat, args.output, args.r_bits, args.weight)
+    generate_fixture(args.kat, args.output, args.r_bits, args.weight, args.input_seed)
     return 0
 
 

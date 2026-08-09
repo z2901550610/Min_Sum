@@ -316,7 +316,8 @@ TRIKE KEM数据通路包含`sm3_compress`、`trike_sm3_service`、`sm3_hash_stre
 `trike_sm3_drng_generate_stream`、`trike_pseudohash512_stream`、`trike_parity_map_stream`、
 `trike_sampler_candidate`、`trike_fixed_weight_sampler`、`trike_drng_weight_sampler`、
 `trike_h4_error_sampler`、`trike_error_support_store`、`trike_h4_error_vector`、`trike_h123_vectors`、
-`trike_poly_mul_core`、`trike_encaps_uv_core`、`trike_poly_inv_core`和`kem_ct_compare_select`公共RTL核。
+`trike_poly_mul_core`、`trike_encaps_uv_core`、`trike_poly_inv_core`、`trike_decaps_syndrome_core`、
+`trike_decoder_load_adapter`、`trike_ct_verify_stream`和`kem_ct_compare_select`公共RTL核。
 SM3压缩核固定用52周期扩展消息、64周期执行压缩；上层完成SM3-DRNG状态生成与更新、
 pseudohash512级联、H1/H2/H3奇偶映射、H4固定扫描和固定结构选择。接口、状态布局和验证边界见
 [trike_kem_common_cores.md](trike_kem_common_cores.md)。
@@ -474,17 +475,88 @@ little-endian byte。H123 byte流每8 byte组装为一个算术operand word。�
 
 官方Count=0候选0合格；补充输入使候选0弱、候选1合格。两组完整输出均逐byte匹配软件golden，连续
 96-byte输入及连续PK/SK接收时busy周期均为98,757,568拍。`success`只控制状态输出，不控制H123、算术、
-RAM扫描或序列化状态。Yosys层次检查确认完整KeyGen顶层只有一个`sm3_compress`。当前RTL的Vivado LUT、
-FF、Slice、BRAM、DSP、WNS与Fmax待复测。
+RAM扫描或序列化状态。Yosys层次检查确认完整KeyGen顶层只有一个`sm3_compress`。完整KeyGen的物理资源、
+时序和Fmax边界由下述wrapper实现结果覆盖。
 
 `trike_keygen_synth_top`为TRIKE-2固定参数提供窄物理边界：96-byte随机输入、1,980-byte PK和
 6,328-byte SK均使用8-bit valid/ready流，`busy/done/success`为单bit寄存输出。随机输入以及PK/SK各有
 一项片内缓冲，输出端再经过IOB寄存器，不把密钥RAM或多项式word导出为顶层端口。官方向量逐byte通过，
 连续外部握手固定98,765,139拍；Yosys层次检查确认wrapper仍只有一个`sm3_compress`。当前RTL的Vivado
-资源和时序报告待运行。
+2023.2、`xc7k355tffg901-2L`、10 ns时钟、0.100 ns uncertainty和Fully Routed报告得到46,859 LUT、
+54,571 FF、21,725 Slice、21 RAMB36、2 RAMB18、22 Block RAM Tile、5 DSP和38 IOB。support顺序
+输出RAM映射为1个RAMB18。整体setup WNS/TNS为+0.025 ns/0，hold WHS/THS为+0.050 ns/0；整体最差
+setup路径是IOB寄存的`o_pk_valid`经OBUF到输出端口，内部register-to-register WNS为+0.414 ns。内部
+最差路径为秘密采样FSM到440-bit状态寄存器的1级逻辑高扇出路径；外层稀疏乘法贡献生成路径紧随其后，
+两者均满足100 MHz。methodology保留49项DPIR-1异步复位DSP输入告警和4项SYNTH-10宽乘法提示，无
+TIMING-16告警或未约束路径。wrapper不分配package pin，因此该结果属于核心实现签核，不是板级I/O签核。
 
-未实现范围包括当前KeyGen RTL的物理复测、Decaps阶段控制和完整KEM统一序列化控制器。KEM公共核未接入
-`decoder_top`；Encaps物理结果单列，不计入本文译码器物理基线。
+Decaps syndrome阶段固定装载`h0` support与`t0/u/v`，顺序复用一个`trike_poly_mul_core`计算
+`h0*u+t0*(u+v)`。官方TRIKE-2 Count=0的244个64-bit syndrome word全部匹配独立Python模型，连续
+握手固定2,030,223拍。decoder装载桥固定写入`3w`项H support，把little-endian syndrome word展开为
+恰好`r`次bit写并只发一次start。流式验证核固定消费全部比较word，把累计difference和decoder residual
+状态共同送入`kem_ct_compare_select`；首/中/末word不匹配均不改变连续输入周期。
+
+官方TRIKE-2 KAT参数为`r=15581,w=35,t=263`，当前K-sign译码参数表的对应档为
+`r=12589,w=35,t=263`。两个参数集的syndrome、密文长度和译码证据不可混用。形成官方端到端Decaps
+KAT前，需要为`r=15581`建立明确的译码profile并分别完成RTL功能、固定周期和DFR验证；形成当前优化参数
+完整KEM则需要生成`r=12589`的KeyGen/Encaps/Decaps一致向量。
+
+`r=12589`固定求逆链由公开`r-2`二进制分解生成，包含13个主乘法阶段、6个累积乘法和最终平方，即
+19次稠密环乘与20次Frobenius置换。197-word确定性输入的RTL输出逐word匹配独立扩展Euclid逆元，固定
+24,863,614拍；既有`r=15581`官方输入继续匹配并保持43,978,192拍。
+
+`TRIKE_MINSUM_KAT_V1` seed 1使用官方SM3语义产生`r=12589`的完整PK/SK/CT和Min-Sum Decaps记录。
+Min-Sum固定7轮后residual为0，263项判决与H4原始错误完全一致，正常SS相等。`u/v`定向翻转分别完整
+译码并以residual 6,304/6,309拒绝；`c2`定向翻转由H4重生成比较拒绝。三者均选择`sigma2`计算拒绝
+SS。项目SK保留采样器原始support顺序，decoder使用块内升序视图以匹配DFR与`low_index` tie边界。
+
+`trike_fixed_support_sorter`逐块缓存`WEIGHT`个坐标并执行固定bubble compare-swap调度，每块比较次数为
+`WEIGHT*(WEIGHT-1)/2`。`r=12589,w=35`下三块连续握手的排序接口固定为1,996拍，只使用35×14 bit
+逻辑存储；该逻辑bit数不是综合后的FF/BRAM结论。排序器已位于decoder装载桥输入侧，装载桥只把排序后
+坐标写入H接口。toy `w=4`两组不同排列均固定43拍并逐项匹配升序结果。
+
+`trike_decoder_error_vector`固定清零`3*PADDED_R_BYTES`后顺序请求全部`3r`个decoder判决bit，按块写成
+padded dense error。`r=12589`下存储为4,800 byte，从start到完成固定42,569拍；toy `r=13`逐byte
+匹配三个块的有效bit和零padding，固定53拍。逻辑容量和周期已经确定，BRAM映射与时序待Vivado验证。
+
+Decaps后处理拆成三个固定调度模块。`trike_decaps_message_recover`两次重放4,800-byte `e'`计算`L(e')`
+并输出`m'=c2 xor L(e')`，项目向量和全零error输入均固定28,431拍。`trike_decaps_reencrypt_verify`以
+`m'||r2`驱动H4，固定比较全部4,800 byte，并按`decoder_ok && equal`选择`m'`或`sigma2`；匹配和首byte
+扰动均固定209,659拍。`trike_decaps_kdf`两次重放`selected_message||ciphertext`，有效与拒绝路径均固定
+19,323拍，32-byte SS逐byte匹配Python项目向量。三个模块均提供外部SM3压缩服务接口。
+
+`trike_decaps_postprocess_core`把上述三段串成单一公开FSM，并通过external-compress接口顺序共享一个
+`trike_sm3_service`。正常项目密文与`c2`首bit篡改密文均固定257,417拍；正常路径输出Encaps SS，篡改
+路径完整执行L/H4/compare/K后选择`sigma2`并输出Python拒绝SS。Yosys层次检查确认该复合顶层恰好一个
+`sm3_compress`实例。
+
+`decoder_top.o_done`只表示固定轮数完成，不表示译码residual为零。`trike_decoder_residual_check`被动保存
+与decoder相同的排序H和原始syndrome，随后按row/block/diag固定扫描`r*3w`条边，通过同步decision读口
+重算`syndrome xor H*e'`。项目向量 residual为0；翻转一个syndrome bit后residual重量为1，两条路径均
+固定2,668,869拍。该`o_residual_zero`作为postprocess的`decoder_ok`来源。
+
+`trike_decaps_pipeline_core`连接syndrome、固定support排序/装载、`decoder_top`、padded decision存储、
+residual重算和单SM3 postprocess。首个H块同时写入syndrome的H0 support RAM和完整H排序器，排序后的H
+与原始syndrome bit同时扇出到decoder和residual checker。decoder的单一decision同步读口先分配给
+error-vector writer，再分配给residual checker；两者完成后才开放error RAM给postprocess。编译时固定
+profile的`PROFILE_DEFAULT`与对应参数宏一致，TRIKE160使用`r=12589,w=35,t=263`运行配置。
+
+项目seed 1正常密文以及`u/v/c2`首bit篡改密文分别从独立复位后的start运行完整流水。四条路径都装载
+105项support、各197个`t0/u/v` word、执行固定7轮Min-Sum、导出全部decision、重算全部residual并运行
+完整L/H4/compare/K，均固定4,727,351拍。RTL residual重量依次为0/6,233/6,314/0；正常路径
+`ciphertext_equal=1`并逐byte输出Encaps SS，三条篡改路径均`ciphertext_equal=0`并逐byte输出对应
+`K(sigma2,tampered_ct)`。
+
+`trike_decaps_synth_top`提供固定TRIKE160窄物理边界。外部按`SK || CT`连续装载5,206+3,180 byte，
+只暴露8-bit input、8-bit SS和valid/ready/status。wrapper固定消费SK中的H0与sigma字段但不保存；原始
+support写入105×14-bit RAM，t0/u/v各写入197×64-bit word RAM，r2和完整CT写入同步byte RAM，sigma2
+写入256-bit寄存器。正常与u/v/c2篡改路径从wrapper start到最后一个SS byte接受均为4,737,077拍。
+wrapper每次复位只接受一项事务，避免复用decoder只允许初次H/syndrome装载的状态。
+
+未实现范围包括KeyGen板级I/O签核、完整Decaps的Vivado资源/时序报告，以及有效Encaps密文触发Min-Sum
+失败的稀有DFR样本。C模型在非收敛`u/v`篡改样本上的residual重量为
+6,304/6,309，与RTL判决不bit-exact，但两侧均为非零并产生相同隐式拒绝SS；不能把该样本写成decoder
+bit-exact对拍。功能固定周期和单SM3层次结果不能替代物理实现签核。
 
 ## 验证状态
 
@@ -510,6 +582,16 @@ make test-trike-keygen-core-reference
 make test-trike-keygen-synth-reference
 make test-trike-poly-reference
 make test-trike-poly-inv-reference
+make test-trike-poly-inv-minsum-reference
+make test-trike-decaps-syndrome-reference
+make gen-trike-minsum-kem-case
+make test-trike-decaps-message-reference
+make test-trike-decaps-verify-reference
+make test-trike-decaps-kdf-reference
+make test-trike-decaps-postprocess-reference
+make test-trike-decoder-residual-reference
+make test-trike-decaps-pipeline-reference
+make test-trike-decaps-synth-reference
 make test-unit
 make test-integration
 make test-trike-unified-ksign-random BIKE_RANDOM_TRIALS=1 \
@@ -583,6 +665,9 @@ make vivado-impl-trike-encaps \
 make vivado-impl-trike-keygen \
   VIVADO_PART=xc7k355tffg901-2L \
   VIVADO_RUN_TAG=trike_keygen_baseline
+make vivado-impl-trike-decaps \
+  VIVADO_PART=xc7k355tffg901-2L \
+  VIVADO_RUN_TAG=trike160_minsum_decaps_baseline
 ```
 
 批处理入口按启动时间创建 `build/vivado/<timestamp>/..._k3` 或 `..._k4` 目录；可以用
@@ -603,6 +688,11 @@ messages和DCP。
 完整KeyGen的Vivado GUI综合顶层为`trike_keygen_synth_top`，外部仅保留8-bit随机输入、8-bit PK输出、
 8-bit SK输出及valid/ready/status控制。工程源文件清单与编译顺序由同一Tcl脚本的该top分支维护，约束
 同样使用`constraints/trike_kem_core.xdc`。
+
+完整Min-Sum Decaps的Vivado顶层为`trike_decaps_synth_top`，固定宏为`TRIKE_160_PARAMS`、`L=32`、
+`K=4`、`MSG_BITS=5`和`COLS_PER_TILE=256`。外部只保留8-bit `SK || CT`输入、8-bit SS输出、residual-zero、
+ciphertext-equal和握手/status。`scripts/vivado_trike_kem_cores.tcl`维护完整decoder/SM3/Decaps源文件顺序；
+实现输出到`build/vivado/<label>/trike_decaps`。
 
 Vivado工程只加载`constraints/trike_kem_core.xdc`，不同时加载译码器`decoder.xdc`。XDC使用
 `get_ports -filter`直接选择数据输入和输出，避免工程模式XDC reader忽略一般Tcl的`if`和
