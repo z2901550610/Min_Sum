@@ -4,10 +4,10 @@ module tb_trike_decaps_pipeline_reference;
   import bike_pkg::*;
   `include "generated/trike_decaps_message_minsum_case.svh"
 
-  localparam int R_BYTES = (REF_R_BITS + 7) / 8;
-  localparam int R_ADDR_W = $clog2(R_BYTES);
+  localparam int R_BYTES   = (REF_R_BITS + 7) / 8;
+  localparam int R_ADDR_W  = $clog2(R_BYTES);
   localparam int CT_ADDR_W = $clog2(REF_CIPHERTEXT_BYTES);
-  localparam int SS_IDX_W = $clog2(REF_M_BYTES);
+  localparam int SS_IDX_W  = $clog2(REF_M_BYTES);
 
   logic                       clk;
   logic                       rst_n;

@@ -1,0 +1,48 @@
+schema_version = 1
+run_id = "RUN-YYYYMMDD-NN-top"
+experiment_id = "EXP-xxxx"
+date = "YYYY-MM-DD"
+status = "pending" # pending | pass | fail | incomparable | superseded
+verdict = "pending" # retained | rejected | pending | incomparable | superseded
+source_revision = "git-commit-or-unrecorded"
+dirty_tree = false
+report_root = "D:/trike_reports/RUN-YYYYMMDD-NN-top"
+notes = ""
+
+[artifacts]
+files = ["post_route_utilization.rpt", "post_route_timing_summary.rpt"]
+sha256_manifest = "" # optional checksum file stored beside the external reports
+
+[design]
+top = "trike_decaps_synth_top"
+profile = "TRIKE160"
+parallel_l = 32
+k_sign_k = 4
+cols_per_tile = 256
+memory_geometry = "describe RAM banks, width, depth, and replication"
+
+[tool]
+vivado = "2023.2"
+part = "xc7k355tffg901-2L"
+xdc = "constraints/trike_kem_core.xdc"
+report_stage = "fully_routed"
+clock_period_ns = 10.0
+clock_uncertainty_ns = 0.100
+
+[functional]
+fixed_cycles = 0
+tests = ["make ..."]
+result = "pending"
+
+[results]
+lut = ""
+ff = ""
+slice = ""
+block_ram_tile = ""
+ramb36 = ""
+ramb18 = ""
+dsp = ""
+setup_wns_ns = ""
+setup_tns_ns = ""
+hold_whs_ns = ""
+comparison_run = ""

@@ -1,0 +1,7 @@
+# Tool versions validated together on 2026-08-09.
+verilator=Verilator 5.050
+verible=Version\tv0.0-4133-g873f559f
+slang=slang version 11.0.0+7ddf4059f
+yosys=Yosys 0.68
+sby=SBY v0.68
+z3=Z3 version 4.16.0

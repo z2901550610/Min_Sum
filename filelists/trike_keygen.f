@@ -1,0 +1,22 @@
+# TRIKE KeyGen implementation entrypoint.
+rtl/reset_sync.sv
+rtl/trike_inv_schedule_pkg.sv
+rtl/ram_bram.sv
+rtl/sm3_compress.sv
+rtl/trike_sm3_service.sv
+rtl/sm3_hash_stream.sv
+rtl/sm3_df_stream.sv
+rtl/trike_sm3_drng_instantiate_stream.sv
+rtl/trike_sm3_drng_generate_stream.sv
+rtl/trike_sampler_candidate.sv
+rtl/trike_fixed_weight_sampler.sv
+rtl/trike_drng_weight_sampler.sv
+rtl/trike_weak_key_test.sv
+rtl/trike_keygen_secret_sampler.sv
+rtl/trike_parity_map_stream.sv
+rtl/trike_h123_vectors.sv
+rtl/trike_poly_mul_core.sv
+rtl/trike_poly_inv_core.sv
+rtl/trike_keygen_arith_core.sv
+rtl/trike_keygen_core.sv
+rtl/trike_keygen_synth_top.sv

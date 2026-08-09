@@ -1,8 +1,12 @@
 # 译码器架构与资源优化探索记录
 
+> 归档状态：本文档冻结在2026-08-09的阶段81，不再追加新阶段。后续实验使用
+> [实验索引](../experiments/index.md)、必要的单项记录和
+> [Vivado运行清单](../../reports/vivado/manifests/README.md)。
+
 本文档按实施顺序记录统一 TRIKE K-sign 译码器已经探索的架构与 RTL 方案、验证结果以及取舍结论。
-它用于保留设计决策过程；成品架构、资源和时序基线见
-[implementation_status.md](implementation_status.md)。
+它用于保留设计决策过程；成品架构见[implementation_status.md](implementation_status.md)，物理结果的
+当前指针见[vivado_baseline_registry.md](vivado_baseline_registry.md)。
 
 ## 结果口径
 
@@ -3793,3 +3797,51 @@ wrapper仿真、格式和lint通过；Makefile dry-run确认top、器件、XDC�
 结论与状态：保留窄I/O wrapper与Vivado入口，可以在Vivado 2023.2环境运行首个完整Decaps物理基线。
 报告必须使用`xc7k355tffg901-2L`、10 ns、0.100 ns uncertainty和同一Tcl阶段；wrapper结果属于实现级
 核心边界，不是板级package-pin签核。
+
+### 阶段81：完整Decaps首轮物理基线与两组关键路径寄存分段（2026-08-09）
+
+目标与假设：根据`trike_decaps_synth_top`的首轮Fully Routed报告，同时处理syndrome稀疏环乘的长进位链
+和residual到decoder全局K-sign RAM的跨层级地址路径。新增状态、RAM预取和寄存边界均由公开
+`WORDS/SPARSE_WEIGHT/r/w`以及固定FSM状态决定，不根据support值、syndrome、判决或residual改变调度。
+
+首轮物理基线由用户在Windows Vivado 2023.2生成，器件为`xc7k355tffg901-2L`，时钟10 ns，设计
+`trike_decaps_synth_top`为Fully Routed。资源为65,746 LUT、66,149 FF、28,128 Slice、575 RAMB36、
+119 RAMB18、634.5 Block RAM Tile和4 DSP；BRAM利用率为88.74%。层次报告把634.5 Tile完整归属为
+decoder 537.5、syndrome 36.5、窄接口缓存24.5、error-vector 16、postprocess 16和residual 4；decoder
+内部`ram_k_global`与`ram_m`分别使用320和144 Tile。
+
+setup WNS/TNS为-0.304 ns/-13.669 ns，共160个失败端点；hold WHS为+0.049 ns。内部前20条失败路径由
+两组组成：12条从稀疏乘法`b_word_idx_q`经过模地址、mask和可变移位到`sparse_contribution_q`，最差
+-0.304 ns、34级逻辑且包含22个CARRY4；8条从residual的support寄存阵列经过动态读取与列地址计算到
+decoder的`ram_k_global`读地址网络，最差-0.282 ns。高扇出报告中的reset、SM3、排序器和K-sign地址复制
+网络均为正裕量，故全局高扇出不是该检查点的setup根因。该检查点没有达到内部100 MHz签核。
+
+关键实现：
+
+- `trike_poly_mul_core`增加固定`ST_SPARSE_PREPARE`状态，先用`INDEX_W+1`位算术寄存循环起点、有效源word
+  和末word有效bit数，再在下一拍产生三组贡献及result地址；稀疏busy公式为
+  `4*WORDS+2*S+8*S*WORDS`；
+- `trike_decoder_residual_check`使用一份`(3w) x ROW_W`同步Block RAM保存排序support。每行
+  `ST_ROW_FETCH`预取第0项，每个`ST_DECISION_ISSUE`预取下一项；`decision_col_q`在送入decoder全局
+  K-sign RAM前形成寄存边界。该预取与原有decision一拍读延迟重叠，residual仍固定
+  `1+r*(2+2*3w)`拍；
+- 测试中的稀疏周期断言以及KeyGen/Encaps/Decaps当前状态文档同步到新增公开流水拍。
+
+验证范围与定量结果：`make format-rtl`、`make check-format-rtl`、`make lint-rtl`、`make test-unit`和
+`make test-integration`通过。13-bit稠密/稀疏toy、越界dummy index和backpressure通过；官方TRIKE-2
+多项式结果逐word匹配，稠密/稀疏固定1,967,372/69,366拍。官方KeyGen算术固定93,933,246拍并逐word
+匹配`t0/r2`；候选0与候选1才合格的完整KeyGen均逐byte匹配PK/SK并固定98,766,108拍，窄I/O为
+98,773,679拍。完整Encaps核与wrapper逐byte匹配CT/SS并固定2,378,447/2,384,421拍。
+
+官方参数syndrome的244个word逐项匹配，固定2,038,763拍。项目参数residual正常/单bit扰动结果为0/1，
+均保持2,668,869拍。完整Min-Sum Decaps正常与u/v/c2首bit篡改四条路径的residual、比较结果和最终SS
+逐项通过；pipeline固定4,734,246拍，窄I/O wrapper固定4,743,972拍。K=3和K=4的五档seed-1回归均为
+`residual=0, exact=1`，固定译码周期依次为193,514、337,245、1,252,957、3,866,043和8,538,564。
+
+物理待测边界：support RAM按当前XPM参数目标映射为1个RAMB18，即0.5 Block RAM Tile；这只是RTL映射
+意图，不是实现结果。新RTL的LUT、FF、Slice、RAMB36/RAMB18、Block RAM Tile、DSP、setup WNS/TNS、
+hold WHS、pulse width和两组top path均待相同器件、Vivado、XDC和Fully Routed阶段复测。只有复测确认
+WNS/TNS收敛且`cycles/Fmax`改善后，才判定为物理时序收益。
+
+结论与状态：RTL结构保留并进入Vivado复测。功能、byte/word golden和公开固定周期已闭合；100 MHz、
+资源变化和Fmax保持待测，不使用Verilator或XPM意图推测物理收益。

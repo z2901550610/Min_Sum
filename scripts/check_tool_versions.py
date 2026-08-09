@@ -1,0 +1,52 @@
+#!/usr/bin/env python3
+"""Print or verify the repository's validated RTL toolchain versions."""
+
+from __future__ import annotations
+
+import argparse
+import subprocess
+from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+LOCK_PATH = REPO_ROOT / "config" / "rtl_toolchain.lock"
+COMMANDS = {
+    "verilator": ["verilator", "--version"],
+    "verible": ["verible-verilog-lint", "--version"],
+    "slang": ["slang", "--version"],
+    "yosys": ["yosys", "-V"],
+    "sby": ["sby", "--version"],
+    "z3": ["z3", "--version"],
+}
+
+
+def load_lock() -> dict[str, str]:
+    versions = {}
+    for raw_line in LOCK_PATH.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        name, expected = line.split("=", maxsplit=1)
+        versions[name] = expected.replace("\\t", "\t")
+    return versions
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--check", action="store_true")
+    args = parser.parse_args()
+    expected_versions = load_lock()
+    failed = False
+    for name, expected in expected_versions.items():
+        result = subprocess.run(COMMANDS[name], text=True, capture_output=True, check=False)
+        output = (result.stdout + result.stderr).strip()
+        first_line = output.splitlines()[0] if output else "<no output>"
+        status = "PASS" if result.returncode == 0 and expected in output else "MISMATCH"
+        print(f"{name:10} {status:8} {first_line}")
+        failed |= status != "PASS"
+    if args.check and failed:
+        raise SystemExit("RTL toolchain differs from config/rtl_toolchain.lock")
+
+
+if __name__ == "__main__":
+    main()

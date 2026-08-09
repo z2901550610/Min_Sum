@@ -3,7 +3,7 @@
 module tb_trike_decaps_message_reference;
   `include "generated/trike_decaps_message_minsum_case.svh"
 
-  localparam int ERROR_ADDR_W = $clog2(REF_ERROR_BYTES);
+  localparam int ERROR_ADDR_W  = $clog2(REF_ERROR_BYTES);
   localparam int MESSAGE_IDX_W = $clog2(REF_M_BYTES);
 
   logic                       clk;

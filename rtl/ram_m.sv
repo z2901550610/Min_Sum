@@ -51,8 +51,8 @@ module ram_m
         logic [ COMP_C2V_W-1:0] flip_wdata;
 
         localparam logic [1:0] RAM_M_READ_NONE = 2'd0;
-        localparam logic [1:0] RAM_M_READ_C2V = 2'd1;
-        localparam logic [1:0] RAM_M_READ_V2C = 2'd2;
+        localparam logic [1:0] RAM_M_READ_C2V  = 2'd1;
+        localparam logic [1:0] RAM_M_READ_V2C  = 2'd2;
         localparam logic [1:0] RAM_M_READ_FLIP = 2'd3;
 
         always_comb begin

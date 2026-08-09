@@ -1,0 +1,26 @@
+[tasks]
+prove_w1 prove width1
+prove_w8 prove width8
+prove_w256 prove width256
+cover_w1 cover width1
+cover_w8 cover width8
+cover_w256 cover width256
+
+[options]
+prove: mode prove
+cover: mode cover
+depth 2
+
+[engines]
+smtbmc z3
+
+[script]
+read -formal -sv kem_ct_compare_select.sv kem_ct_compare_select_formal.sv
+width1: chparam -set COMPARE_W 1 -set DATA_W 1 kem_ct_compare_select_formal
+width8: chparam -set COMPARE_W 8 -set DATA_W 8 kem_ct_compare_select_formal
+width256: chparam -set COMPARE_W 256 -set DATA_W 256 kem_ct_compare_select_formal
+prep -top kem_ct_compare_select_formal
+
+[files]
+rtl/kem_ct_compare_select.sv
+formal/kem_ct_compare_select_formal.sv

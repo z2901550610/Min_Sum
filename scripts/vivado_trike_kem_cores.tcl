@@ -41,75 +41,40 @@ proc run_step {name command} {
 
 set verilog_defines [list]
 
-if {$top eq "trike_poly_inv_synth_top"} {
-  set rtl_files [list \
-    rtl/reset_sync.sv \
-    rtl/ram_bram.sv \
-    rtl/trike_inv_schedule_pkg.sv \
-    rtl/trike_poly_mul_core.sv \
-    rtl/trike_poly_inv_core.sv \
-    rtl/trike_poly_inv_synth_top.sv \
-  ]
-} elseif {$top eq "trike_pseudohash_synth_top"} {
-  set rtl_files [list \
-    rtl/reset_sync.sv \
-    rtl/sm3_compress.sv \
-    rtl/trike_sm3_service.sv \
-    rtl/sm3_hash_stream.sv \
-    rtl/hmac_sm3_64byte_key_stream.sv \
-    rtl/trike_pseudohash512_stream.sv \
-    rtl/trike_pseudohash_synth_top.sv \
-  ]
-} elseif {$top eq "trike_encaps_synth_top"} {
-  set rtl_files [list \
-    rtl/reset_sync.sv \
-    rtl/ram_bram.sv \
-    rtl/sm3_compress.sv \
-    rtl/trike_sm3_service.sv \
-    rtl/sm3_hash_stream.sv \
-    rtl/sm3_df_stream.sv \
-    rtl/hmac_sm3_64byte_key_stream.sv \
-    rtl/trike_sm3_drng_instantiate_stream.sv \
-    rtl/trike_sm3_drng_generate_stream.sv \
-    rtl/trike_sampler_candidate.sv \
-    rtl/trike_fixed_weight_sampler.sv \
-    rtl/trike_drng_weight_sampler.sv \
-    rtl/trike_h4_error_sampler.sv \
-    rtl/trike_parity_map_stream.sv \
-    rtl/trike_h123_vectors.sv \
-    rtl/trike_error_support_store.sv \
-    rtl/trike_h4_error_vector.sv \
-    rtl/trike_poly_mul_core.sv \
-    rtl/trike_encaps_uv_core.sv \
-    rtl/trike_pseudohash512_stream.sv \
-    rtl/trike_encaps_core.sv \
-    rtl/trike_encaps_synth_top.sv \
-  ]
-} elseif {$top eq "trike_keygen_synth_top"} {
-  set rtl_files [list \
-    rtl/reset_sync.sv \
-    rtl/trike_inv_schedule_pkg.sv \
-    rtl/ram_bram.sv \
-    rtl/sm3_compress.sv \
-    rtl/trike_sm3_service.sv \
-    rtl/sm3_hash_stream.sv \
-    rtl/sm3_df_stream.sv \
-    rtl/trike_sm3_drng_instantiate_stream.sv \
-    rtl/trike_sm3_drng_generate_stream.sv \
-    rtl/trike_sampler_candidate.sv \
-    rtl/trike_fixed_weight_sampler.sv \
-    rtl/trike_drng_weight_sampler.sv \
-    rtl/trike_weak_key_test.sv \
-    rtl/trike_keygen_secret_sampler.sv \
-    rtl/trike_parity_map_stream.sv \
-    rtl/trike_h123_vectors.sv \
-    rtl/trike_poly_mul_core.sv \
-    rtl/trike_poly_inv_core.sv \
-    rtl/trike_keygen_arith_core.sv \
-    rtl/trike_keygen_core.sv \
-    rtl/trike_keygen_synth_top.sv \
-  ]
-} elseif {$top eq "trike_decaps_synth_top"} {
+proc read_rtl_filelist {path repo_root} {
+  if {![file exists $path]} {
+    error "RTL filelist not found: $path"
+  }
+  set channel [open $path r]
+  set rtl_files [list]
+  while {[gets $channel line] >= 0} {
+    regsub {#.*$} $line "" line
+    set line [string trim $line]
+    if {$line ne ""} {
+      lappend rtl_files [file join $repo_root $line]
+    }
+  }
+  close $channel
+  return $rtl_files
+}
+
+set repo_root [file normalize [file join [file dirname [info script]] ..]]
+set filelist_by_top [dict create \
+  trike_poly_inv_synth_top filelists/trike_poly_inv.f \
+  trike_pseudohash_synth_top filelists/trike_pseudohash.f \
+  trike_encaps_synth_top filelists/trike_encaps.f \
+  trike_keygen_synth_top filelists/trike_keygen.f \
+  trike_decaps_synth_top filelists/trike_decaps.f \
+]
+
+if {![dict exists $filelist_by_top $top]} {
+  error "Unsupported TRIKE_KEM_SYNTH_TOP: $top"
+}
+set rtl_filelist [file join $repo_root [dict get $filelist_by_top $top]]
+set rtl_files [read_rtl_filelist $rtl_filelist $repo_root]
+puts "RTL filelist: $rtl_filelist"
+
+if {$top eq "trike_decaps_synth_top"} {
   set verilog_defines [list \
     TRIKE_160_PARAMS \
     BIKE_PARALLEL_L=32 \
@@ -117,65 +82,6 @@ if {$top eq "trike_poly_inv_synth_top"} {
     BIKE_MSG_BITS=5 \
     BIKE_COLS_PER_TILE=256 \
   ]
-  set rtl_files [list \
-    rtl/bike_pkg.sv \
-    rtl/reset_sync.sv \
-    rtl/decoder_profile_config.sv \
-    rtl/ram_bram.sv \
-    rtl/ram_i.sv \
-    rtl/barrel_rotate.sv \
-    rtl/edge_addr_gen.sv \
-    rtl/tile_scheduler.sv \
-    rtl/ram_m.sv \
-    rtl/ram_s.sv \
-    rtl/k_sign_update.sv \
-    rtl/k_sign_reconstruct.sv \
-    rtl/k_sign_overlap_scheduler.sv \
-    rtl/ram_k_tile.sv \
-    rtl/k_sign_selector.sv \
-    rtl/ram_k_global.sv \
-    rtl/ram_sign_delta.sv \
-    rtl/ram_syndrome.sv \
-    rtl/ram_accum.sv \
-    rtl/ram_t.sv \
-    rtl/msg_tc_to_signmag_sat.sv \
-    rtl/vnu.sv \
-    rtl/ram_decision.sv \
-    rtl/cnu_a.sv \
-    rtl/cnu_b.sv \
-    rtl/msg_signmag_to_tc.sv \
-    rtl/decoder_top.sv \
-    rtl/trike_poly_mul_core.sv \
-    rtl/trike_decaps_syndrome_core.sv \
-    rtl/trike_fixed_support_sorter.sv \
-    rtl/trike_decoder_load_adapter.sv \
-    rtl/trike_decoder_error_vector.sv \
-    rtl/trike_decoder_residual_check.sv \
-    rtl/sm3_compress.sv \
-    rtl/trike_sm3_service.sv \
-    rtl/sm3_hash_stream.sv \
-    rtl/sm3_df_stream.sv \
-    rtl/hmac_sm3_64byte_key_stream.sv \
-    rtl/trike_sm3_drng_instantiate_stream.sv \
-    rtl/trike_sm3_drng_generate_stream.sv \
-    rtl/trike_sampler_candidate.sv \
-    rtl/trike_fixed_weight_sampler.sv \
-    rtl/trike_drng_weight_sampler.sv \
-    rtl/trike_h4_error_sampler.sv \
-    rtl/trike_error_support_store.sv \
-    rtl/trike_h4_error_vector.sv \
-    rtl/kem_ct_compare_select.sv \
-    rtl/trike_ct_verify_stream.sv \
-    rtl/trike_pseudohash512_stream.sv \
-    rtl/trike_decaps_message_recover.sv \
-    rtl/trike_decaps_reencrypt_verify.sv \
-    rtl/trike_decaps_kdf.sv \
-    rtl/trike_decaps_postprocess_core.sv \
-    rtl/trike_decaps_pipeline_core.sv \
-    rtl/trike_decaps_synth_top.sv \
-  ]
-} else {
-  error "Unsupported TRIKE_KEM_SYNTH_TOP: $top"
 }
 
 run_step "read_verilog" {
@@ -185,7 +91,7 @@ run_step "read_verilog" {
     read_verilog -sv $rtl_files
   }
 }
-set_property include_dirs [list rtl] [current_fileset]
+set_property include_dirs [list [file join $repo_root rtl]] [current_fileset]
 
 run_step "read_xdc" {
   read_xdc $xdc_file

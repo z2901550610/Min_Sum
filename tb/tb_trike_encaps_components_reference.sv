@@ -10,7 +10,7 @@ module tb_trike_encaps_components_reference;
   localparam int REF_WORD_ADDR_W = $clog2(REF_WORDS);
   localparam int REF_H123_BUSY_CYCLES = 44640;
   localparam int REF_H4_BUSY_CYCLES = 207017;
-  localparam int REF_UV_BUSY_CYCLES = 1805550;
+  localparam int REF_UV_BUSY_CYCLES = 2062238;
 
   logic                          clk;
   logic                          rst_n;
@@ -354,7 +354,7 @@ module tb_trike_encaps_components_reference;
   end
 
   initial begin
-    repeat (2000000) @(posedge clk);
+    repeat (2250000) @(posedge clk);
     $fatal(1, "tb_trike_encaps_components_reference timeout");
   end
 

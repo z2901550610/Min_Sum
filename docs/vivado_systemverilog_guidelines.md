@@ -12,14 +12,14 @@
 ## 目录和文件
 
 - 可综合 RTL 放在 `rtl/`，testbench 放在 `tb/`，Vivado 约束放在 `constraints/`，脚本放在 `scripts/`。
-- 公共参数、类型、打包布局和几何尺寸放在 [bike_pkg.sv](/Users/z2901550610/Documents/Min_Sum/rtl/bike_pkg.sv:1)。
+- 公共参数、类型、打包布局和几何尺寸放在 [bike_pkg.sv](../rtl/bike_pkg.sv)。
 - 主要模块文件名与模块名保持一致。
 - 随机仿真 fixture 目录为 `tb/generated/`，本地生成产物由 `.gitignore` 管理。修改生成流程时同时更新生成脚本和验证入口。
 - 新增设计文档只描述目标架构和当前行为，不写迁移叙述。
 
 ## 命名和格式
 
-- 遵守 [naming_conventions.md](/Users/z2901550610/Documents/Min_Sum/docs/design/naming_conventions.md:1)。
+- 遵守 [naming_conventions.md](design/naming_conventions.md)。
 - 模块输入使用 `i_` 前缀，输出使用 `o_` 前缀，子模块实例使用 `u_` 前缀。
 - 时钟使用 `i_clk`。顶层外部复位端口使用 `i_rst_n`，含义是异步置位、同步释放的低有效复位源。
 - lane、tile、row、col、diagonal、pair、buffer 相关名称使用项目术语：`lane_idx`、`tile_idx`、`base_row_idx`、`check_row_idx`、`row_idx`、`col_idx`、`diag_idx_local`、`diag_idx_global`、`comp_clear_addr`、`fill_buf`、`active_buf`。
@@ -198,12 +198,12 @@ localparam int ROW_IDX_W = (R > 1) ? $clog2(R) : 1;
 
 ## XDC 和 Vivado 脚本
 
-- 基本约束位于 [decoder_top.xdc](/Users/z2901550610/Documents/Min_Sum/constraints/decoder_top.xdc:1)。
+- 基本约束位于 [decoder_top.xdc](../constraints/decoder_top.xdc)。
 - 约束顺序遵守 UG903：primary/generated clocks、clock groups、I/O delay、timing exceptions、physical constraints。
 - clock 必须先创建，再被后续约束引用。
 - false path、multicycle path、min/max delay 需要写清楚对象和功能理由。
 - 新增 clock、generated clock、异步输入、外设 I/O、debug ILA 或 CDC 结构时同步更新 XDC。
-- Vivado batch 流程使用 [vivado_synth.tcl](/Users/z2901550610/Documents/Min_Sum/scripts/vivado_synth.tcl:1)，报告至少包含 utilization、timing summary 和 messages。新增 CDC 结构时加入 `report_cdc`。
+- Vivado batch 流程使用 [vivado_synth.tcl](../scripts/vivado_synth.tcl)，报告至少包含 utilization、timing summary 和 messages。新增 CDC 结构时加入 `report_cdc`。
 - 综合报告流程包含 methodology、CDC、timing summary、messages 和 utilization。methodology 报告用于发现约束、时钟、复位、综合属性和实现流程问题；CDC 报告用于发现跨域结构、复位同步和未识别同步链。
 
 ## 仿真和验证

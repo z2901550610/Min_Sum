@@ -18,8 +18,8 @@ module sm3_compress (
 );
 
   localparam logic [6:0] EXPAND_FIRST = 7'd16;
-  localparam logic [6:0] EXPAND_LAST = 7'd67;
-  localparam logic [5:0] ROUND_LAST = 6'd63;
+  localparam logic [6:0] EXPAND_LAST  = 7'd67;
+  localparam logic [5:0] ROUND_LAST   = 6'd63;
 
   typedef enum logic [1:0] {
     ST_IDLE,

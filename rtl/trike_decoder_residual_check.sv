@@ -30,7 +30,7 @@ module trike_decoder_residual_check #(
     output logic                o_done
 );
 
-  localparam int SUPPORT_COUNT = BLOCKS * WEIGHT;
+  localparam int SUPPORT_COUNT  = BLOCKS * WEIGHT;
   localparam int SUPPORT_ADDR_W = (SUPPORT_COUNT > 1) ? $clog2(SUPPORT_COUNT) : 1;
 
   typedef enum logic [2:0] {
@@ -42,19 +42,40 @@ module trike_decoder_residual_check #(
   } state_t;
 
   state_t                      state_q;
-  logic   [         ROW_W-1:0] support_q[0:SUPPORT_COUNT-1];
   logic   [         ROW_W-1:0] row_q;
   logic   [       BLOCK_W-1:0] block_q;
   logic   [        DIAG_W-1:0] diag_q;
   logic                        parity_q;
   logic   [      WEIGHT_W-1:0] residual_weight_q;
+  logic                        support_re;
+  logic   [SUPPORT_ADDR_W-1:0] support_raddr;
+  logic   [         ROW_W-1:0] support_rdata;
   logic                        syndrome_re;
   logic   [         ROW_W-1:0] syndrome_raddr;
   logic                        syndrome_rdata;
   logic   [SUPPORT_ADDR_W-1:0] support_addr_c;
+  logic                        final_support_c;
+  logic   [       BLOCK_W-1:0] decision_block_c;
   integer                      column_c;
   logic   [         COL_W-1:0] decision_col_c;
+  logic   [         COL_W-1:0] decision_col_q;
   logic                        final_parity_c;
+
+  // The sorted H support uses a sequential synchronous-RAM read schedule.
+  // decision_col_q forms a physical timing boundary before the decoder's
+  // global K-sign RAM address network.
+  ram_bram #(
+      .DATA_W(ROW_W),
+      .DEPTH (SUPPORT_COUNT)
+  ) u_support_mem (
+      .i_clk  (i_clk),
+      .i_we   (i_h_we),
+      .i_waddr(SUPPORT_ADDR_W'((int'(i_h_block_idx) * WEIGHT) + int'(i_h_diag_idx))),
+      .i_wdata(i_h_index),
+      .i_re   (support_re),
+      .i_raddr(support_raddr),
+      .o_rdata(support_rdata)
+  );
 
   ram_bram #(
       .DATA_W(1),
@@ -74,13 +95,25 @@ module trike_decoder_residual_check #(
 
   always_comb begin
     support_addr_c = SUPPORT_ADDR_W'((int'(block_q) * WEIGHT) + int'(diag_q));
-    if (int'(row_q) >= int'(support_q[support_addr_c])) begin
-      column_c = int'(row_q) - int'(support_q[support_addr_c]);
-    end else begin
-      column_c = int'(row_q) + R_BITS - int'(support_q[support_addr_c]);
+    final_support_c = (block_q == BLOCK_W'(BLOCKS - 1)) && (diag_q == DIAG_W'(WEIGHT - 1));
+    support_re = state_q == ST_ROW_FETCH;
+    support_raddr = support_addr_c;
+    if ((state_q == ST_DECISION_ISSUE) && !final_support_c) begin
+      support_re    = 1'b1;
+      support_raddr = support_addr_c + 1'b1;
     end
-    decision_col_c = COL_W'((int'(block_q) * R_BITS) + column_c);
-    o_decision_col_idx = decision_col_c;
+
+    decision_block_c = block_q;
+    if ((state_q == ST_DECISION_CONSUME) && (diag_q == DIAG_W'(WEIGHT - 1))) begin
+      decision_block_c = block_q + 1'b1;
+    end
+    if (int'(row_q) >= int'(support_rdata)) begin
+      column_c = int'(row_q) - int'(support_rdata);
+    end else begin
+      column_c = int'(row_q) + R_BITS - int'(support_rdata);
+    end
+    decision_col_c = COL_W'((int'(decision_block_c) * R_BITS) + column_c);
+    o_decision_col_idx = decision_col_q;
     final_parity_c = parity_q ^ i_decision_data;
     syndrome_re = state_q == ST_ROW_FETCH;
     syndrome_raddr = row_q;
@@ -94,16 +127,12 @@ module trike_decoder_residual_check #(
       diag_q <= '0;
       parity_q <= 1'b0;
       residual_weight_q <= '0;
+      decision_col_q <= '0;
       o_residual_zero <= 1'b0;
       o_residual_weight <= '0;
       o_done <= 1'b0;
-      for (int idx = 0; idx < SUPPORT_COUNT; idx++) support_q[idx] <= '0;
     end else begin
       o_done <= 1'b0;
-
-      if (i_h_we) begin
-        support_q[(int'(i_h_block_idx)*WEIGHT)+int'(i_h_diag_idx)] <= i_h_index;
-      end
 
       unique case (state_q)
         ST_IDLE: begin
@@ -119,16 +148,15 @@ module trike_decoder_residual_check #(
         ST_ROW_FETCH: state_q <= ST_ROW_INIT;
 
         ST_ROW_INIT: begin
-          parity_q <= syndrome_rdata;
-          block_q  <= '0;
-          diag_q   <= '0;
-          state_q  <= ST_DECISION_ISSUE;
+          parity_q       <= syndrome_rdata;
+          decision_col_q <= decision_col_c;
+          state_q        <= ST_DECISION_ISSUE;
         end
 
         ST_DECISION_ISSUE: state_q <= ST_DECISION_CONSUME;
 
         ST_DECISION_CONSUME: begin
-          if ((block_q == BLOCK_W'(BLOCKS - 1)) && (diag_q == DIAG_W'(WEIGHT - 1))) begin
+          if (final_support_c) begin
             residual_weight_q <= residual_weight_q + WEIGHT_W'(final_parity_c);
             if (row_q == ROW_W'(R_BITS - 1)) begin
               o_residual_weight <= residual_weight_q + WEIGHT_W'(final_parity_c);
@@ -137,10 +165,13 @@ module trike_decoder_residual_check #(
               state_q <= ST_IDLE;
             end else begin
               row_q   <= row_q + 1'b1;
+              block_q <= '0;
+              diag_q  <= '0;
               state_q <= ST_ROW_FETCH;
             end
           end else begin
             parity_q <= final_parity_c;
+            decision_col_q <= decision_col_c;
             if (diag_q == DIAG_W'(WEIGHT - 1)) begin
               diag_q  <= '0;
               block_q <= block_q + 1'b1;

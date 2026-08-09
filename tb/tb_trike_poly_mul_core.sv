@@ -8,7 +8,7 @@ module tb_trike_poly_mul_core;
   localparam int WORDS = (R_BITS + WORD_W - 1) / WORD_W;
   localparam int INDEX_W = $clog2(R_BITS);
   localparam int DENSE_CYCLES = (11 * WORDS) + (WORDS * WORDS * (1 + (4 * WORD_W / DIGIT_W)));
-  localparam int SPARSE_CYCLES = (4 * WORDS) + (2 * SPARSE_WEIGHT) + (7 * SPARSE_WEIGHT * WORDS);
+  localparam int SPARSE_CYCLES = (4 * WORDS) + (2 * SPARSE_WEIGHT) + (8 * SPARSE_WEIGHT * WORDS);
 
   logic                     clk;
   logic                     rst_n;

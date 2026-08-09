@@ -28,6 +28,7 @@ module tb_trike_decaps_verify_reference;
   integer                    seed_total_count;
   integer                    cycle_count;
 
+  /* verilator lint_off PINCONNECTEMPTY */
   trike_decaps_reencrypt_verify #(
       .M_BYTES       (REF_M_BYTES),
       .R_BITS        (REF_R_BITS),
@@ -51,10 +52,14 @@ module tb_trike_decaps_verify_reference;
       .o_selected_data  (selected_data),
       .o_busy           (busy),
       .o_done           (done),
+      .o_compress_start (),
+      .o_compress_block (),
+      .o_compress_state (),
       .i_compress_busy  (1'b0),
       .i_compress_done  (1'b0),
       .i_compress_state ('0)
   );
+  /* verilator lint_on PINCONNECTEMPTY */
 
   always #1 clk = ~clk;
 

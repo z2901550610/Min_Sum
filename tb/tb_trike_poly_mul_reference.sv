@@ -8,7 +8,7 @@ module tb_trike_poly_mul_reference;
       (REF_WORDS * REF_WORDS * (1 + (4 * REF_WORD_W / REF_DIGIT_W)));
   localparam int REF_SPARSE_CYCLES =
       (4 * REF_WORDS) + (2 * REF_SPARSE_WEIGHT) +
-      (7 * REF_SPARSE_WEIGHT * REF_WORDS);
+      (8 * REF_SPARSE_WEIGHT * REF_WORDS);
 
   logic                         clk;
   logic                         rst_n;

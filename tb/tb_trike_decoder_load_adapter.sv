@@ -1,14 +1,14 @@
 `timescale 1ns / 1ps
 
 module tb_trike_decoder_load_adapter;
-  localparam int R_BITS = 13;
-  localparam int BLOCKS = 3;
-  localparam int WEIGHT = 3;
-  localparam int WORD_W = 8;
-  localparam int WORDS = (R_BITS + WORD_W - 1) / WORD_W;
-  localparam int ROW_W = $clog2(R_BITS);
+  localparam int R_BITS  = 13;
+  localparam int BLOCKS  = 3;
+  localparam int WEIGHT  = 3;
+  localparam int WORD_W  = 8;
+  localparam int WORDS   = (R_BITS + WORD_W - 1) / WORD_W;
+  localparam int ROW_W   = $clog2(R_BITS);
   localparam int BLOCK_W = $clog2(BLOCKS);
-  localparam int DIAG_W = $clog2(WEIGHT);
+  localparam int DIAG_W  = $clog2(WEIGHT);
 
   logic                 clk;
   logic                 rst_n;

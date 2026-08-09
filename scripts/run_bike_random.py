@@ -9,33 +9,20 @@ import shlex
 import subprocess
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def read_filelist(path: Path) -> list[str]:
+    entries = []
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.split("#", maxsplit=1)[0].strip()
+        if line:
+            entries.append(line)
+    return entries
+
+
 RTL_CORE = [
-    "rtl/reset_sync.sv",
-    "rtl/decoder_profile_config.sv",
-    "rtl/ram_bram.sv",
-    "rtl/ram_i.sv",
-    "rtl/barrel_rotate.sv",
-    "rtl/edge_addr_gen.sv",
-    "rtl/tile_scheduler.sv",
-    "rtl/ram_m.sv",
-    "rtl/ram_s.sv",
-    "rtl/k_sign_update.sv",
-    "rtl/k_sign_reconstruct.sv",
-    "rtl/k_sign_overlap_scheduler.sv",
-    "rtl/ram_k_tile.sv",
-    "rtl/k_sign_selector.sv",
-    "rtl/ram_k_global.sv",
-    "rtl/ram_sign_delta.sv",
-    "rtl/ram_syndrome.sv",
-    "rtl/ram_accum.sv",
-    "rtl/ram_t.sv",
-    "rtl/msg_tc_to_signmag_sat.sv",
-    "rtl/vnu.sv",
-    "rtl/ram_decision.sv",
-    "rtl/cnu_a.sv",
-    "rtl/cnu_b.sv",
-    "rtl/msg_signmag_to_tc.sv",
-    "rtl/decoder_top.sv",
+    entry for entry in read_filelist(REPO_ROOT / "filelists" / "decoder.f") if entry != "rtl/bike_pkg.sv"
 ]
 
 PARAM_SETS = {
@@ -900,8 +887,8 @@ def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int
                 f"-DBIKE_K_SIGN_K={args.k_sign_k}",
                 "-DBIKE_SIM_DEBUG",
                 "-Wall",
-                "-Wno-fatal",
                 "-I./tb",
+                "config/verilator_waivers.vlt",
                 "--Mdir",
                 str(obj_dir),
                 "--top-module",
@@ -917,8 +904,8 @@ def run_case(args: argparse.Namespace, repo_root: Path, case_idx: int, seed: int
                 "-DBIKE_PKG_EXTERNAL",
                 "-DBIKE_SIM_DEBUG",
                 "-Wall",
-                "-Wno-fatal",
                 "-I./tb",
+                "config/verilator_waivers.vlt",
                 "--Mdir",
                 str(obj_dir),
                 "--top-module",

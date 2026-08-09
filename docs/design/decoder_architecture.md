@@ -135,7 +135,7 @@ last window   : V2C(last tile)
 
 ## 相关文档
 
-- [implementation_status.md](implementation_status.md)：RTL 实现配置、RAM 组织、Vivado 资源与时序基线。
+- [implementation_status.md](implementation_status.md)：当前RTL配置、RAM生命周期、固定周期、验证状态和物理证据边界。
 - [tile_decoder_design.md](tile_decoder_design.md)：tile 内地址、guard、状态组织和 C2V/V2C 公式。
 - [decoder_schedule.md](decoder_schedule.md)：调度状态、计数器和固定周期预算。
 - [naming_conventions.md](naming_conventions.md)：RTL 命名规则。

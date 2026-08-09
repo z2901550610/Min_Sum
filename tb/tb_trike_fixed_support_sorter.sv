@@ -1,13 +1,13 @@
 `timescale 1ns / 1ps
 
 module tb_trike_fixed_support_sorter;
-  localparam int R_BITS = 13;
-  localparam int BLOCKS = 3;
-  localparam int WEIGHT = 4;
-  localparam int TOTAL = BLOCKS * WEIGHT;
-  localparam int ROW_W = $clog2(R_BITS);
+  localparam int R_BITS  = 13;
+  localparam int BLOCKS  = 3;
+  localparam int WEIGHT  = 4;
+  localparam int TOTAL   = BLOCKS * WEIGHT;
+  localparam int ROW_W   = $clog2(R_BITS);
   localparam int BLOCK_W = $clog2(BLOCKS);
-  localparam int DIAG_W = $clog2(WEIGHT);
+  localparam int DIAG_W  = $clog2(WEIGHT);
 
   logic                 clk;
   logic                 rst_n;

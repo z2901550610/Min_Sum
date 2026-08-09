@@ -1,0 +1,4 @@
+# Copy this file to config/local.mk and use host-specific absolute paths there.
+# config/local.mk is ignored by Git and is loaded before Makefile defaults.
+
+TRIKE_REFERENCE_SOURCE_ROOT := /absolute/path/to/TRIKE-reference-and-test-vectors

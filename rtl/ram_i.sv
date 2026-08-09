@@ -25,8 +25,8 @@ module ram_i
     output logic                  o_error
 );
 
-  localparam int H_ENTRY_COUNT = N0 * W;
-  localparam int H_ENTRY_ADDR_W = (H_ENTRY_COUNT > 1) ? $clog2(H_ENTRY_COUNT) : 1;
+  localparam int H_ENTRY_COUNT   = N0 * W;
+  localparam int H_ENTRY_ADDR_W  = (H_ENTRY_COUNT > 1) ? $clog2(H_ENTRY_COUNT) : 1;
   localparam int H_ENTRY_COUNT_W = (H_ENTRY_COUNT > 1) ? $clog2(H_ENTRY_COUNT + 1) : 1;
 
   logic [  H_ENTRY_COUNT-1:0] loaded_bit;

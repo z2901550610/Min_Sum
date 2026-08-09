@@ -4,7 +4,7 @@ module tb_trike_decaps_kdf_reference;
   `include "generated/trike_decaps_message_minsum_case.svh"
 
   localparam int CT_ADDR_W = $clog2(REF_CIPHERTEXT_BYTES);
-  localparam int SS_IDX_W = $clog2(REF_M_BYTES);
+  localparam int SS_IDX_W  = $clog2(REF_M_BYTES);
 
   logic                   clk;
   logic                   rst_n;
@@ -20,11 +20,11 @@ module tb_trike_decaps_kdf_reference;
   logic                   shared_secret_ready;
   logic                   busy;
   logic                   done;
-  logic   [        511:0] k_digest;
   logic                   expect_reject;
   integer                 shared_secret_count;
   integer                 cycle_count;
 
+  /* verilator lint_off PINCONNECTEMPTY */
   trike_decaps_kdf #(
       .M_BYTES         (REF_M_BYTES),
       .CIPHERTEXT_BYTES(REF_CIPHERTEXT_BYTES)
@@ -43,11 +43,15 @@ module tb_trike_decaps_kdf_reference;
       .i_shared_secret_ready(shared_secret_ready),
       .o_busy               (busy),
       .o_done               (done),
-      .o_k_digest           (k_digest),
+      .o_k_digest           (),
+      .o_compress_start     (),
+      .o_compress_block     (),
+      .o_compress_state     (),
       .i_compress_busy      (1'b0),
       .i_compress_done      (1'b0),
       .i_compress_state     ('0)
   );
+  /* verilator lint_on PINCONNECTEMPTY */
 
   always #1 clk = ~clk;
 

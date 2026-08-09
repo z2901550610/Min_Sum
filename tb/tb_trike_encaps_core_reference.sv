@@ -10,8 +10,8 @@ module tb_trike_encaps_core_reference #(
 
   localparam int REF_INPUT_BYTES = REF_R_BYTES + (2 * REF_M_BYTES);
   localparam int REF_CT_BYTES = (2 * REF_R_BYTES) + REF_M_BYTES;
-  localparam int REF_BUSY_CYCLES = 2121759;
-  localparam int REF_SYNTH_BUSY_CYCLES = 2127733;
+  localparam int REF_BUSY_CYCLES = 2378447;
+  localparam int REF_SYNTH_BUSY_CYCLES = 2384421;
 
   logic       clk;
   logic       rst_n;

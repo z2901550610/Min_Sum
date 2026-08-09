@@ -1,0 +1,23 @@
+# TRIKE Encaps implementation entrypoint.
+rtl/reset_sync.sv
+rtl/ram_bram.sv
+rtl/sm3_compress.sv
+rtl/trike_sm3_service.sv
+rtl/sm3_hash_stream.sv
+rtl/sm3_df_stream.sv
+rtl/hmac_sm3_64byte_key_stream.sv
+rtl/trike_sm3_drng_instantiate_stream.sv
+rtl/trike_sm3_drng_generate_stream.sv
+rtl/trike_sampler_candidate.sv
+rtl/trike_fixed_weight_sampler.sv
+rtl/trike_drng_weight_sampler.sv
+rtl/trike_h4_error_sampler.sv
+rtl/trike_parity_map_stream.sv
+rtl/trike_h123_vectors.sv
+rtl/trike_error_support_store.sv
+rtl/trike_h4_error_vector.sv
+rtl/trike_poly_mul_core.sv
+rtl/trike_encaps_uv_core.sv
+rtl/trike_pseudohash512_stream.sv
+rtl/trike_encaps_core.sv
+rtl/trike_encaps_synth_top.sv

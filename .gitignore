@@ -51,3 +51,6 @@ Thumbs.db
 .idea/
 .codex
 .workbuddy/
+
+# Machine-local paths and tool configuration
+/config/local.mk
