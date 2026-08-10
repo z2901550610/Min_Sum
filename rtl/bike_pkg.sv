@@ -6,7 +6,6 @@
 `ifndef BIKE_128_PARAMS
 `ifndef BIKE_192_PARAMS
 `ifndef BIKE_256_PARAMS
-`ifndef TRIKE_128_PARAMS
 `ifndef TRIKE_160_PARAMS
 `ifndef TRIKE_256_PARAMS
 `ifndef TRIKE_384_PARAMS
@@ -22,12 +21,8 @@
 `endif
 `endif
 `endif
-`endif
 
 `ifdef TRIKE_UNIFIED_PARAMS
-`define DECODER_TRIKE_FAMILY
-`endif
-`ifdef TRIKE_128_PARAMS
 `define DECODER_TRIKE_FAMILY
 `endif
 `ifdef TRIKE_160_PARAMS
@@ -48,14 +43,14 @@ package bike_pkg;
   /* verilator lint_off UNUSEDPARAM */
 
 `ifdef DECODER_TRIKE_FAMILY
-  // TRIKE profile values indexed [0:4] = {128, 160, 256, 384, 512}.
-  localparam int P_R_VALS[0:4] = '{8243, 12589, 30389, 63773, 106781};
-  localparam int P_W_VALS[0:4] = '{27, 35, 55, 83, 111};
-  localparam int P_T_VALS[0:4] = '{201, 263, 429, 659, 877};
-  localparam int P_C_VALS[0:4] = '{4, 4, 5, 5, 7};
-  localparam int P_ASH0_VALS[0:4] = '{3, 3, 3, 3, 4};
-  localparam int P_ASH1_VALS[0:4] = '{4, 4, 4, 6, 0};
-  localparam int P_COLS_PER_TILE_VALS[0:4] = '{256, 256, 288, 464, 1168};
+  // Submission profiles indexed [0:3] = {TRIKE-2, TRIKE-5, TRIKE-7, TRIKE-9}.
+  localparam int P_R_VALS[0:3] = '{12589, 30389, 63773, 106781};
+  localparam int P_W_VALS[0:3] = '{35, 55, 83, 111};
+  localparam int P_T_VALS[0:3] = '{263, 429, 659, 877};
+  localparam int P_C_VALS[0:3] = '{4, 5, 5, 7};
+  localparam int P_ASH0_VALS[0:3] = '{3, 3, 3, 4};
+  localparam int P_ASH1_VALS[0:3] = '{4, 4, 6, 0};
+  localparam int P_COLS_PER_TILE_VALS[0:3] = '{256, 288, 464, 1168};
 `else
   // BIKE profile values indexed [0:2] = {128, 192, 256}.
   localparam int P_R_VALS[0:2] = '{12323, 24659, 40973};
@@ -71,18 +66,16 @@ package bike_pkg;
   localparam int I_MAX = 7;
 `ifdef DECODER_TRIKE_FAMILY
   localparam int N0 = 3;
-`ifdef TRIKE_128_PARAMS
+`ifdef TRIKE_160_PARAMS
   localparam int PROF_IDX = 0;
-`elsif TRIKE_160_PARAMS
-  localparam int PROF_IDX = 1;
 `elsif TRIKE_256_PARAMS
-  localparam int PROF_IDX = 2;
+  localparam int PROF_IDX = 1;
 `elsif TRIKE_384_PARAMS
-  localparam int PROF_IDX = 3;
+  localparam int PROF_IDX = 2;
 `elsif TRIKE_512_PARAMS
-  localparam int PROF_IDX = 4;
+  localparam int PROF_IDX = 3;
 `else
-  localparam int PROF_IDX = 4;
+  localparam int PROF_IDX = 3;
 `endif
 `else
   localparam int N0 = 2;
@@ -187,16 +180,13 @@ package bike_pkg;
   localparam int ITER_W = $clog2(I_MAX + 1);
 
 `ifdef DECODER_TRIKE_FAMILY
-  localparam int PROFILE_COUNT = 5;
-  localparam int PROFILE_ID_W = 3;
-  localparam logic [PROFILE_ID_W-1:0] PROFILE_TRIKE_128 = 3'd0;
-  localparam logic [PROFILE_ID_W-1:0] PROFILE_TRIKE_160 = 3'd1;
-  localparam logic [PROFILE_ID_W-1:0] PROFILE_TRIKE_256 = 3'd2;
-  localparam logic [PROFILE_ID_W-1:0] PROFILE_TRIKE_384 = 3'd3;
-  localparam logic [PROFILE_ID_W-1:0] PROFILE_TRIKE_512 = 3'd4;
-`ifdef TRIKE_128_PARAMS
-  localparam logic [PROFILE_ID_W-1:0] PROFILE_DEFAULT = PROFILE_TRIKE_128;
-`elsif TRIKE_160_PARAMS
+  localparam int PROFILE_COUNT = 4;
+  localparam int PROFILE_ID_W = 2;
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_TRIKE_160 = 2'd0;
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_TRIKE_256 = 2'd1;
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_TRIKE_384 = 2'd2;
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_TRIKE_512 = 2'd3;
+`ifdef TRIKE_160_PARAMS
   localparam logic [PROFILE_ID_W-1:0] PROFILE_DEFAULT = PROFILE_TRIKE_160;
 `elsif TRIKE_256_PARAMS
   localparam logic [PROFILE_ID_W-1:0] PROFILE_DEFAULT = PROFILE_TRIKE_256;

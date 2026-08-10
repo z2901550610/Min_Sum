@@ -1,6 +1,7 @@
 `timescale 1ns / 1ps
 
-// Narrow-I/O TRIKE160 Min-Sum Decaps wrapper for Vivado implementation.
+// Narrow-I/O Min-Sum Decaps wrapper for Vivado implementation. Fixed-profile
+// simulation uses TRIKE160; TRIKE_UNIFIED_PARAMS measures the maximum geometry.
 // One transaction is accepted after each reset. The input stream is
 //   secret_key || ciphertext,
 // using the project TRIKE_MINSUM_KAT_V1 byte layout.

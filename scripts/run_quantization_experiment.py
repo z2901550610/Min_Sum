@@ -14,7 +14,6 @@ from pathlib import Path
 
 
 PROFILE_TARGETS = {
-    "trike128": 201,
     "trike160": 263,
     "trike256": 429,
     "trike384": 659,
@@ -91,7 +90,7 @@ def parse_candidate(text: str) -> tuple[int, int, int, int]:
 
 def add_common_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--model", default="build/model/min_sum_model")
-    parser.add_argument("--profile", choices=sorted(PROFILE_TARGETS), default="trike128")
+    parser.add_argument("--profile", choices=sorted(PROFILE_TARGETS), default="trike160")
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--threads", type=int, default=0)
 

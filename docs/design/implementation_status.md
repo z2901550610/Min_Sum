@@ -26,7 +26,6 @@ Min-Sum。最大公开参数等级确定计数器和存储几何，`i_param_leve
 
 | 等级 | `R` | `W` | 固定周期 | 100 MHz延时 |
 | --- | ---: | ---: | ---: | ---: |
-| TRIKE128 | 8243 | 27 | 193,514 | 1.93514 ms |
 | TRIKE160 | 12589 | 35 | 337,245 | 3.37245 ms |
 | TRIKE256 | 30389 | 55 | 1,252,957 | 12.52957 ms |
 | TRIKE384 | 63773 | 83 | 3,866,043 | 38.66043 ms |
@@ -149,19 +148,20 @@ Min-Sum判决与软件模型bit-exact。
 
 - `make ci-fast`：工具锁、记录/filelist检查、Verible/Slang/Verilator、形式proof/cover、单元测试和toy
   集成；toy结果为`residual=0, exact=1, cycles=154`。
-- `make ci-kem-reference`：官方TRIKE-2/5/7/9 C KAT哈希、五档软件KEM自测，以及完整
+- `make ci-kem-reference`：官方TRIKE-2/5/7/9 C KAT哈希、四档软件KEM自测，以及完整
   KeyGen/Encaps/Min-Sum Decaps参考链。
-- 默认K=4、`L=32`五档随机译码：固定周期与预算一致，`residual=0`、`exact=1`。
+- 默认K=4、`L=32`四档随机译码：固定周期与预算一致，`residual=0`、`exact=1`。
 
 严格Verilator告警门使用[精确waiver文件](../../config/verilator_waivers.vlt)。waiver只覆盖已知的生成
 fixture未用参数、testbench同步观察复位与DUT异步复位、以及显式未消费的测试输出；RTL规则保持启用。
 
 ## Vivado证据边界
 
-当前参数与当前源码没有完整的同条件routed decoder基线。2026-08-10的Decaps GUI报告虽然Fully Routed
-且100 MHz通过，但层次证明其实际展开为统一最大TRIKE几何，不是目标TRIKE160配置，已在
-[EXP-0082](../experiments/EXP-0082-decaps-route-config-audit.md)中拒绝用于基线。KeyGen、Encaps和Decaps
-的资源、WNS和Fmax以下一次配置匹配且带manifest的实现为准。
+2026-08-10的五档统一最大几何Decaps报告Fully Routed并满足100 MHz：63,228 LUT、60,542 FF、
+25,653 Slice、635 Block RAM Tile、575 RAMB36、120 RAMB18、4 DSP，setup WNS/TNS为
+`+0.033 ns/0`，hold WHS/THS为`+0.050 ns/0`。该结果见
+[EXP-0082](../experiments/EXP-0082-decaps-route-config-audit.md)。当前RTL只保留四个提交档位，最大RAM几何
+不变但profile控制已修改，因此当前四档物理基线等待同条件复测。
 
 每次新运行使用`RUN-YYYYMMDD-NN-<top>`标识，在
 `reports/vivado/manifests/`提交运行manifest，原始`.rpt/.dcp`保存在
@@ -169,8 +169,8 @@ fixture未用参数、testbench同步观察复位与DUT异步复位、以及显�
 Fully Routed结果才可更新[Vivado基线注册表](vivado_baseline_registry.md)。wrapper没有package pin约束，
 因此核心100 MHz通过不等于板级I/O签核。
 
-实现入口与产物说明见[项目工作流](../project_workflow.md)。完整Decaps的下一项物理工作是在sources_1中
-显式设置`TRIKE_160_PARAMS`、`BIKE_PARALLEL_L=32`、`BIKE_K_SIGN_K=4`、`BIKE_MSG_BITS=5`和
+实现入口与产物说明见[项目工作流](../project_workflow.md)。统一decoder嵌入Decaps的最大档物理包络复测使用
+`TRIKE_UNIFIED_PARAMS`、`BIKE_PARALLEL_L=32`、`BIKE_K_SIGN_K=4`、`BIKE_MSG_BITS=5`和
 `BIKE_COLS_PER_TILE=256`，重置synthesis/implementation后重新运行`trike_decaps_synth_top`。新报告需
 记录LUT/FF/Slice/BRAM/DSP、setup WNS/TNS、hold WHS/THS、未约束路径和关键routed path，再用
 `cycles/Fmax`评价体系级延时。
@@ -179,6 +179,9 @@ Fully Routed结果才可更新[Vivado基线注册表](vivado_baseline_registry.m
 
 - 官方TRIKE-2的`r=15581`与项目Min-Sum profile的`r=12589`是两个验证域；官方端到端Decaps KAT需要
   单独建立`r=15581`译码profile及DFR证据。
+- `decoder_top`已通过2-bit公开profile选择适配四档；`trike_decaps_synth_top`的字节布局和
+  pipeline profile仍为编译期边界。四档完整KEM统一还需在wrapper暴露公开profile，并为各档固定
+  `SK/CT`长度建立分档事务调度和逐档golden。
 - 当前Min-Sum端到端向量证明功能闭环、固定周期和隐式拒绝，不构成有限样本之外的DFR/FLS结论。
 - 完整Decaps、当前KeyGen和当前Encaps需要同条件Vivado复测；板级接口还需要真实pin与I/O delay约束。
 

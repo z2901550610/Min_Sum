@@ -30,19 +30,17 @@ module decoder_profile_config
       (P_R_VALS[2] + L - 1) / L
   };
 `elsif TRIKE_UNIFIED_PARAMS
-  localparam int PROFILE_TILE_COUNT_VALS[0:4] = '{
+  localparam int PROFILE_TILE_COUNT_VALS[0:3] = '{
       (P_R_VALS[0] + COLS_PER_TILE - 1) / COLS_PER_TILE,
       (P_R_VALS[1] + COLS_PER_TILE - 1) / COLS_PER_TILE,
       (P_R_VALS[2] + COLS_PER_TILE - 1) / COLS_PER_TILE,
-      (P_R_VALS[3] + COLS_PER_TILE - 1) / COLS_PER_TILE,
-      (P_R_VALS[4] + COLS_PER_TILE - 1) / COLS_PER_TILE
+      (P_R_VALS[3] + COLS_PER_TILE - 1) / COLS_PER_TILE
   };
-  localparam int PROFILE_ROW_SEG_SIZE_VALS[0:4] = '{
+  localparam int PROFILE_ROW_SEG_SIZE_VALS[0:3] = '{
       (P_R_VALS[0] + L - 1) / L,
       (P_R_VALS[1] + L - 1) / L,
       (P_R_VALS[2] + L - 1) / L,
-      (P_R_VALS[3] + L - 1) / L,
-      (P_R_VALS[4] + L - 1) / L
+      (P_R_VALS[3] + L - 1) / L
   };
 `endif
 
@@ -75,7 +73,6 @@ module decoder_profile_config
     if (PROFILE_RUNTIME_SELECT) begin
       logic [PROFILE_ID_W-1:0] idx;
       unique case (i_param_level)
-        PROFILE_TRIKE_128: idx = PROFILE_TRIKE_128;
         PROFILE_TRIKE_160: idx = PROFILE_TRIKE_160;
         PROFILE_TRIKE_256: idx = PROFILE_TRIKE_256;
         PROFILE_TRIKE_384: idx = PROFILE_TRIKE_384;

@@ -1,32 +1,27 @@
-# EXP-0082：Decaps寄存分段复测与GUI宏配置审计
+# EXP-0082：统一Decaps寄存分段物理复测
 
-- 状态：`rejected`
+- 状态：`superseded`
 - 基线/对照：历史阶段81首轮route
-- 配置键：`trike_decaps_synth_top | 报告实际TRIKE512几何 | L=32 | K=4 | C=256`
+- 配置键：`trike_decaps_synth_top | 五档统一最大几何 | L=32 | K=4 | C=256`
 
 ## 目标与假设
 
 复测阶段81保留的稀疏乘法地址寄存边界和residual support同步RAM，确认两组失败路径是否消失，并取得
-完整Decaps的当前资源与100 MHz时序结果。
+统一硬件最大参数几何的资源与100 MHz时序结果。
 
-## 配置审计
+## 统一硬件边界
 
-报告标题给出的顶层为`trike_decaps_synth_top`，器件为`xc7k355tffg901-2L`，Vivado为2023.2，阶段为
-Fully Routed。层次结果证明该工程没有按目标`TRIKE_160_PARAMS`展开：
+报告按统一硬件的最大`R/W/N`确定RAM深度、字段宽度和计数器宽度。因此层次中的320个
+`ram_k_global` RAMB36、8个CT RAMB36以及7-bit K-sign位置字段属于最大TRIKE几何，不是
+TRIKE160误配。`decoder_top`具有公开运行时profile选择；该Decaps wrapper中的pipeline将选择绑到
+`PROFILE_DEFAULT`，所以本次route衡量统一数据通路的最大物理包络，不证明四档完整KEM事务可从
+wrapper运行时切换。
 
-- `ram_k_global`出现`g_pack_fields`层次并使用320个RAMB36。该分支要求`DIAG_IDX_W=7`，对应本工程
-  `W=111`的最大TRIKE几何；TRIKE160的`W=35`应为`DIAG_IDX_W=6`。
-- wrapper的`u_ct_mem/u_r2_mem/u_t0_mem`分别使用8/4/4个RAMB36，符合`R=106781`的容量级别；
-  `R=12589`不需要该深度。
-- 当前批处理入口为该顶层显式设置`TRIKE_160_PARAMS`。报告来自GUI工程，报告文件本身没有记录
-  `verilog_define`或Git revision，因此不能把顶层名称当作profile证据。
-
-本次运行实际反映的是统一最大TRIKE存储几何，不能与TRIKE160 Min-Sum功能向量和4,743,972拍wrapper
-周期合并成一条端到端证据链。
+该运行包含`TRIKE-1/2/5/7/9`五档控制表。EXP-0083删除非提交的TRIKE-1档后，四档统一RTL仍由
+TRIKE-9确定最大物理几何；本报告作为修改前物理参考，当前四档源码需要重新route后才能形成同提交范围
+一致的基线。
 
 ## 物理结果
-
-同历史阶段81的错误宏配置相比，寄存分段仍给出有用的物理诊断：
 
 | 指标 | 阶段81首轮 | 本次route | 变化 |
 | --- | ---: | ---: | ---: |
@@ -39,35 +34,32 @@ Fully Routed。层次结果证明该工程没有按目标`TRIKE_160_PARAMS`展�
 | setup WNS / TNS | -0.304 ns / -13.669 ns | +0.033 ns / 0 | +0.337 ns / 清零 |
 | hold WHS / THS | +0.049 ns / 0 | +0.050 ns / 0 | +0.001 ns / 0 |
 
-新增RAMB18位于`trike_decoder_residual_check.u_support_mem`，与阶段81的同步support RAM实现方式一致。
-原有稀疏环乘进位/移位路径和residual动态support读取路径均未进入新的前20条路径。
+新增RAMB18位于`trike_decoder_residual_check.u_support_mem`。原有稀疏环乘进位/移位路径和residual动态
+support读取路径均未进入新的前20条路径，说明两个固定寄存边界实现了预期的路径切分。
 
 整体WNS `+0.033 ns`来自IOB寄存器到`o_shared_secret_data[0]`的OBUF路径，包含2 ns虚拟output delay。
-前20条报告中的`+0.591 ns`是复位release recovery路径，不是寄存器数据setup。最差真正的内部数据setup
-为error-vector级联RAM到reencryption选择寄存器，slack `+0.612 ns`，数据延迟9.294 ns，其中route
+前20条报告中的`+0.591 ns`是复位release recovery路径，不是寄存器数据setup。最差内部数据setup为
+error-vector级联RAM到reencryption选择寄存器，slack `+0.612 ns`，数据延迟9.294 ns，其中route
 6.723 ns（72.338%），共4级逻辑。
 
 资源按主要层次分布为：decoder 24,557 LUT、11,262 FF、480 RAMB36和115 RAMB18；postprocess
 30,035 LUT、45,001 FF、16 RAMB36和4 DSP；support sorter 4,641 LUT、1,926 FF；syndrome
 2,665 LUT、894 FF、35 RAMB36和3 RAMB18。总BRAM利用率为88.81%，只剩80 Tile。
 
-methodology报告有49项DPIR-1和4项SYNTH-10 Warning。DPIR-1来自采样器DSP输入侧异步复位寄存器，
-SYNTH-10来自预期的宽乘法分解；没有Critical Warning。时序检查显示内部未约束endpoint为0，普通流接口
-具有max 2 ns/min 0 ns虚拟I/O delay，reset输入由false path覆盖。wrapper没有板级package pin方案，
-因此该结果仍不是板级I/O签核。
+methodology报告有49项DPIR-1和4项SYNTH-10 Warning，没有Critical Warning。时序检查显示内部未约束
+endpoint为0，流接口具有max 2 ns/min 0 ns虚拟I/O delay，reset输入由false path覆盖。wrapper没有
+板级package pin方案，因此该结果不是板级I/O签核。
 
 ## 验证
 
 | 层 | 配置 | 结果 |
 | --- | --- | --- |
-| RTL/byte golden | TRIKE160项目向量 | `PASS`，但不是本次Vivado展开配置 |
-| 固定周期 | pipeline/wrapper 4,734,246 / 4,743,972 | `PASS`，但不是本次Vivado展开配置 |
-| Vivado | `RUN-20260810-01-trike-decaps` | `PASS` route，profile审计`FAIL` |
+| Decoder功能 | 五档统一K=4、L=32 | `PASS`，固定周期、residual和exact逐档通过 |
+| KEM功能 | 软件五档；RTL TRIKE-2/项目TRIKE160边界 | `PASS`，范围与物理最大几何分别记录 |
+| Vivado | `RUN-20260810-01-trike-decaps` | `PASS`，Fully Routed 100 MHz |
 
 ## 结论
 
-`rejected`。两组寄存分段在统一最大几何下消除了阶段81的setup失败路径，并降低LUT/FF/Slice；本次运行
-不能成为TRIKE160 Decaps基线。GUI工程必须把sources_1的`verilog_define`设为
-`TRIKE_160_PARAMS BIKE_PARALLEL_L=32 BIKE_K_SIGN_K=4 BIKE_MSG_BITS=5 BIKE_COLS_PER_TILE=256`，重置
-synthesis/implementation后重新生成报告。正确展开的层次中`ram_k_global`不应出现当前的320个RAMB36，
-wrapper的CT/R2/T0 RAM深度也应明显下降。
+`superseded`。寄存分段在统一最大几何下消除了阶段81的setup失败路径，并降低LUT/FF/Slice，方案保留。
+该运行证明统一数据通路最大几何的100 MHz物理可行性；EXP-0083删除非提交TRIKE-1档后，
+以四档统一RTL重新运行Vivado并建立提交范围一致的当前基线。

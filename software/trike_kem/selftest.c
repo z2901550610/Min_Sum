@@ -25,7 +25,7 @@ static double elapsed_seconds(const struct timespec *start,
 }
 
 int main(int argc, char **argv) {
-  const char *profile_name = argc > 1 ? argv[1] : "trike128";
+  const char *profile_name = argc > 1 ? argv[1] : "trike160";
   uint64_t seed_value = 1U;
   const trike_kem_params_t *params;
   trike_public_key_t public_key = {0};

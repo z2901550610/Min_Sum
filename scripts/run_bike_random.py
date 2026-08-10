@@ -73,18 +73,6 @@ PARAM_SETS = {
         "alpha_shift_1": 4,
         "cols_per_tile": 576,
     },
-    "trike128": {
-        "n0": 3,
-        "r": 8243,
-        "w": 27,
-        "error_count": 201,
-        "i_max": 7,
-        "c_val": 4,
-        "msg_bits": 5,
-        "alpha_shift_0": 3,
-        "alpha_shift_1": 4,
-        "cols_per_tile": 256,
-    },
     "trike160": {
         "n0": 3,
         "r": 12589,
@@ -139,7 +127,6 @@ PROFILE_IDS = {
     "bike128": "PROFILE_BIKE_128",
     "bike192": "PROFILE_BIKE_192",
     "bike256": "PROFILE_BIKE_256",
-    "trike128": "PROFILE_TRIKE_128",
     "trike160": "PROFILE_TRIKE_160",
     "trike256": "PROFILE_TRIKE_256",
     "trike384": "PROFILE_TRIKE_384",
@@ -150,14 +137,13 @@ UNIFIED_PROFILE_IDS = {
     "bike128": "PROFILE_BIKE_128",
     "bike192": "PROFILE_BIKE_192",
     "bike256": "PROFILE_BIKE_256",
-    "trike128": "PROFILE_TRIKE_128",
     "trike160": "PROFILE_TRIKE_160",
     "trike256": "PROFILE_TRIKE_256",
     "trike384": "PROFILE_TRIKE_384",
     "trike512": "PROFILE_TRIKE_512",
 }
 
-TRIKE_PARAM_SETS = {"trike128", "trike160", "trike256", "trike384", "trike512"}
+TRIKE_PARAM_SETS = {"trike160", "trike256", "trike384", "trike512"}
 
 
 def bit_vector_hex(bits: list[int], width: int) -> str:
@@ -327,14 +313,13 @@ def emit_pkg(
     t: int,
 ) -> None:
     if n0 == 3:
-        profile_constants = """  parameter int PROFILE_COUNT = 5;
-  parameter int PROFILE_ID_W = 3;
-  localparam logic [PROFILE_ID_W-1:0] PROFILE_TRIKE_128 = 3'd0;
-  localparam logic [PROFILE_ID_W-1:0] PROFILE_TRIKE_160 = 3'd1;
-  localparam logic [PROFILE_ID_W-1:0] PROFILE_TRIKE_256 = 3'd2;
-  localparam logic [PROFILE_ID_W-1:0] PROFILE_TRIKE_384 = 3'd3;
-  localparam logic [PROFILE_ID_W-1:0] PROFILE_TRIKE_512 = 3'd4;
-  localparam logic [PROFILE_ID_W-1:0] PROFILE_DEFAULT = PROFILE_TRIKE_128;"""
+        profile_constants = """  parameter int PROFILE_COUNT = 4;
+  parameter int PROFILE_ID_W = 2;
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_TRIKE_160 = 2'd0;
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_TRIKE_256 = 2'd1;
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_TRIKE_384 = 2'd2;
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_TRIKE_512 = 2'd3;
+  localparam logic [PROFILE_ID_W-1:0] PROFILE_DEFAULT = PROFILE_TRIKE_160;"""
     else:
         profile_constants = """  parameter int PROFILE_COUNT = 3;
   parameter int PROFILE_ID_W = 2;

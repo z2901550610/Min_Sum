@@ -94,7 +94,6 @@ typedef struct {
 
 static const decoder_config_t k_profiles[] = {
     {"toy", 2, 8, 3, 1, 4, 5, 2, 1, 3},
-    {"trike128", 3, 8243, 27, 201, 7, 5, 4, 3, 4},
     {"trike160", 3, 12589, 35, 263, 7, 5, 4, 3, 4},
     {"trike256", 3, 30389, 55, 429, 7, 5, 5, 3, 4},
     {"trike384", 3, 63773, 83, 659, 7, 5, 5, 3, 6},
@@ -113,7 +112,7 @@ static void usage(FILE *stream, const char *program) {
           "Run a fixed-iteration QC-MDPC syndrome min-sum model.\n"
           "\n"
           "Options:\n"
-          "  --profile NAME          toy, trike128, trike160, trike256, trike384,"
+          "  --profile NAME          toy, trike160, trike256, trike384,"
           " trike512, bike128, bike192, or bike256\n"
           "  --seed N                first trial seed (default: 1)\n"
           "  --trials N              number of generated cases (default: 1)\n"

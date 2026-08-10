@@ -23,8 +23,6 @@ enum {
 };
 
 static const trike_kem_params_t k_trike_params[] = {
-    {"trike128", 128U, 8243U, 27U, 201U,
-     {3U, 8243U, 27U, 7U, 5U, 4U, 3U, 4U}},
     {"trike160", 160U, 12589U, 35U, 263U,
      {3U, 12589U, 35U, 7U, 5U, 4U, 3U, 4U}},
     {"trike256", 256U, 30389U, 55U, 429U,

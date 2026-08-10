@@ -32,12 +32,12 @@ Build and run:
 make test-software-trike-kem
 ```
 
-The default target checks all five TRIKE profiles. For every profile it checks
+The default target checks the four submission profiles. For every profile it checks
 a valid encapsulation and decapsulation, then corrupts `c2` and checks the
 implicit-rejection path. A single deterministic case can be run with:
 
 ```sh
-build/software/trike_kem/trike_kem_selftest trike128 1
+build/software/trike_kem/trike_kem_selftest trike160 1
 ```
 
 This bring-up code is not a production side-channel implementation. Decaps

@@ -798,7 +798,7 @@ H2为766/1,043，pseudohash本层控制与摘要状态为151/1,044。后续面�
 
 `make test-trike-reference-kat`直接编译最新材料中的TRIKE-2/5/7/9 Reference C，各生成10组完整
 KeyGen/Encaps/Decaps向量，并在统一LF换行后逐byte比较随包官方KAT。四档PK、SK、CT和SS均完全匹配。
-该入口是软件golden和后续RTL端到端对拍的权威边界；`software/trike_kem`中的五档SHAKE bring-up不作为
+该入口是软件golden和后续RTL端到端对拍的权威边界；`software/trike_kem`中的四档SHAKE bring-up不作为
 最新四档KAT结论。
 
 `make test-trike-poly-reference`从TRIKE-2官方KAT第0组解析私钥中的$t_0$、$h_0$支持集以及公钥$r_2$，

@@ -33,7 +33,7 @@ AWS_FIPS202_INCLUDE := $(AWS_BIKE_KEM_DIR)/src/third_party_src
 TRIKE_KEM_BUILD_DIR ?= build/software/trike_kem
 TRIKE_KEM_SELFTEST ?= $(TRIKE_KEM_BUILD_DIR)/trike_kem_selftest
 TRIKE_KEM_SOURCES := software/trike_kem/trike_kem.c software/trike_kem/trike_ms_quant.c software/trike_kem/selftest.c
-TRIKE_KEM_TEST_PROFILES ?= trike128 trike160 trike256 trike384 trike512
+TRIKE_KEM_TEST_PROFILES ?= trike160 trike256 trike384 trike512
 TRIKE_REFERENCE_SOURCE_ROOT ?= external/trike-reference
 TRIKE_REFERENCE_BUILD_DIR ?= build/software/trike_reference
 TRIKE_REFERENCE_PARAM_SETS ?= TRIKE-2 TRIKE-5 TRIKE-7 TRIKE-9
@@ -108,7 +108,7 @@ BIKE_UNIFIED_RANDOM_TIMEOUT_CYCLES ?= 40000000
 TRIKE_UNIFIED_KSIGN_PARALLEL_L ?= 32
 TRIKE_UNIFIED_KSIGN_COLS_PER_TILE ?= 1152
 TRIKE_UNIFIED_KSIGN_K ?= 4
-TRIKE_UNIFIED_KSIGN_PARAM_SETS ?= trike128 trike160 trike256 trike384 trike512
+TRIKE_UNIFIED_KSIGN_PARAM_SETS ?= trike160 trike256 trike384 trike512
 TRIKE_UNIFIED_KSIGN_TIMEOUT_CYCLES ?= 40000000
 CI_SMOKE_SEED ?= 1
 CI_NIGHTLY_TRIALS ?= 4
@@ -450,12 +450,14 @@ lint-verilator:
 	@$(REAL_VERILATOR) $(VERILATOR_LINT_FLAGS) --top-module trike_encaps_synth_top $(TRIKE_ENCAPS_RTL)
 	@$(REAL_VERILATOR) $(VERILATOR_LINT_FLAGS) --top-module trike_keygen_synth_top $(TRIKE_KEYGEN_RTL)
 	@$(REAL_VERILATOR) $(VERILATOR_LINT_FLAGS) -DTRIKE_160_PARAMS -DBIKE_PARALLEL_L=32 -DBIKE_K_SIGN_K=4 -DBIKE_MSG_BITS=5 -DBIKE_COLS_PER_TILE=256 --top-module trike_decaps_synth_top $(TRIKE_DECAPS_SYNTH_RTL)
+	@$(REAL_VERILATOR) $(VERILATOR_LINT_FLAGS) -DTRIKE_UNIFIED_PARAMS -DBIKE_PARALLEL_L=32 -DBIKE_K_SIGN_K=4 -DBIKE_MSG_BITS=5 -DBIKE_COLS_PER_TILE=256 --top-module trike_decaps_synth_top $(TRIKE_DECAPS_SYNTH_RTL)
 
 lint-slang:
 	@$(SLANG) $(SLANG_FLAGS) -DBIKE_PARALLEL_L=$(BIKE_PARALLEL_L) --top decoder_top $(RTL)
 	@$(SLANG) $(SLANG_FLAGS) --top trike_encaps_synth_top $(TRIKE_ENCAPS_RTL)
 	@$(SLANG) $(SLANG_FLAGS) --top trike_keygen_synth_top $(TRIKE_KEYGEN_RTL)
 	@$(SLANG) $(SLANG_FLAGS) -DTRIKE_160_PARAMS -DBIKE_PARALLEL_L=32 -DBIKE_K_SIGN_K=4 -DBIKE_MSG_BITS=5 -DBIKE_COLS_PER_TILE=256 --top trike_decaps_synth_top $(TRIKE_DECAPS_RTL) rtl/trike_decaps_synth_top.sv
+	@$(SLANG) $(SLANG_FLAGS) -DTRIKE_UNIFIED_PARAMS -DBIKE_PARALLEL_L=32 -DBIKE_K_SIGN_K=4 -DBIKE_MSG_BITS=5 -DBIKE_COLS_PER_TILE=256 --top trike_decaps_synth_top $(TRIKE_DECAPS_RTL) rtl/trike_decaps_synth_top.sv
 
 check-rtl: check-filelists check-format-rtl lint-rtl lint-verilator lint-slang
 

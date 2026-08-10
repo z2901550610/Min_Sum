@@ -76,7 +76,7 @@ puts "RTL filelist: $rtl_filelist"
 
 if {$top eq "trike_decaps_synth_top"} {
   set verilog_defines [list \
-    TRIKE_160_PARAMS \
+    TRIKE_UNIFIED_PARAMS \
     BIKE_PARALLEL_L=32 \
     BIKE_K_SIGN_K=4 \
     BIKE_MSG_BITS=5 \

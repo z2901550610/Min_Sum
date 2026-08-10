@@ -3845,3 +3845,41 @@ WNS/TNS收敛且`cycles/Fmax`改善后，才判定为物理时序收益。
 
 结论与状态：RTL结构保留并进入Vivado复测。功能、byte/word golden和公开固定周期已闭合；100 MHz、
 资源变化和Fmax保持待测，不使用Verilator或XPM意图推测物理收益。
+
+### 阶段82：统一Decaps最大几何寄存分段复测（2026-08-10）
+
+目标与假设：在与阶段81相同的`xc7k355tffg901-2L`、Vivado 2023.2、10 ns时钟、
+0.100 ns uncertainty和Fully Routed阶段复测稀疏乘法与residual support RAM寄存分段。该实现按
+五档统一配置的TRIKE-9最大`R/W/N`展开存储与数据通路；Decaps pipeline的profile绑到
+`PROFILE_DEFAULT`，所以这是最大档物理包络，不是wrapper端的五档运行时KEM切换证明。
+
+验证范围与定量结果：用户提供的报告显示63,228 LUT、60,542 FF、25,653 Slice、635 Block RAM
+Tile（575 RAMB36/120 RAMB18）和4 DSP。setup WNS/TNS为`+0.033 ns/0`，hold WHS/THS为
+`+0.050 ns/0`。相对阶段81首轮分别减少2,518 LUT、5,607 FF和2,475 Slice，Block RAM Tile增加0.5，
+setup WNS改善0.337 ns且TNS清零。新RAMB18位于residual support RAM；原两组失败路径没有进入
+新的前20条路径。功能门禁与物理报告分层记录，详见EXP-0082和RUN-20260810-01。
+
+结论与状态：寄存分段保留，统一最大几何在100 MHz下Fully Routed通过。该结果随阶段83的
+参数范围修改标记为历史参考，四档当前RTL的物理基线待同条件复测。
+
+### 阶段83：统一TRIKE架构收缩到四个提交档（2026-08-10）
+
+目标与假设：删除非提交的TRIKE-1/TRIKE128实验profile，保留TRIKE-2/5/7/9四档统一运行时
+数据通路。最大档TRIKE-9不变，因此K-sign、message、syndrome和tile RAM深度、K-sign位置字段
+宽度与最大固定周期不变；只有profile表、公开选择ID和其控制mux收缩。
+
+关键实现：RTL和随机fixture的TRIKE profile数组改为四项，ID宽度由3 bit改为2 bit，值0/1/2/3
+分别对应TRIKE160/256/384/512。Makefile、C量化模型、量化campaign、软件KEM、当前设计文档、
+DFR汇总CSV和对应图表同步删除TRIKE128入口。Decaps Vivado批处理入口使用
+`TRIKE_UNIFIED_PARAMS`生成最大档物理包络；固定TRIKE160 golden门禁保持独立。历史实验保留删除原因
+与旧报告配置。
+
+验证范围与定量结果：`make format-rtl`、`make check-format-rtl`、`make lint-rtl`和`make ci-fast`
+通过，Decaps固定TRIKE160与统一最大几何的Verilator/Slang lint均通过。K=4、L=32、seed 1四档
+随机回归分别固定337,245、1,252,957、3,866,043和8,538,564拍，
+均为`residual=0, exact=1`。四档软件KEM正常解封装与篡改隐式拒绝通过；`make ci-kem-reference`
+的官方TRIKE-2/5/7/9 KAT和RTL KEM分层golden/固定周期门禁通过。未运行四档当前RTL的Vivado实现，
+LUT、FF、Slice、RAMB36/RAMB18、Block RAM Tile、DSP、setup WNS/TNS和hold WHS待测。
+
+结论与状态：四档profile收缩保留，功能状态为通过。不将profile ID减少解释为物理收益；
+最大RAM几何不变，同条件Fully Routed复测完成前，当前物理结果保持待测。

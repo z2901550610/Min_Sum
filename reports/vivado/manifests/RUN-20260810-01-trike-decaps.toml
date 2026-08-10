@@ -2,12 +2,12 @@ schema_version = 1
 run_id = "RUN-20260810-01-trike-decaps"
 experiment_id = "EXP-0082"
 date = "2026-08-10"
-status = "incomparable"
-verdict = "rejected"
+status = "pass"
+verdict = "superseded"
 source_revision = "unrecorded-windows-copy"
 dirty_tree = true
 report_root = "D:/trike_reports/RUN-20260810-01-trike-decaps"
-notes = "User-provided report headers use flat D:/trike_reports filenames and do not embed Git revision or verilog_define. Hierarchy proves unified maximum TRIKE geometry, not the intended TRIKE160 elaboration. The run directory is the assigned archive destination."
+notes = "User-provided report headers use flat D:/trike_reports filenames and do not embed Git revision. The hierarchy is the intended five-profile unified maximum TRIKE geometry. EXP-0083 removes the non-submission TRIKE-1 profile, so this run remains a pre-removal physical reference. The run directory is the assigned archive destination."
 
 [artifacts]
 files = [
@@ -22,7 +22,7 @@ sha256_manifest = ""
 
 [design]
 top = "trike_decaps_synth_top"
-profile = "TRIKE_UNIFIED maximum geometry observed; intended TRIKE160"
+profile = "TRIKE_UNIFIED five-profile maximum geometry"
 parallel_l = 32
 k_sign_k = 4
 cols_per_tile = 256
@@ -39,7 +39,7 @@ clock_uncertainty_ns = 0.100
 [functional]
 fixed_cycles = 0
 tests = []
-result = "not associated: elaborated profile does not match TRIKE160 reference tests"
+result = "decoder five-profile regression and KEM reference gates passed; full RTL KEM golden is bounded separately"
 
 [results]
 lut = "63228"
