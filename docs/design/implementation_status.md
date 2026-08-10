@@ -158,9 +158,10 @@ fixture未用参数、testbench同步观察复位与DUT异步复位、以及显�
 
 ## Vivado证据边界
 
-当前参数与当前源码没有完整的同条件routed decoder基线。KeyGen、Encaps和Decaps经历过会影响路径或
-周期的RTL修改，其资源、WNS和Fmax以下一次带manifest的实现为准。历史报告只用于定位，不用于计算当前
-增减或宣称物理收益。
+当前参数与当前源码没有完整的同条件routed decoder基线。2026-08-10的Decaps GUI报告虽然Fully Routed
+且100 MHz通过，但层次证明其实际展开为统一最大TRIKE几何，不是目标TRIKE160配置，已在
+[EXP-0082](../experiments/EXP-0082-decaps-route-config-audit.md)中拒绝用于基线。KeyGen、Encaps和Decaps
+的资源、WNS和Fmax以下一次配置匹配且带manifest的实现为准。
 
 每次新运行使用`RUN-YYYYMMDD-NN-<top>`标识，在
 `reports/vivado/manifests/`提交运行manifest，原始`.rpt/.dcp`保存在
@@ -168,9 +169,11 @@ fixture未用参数、testbench同步观察复位与DUT异步复位、以及显�
 Fully Routed结果才可更新[Vivado基线注册表](vivado_baseline_registry.md)。wrapper没有package pin约束，
 因此核心100 MHz通过不等于板级I/O签核。
 
-实现入口与产物说明见[项目工作流](../project_workflow.md)。完整Decaps的下一项物理工作是运行
-`trike_decaps_synth_top`，记录LUT/FF/Slice/BRAM/DSP、setup WNS/TNS、hold WHS/THS、未约束路径和
-关键routed path，再用`cycles/Fmax`评价体系级延时。
+实现入口与产物说明见[项目工作流](../project_workflow.md)。完整Decaps的下一项物理工作是在sources_1中
+显式设置`TRIKE_160_PARAMS`、`BIKE_PARALLEL_L=32`、`BIKE_K_SIGN_K=4`、`BIKE_MSG_BITS=5`和
+`BIKE_COLS_PER_TILE=256`，重置synthesis/implementation后重新运行`trike_decaps_synth_top`。新报告需
+记录LUT/FF/Slice/BRAM/DSP、setup WNS/TNS、hold WHS/THS、未约束路径和关键routed path，再用
+`cycles/Fmax`评价体系级延时。
 
 ## 当前限制
 
