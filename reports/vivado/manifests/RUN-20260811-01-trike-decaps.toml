@@ -1,0 +1,63 @@
+schema_version = 1
+run_id = "RUN-20260811-01-trike-decaps"
+experiment_id = "EXP-0084"
+date = "2026-08-11"
+status = "pass"
+verdict = "retained"
+source_revision = "unrecorded-windows-copy"
+dirty_tree = true
+report_root = "D:/trike_reports/RUN-20260811-01-trike-decaps"
+notes = "User-provided report headers use flat D:/trike_reports filenames and do not embed Git revision or compile defines. The run was supplied as the same-condition four-submission-profile rerun after EXP-0083; the assigned run directory is the archive destination. The two supplied internal-setup attachments are identical and represent one report artifact. Its top 20 paths are async reset recovery paths, so internal_data_setup_wns_ns is intentionally blank."
+
+[artifacts]
+files = [
+  "post_route_utilization.rpt",
+  "post_route_methodology.rpt",
+  "post_route_utilization_hier.rpt",
+  "post_route_high_fanout.rpt",
+  "post_route_internal_setup_paths.rpt",
+  "post_route_timing_summary.rpt",
+]
+sha256_manifest = ""
+
+[design]
+top = "trike_decaps_synth_top"
+profile = "TRIKE_UNIFIED four-submission-profile maximum geometry"
+parallel_l = 32
+k_sign_k = 4
+cols_per_tile = 256
+memory_geometry = "Observed W=111/DIAG_IDX_W=7 packed global K RAM: 320 RAMB36; decoder total 480 RAMB36 plus 115 RAMB18; top CT/R2/T0 memories 8/4/4 RAMB36"
+
+[tool]
+vivado = "2023.2 build 4029153"
+part = "xc7k355tffg901-2L"
+xdc = "constraints/trike_kem_core.xdc"
+report_stage = "fully_routed"
+clock_period_ns = 10.0
+clock_uncertainty_ns = 0.100
+
+[functional]
+fixed_cycles = 0
+tests = [
+  "make ci-fast",
+  "four-profile K=4 L=32 seed-1 decoder regression",
+  "make ci-kem-reference",
+]
+result = "four-profile decoder and KEM reference gates passed separately; the routed top is the maximum physical envelope, not a runtime four-profile KEM wrapper"
+
+[results]
+lut = "63386"
+ff = "60521"
+slice = "25759"
+block_ram_tile = "635"
+ramb36 = "575"
+ramb18 = "120"
+dsp = "4"
+setup_wns_ns = "0.033"
+setup_tns_ns = "0.000"
+hold_whs_ns = "0.051"
+hold_ths_ns = "0.000"
+pulse_width_wps_ns = "4.232"
+async_recovery_wns_ns = "0.275"
+internal_data_setup_wns_ns = ""
+comparison_run = "RUN-20260810-01-trike-decaps"

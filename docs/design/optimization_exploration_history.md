@@ -3883,3 +3883,24 @@ LUT、FF、Slice、RAMB36/RAMB18、Block RAM Tile、DSP、setup WNS/TNS和hold W
 
 结论与状态：四档profile收缩保留，功能状态为通过。不将profile ID减少解释为物理收益；
 最大RAM几何不变，同条件Fully Routed复测完成前，当前物理结果保持待测。
+
+### 阶段84：四档统一Decaps同条件物理复测（2026-08-11）
+
+目标与假设：在阶段83删除非提交TRIKE-1档后，使用与阶段82相同的`xc7k355tffg901-2L`、Vivado
+2023.2、10 ns时钟、0.100 ns uncertainty、XDC、L32/K4/C256最大几何和Fully Routed阶段复测。
+最大TRIKE-9几何不变，预期RAM资源不变；profile控制收缩是否形成物理资源变化只由实现报告判断。
+
+验证范围与定量结果：用户提供的四档报告为63,386 LUT、60,521 FF、25,759 Slice、635 Block RAM
+Tile（575 RAMB36/120 RAMB18）和4 DSP。setup WNS/TNS为`+0.033 ns/0`，hold WHS/THS为
+`+0.051 ns/0`，pulse-width裕量为`+4.232 ns`。相对阶段82五档参考，LUT增加158、FF减少21、Slice
+增加106，BRAM/DSP和setup WNS不变，判定为实现级小幅波动。methodology保留49项`DPIR-1`和4项
+`SYNTH-10`告警；没有无约束内部端点。
+
+时序证据边界：全局setup最差路径位于registered输出到OBUF，wrapper没有package pin约束。用户提供的
+两份internal-setup附件内容重复，报告中的20条路径全部是async reset recovery检查，最差`+0.275 ns`，
+不能据此声明片内同步数据通路WNS。后续优化前需要以register output pin到register data pin重新生成
+同步数据路径top-N报告。该缺项不改变所有已指定100 MHz约束均满足的结果。
+
+结论与状态：保留四档统一架构并把本次运行作为当前统一Decaps物理基线。删除一档使提交范围与公开控制
+一致，但没有可声明的面积或时序收益。完整配置、层次资源和补充报告命令见EXP-0084与
+RUN-20260811-01-trike-decaps。

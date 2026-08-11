@@ -1,6 +1,6 @@
 # EXP-0083：统一架构删除非提交TRIKE-1档
 
-- 状态：`functional-pass`
+- 状态：`retained`
 - 基线/对照：`EXP-0082` / `RUN-20260810-01-trike-decaps`
 - 配置键：`TRIKE_UNIFIED_PARAMS | TRIKE-2/5/7/9 | L=32 | K=4 | maximum geometry`
 
@@ -30,9 +30,9 @@ profile ID、软件入口和默认回归项；最大档TRIKE-9不变，因此RAM
 | Decoder随机回归 | TRIKE-2/5/7/9，K=4，L=32，seed 1 | `PASS`，337245/1252957/3866043/8538564拍，均`residual=0, exact=1` |
 | KEM软件 | trike160/256/384/512 | `PASS`，正常解封装与篡改隐式拒绝逐档通过 |
 | 完整参考门禁 | `make ci-kem-reference` | `PASS`，官方TRIKE-2/5/7/9 KAT与RTL KEM分层golden通过 |
-| Vivado | 四档统一最大几何 | `pending` |
+| Vivado | 四档统一最大几何 | [EXP-0084](EXP-0084-four-profile-decaps-route.md)：`PASS`，63,386 LUT、635 Block RAM Tile、setup WNS `+0.033 ns` |
 
 ## 结论
 
-`pending`。四档RTL和软件功能门禁通过；最大物理几何不变，但profile mux和控制宽度发生变化，必须用新的
-Fully Routed报告确认LUT/FF/Slice、BRAM和WNS后再更新当前物理基线。
+`retained`。四档RTL和软件功能门禁通过；同条件Fully Routed复测满足100 MHz，成为当前统一Decaps
+物理基线。profile收缩没有改变最大RAM几何，资源差异为实现级小幅波动，不声明面积收益。

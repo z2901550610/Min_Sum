@@ -157,11 +157,10 @@ fixture未用参数、testbench同步观察复位与DUT异步复位、以及显�
 
 ## Vivado证据边界
 
-2026-08-10的五档统一最大几何Decaps报告Fully Routed并满足100 MHz：63,228 LUT、60,542 FF、
-25,653 Slice、635 Block RAM Tile、575 RAMB36、120 RAMB18、4 DSP，setup WNS/TNS为
-`+0.033 ns/0`，hold WHS/THS为`+0.050 ns/0`。该结果见
-[EXP-0082](../experiments/EXP-0082-decaps-route-config-audit.md)。当前RTL只保留四个提交档位，最大RAM几何
-不变但profile控制已修改，因此当前四档物理基线等待同条件复测。
+2026-08-11的四档统一最大几何Decaps报告Fully Routed并满足100 MHz：63,386 LUT、60,521 FF、
+25,759 Slice、635 Block RAM Tile、575 RAMB36、120 RAMB18、4 DSP，setup WNS/TNS为
+`+0.033 ns/0`，hold WHS/THS为`+0.051 ns/0`。该结果见
+[EXP-0084](../experiments/EXP-0084-four-profile-decaps-route.md)，是当前统一Decaps物理基线。
 
 每次新运行使用`RUN-YYYYMMDD-NN-<top>`标识，在
 `reports/vivado/manifests/`提交运行manifest，原始`.rpt/.dcp`保存在
@@ -173,7 +172,8 @@ Fully Routed结果才可更新[Vivado基线注册表](vivado_baseline_registry.m
 `TRIKE_UNIFIED_PARAMS`、`BIKE_PARALLEL_L=32`、`BIKE_K_SIGN_K=4`、`BIKE_MSG_BITS=5`和
 `BIKE_COLS_PER_TILE=256`，重置synthesis/implementation后重新运行`trike_decaps_synth_top`。新报告需
 记录LUT/FF/Slice/BRAM/DSP、setup WNS/TNS、hold WHS/THS、未约束路径和关键routed path，再用
-`cycles/Fmax`评价体系级延时。
+`cycles/Fmax`评价体系级延时。同步数据路径报告必须把起点限制为register output pin、终点限制为register
+data pin，避免async recovery路径占满top-N列表。
 
 ## 当前限制
 
