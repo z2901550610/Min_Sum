@@ -3896,11 +3896,13 @@ Tile（575 RAMB36/120 RAMB18）和4 DSP。setup WNS/TNS为`+0.033 ns/0`，hold W
 增加106，BRAM/DSP和setup WNS不变，判定为实现级小幅波动。methodology保留49项`DPIR-1`和4项
 `SYNTH-10`告警；没有无约束内部端点。
 
-时序证据边界：全局setup最差路径位于registered输出到OBUF，wrapper没有package pin约束。用户提供的
-两份internal-setup附件内容重复，报告中的20条路径全部是async reset recovery检查，最差`+0.275 ns`，
-不能据此声明片内同步数据通路WNS。后续优化前需要以register output pin到register data pin重新生成
-同步数据路径top-N报告。该缺项不改变所有已指定100 MHz约束均满足的结果。
+时序证据边界：全局setup最差路径位于registered输出到OBUF，wrapper没有package pin约束。最初两份
+internal-setup附件内容重复，20条路径全部是async reset recovery检查，最差`+0.275 ns`。补充的data-pin
+限定报告返回20条同步setup路径，内部WNS为`+0.635 ns`。最差路径从decoder的pair选择寄存器到`ram_m`
+RAMB18读地址，仅1级LUT6，8.800 ns数据延迟中8.534 ns（96.98%）为布线。20条中14条归属`ram_m`
+地址控制到BRAM，5条归属V2C循环地址生成，1条归属C2V局部对角索引到`ram_t`地址；后续优化应先检查
+地址控制复制、bank邻近性与布局局部性。
 
 结论与状态：保留四档统一架构并把本次运行作为当前统一Decaps物理基线。删除一档使提交范围与公开控制
-一致，但没有可声明的面积或时序收益。完整配置、层次资源和补充报告命令见EXP-0084与
+一致，但没有可声明的面积或时序收益。完整配置、层次资源和同步路径报告结论见EXP-0084与
 RUN-20260811-01-trike-decaps。

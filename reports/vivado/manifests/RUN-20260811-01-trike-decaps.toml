@@ -7,7 +7,7 @@ verdict = "retained"
 source_revision = "unrecorded-windows-copy"
 dirty_tree = true
 report_root = "D:/trike_reports/RUN-20260811-01-trike-decaps"
-notes = "User-provided report headers use flat D:/trike_reports filenames and do not embed Git revision or compile defines. The run was supplied as the same-condition four-submission-profile rerun after EXP-0083; the assigned run directory is the archive destination. The two supplied internal-setup attachments are identical and represent one report artifact. Its top 20 paths are async reset recovery paths, so internal_data_setup_wns_ns is intentionally blank."
+notes = "User-provided report headers use flat D:/trike_reports filenames and do not embed Git revision or compile defines. The run was supplied as the same-condition four-submission-profile rerun after EXP-0083; the assigned run directory is the archive destination. The two initially supplied internal-setup attachments are identical and represent one async-recovery report artifact. A later data-pin-limited report supplies the synchronous internal setup result."
 
 [artifacts]
 files = [
@@ -16,6 +16,7 @@ files = [
   "post_route_utilization_hier.rpt",
   "post_route_high_fanout.rpt",
   "post_route_internal_setup_paths.rpt",
+  "post_route_internal_data_setup_paths.rpt",
   "post_route_timing_summary.rpt",
 ]
 sha256_manifest = ""
@@ -59,5 +60,5 @@ hold_whs_ns = "0.051"
 hold_ths_ns = "0.000"
 pulse_width_wps_ns = "4.232"
 async_recovery_wns_ns = "0.275"
-internal_data_setup_wns_ns = ""
+internal_data_setup_wns_ns = "0.635"
 comparison_run = "RUN-20260810-01-trike-decaps"

@@ -161,6 +161,8 @@ fixture未用参数、testbench同步观察复位与DUT异步复位、以及显�
 25,759 Slice、635 Block RAM Tile、575 RAMB36、120 RAMB18、4 DSP，setup WNS/TNS为
 `+0.033 ns/0`，hold WHS/THS为`+0.051 ns/0`。该结果见
 [EXP-0084](../experiments/EXP-0084-four-profile-decaps-route.md)，是当前统一Decaps物理基线。
+数据pin限定的同步register-to-register报告给出内部setup WNS `+0.635 ns`；最差路径位于decoder
+`ram_m`读地址控制，96.98%的数据路径延迟来自布线。
 
 每次新运行使用`RUN-YYYYMMDD-NN-<top>`标识，在
 `reports/vivado/manifests/`提交运行manifest，原始`.rpt/.dcp`保存在

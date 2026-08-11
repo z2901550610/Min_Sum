@@ -54,19 +54,17 @@ LUT、FF和Slice的微小正负变化处于重新实现的物理波动范围。�
 - methodology有49项`DPIR-1`异步驱动检查和4项`SYNTH-10`宽乘法告警，与签核边界一起保留。
 
 两份用户提供的`post_route_internal_setup_paths.rpt`内容完全相同，只计作一个artifact。该命令的前20条
-路径全部落在`**async_default**` recovery检查，不能给出同步register-to-register数据路径WNS。后续若要
-定位下一项优化，应在Vivado Tcl Console生成数据pin限定报告：
+路径全部落在`**async_default**` recovery检查。补充的data-pin限定报告准确返回20条`core_clk`同步
+setup路径，片内数据WNS为`+0.635 ns`；按`10 ns - WNS`粗略换算的片内Fmax估计约106.8 MHz，
+不代替更高目标频率下重新实现。
 
-```tcl
-report_timing \
-  -from [all_registers -clock [get_clocks core_clk] -output_pins] \
-  -to [all_registers -clock [get_clocks core_clk] -data_pins] \
-  -delay_type max -max_paths 20 -sort_by slack \
-  -file D:/trike_reports/post_route_internal_data_setup_paths.rpt
-```
+最差路径从`comp_read_pair_sel_r_reg_rep__3`经过1级LUT6到`ram_m`第9 bank的RAMB18读地址，数据路径
+8.800 ns，其中8.534 ns、96.98%为布线。20条路径按硬件归属分为：14条`ram_m` pair/write/clear地址
+控制到BRAM地址，5条V2C循环地址生成到行地址寄存器，1条C2V局部对角索引到`ram_t`地址。其优化优先级
+是`ram_m`地址控制的复制、布局局部性与bank邻近性；单纯减少组合逻辑级数不是首要方向。
 
 ## 结论
 
 `retained`。四档统一最大几何在100 MHz下Fully Routed通过，成为当前统一Decaps物理基线。删除
-TRIKE-1档的功能收益是提交范围与公开控制一致；物理结果判定为中性。同步数据关键路径报告仍需补充，
-它影响后续优化定位，不影响本次已约束100 MHz实现通过的结论。
+TRIKE-1档的功能收益是提交范围与公开控制一致；物理结果判定为中性。同步数据关键路径证据已补齐，
+内部最差路径仍有`+0.635 ns`裕量，下一轮物理优化集中在decoder的BRAM地址布线局部性。
