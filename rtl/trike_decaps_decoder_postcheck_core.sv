@@ -1,8 +1,8 @@
 `timescale 1ns / 1ps
 
-// Sequences the single decoder decision read port through the padded error
-// writer and the independent residual checker. Public runtime geometry is
-// latched once at i_start and remains fixed for the complete transaction.
+// Sequences decoder decision reads through the padded error writer and the
+// two-row residual checker. Public runtime geometry is latched once at i_start
+// and remains fixed for the complete transaction.
 module trike_decaps_decoder_postcheck_core #(
     parameter int R_BITS = 106781,
     parameter int BLOCKS = 3,
@@ -30,7 +30,10 @@ module trike_decaps_decoder_postcheck_core #(
     input  logic [                 31:0] i_runtime_r_bits,
     input  logic [                 31:0] i_runtime_weight,
     output logic [            COL_W-1:0] o_decision_col_idx,
+    output logic [            COL_W-1:0] o_decision_col_idx_1,
+    output logic                         o_decision_valid_1,
     input  logic                         i_decision_data,
+    input  logic                         i_decision_data_1,
     input  logic                         i_error_re,
     input  logic [     ERROR_ADDR_W-1:0] i_error_raddr,
     output logic [                  7:0] o_error_rdata,
@@ -55,11 +58,15 @@ module trike_decaps_decoder_postcheck_core #(
   logic               error_busy;
   logic               error_done;
   logic   [COL_W-1:0] residual_decision_col;
+  logic   [COL_W-1:0] residual_decision_col_1;
+  logic               residual_decision_valid_1;
   logic               residual_busy;
   logic               residual_done;
 
   assign o_decision_col_idx = (state_q == ST_ERROR_RUN) ? error_decision_col :
                               (state_q == ST_RESIDUAL_RUN) ? residual_decision_col : '0;
+  assign o_decision_col_idx_1 = (state_q == ST_RESIDUAL_RUN) ? residual_decision_col_1 : '0;
+  assign o_decision_valid_1 = (state_q == ST_RESIDUAL_RUN) && residual_decision_valid_1;
   assign o_busy = (state_q != ST_IDLE) || error_busy || residual_busy;
 
   trike_decoder_error_vector #(
@@ -87,24 +94,27 @@ module trike_decaps_decoder_postcheck_core #(
       .WEIGHT(WEIGHT),
       .RUNTIME_GEOMETRY(1'b1)
   ) u_residual (
-      .i_clk             (i_clk),
-      .i_rst_n           (i_rst_n),
-      .i_h_we            (i_h_we),
-      .i_h_block_idx     (i_h_block_idx),
-      .i_h_diag_idx      (i_h_diag_idx),
-      .i_h_index         (i_h_index),
-      .i_syndrome_we     (i_syndrome_we),
-      .i_syndrome_addr   (i_syndrome_addr),
-      .i_syndrome_data   (i_syndrome_data),
-      .i_start           (state_q == ST_RESIDUAL_START),
-      .i_runtime_r_bits  (runtime_r_bits_q),
-      .i_runtime_weight  (runtime_weight_q),
-      .o_decision_col_idx(residual_decision_col),
-      .i_decision_data   (i_decision_data),
-      .o_residual_zero   (o_residual_zero),
-      .o_residual_weight (o_residual_weight),
-      .o_busy            (residual_busy),
-      .o_done            (residual_done)
+      .i_clk               (i_clk),
+      .i_rst_n             (i_rst_n),
+      .i_h_we              (i_h_we),
+      .i_h_block_idx       (i_h_block_idx),
+      .i_h_diag_idx        (i_h_diag_idx),
+      .i_h_index           (i_h_index),
+      .i_syndrome_we       (i_syndrome_we),
+      .i_syndrome_addr     (i_syndrome_addr),
+      .i_syndrome_data     (i_syndrome_data),
+      .i_start             (state_q == ST_RESIDUAL_START),
+      .i_runtime_r_bits    (runtime_r_bits_q),
+      .i_runtime_weight    (runtime_weight_q),
+      .o_decision_col_idx  (residual_decision_col),
+      .o_decision_col_idx_1(residual_decision_col_1),
+      .o_decision_valid_1  (residual_decision_valid_1),
+      .i_decision_data     (i_decision_data),
+      .i_decision_data_1   (i_decision_data_1),
+      .o_residual_zero     (o_residual_zero),
+      .o_residual_weight   (o_residual_weight),
+      .o_busy              (residual_busy),
+      .o_done              (residual_done)
   );
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin

@@ -27,7 +27,10 @@ module tb_trike_decaps_decoder_postcheck_core;
   logic   [                 31:0] runtime_r_bits;
   logic   [                 31:0] runtime_weight;
   logic   [            COL_W-1:0] decision_col;
+  logic   [            COL_W-1:0] decision_col_1;
+  logic                           decision_valid_1;
   logic                           decision_data;
+  logic                           decision_data_1;
   logic                           error_re;
   logic   [     ERROR_ADDR_W-1:0] error_raddr;
   logic   [                  7:0] error_rdata;
@@ -47,27 +50,30 @@ module tb_trike_decaps_decoder_postcheck_core;
       .WEIGHT(MAX_W),
       .PADDED_R_BYTES(PADDED_R_BYTES)
   ) dut (
-      .i_clk             (clk),
-      .i_rst_n           (rst_n),
-      .i_h_we            (h_we),
-      .i_h_block_idx     (h_block),
-      .i_h_diag_idx      (h_diag),
-      .i_h_index         (h_index),
-      .i_syndrome_we     (syndrome_we),
-      .i_syndrome_addr   (syndrome_addr),
-      .i_syndrome_data   (syndrome_data),
-      .i_start           (start),
-      .i_runtime_r_bits  (runtime_r_bits),
-      .i_runtime_weight  (runtime_weight),
-      .o_decision_col_idx(decision_col),
-      .i_decision_data   (decision_data),
-      .i_error_re        (error_re),
-      .i_error_raddr     (error_raddr),
-      .o_error_rdata     (error_rdata),
-      .o_residual_zero   (residual_zero),
-      .o_residual_weight (residual_weight),
-      .o_busy            (busy),
-      .o_done            (done)
+      .i_clk               (clk),
+      .i_rst_n             (rst_n),
+      .i_h_we              (h_we),
+      .i_h_block_idx       (h_block),
+      .i_h_diag_idx        (h_diag),
+      .i_h_index           (h_index),
+      .i_syndrome_we       (syndrome_we),
+      .i_syndrome_addr     (syndrome_addr),
+      .i_syndrome_data     (syndrome_data),
+      .i_start             (start),
+      .i_runtime_r_bits    (runtime_r_bits),
+      .i_runtime_weight    (runtime_weight),
+      .o_decision_col_idx  (decision_col),
+      .o_decision_col_idx_1(decision_col_1),
+      .o_decision_valid_1  (decision_valid_1),
+      .i_decision_data     (decision_data),
+      .i_decision_data_1   (decision_data_1),
+      .i_error_re          (error_re),
+      .i_error_raddr       (error_raddr),
+      .o_error_rdata       (error_rdata),
+      .o_residual_zero     (residual_zero),
+      .o_residual_weight   (residual_weight),
+      .o_busy              (busy),
+      .o_done              (done)
   );
 
   always #1 clk = ~clk;
@@ -78,7 +84,9 @@ module tb_trike_decaps_decoder_postcheck_core;
       cycle_count   <= 0;
     end else begin
       decision_data <= decisions[decision_col];
-      cycle_count   <= cycle_count + 1;
+      decision_data_1 <=
+          decisions[(decision_valid_1 && (int'(decision_col_1) < N_BITS)) ? decision_col_1 : '0];
+      cycle_count <= cycle_count + 1;
     end
   end
 
@@ -168,7 +176,7 @@ module tb_trike_decaps_decoder_postcheck_core;
       active_padded_r_bytes = ((active_r + 511) / 512) * 64;
       active_error_bytes = BLOCKS * active_padded_r_bytes;
       expected_latency = active_error_bytes + (BLOCKS * active_r) + 2;
-      expected_latency += (active_r * (2 + (2 * BLOCKS * active_w))) + 1;
+      expected_latency += ((active_r + 1) / 2) * (3 + (2 * BLOCKS * active_w)) + 1;
       expected_latency += 3;
       if (latency != expected_latency) $fatal(1, "runtime postcheck latency mismatch");
       if (residual_zero != !flip_syndrome) $fatal(1, "runtime residual zero mismatch");

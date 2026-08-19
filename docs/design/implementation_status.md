@@ -133,13 +133,13 @@ error writer和residual checker，之后postprocess才读取error RAM。
 | reencrypt verify | 209,659 | 匹配与首byte扰动 |
 | KDF | 19,323 | 接受与拒绝SS逐byte |
 | postprocess | 257,417 | 正常与`c2`篡改 |
-| residual checker | 2,668,869 | residual 0与单bit syndrome扰动 |
-| pipeline core | 4,734,246 | 正常及`u/v/c2`三种篡改 |
-| `trike_decaps_synth_top` | 4,743,972 | 8-bit `SK || CT`输入和SS输出 |
-| `trike_decaps_runtime_synth_top`，TRIKE160 | 4,743,324 | 有效及u/v/c2三种篡改 |
-| `trike_decaps_runtime_synth_top`，TRIKE256 | 19,970,378 | 有效及c2隐式拒绝 |
-| `trike_decaps_runtime_synth_top`，TRIKE384 | 71,565,719 | 有效及c2隐式拒绝 |
-| `trike_decaps_runtime_synth_top`，TRIKE512 | 177,759,567 | 有效及c2隐式拒绝 |
+| residual checker | 1,340,836 | 双行扫描，residual 0与单bit syndrome扰动 |
+| pipeline core | 3,406,213 | 正常及`u/v/c2`三种篡改 |
+| `trike_decaps_synth_top` | 3,415,939 | 8-bit `SK || CT`输入和SS输出 |
+| `trike_decaps_runtime_synth_top`，TRIKE160 | 3,415,291 | 有效及u/v/c2三种篡改 |
+| `trike_decaps_runtime_synth_top`，TRIKE256 | 14,941,165 | 有效及c2隐式拒绝 |
+| `trike_decaps_runtime_synth_top`，TRIKE384 | 55,654,606 | 有效及c2隐式拒绝 |
+| `trike_decaps_runtime_synth_top`，TRIKE512 | 142,148,438 | 有效及c2隐式拒绝 |
 
 四条pipeline路径的RTL residual重量为`0/6233/6314/0`。正常路径输出Encaps SS，三条篡改路径均输出
 `K(sigma2,tampered_ct)`。非收敛`u/v`样本只要求双方residual非零与最终隐式拒绝SS一致，不声明
@@ -173,24 +173,24 @@ payload的坐标、地址、数据、访问次数和周期一致。
 两套payload均匹配golden且固定1,361,944拍。该边界的decoder完成信号由testbench固定延迟模型提供。
 
 decoder后检查使用最大容量error、support和syndrome RAM，在事务start锁存公开`r/w`。error writer只清零
-活动`3*ceil(r/512)*64` byte并扫描`3r`项判决；residual checker逐row固定读取`3w`项，support物理块
-保持最大`W`跨度，decision列按活动`r`拼接。共享decision读口的组合边界在`r/w=7/1、13/3、521/5`
-下分别固定275、497、18,625拍，每档两套数据的error逐byte匹配，residual为0与单bit扰动重量1的周期
-一致。项目TRIKE160运行时residual reference固定2,668,869拍。
+活动`3*ceil(r/512)*64` byte并扫描`3r`项判决；residual checker用同一support读数处理相邻两行，
+K-sign全局记录RAM在译码完成后提供两个不同bank的decision读数。固定预算为
+`ceil(r/2)*(3+6w)+1`拍，不因判决值或首个非零residual提前结束。小几何error逐byte匹配，residual为0
+与单bit扰动重量1的周期一致。项目TRIKE160运行时residual reference固定1,340,836拍。
 
 ## 验证状态
 
-2026-08-18当前源码通过：
+2026-08-19当前源码通过：
 
 - `make ci-fast`：工具锁、记录/filelist检查、Verible/Slang/Verilator、形式proof/cover、单元测试和toy
   集成；toy结果为`residual=0, exact=1, cycles=154`，四档Decaps输入/最大几何存储及运行时decoder
   装载/后检查边界包含在该门禁中。
-- `make test-trike-decaps-synth-reference`：既有TRIKE160正常及`u/v/c2`篡改路径保持4,743,972拍并通过
+- `make test-trike-decaps-synth-reference`：TRIKE160正常及`u/v/c2`篡改路径固定3,415,939拍并通过
   逐byte shared-secret golden。
 - `make test-trike-decaps-runtime-synth-reference`：最大几何统一入口选择TRIKE160，正常及`u/v/c2`篡改
-  均固定4,743,324拍并通过逐byte shared-secret golden。
-- 同一目标逐档选择TRIKE256/384/512并运行有效及`c2`篡改路径，分别固定19,970,378、71,565,719和
-  177,759,567拍；接受与拒绝SS均逐byte匹配项目golden。
+  均固定3,415,291拍并通过逐byte shared-secret golden。
+- 同一目标逐档选择TRIKE256/384/512并运行有效及`c2`篡改路径，分别固定14,941,165、55,654,606和
+  142,148,438拍；接受与拒绝SS均逐byte匹配项目golden。
 - 四档统一K=4 seed-1 decoder：337,245/1,252,957/3,866,043/8,538,564拍，全部residual 0且exact 1。
 
 2026-08-10发布门禁记录包含：

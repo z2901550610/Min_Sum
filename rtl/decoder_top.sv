@@ -15,10 +15,13 @@ module decoder_top
     input  logic [  DIAG_IDX_W-1:0] i_h_diag_idx_local,
     input  logic [   ROW_IDX_W-1:0] i_h_base_row_idx,
     input  logic [       COL_W-1:0] i_e_read_col_idx,
+    input  logic [       COL_W-1:0] i_e_read_col_idx_1,
+    input  logic                    i_e_read_valid_1,
     output logic                    o_h_loaded,
     output logic                    o_h_error,
     output logic                    o_done,
     output logic                    o_e_rdata,
+    output logic                    o_e_rdata_1,
     output logic [      ITER_W-1:0] o_iter_count
 );
 
@@ -324,6 +327,8 @@ module decoder_top
   logic                                c2v_ksign_sign_q[0:L-1];
   logic                                ksign_read_valid[0:L-1];
   logic        [            COL_W-1:0] ksign_read_col_idx[0:L-1];
+  logic        [       LANE_IDX_W-1:0] external_read_lane1_offset_c;
+  logic        [       LANE_IDX_W-1:0] external_read_lane1_offset_q;
   logic        [       DIAG_IDX_W-1:0] ksign_read_diag_idx_local;
   logic                                ksign_commit_valid[0:L-1];
   logic        [            COL_W-1:0] ksign_commit_col_idx[0:L-1];
@@ -432,6 +437,7 @@ module decoder_top
   always_comb begin
     first_iter_c2v_comp = {1'b0, DIAG_GLOBAL_W'(0), D'(cfg_c_val), D'(cfg_c_val)};
     ksign_read_diag_idx_local = c2v_diag_idx_local_r;
+    external_read_lane1_offset_c = LANE_IDX_W'(i_e_read_col_idx_1) - LANE_IDX_W'(i_e_read_col_idx);
 
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
       c2v_valid[lane_idx] = c2v_corr_valid[lane_idx] && c2v_phase_a;
@@ -443,11 +449,17 @@ module decoder_top
       ksign_read_valid[lane_idx] = c2v_valid_r[lane_idx];
       ksign_read_col_idx[lane_idx] = c2v_col_idx_r[lane_idx];
       // The final posterior sign is the base-sign field of the committed
-      // global K-sign record.  Once decoding is complete, the C2V read port
-      // is idle and serves the external serial decision interface.
+      // global K-sign record. Once decoding is complete, the C2V bank read
+      // ports serve the external decision interface. Lane 0 anchors the bank
+      // rotation and the optional second address occupies its bank offset.
       if (K_SIGN_ENABLE && ctrl_done_final && (lane_idx == 0)) begin
         ksign_read_valid[lane_idx]   = 1'b1;
         ksign_read_col_idx[lane_idx] = i_e_read_col_idx;
+      end
+      if (K_SIGN_ENABLE && ctrl_done_final && i_e_read_valid_1 &&
+          (LANE_IDX_W'(lane_idx) == external_read_lane1_offset_c)) begin
+        ksign_read_valid[lane_idx]   = 1'b1;
+        ksign_read_col_idx[lane_idx] = i_e_read_col_idx_1;
       end
       c2v_tc_ext[lane_idx] = '0;
       v2c_comp_next[lane_idx] = COMP_C2V_INIT;
@@ -815,7 +827,8 @@ module decoder_top
 
   generate
     if (K_SIGN_ENABLE) begin : g_ksign_decision_read
-      assign o_e_rdata = c2v_ksign_base_sign_mem[0];
+      assign o_e_rdata   = c2v_ksign_base_sign_mem[0];
+      assign o_e_rdata_1 = c2v_ksign_base_sign_mem[external_read_lane1_offset_q];
     end else begin : g_full_sign_decision_read
       ram_decision u_ram_decision (
           .i_clk(i_clk),
@@ -824,13 +837,28 @@ module decoder_top
           .i_write_col_idx(v2c_col_idx_p),
           .i_wdata(posterior_sign_p),
           .i_read_col_idx(i_e_read_col_idx),
-          .o_rdata(o_e_rdata)
+          .i_read_col_idx_1(i_e_read_col_idx_1),
+          .i_read_valid_1(i_e_read_valid_1),
+          .o_rdata(o_e_rdata),
+          .o_rdata_1(o_e_rdata_1)
       );
     end
   endgenerate
 
+  always_ff @(posedge i_clk or negedge rst_n_sync) begin
+    if (!rst_n_sync) begin
+      external_read_lane1_offset_q <= '0;
+    end else begin
+      external_read_lane1_offset_q <= external_read_lane1_offset_c;
+    end
+  end
+
 `ifndef SYNTHESIS
   always_ff @(posedge i_clk) begin
+    if (rst_n_sync && ctrl_done_final && i_e_read_valid_1 &&
+        (external_read_lane1_offset_c == '0)) begin
+      $fatal(1, "decoder_top external decision reads target the same bank");
+    end
     if (rst_n_sync && i_h_we && !h_load_write_enable) begin
       $fatal(1, "decoder_top rejected H write outside the initial idle load window");
     end

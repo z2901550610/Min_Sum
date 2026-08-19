@@ -223,20 +223,20 @@ SM3、HMAC-SM3和pseudohash控制器支持在start边界锁存公开活动byte�
 采样、dense error store和完整比较均使用同一活动几何。
 
 Min-Sum固定7轮结束与residual为零是两个独立信号。`trike_decoder_residual_check`保存同一份排序H和
-原始syndrome，在start锁存公开`r/w`，逐row执行固定`3w`次decision读取并计算
-`syndrome xor H*e'`。support RAM使用最大`W`块跨度，块内只扫描活动`w`项；decision列按活动`r`
-拼接。固定预算为`r*(2+6w)+1`拍。项目TRIKE160有效判决得到0，单bit syndrome扰动得到重量1，
-两条路径均为2,668,869拍。
+原始syndrome，在start锁存公开`r/w`，每个固定support读数同时处理相邻两行并计算
+`syndrome xor H*e'`。K-sign全局记录RAM在译码完成后提供两个不同bank的decision读数；support RAM仍按
+最大`W`块跨度扫描活动`w`项。固定预算为`ceil(r/2)*(3+6w)+1`拍。项目TRIKE160有效判决得到0，
+单bit syndrome扰动得到重量1，两条路径均为1,340,836拍。
 
-`trike_decaps_decoder_postcheck_core`在事务start锁存一次`r/w`，把decoder单decision同步读口依次分配给
-error writer和residual checker。`r/w=7/1、13/3、521/5`的组合周期分别为275、497、18,625拍；
+`trike_decaps_decoder_postcheck_core`在事务start锁存一次`r/w`，先用decision lane 0生成error，再把两个
+decision lane分配给residual checker。`r/w=7/1、13/3、521/5`的组合周期分别为255、384、10,566拍；
 每档不同decision/support数据及residual结果不改变完成时刻。
 
 固定profile Min-Sum Decaps控制由`trike_decaps_pipeline_core`形成。H输入首块在同一次valid/ready接受中送入H0
 syndrome RAM和三块support排序器；排序输出与syndrome bit分别同时写入decoder和residual checker。
 Min-Sum固定轮结束后，decision同步读口按公开FSM顺序分配给4,800-byte padded error writer和全residual
 扫描，之后由单SM3 postprocess读取error、r2和完整ciphertext。`r=12589,w=35,t=263,L=32,K=4`的
-seed 1正常与u/v/c2首bit篡改路径均固定4,734,246拍，RTL residual分别为0/6,233/6,314/0，正常路径
+seed 1正常与u/v/c2首bit篡改路径均固定3,406,213拍，RTL residual分别为0/6,233/6,314/0，正常路径
 输出Encaps SS，三条篡改路径均输出对应`sigma2`隐式拒绝SS。非收敛u/v样本的C模型residual为
 6,304/6,309，因此这里只对拍KEM接受/拒绝与最终byte结果，不声明失败判决bit-exact。该结果是Verilator
 功能/周期证据；外部r2/ciphertext RAM的Vivado映射和完整顶层资源、时序均待测。
@@ -244,7 +244,7 @@ seed 1正常与u/v/c2首bit篡改路径均固定4,734,246拍，RTL residual分�
 `trike_decaps_synth_top`把物理接口收窄为8-bit `SK || CT`输入和8-bit SS输出。输入生命周期依次为
 420-byte原始support、H0、t0、r2、sigma、sigma2、u、v和c2；H0与sigma固定消费但不存储，其他字段写入
 专用support/64-bit word/byte RAM或sigma2寄存器。连续输入和SS接收下，正常与u/v/c2篡改四条路径均
-固定4,743,972拍。该wrapper每次复位执行一项事务，Vivado入口固定使用TRIKE160、L32、K4和256-column
+固定3,415,939拍。该wrapper每次复位执行一项事务，Vivado入口固定使用TRIKE160、L32、K4和256-column
 tile；资源映射、routed timing和Fmax待实现报告。
 
 四档输入事务边界由`trike_decaps_profile_config`和`trike_decaps_input_loader`定义。公开profile在
@@ -261,8 +261,8 @@ residual全扫描。单口ciphertext RAM在message阶段按`2*r_bytes+c2_index`�
 decoder H校验状态在复位时初始化，因此该物理边界每次复位接受一项事务。
 
 四档seed-1有效路径均为candidate 0、decoder residual 0并精确恢复；u/v/c2首bit篡改的软件golden均进入
-隐式拒绝。统一运行时RTL的有效与c2篡改路径分别固定4,743,324、19,970,378、71,565,719和
-177,759,567拍，逐byte匹配对应SS；TRIKE160另覆盖u/v两条RTL非收敛路径。输入连续供给、SS持续ready，
+隐式拒绝。统一运行时RTL的有效与c2篡改路径分别固定3,415,291、14,941,165、55,654,606和
+142,148,438拍，逐byte匹配对应SS；TRIKE160另覆盖u/v两条RTL非收敛路径。输入连续供给、SS持续ready，
 周期边界为start到done。生成fixture使用逐byte hex文件承载最大68,168-byte输入。
 
 `trike_decaps_input_store`承接运行时流水线的最大几何RAM生命周期。support以17-bit index保存，t0/u/v以

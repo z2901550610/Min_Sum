@@ -1,8 +1,8 @@
 `timescale 1ns / 1ps
 
-// Recomputes syndrome xor H*e' with a fixed row-major schedule. Every active
-// row performs BLOCKS*active_weight synchronous decision reads, regardless of
-// e' data. Runtime geometry is a public descriptor sampled with i_start.
+// Recomputes syndrome xor H*e' with a fixed two-row schedule. Every active row
+// performs BLOCKS*active_weight synchronous decision reads, regardless of e'
+// data. Runtime geometry is a public descriptor sampled with i_start.
 module trike_decoder_residual_check #(
     parameter int R_BITS           = 12589,
     parameter int BLOCKS           = 3,
@@ -27,7 +27,10 @@ module trike_decoder_residual_check #(
     input  logic [        31:0] i_runtime_r_bits,
     input  logic [        31:0] i_runtime_weight,
     output logic [   COL_W-1:0] o_decision_col_idx,
+    output logic [   COL_W-1:0] o_decision_col_idx_1,
+    output logic                o_decision_valid_1,
     input  logic                i_decision_data,
+    input  logic                i_decision_data_1,
     output logic                o_residual_zero,
     output logic [WEIGHT_W-1:0] o_residual_weight,
     output logic                o_busy,
@@ -39,7 +42,8 @@ module trike_decoder_residual_check #(
 
   typedef enum logic [2:0] {
     ST_IDLE,
-    ST_ROW_FETCH,
+    ST_ROW0_FETCH,
+    ST_ROW1_FETCH,
     ST_ROW_INIT,
     ST_DECISION_ISSUE,
     ST_DECISION_CONSUME
@@ -49,7 +53,7 @@ module trike_decoder_residual_check #(
   logic   [         ROW_W-1:0] row_q;
   logic   [       BLOCK_W-1:0] block_q;
   logic   [        DIAG_W-1:0] diag_q;
-  logic                        parity_q;
+  logic                        parity_q[0:1];
   logic   [      WEIGHT_W-1:0] residual_weight_q;
   logic                        support_re;
   logic   [SUPPORT_ADDR_W-1:0] support_raddr;
@@ -59,16 +63,32 @@ module trike_decoder_residual_check #(
   logic                        syndrome_rdata;
   logic   [SUPPORT_ADDR_W-1:0] support_addr_c;
   logic                        final_support_c;
-  logic   [       BLOCK_W-1:0] decision_block_c;
-  integer                      column_c;
-  logic   [         COL_W-1:0] decision_col_c;
-  logic   [         COL_W-1:0] decision_col_q;
-  logic                        final_parity_c;
+  logic   [         COL_W-1:0] decision_col_0_q;
+  logic   [         COL_W-1:0] decision_col_1_q;
+  logic                        final_parity_0_c;
+  logic                        final_parity_1_c;
+  logic                        row1_active_c;
+  logic                        row1_active_q;
+  logic   [      WEIGHT_W-1:0] row_residual_count_c;
   integer                      active_r_bits_q;
   integer                      active_weight_q;
 
+  function automatic logic [COL_W-1:0] decision_col(
+      input integer row_value, input integer block_value, input  logic [ROW_W-1:0] support_value,
+      input integer r_bits_value);
+    integer local_col;
+    begin
+      if (row_value >= int'(support_value)) begin
+        local_col = row_value - int'(support_value);
+      end else begin
+        local_col = row_value + r_bits_value - int'(support_value);
+      end
+      decision_col = COL_W'((block_value * r_bits_value) + local_col);
+    end
+  endfunction
+
   // The sorted H support uses a sequential synchronous-RAM read schedule.
-  // decision_col_q forms a physical timing boundary before the decoder's
+  // The registered decision columns form a physical timing boundary before the decoder's
   // global K-sign RAM address network.
   ram_bram #(
       .DATA_W(ROW_W),
@@ -102,7 +122,7 @@ module trike_decoder_residual_check #(
   always_comb begin
     support_addr_c = SUPPORT_ADDR_W'((int'(block_q) * WEIGHT) + int'(diag_q));
     final_support_c = (block_q == BLOCK_W'(BLOCKS - 1)) && (diag_q == DIAG_W'(active_weight_q - 1));
-    support_re = state_q == ST_ROW_FETCH;
+    support_re = state_q == ST_ROW0_FETCH;
     support_raddr = support_addr_c;
     if ((state_q == ST_DECISION_ISSUE) && !final_support_c) begin
       support_re = 1'b1;
@@ -113,20 +133,16 @@ module trike_decoder_residual_check #(
       end
     end
 
-    decision_block_c = block_q;
-    if ((state_q == ST_DECISION_CONSUME) && (diag_q == DIAG_W'(active_weight_q - 1))) begin
-      decision_block_c = block_q + 1'b1;
-    end
-    if (int'(row_q) >= int'(support_rdata)) begin
-      column_c = int'(row_q) - int'(support_rdata);
-    end else begin
-      column_c = int'(row_q) + active_r_bits_q - int'(support_rdata);
-    end
-    decision_col_c = COL_W'((int'(decision_block_c) * active_r_bits_q) + column_c);
-    o_decision_col_idx = decision_col_q;
-    final_parity_c = parity_q ^ i_decision_data;
-    syndrome_re = state_q == ST_ROW_FETCH;
-    syndrome_raddr = row_q;
+    row1_active_c = int'(row_q) + 1 < active_r_bits_q;
+    final_parity_0_c = parity_q[0] ^ i_decision_data;
+    final_parity_1_c = parity_q[1] ^ i_decision_data_1;
+    o_decision_col_idx = decision_col_0_q;
+    o_decision_col_idx_1 = decision_col_1_q;
+    o_decision_valid_1 = (state_q == ST_DECISION_ISSUE) && row1_active_q;
+    row_residual_count_c = WEIGHT_W'(final_parity_0_c) +
+        WEIGHT_W'(row1_active_q && final_parity_1_c);
+    syndrome_re = (state_q == ST_ROW0_FETCH) || ((state_q == ST_ROW1_FETCH) && row1_active_c);
+    syndrome_raddr = (state_q == ST_ROW1_FETCH) ? row_q + 1'b1 : row_q;
   end
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
@@ -135,9 +151,12 @@ module trike_decoder_residual_check #(
       row_q <= '0;
       block_q <= '0;
       diag_q <= '0;
-      parity_q <= 1'b0;
+      parity_q[0] <= 1'b0;
+      parity_q[1] <= 1'b0;
       residual_weight_q <= '0;
-      decision_col_q <= '0;
+      decision_col_0_q <= '0;
+      decision_col_1_q <= '0;
+      row1_active_q <= 1'b0;
       active_r_bits_q <= R_BITS;
       active_weight_q <= WEIGHT;
       o_residual_zero <= 1'b0;
@@ -160,41 +179,64 @@ module trike_decoder_residual_check #(
               active_r_bits_q <= R_BITS;
               active_weight_q <= WEIGHT;
             end
-            state_q <= ST_ROW_FETCH;
+            state_q <= ST_ROW0_FETCH;
           end
         end
 
-        ST_ROW_FETCH: state_q <= ST_ROW_INIT;
+        ST_ROW0_FETCH: state_q <= ST_ROW1_FETCH;
+
+        ST_ROW1_FETCH: begin
+          parity_q[0] <= syndrome_rdata;
+          row1_active_q <= row1_active_c;
+          state_q <= ST_ROW_INIT;
+        end
 
         ST_ROW_INIT: begin
-          parity_q       <= syndrome_rdata;
-          decision_col_q <= decision_col_c;
-          state_q        <= ST_DECISION_ISSUE;
+          parity_q[1] <= row1_active_q ? syndrome_rdata : 1'b0;
+          decision_col_0_q <= decision_col(
+              int'(row_q), int'(block_q), support_rdata, active_r_bits_q
+          );
+          decision_col_1_q <= decision_col(
+              int'(row_q) + 1, int'(block_q), support_rdata, active_r_bits_q
+          );
+          state_q <= ST_DECISION_ISSUE;
         end
 
         ST_DECISION_ISSUE: state_q <= ST_DECISION_CONSUME;
 
         ST_DECISION_CONSUME: begin
           if (final_support_c) begin
-            residual_weight_q <= residual_weight_q + WEIGHT_W'(final_parity_c);
-            if (row_q == ROW_W'(active_r_bits_q - 1)) begin
-              o_residual_weight <= residual_weight_q + WEIGHT_W'(final_parity_c);
-              o_residual_zero <= (residual_weight_q + WEIGHT_W'(final_parity_c)) == '0;
+            residual_weight_q <= residual_weight_q + row_residual_count_c;
+            if ((int'(row_q) + 2) >= active_r_bits_q) begin
+              o_residual_weight <= residual_weight_q + row_residual_count_c;
+              o_residual_zero <= (residual_weight_q + row_residual_count_c) == '0;
               o_done <= 1'b1;
               state_q <= ST_IDLE;
             end else begin
-              row_q   <= row_q + 1'b1;
+              row_q   <= row_q + 2;
               block_q <= '0;
               diag_q  <= '0;
-              state_q <= ST_ROW_FETCH;
+              state_q <= ST_ROW0_FETCH;
             end
           end else begin
-            parity_q <= final_parity_c;
-            decision_col_q <= decision_col_c;
+            parity_q[0] <= final_parity_0_c;
+            parity_q[1] <= final_parity_1_c;
             if (diag_q == DIAG_W'(active_weight_q - 1)) begin
-              diag_q  <= '0;
+              decision_col_0_q <= decision_col(
+                  int'(row_q), int'(block_q) + 1, support_rdata, active_r_bits_q
+              );
+              decision_col_1_q <= decision_col(
+                  int'(row_q) + 1, int'(block_q) + 1, support_rdata, active_r_bits_q
+              );
+              diag_q <= '0;
               block_q <= block_q + 1'b1;
             end else begin
+              decision_col_0_q <= decision_col(
+                  int'(row_q), int'(block_q), support_rdata, active_r_bits_q
+              );
+              decision_col_1_q <= decision_col(
+                  int'(row_q) + 1, int'(block_q), support_rdata, active_r_bits_q
+              );
               diag_q <= diag_q + 1'b1;
             end
             state_q <= ST_DECISION_ISSUE;

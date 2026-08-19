@@ -101,8 +101,11 @@ module trike_decaps_pipeline_core #(
   logic                      decoder_h_error;
   logic                      decoder_done;
   logic                      decoder_e_data;
+  logic                      decoder_e_data_1;
   logic   [      ITER_W-1:0] decoder_iter_count;
   logic   [       COL_W-1:0] decoder_e_addr;
+  logic   [       COL_W-1:0] decoder_e_addr_1;
+  logic                      decoder_e_valid_1;
 
   logic   [       COL_W-1:0] error_decision_addr;
   logic                      error_reference_re;
@@ -112,6 +115,8 @@ module trike_decaps_pipeline_core #(
   logic                      error_done;
 
   logic   [       COL_W-1:0] residual_decision_addr;
+  logic   [       COL_W-1:0] residual_decision_addr_1;
+  logic                      residual_decision_valid_1;
   logic                      residual_busy;
   logic                      residual_done;
 
@@ -130,6 +135,8 @@ module trike_decaps_pipeline_core #(
 
   assign decoder_e_addr = (state_q == ST_ERROR_RUN) ? error_decision_addr :
                           (state_q == ST_RESIDUAL_RUN) ? residual_decision_addr : '0;
+  assign decoder_e_addr_1 = (state_q == ST_RESIDUAL_RUN) ? residual_decision_addr_1 : '0;
+  assign decoder_e_valid_1 = (state_q == ST_RESIDUAL_RUN) && residual_decision_valid_1;
   assign o_busy = state_q != ST_IDLE;
 
   trike_decaps_syndrome_core #(
@@ -209,10 +216,13 @@ module trike_decaps_pipeline_core #(
       .i_h_diag_idx_local(adapter_h_diag),
       .i_h_base_row_idx  (adapter_h_index),
       .i_e_read_col_idx  (decoder_e_addr),
+      .i_e_read_col_idx_1(decoder_e_addr_1),
+      .i_e_read_valid_1  (decoder_e_valid_1),
       .o_h_loaded        (decoder_h_loaded),
       .o_h_error         (decoder_h_error),
       .o_done            (decoder_done),
       .o_e_rdata         (decoder_e_data),
+      .o_e_rdata_1       (decoder_e_data_1),
       .o_iter_count      (decoder_iter_count)
   );
 
@@ -239,24 +249,27 @@ module trike_decaps_pipeline_core #(
       .BLOCKS(N0),
       .WEIGHT(W)
   ) u_residual (
-      .i_clk             (i_clk),
-      .i_rst_n           (i_rst_n),
-      .i_h_we            (adapter_h_we),
-      .i_h_block_idx     (adapter_h_block),
-      .i_h_diag_idx      (adapter_h_diag),
-      .i_h_index         (adapter_h_index),
-      .i_syndrome_we     (adapter_syndrome_we),
-      .i_syndrome_addr   (adapter_syndrome_addr),
-      .i_syndrome_data   (adapter_syndrome_data),
-      .i_start           (state_q == ST_RESIDUAL_START),
-      .i_runtime_r_bits  ('0),
-      .i_runtime_weight  ('0),
-      .o_decision_col_idx(residual_decision_addr),
-      .i_decision_data   (decoder_e_data),
-      .o_residual_zero   (o_residual_zero),
-      .o_residual_weight (o_residual_weight),
-      .o_busy            (residual_busy),
-      .o_done            (residual_done)
+      .i_clk               (i_clk),
+      .i_rst_n             (i_rst_n),
+      .i_h_we              (adapter_h_we),
+      .i_h_block_idx       (adapter_h_block),
+      .i_h_diag_idx        (adapter_h_diag),
+      .i_h_index           (adapter_h_index),
+      .i_syndrome_we       (adapter_syndrome_we),
+      .i_syndrome_addr     (adapter_syndrome_addr),
+      .i_syndrome_data     (adapter_syndrome_data),
+      .i_start             (state_q == ST_RESIDUAL_START),
+      .i_runtime_r_bits    ('0),
+      .i_runtime_weight    ('0),
+      .o_decision_col_idx  (residual_decision_addr),
+      .o_decision_col_idx_1(residual_decision_addr_1),
+      .o_decision_valid_1  (residual_decision_valid_1),
+      .i_decision_data     (decoder_e_data),
+      .i_decision_data_1   (decoder_e_data_1),
+      .o_residual_zero     (o_residual_zero),
+      .o_residual_weight   (o_residual_weight),
+      .o_busy              (residual_busy),
+      .o_done              (residual_done)
   );
 
   trike_decaps_postprocess_core #(

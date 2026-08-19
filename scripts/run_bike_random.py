@@ -527,6 +527,9 @@ module tb_bike_decoder_random;
   logic h_error;
   logic [COL_W-1:0] e_read_col_idx;
   logic e_rdata;
+  /* verilator lint_off UNUSEDSIGNAL */
+  logic unused_e_rdata_1;
+  /* verilator lint_on UNUSEDSIGNAL */
   logic [TEST_N-1:0] e_out;
   logic [ITER_W-1:0] iter_count;
 
@@ -543,10 +546,13 @@ module tb_bike_decoder_random;
     .i_h_diag_idx_local(h_load_diag_idx_local),
     .i_h_base_row_idx(h_base_row_idx),
     .i_e_read_col_idx(e_read_col_idx),
+    .i_e_read_col_idx_1('0),
+    .i_e_read_valid_1(1'b0),
     .o_h_loaded(h_loaded),
     .o_h_error(h_error),
     .o_done(done),
     .o_e_rdata(e_rdata),
+    .o_e_rdata_1(unused_e_rdata_1),
     .o_iter_count(iter_count)
   );
 

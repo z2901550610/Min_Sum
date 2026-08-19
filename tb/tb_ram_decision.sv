@@ -9,7 +9,10 @@ module tb_ram_decision;
   logic [COL_W-1:0] write_col_idx[0:L-1];
   logic             wdata[0:L-1];
   logic [COL_W-1:0] read_col_idx;
+  logic [COL_W-1:0] read_col_idx_1;
+  logic             read_valid_1;
   logic             rdata;
+  logic             rdata_1;
 
   ram_decision dut (
       .i_clk(clk),
@@ -18,7 +21,10 @@ module tb_ram_decision;
       .i_write_col_idx(write_col_idx),
       .i_wdata(wdata),
       .i_read_col_idx(read_col_idx),
-      .o_rdata(rdata)
+      .i_read_col_idx_1(read_col_idx_1),
+      .i_read_valid_1(read_valid_1),
+      .o_rdata(rdata),
+      .o_rdata_1(rdata_1)
   );
 
   initial clk = 1'b0;
@@ -43,6 +49,8 @@ module tb_ram_decision;
     clear_inputs();
     rst_n = 1'b0;
     read_col_idx = '0;
+    read_col_idx_1 = '0;
+    read_valid_1 = 1'b0;
     repeat (2) @(negedge clk);
     rst_n = 1'b1;
 
@@ -71,6 +79,22 @@ module tb_ram_decision;
       @(posedge clk);
       #1;
       if (rdata !== 1'b0) $fatal(1, "same-bank write priority mismatch");
+
+      we[0] = 1'b1;
+      write_col_idx[0] = COL_W'(3);
+      wdata[0] = 1'b1;
+      we[1] = 1'b1;
+      write_col_idx[1] = COL_W'(4);
+      wdata[1] = 1'b0;
+      @(posedge clk);
+      #1;
+      clear_inputs();
+      read_col_idx   = COL_W'(3);
+      read_col_idx_1 = COL_W'(4);
+      read_valid_1   = 1'b1;
+      @(posedge clk);
+      #1;
+      if ((rdata !== 1'b1) || (rdata_1 !== 1'b0)) $fatal(1, "dual-bank read mismatch");
     end
 
     $display("tb_ram_decision PASS");

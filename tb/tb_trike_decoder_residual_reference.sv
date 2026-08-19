@@ -7,7 +7,8 @@ module tb_trike_decoder_residual_reference;
   localparam int BLOCK_W = $clog2(REF_BLOCKS);
   localparam int DIAG_W = $clog2(REF_SECRET_WEIGHT);
   localparam int WEIGHT_W = $clog2(REF_R_BITS + 1);
-  localparam int EXPECTED_CYCLES = 1 + REF_R_BITS * (2 + 2 * REF_BLOCKS * REF_SECRET_WEIGHT);
+  localparam int EXPECTED_CYCLES =
+      1 + ((REF_R_BITS + 1) / 2) * (3 + 2 * REF_BLOCKS * REF_SECRET_WEIGHT);
 
   logic                       clk;
   logic                       rst_n;
@@ -20,7 +21,10 @@ module tb_trike_decoder_residual_reference;
   logic                       syndrome_data;
   logic                       start;
   logic   [        COL_W-1:0] decision_col;
+  logic   [        COL_W-1:0] decision_col_1;
+  logic                       decision_valid_1;
   logic                       decision_data;
+  logic                       decision_data_1;
   logic                       residual_zero;
   logic   [     WEIGHT_W-1:0] residual_weight;
   logic                       busy;
@@ -33,30 +37,36 @@ module tb_trike_decoder_residual_reference;
       .WEIGHT(REF_SECRET_WEIGHT),
       .RUNTIME_GEOMETRY(1'b1)
   ) dut (
-      .i_clk             (clk),
-      .i_rst_n           (rst_n),
-      .i_h_we            (h_we),
-      .i_h_block_idx     (h_block),
-      .i_h_diag_idx      (h_diag),
-      .i_h_index         (h_index),
-      .i_syndrome_we     (syndrome_we),
-      .i_syndrome_addr   (syndrome_addr),
-      .i_syndrome_data   (syndrome_data),
-      .i_start           (start),
-      .i_runtime_r_bits  (32'(REF_R_BITS)),
-      .i_runtime_weight  (32'(REF_SECRET_WEIGHT)),
-      .o_decision_col_idx(decision_col),
-      .i_decision_data   (decision_data),
-      .o_residual_zero   (residual_zero),
-      .o_residual_weight (residual_weight),
-      .o_busy            (busy),
-      .o_done            (done)
+      .i_clk               (clk),
+      .i_rst_n             (rst_n),
+      .i_h_we              (h_we),
+      .i_h_block_idx       (h_block),
+      .i_h_diag_idx        (h_diag),
+      .i_h_index           (h_index),
+      .i_syndrome_we       (syndrome_we),
+      .i_syndrome_addr     (syndrome_addr),
+      .i_syndrome_data     (syndrome_data),
+      .i_start             (start),
+      .i_runtime_r_bits    (32'(REF_R_BITS)),
+      .i_runtime_weight    (32'(REF_SECRET_WEIGHT)),
+      .o_decision_col_idx  (decision_col),
+      .o_decision_col_idx_1(decision_col_1),
+      .o_decision_valid_1  (decision_valid_1),
+      .i_decision_data     (decision_data),
+      .i_decision_data_1   (decision_data_1),
+      .o_residual_zero     (residual_zero),
+      .o_residual_weight   (residual_weight),
+      .o_busy              (busy),
+      .o_done              (done)
   );
 
   always #1 clk = ~clk;
 
   always_ff @(posedge clk) begin
     decision_data <= REF_DECISION[decision_col];
+    decision_data_1 <= REF_DECISION[(decision_valid_1 &&
+                                     (int'(decision_col_1) < (REF_BLOCKS * REF_R_BITS))) ?
+                                        decision_col_1 : '0];
     if (!rst_n) cycle_count <= 0;
     else cycle_count <= cycle_count + 1;
   end

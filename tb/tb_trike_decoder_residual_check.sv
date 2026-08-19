@@ -22,7 +22,10 @@ module tb_trike_decoder_residual_check;
   logic                  syndrome_data;
   logic                  start;
   logic   [   COL_W-1:0] decision_col;
+  logic   [   COL_W-1:0] decision_col_1;
+  logic                  decision_valid_1;
   logic                  decision_data;
+  logic                  decision_data_1;
   logic                  residual_zero;
   logic   [WEIGHT_W-1:0] residual_weight;
   logic                  busy;
@@ -37,30 +40,35 @@ module tb_trike_decoder_residual_check;
       .BLOCKS(BLOCKS),
       .WEIGHT(WEIGHT)
   ) dut (
-      .i_clk             (clk),
-      .i_rst_n           (rst_n),
-      .i_h_we            (h_we),
-      .i_h_block_idx     (h_block),
-      .i_h_diag_idx      (h_diag),
-      .i_h_index         (h_index),
-      .i_syndrome_we     (syndrome_we),
-      .i_syndrome_addr   (syndrome_addr),
-      .i_syndrome_data   (syndrome_data),
-      .i_start           (start),
-      .i_runtime_r_bits  ('0),
-      .i_runtime_weight  ('0),
-      .o_decision_col_idx(decision_col),
-      .i_decision_data   (decision_data),
-      .o_residual_zero   (residual_zero),
-      .o_residual_weight (residual_weight),
-      .o_busy            (busy),
-      .o_done            (done)
+      .i_clk               (clk),
+      .i_rst_n             (rst_n),
+      .i_h_we              (h_we),
+      .i_h_block_idx       (h_block),
+      .i_h_diag_idx        (h_diag),
+      .i_h_index           (h_index),
+      .i_syndrome_we       (syndrome_we),
+      .i_syndrome_addr     (syndrome_addr),
+      .i_syndrome_data     (syndrome_data),
+      .i_start             (start),
+      .i_runtime_r_bits    ('0),
+      .i_runtime_weight    ('0),
+      .o_decision_col_idx  (decision_col),
+      .o_decision_col_idx_1(decision_col_1),
+      .o_decision_valid_1  (decision_valid_1),
+      .i_decision_data     (decision_data),
+      .i_decision_data_1   (decision_data_1),
+      .o_residual_zero     (residual_zero),
+      .o_residual_weight   (residual_weight),
+      .o_busy              (busy),
+      .o_done              (done)
   );
 
   always #1 clk = ~clk;
 
   always_ff @(posedge clk) begin
     decision_data <= decisions[decision_col];
+    decision_data_1 <=
+        decisions[(decision_valid_1 && (int'(decision_col_1) < N_BITS)) ? decision_col_1 : '0];
     if (!rst_n) cycle_count <= 0;
     else cycle_count <= cycle_count + 1;
   end
@@ -89,7 +97,8 @@ module tb_trike_decoder_residual_check;
       if (!busy) $fatal(1, "residual checker did not become busy");
       while (!done) @(negedge clk);
       latency = cycle_count - start_cycle;
-      if (residual_zero != expect_zero) $fatal(1, "residual zero mismatch");
+      if (residual_zero != expect_zero)
+        $fatal(1, "residual zero mismatch weight=%0d", residual_weight);
       if (residual_weight != (expect_zero ? 0 : 1)) $fatal(1, "residual weight mismatch");
     end
   endtask
@@ -135,7 +144,7 @@ module tb_trike_decoder_residual_check;
     load_syndrome(1'b1);
     run_case(1'b0, nonzero_latency);
     if (zero_latency != nonzero_latency) $fatal(1, "residual-dependent checker latency");
-    if (zero_latency != 261) $fatal(1, "unexpected residual checker latency");
+    if (zero_latency != 148) $fatal(1, "unexpected residual checker latency");
 
     $display("tb_trike_decoder_residual_check PASS cycles=%0d", zero_latency);
     $finish;

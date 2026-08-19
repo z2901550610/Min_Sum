@@ -1,6 +1,6 @@
 # 实验索引
 
-下一个实验ID：`EXP-0098`。
+下一个实验ID：`EXP-0099`。
 
 | ID | 日期 | 主题 | 配置/比较键 | 功能与周期 | Vivado | 结论 | 详情 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -21,6 +21,7 @@
 | EXP-0095 | 2026-08-17 | Decaps运行时H4与完整postprocess | 最大H4/error RAM，活动`r/t/byte` | 三档golden、隐式拒绝及成对固定周期通过 | 待测 | `retained` | [详情](EXP-0095-runtime-h4-postprocess.md) |
 | EXP-0096 | 2026-08-18 | 四档运行时Decaps流水线集成 | 最大几何，L32/K4/C256，8-bit I/O | TRIKE160完整golden、四档decoder分层通过 | 待测 | `retained` | [详情](EXP-0096-unified-runtime-decaps-pipeline.md) |
 | EXP-0097 | 2026-08-18 | 四档运行时Decaps端到端golden | 四档项目Min-Sum参数，L32/K4/C256 | 全档有效/c2拒绝byte golden与固定周期通过 | 待测 | `retained` | [详情](EXP-0097-four-profile-runtime-decaps-golden.md) |
+| EXP-0098 | 2026-08-19 | 双行并行residual扫描 | 两个decision读bank，相邻row固定配对 | 四档byte golden，residual与固定周期通过 | 待测 | `retained` | [详情](EXP-0098-dual-row-residual-scan.md) |
 
 新实验只追加一行。需要详细说明时，详情列链接到`EXP-xxxx-<slug>.md`；Vivado列链接到
 `reports/vivado/manifests/<run-id>.toml`。

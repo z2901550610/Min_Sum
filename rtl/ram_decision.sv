@@ -1,5 +1,6 @@
 `timescale 1ns / 1ps
-// Final decision block RAM with L write banks and one synchronous read port.
+// Final decision block RAM with L write banks and two conflict-free synchronous
+// read ports. The second read is optional and may target a different bank.
 module ram_decision
   import bike_pkg::*;
 (
@@ -9,7 +10,10 @@ module ram_decision
     input  logic [COL_W-1:0] i_write_col_idx[0:L-1],
     input  logic             i_wdata[0:L-1],
     input  logic [COL_W-1:0] i_read_col_idx,
-    output logic             o_rdata
+    input  logic [COL_W-1:0] i_read_col_idx_1,
+    input  logic             i_read_valid_1,
+    output logic             o_rdata,
+    output logic             o_rdata_1
 );
 
   localparam int DEC_BANK_DEPTH = (N + L - 1) / L;
@@ -17,6 +21,7 @@ module ram_decision
 
   logic                  bank_rdata[0:L-1];
   logic [LANE_IDX_W-1:0] read_bank_q;
+  logic [LANE_IDX_W-1:0] read_bank_1_q;
 
   function automatic logic [LANE_IDX_W-1:0] col_bank(input  logic [COL_W-1:0] col_idx);
     begin
@@ -36,12 +41,16 @@ module ram_decision
       logic [DEC_BANK_AW-1:0] bank_waddr;
       logic                   bank_wdata;
       logic                   bank_re;
+      logic [DEC_BANK_AW-1:0] bank_raddr;
 
       always_comb begin
         bank_we = 1'b0;
         bank_waddr = '0;
         bank_wdata = 1'b0;
-        bank_re = col_bank(i_read_col_idx) == LANE_IDX_W'(bank_idx);
+        bank_re = (col_bank(i_read_col_idx) == LANE_IDX_W'(bank_idx)) ||
+            (i_read_valid_1 && (col_bank(i_read_col_idx_1) == LANE_IDX_W'(bank_idx)));
+        bank_raddr = (i_read_valid_1 && (col_bank(i_read_col_idx_1) == LANE_IDX_W'(bank_idx))) ?
+            col_addr(i_read_col_idx_1) : col_addr(i_read_col_idx);
         for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
           if (i_we[lane_idx] && (col_bank(
                   i_write_col_idx[lane_idx]
@@ -63,7 +72,7 @@ module ram_decision
           .i_waddr(bank_waddr),
           .i_wdata(bank_wdata),
           .i_re   (bank_re),
-          .i_raddr(col_addr(i_read_col_idx)),
+          .i_raddr(bank_raddr),
           .o_rdata(bank_rdata[bank_idx])
       );
     end
@@ -71,18 +80,27 @@ module ram_decision
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin
-      read_bank_q <= '0;
+      read_bank_q   <= '0;
+      read_bank_1_q <= '0;
     end else begin
-      read_bank_q <= col_bank(i_read_col_idx);
+      read_bank_q   <= col_bank(i_read_col_idx);
+      read_bank_1_q <= col_bank(i_read_col_idx_1);
     end
   end
 
-  assign o_rdata = bank_rdata[read_bank_q];
+  assign o_rdata   = bank_rdata[read_bank_q];
+  assign o_rdata_1 = bank_rdata[read_bank_1_q];
 
 `ifndef SYNTHESIS
   always @(posedge i_clk) begin
     if (int'(i_read_col_idx) >= N) begin
       $fatal(1, "ram_decision read column out of range col=%0d", i_read_col_idx);
+    end
+    if (i_read_valid_1 && (int'(i_read_col_idx_1) >= N)) begin
+      $fatal(1, "ram_decision second read column out of range col=%0d", i_read_col_idx_1);
+    end
+    if (i_read_valid_1 && (col_bank(i_read_col_idx) == col_bank(i_read_col_idx_1))) begin
+      $fatal(1, "ram_decision simultaneous reads target the same bank");
     end
     for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
       if (i_we[lane_idx] && (int'(i_write_col_idx[lane_idx]) >= N)) begin
