@@ -9,11 +9,14 @@ module trike_h4_error_sampler #(
     parameter int M_BYTES               = 32,
     parameter int R_BITS                = 15581,
     parameter int ERROR_WEIGHT          = 263,
+    parameter bit RUNTIME_GEOMETRY      = 1'b0,
     parameter bit USE_EXTERNAL_COMPRESS = 1'b0
 ) (
     input  logic                                                       i_clk,
     input  logic                                                       i_rst_n,
     input  logic                                                       i_start,
+    input  logic [                                               31:0] i_runtime_r_bits,
+    input  logic [                                               31:0] i_runtime_error_weight,
     input  logic                                                       i_seed_valid,
     input  logic [                                                7:0] i_seed_data,
     output logic                                                       o_seed_ready,
@@ -83,6 +86,9 @@ module trike_h4_error_sampler #(
   logic                                                         internal_compress_busy;
   logic                                                         internal_compress_done;
   logic   [                                              255:0] internal_compress_result;
+  logic   [                                               31:0] active_seed_bytes_q;
+  logic   [                                               31:0] active_error_length_q;
+  logic   [                                               31:0] active_error_weight_q;
 
   assign instantiate_start = state_q == ST_START_INSTANTIATE;
   assign sample_start = state_q == ST_START_SAMPLE;
@@ -113,36 +119,41 @@ module trike_h4_error_sampler #(
 
   trike_sm3_drng_instantiate_stream #(
       .SEED_BYTES           (SEED_BYTES),
+      .RUNTIME_LENGTH       (RUNTIME_GEOMETRY),
       .USE_EXTERNAL_COMPRESS(1'b1)
   ) u_instantiate (
-      .i_clk           (i_clk),
-      .i_rst_n         (i_rst_n),
-      .i_start         (instantiate_start),
-      .i_seed_valid    (i_seed_valid && (state_q == ST_WAIT_INSTANTIATE)),
-      .i_seed_data     (i_seed_data),
-      .o_seed_ready    (instantiate_seed_ready),
-      .o_seed_pass     (instantiate_seed_pass),
-      .o_busy          (),
-      .o_done          (instantiate_done),
-      .o_v             (instantiate_v),
-      .o_c             (instantiate_c),
-      .o_reseed_counter(instantiate_reseed_counter),
-      .o_compress_start(instantiate_compress_start),
-      .o_compress_block(instantiate_compress_block),
-      .o_compress_state(instantiate_compress_state),
-      .i_compress_busy (shared_compress_busy),
-      .i_compress_done (shared_compress_done),
-      .i_compress_state(shared_compress_result)
+      .i_clk               (i_clk),
+      .i_rst_n             (i_rst_n),
+      .i_start             (instantiate_start),
+      .i_runtime_seed_bytes(active_seed_bytes_q),
+      .i_seed_valid        (i_seed_valid && (state_q == ST_WAIT_INSTANTIATE)),
+      .i_seed_data         (i_seed_data),
+      .o_seed_ready        (instantiate_seed_ready),
+      .o_seed_pass         (instantiate_seed_pass),
+      .o_busy              (),
+      .o_done              (instantiate_done),
+      .o_v                 (instantiate_v),
+      .o_c                 (instantiate_c),
+      .o_reseed_counter    (instantiate_reseed_counter),
+      .o_compress_start    (instantiate_compress_start),
+      .o_compress_block    (instantiate_compress_block),
+      .o_compress_state    (instantiate_compress_state),
+      .i_compress_busy     (shared_compress_busy),
+      .i_compress_done     (shared_compress_done),
+      .i_compress_state    (shared_compress_result)
   );
 
   trike_drng_weight_sampler #(
       .LENGTH               (ERROR_LENGTH),
       .WEIGHT               (ERROR_WEIGHT),
+      .RUNTIME_GEOMETRY     (RUNTIME_GEOMETRY),
       .USE_EXTERNAL_COMPRESS(1'b1)
   ) u_sampler (
       .i_clk           (i_clk),
       .i_rst_n         (i_rst_n),
       .i_start         (sample_start),
+      .i_runtime_length(active_error_length_q),
+      .i_runtime_weight(active_error_weight_q),
       .i_v             (instantiate_v),
       .i_c             (instantiate_c),
       .i_reseed_counter(instantiate_reseed_counter),
@@ -184,17 +195,31 @@ module trike_h4_error_sampler #(
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin
-      state_q          <= ST_IDLE;
-      o_done           <= 1'b0;
-      o_v              <= '0;
-      o_c              <= '0;
-      o_reseed_counter <= '0;
+      state_q               <= ST_IDLE;
+      o_done                <= 1'b0;
+      o_v                   <= '0;
+      o_c                   <= '0;
+      o_reseed_counter      <= '0;
+      active_seed_bytes_q   <= 32'(SEED_BYTES);
+      active_error_length_q <= 32'(ERROR_LENGTH);
+      active_error_weight_q <= 32'(ERROR_WEIGHT);
     end else begin
       o_done <= 1'b0;
 
       unique case (state_q)
         ST_IDLE: begin
-          if (i_start) state_q <= ST_START_INSTANTIATE;
+          if (i_start) begin
+            if (RUNTIME_GEOMETRY) begin
+              active_seed_bytes_q   <= 32'(M_BYTES) + ((i_runtime_r_bits + 7) >> 3);
+              active_error_length_q <= 3 * i_runtime_r_bits;
+              active_error_weight_q <= i_runtime_error_weight;
+            end else begin
+              active_seed_bytes_q   <= 32'(SEED_BYTES);
+              active_error_length_q <= 32'(ERROR_LENGTH);
+              active_error_weight_q <= 32'(ERROR_WEIGHT);
+            end
+            state_q <= ST_START_INSTANTIATE;
+          end
         end
 
         ST_START_INSTANTIATE: begin
@@ -233,6 +258,16 @@ module trike_h4_error_sampler #(
     if (ERROR_WEIGHT < 1) $error("trike_h4_error_sampler ERROR_WEIGHT must be at least 1");
     if (ERROR_WEIGHT > ERROR_LENGTH) begin
       $error("trike_h4_error_sampler ERROR_WEIGHT must not exceed 3*R_BITS");
+    end
+  end
+
+  always_ff @(posedge i_clk) begin
+    if (i_rst_n && (state_q == ST_IDLE) && i_start && RUNTIME_GEOMETRY) begin
+      if ((i_runtime_r_bits < 1) || (i_runtime_r_bits > R_BITS))
+        $fatal(1, "trike_h4_error_sampler runtime r out of range");
+      if ((i_runtime_error_weight < 1) || (i_runtime_error_weight > ERROR_WEIGHT) ||
+          (i_runtime_error_weight > (3 * i_runtime_r_bits)))
+        $fatal(1, "trike_h4_error_sampler runtime weight out of range");
     end
   end
 `endif

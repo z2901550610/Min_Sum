@@ -6,13 +6,17 @@
 // byte read/modify/write. The dense layout is e0 || e1 || e2, with every block
 // padded independently to PADDED_R_BYTES for the TRIKE L(e) input.
 module trike_error_support_store #(
-    parameter int R_BITS         = 15581,
-    parameter int ERROR_WEIGHT   = 263,
-    parameter int PADDED_R_BYTES = ((R_BITS + 511) / 512) * 64
+    parameter int R_BITS           = 15581,
+    parameter int ERROR_WEIGHT     = 263,
+    parameter int PADDED_R_BYTES   = ((R_BITS + 511) / 512) * 64,
+    parameter bit RUNTIME_GEOMETRY = 1'b0
 ) (
     input  logic i_clk,
     input  logic i_rst_n,
     input  logic i_start,
+    input  logic [31:0] i_runtime_r_bits,
+    input  logic [31:0] i_runtime_error_weight,
+    input  logic [31:0] i_runtime_padded_r_bytes,
     input  logic i_index_valid,
     input  logic [((ERROR_WEIGHT > 1) ? $clog2(ERROR_WEIGHT) : 1)-1:0] i_index_position,
     input  logic [(((3 * R_BITS) > 1) ? $clog2(3 * R_BITS) : 1)-1:0] i_index,
@@ -63,6 +67,10 @@ module trike_error_support_store #(
   integer                      input_block_c;
   integer                      input_local_c;
   logic   [  ERROR_ADDR_W-1:0] input_error_addr_c;
+  integer                      active_r_bits_q;
+  integer                      active_error_weight_q;
+  integer                      active_padded_r_bytes_q;
+  integer                      active_error_bytes_q;
 
   ram_bram #(
       .DATA_W(GLOBAL_INDEX_W),
@@ -95,9 +103,10 @@ module trike_error_support_store #(
   assign o_busy = state_q != ST_IDLE;
 
   always_comb begin
-    input_block_c = int'(i_index) / R_BITS;
-    input_local_c = int'(i_index) % R_BITS;
-    input_error_addr_c = ERROR_ADDR_W'((input_block_c * PADDED_R_BYTES) + (input_local_c / 8));
+    input_block_c = int'(i_index) / active_r_bits_q;
+    input_local_c = int'(i_index) % active_r_bits_q;
+    input_error_addr_c =
+        ERROR_ADDR_W'((input_block_c * active_padded_r_bytes_q) + (input_local_c / 8));
 
     support_we = 1'b0;
     support_waddr = i_index_position;
@@ -143,20 +152,35 @@ module trike_error_support_store #(
       error_addr_q <= '0;
       error_bit_q <= '0;
       o_done <= 1'b0;
+      active_r_bits_q <= R_BITS;
+      active_error_weight_q <= ERROR_WEIGHT;
+      active_padded_r_bytes_q <= PADDED_R_BYTES;
+      active_error_bytes_q <= ERROR_BYTES;
     end else begin
       o_done <= 1'b0;
 
       unique case (state_q)
         ST_IDLE: begin
           if (i_start) begin
-            clear_addr_q <= 0;
+            clear_addr_q  <= 0;
             index_count_q <= 0;
+            if (RUNTIME_GEOMETRY) begin
+              active_r_bits_q <= int'(i_runtime_r_bits);
+              active_error_weight_q <= int'(i_runtime_error_weight);
+              active_padded_r_bytes_q <= int'(i_runtime_padded_r_bytes);
+              active_error_bytes_q <= 3 * int'(i_runtime_padded_r_bytes);
+            end else begin
+              active_r_bits_q <= R_BITS;
+              active_error_weight_q <= ERROR_WEIGHT;
+              active_padded_r_bytes_q <= PADDED_R_BYTES;
+              active_error_bytes_q <= ERROR_BYTES;
+            end
             state_q <= ST_CLEAR_ERROR;
           end
         end
 
         ST_CLEAR_ERROR: begin
-          if (clear_addr_q == (ERROR_BYTES - 1)) begin
+          if (clear_addr_q == (active_error_bytes_q - 1)) begin
             state_q <= ST_LOAD_READ;
           end else begin
             clear_addr_q <= clear_addr_q + 1;
@@ -172,7 +196,7 @@ module trike_error_support_store #(
         end
 
         ST_LOAD_WRITE: begin
-          if (index_count_q == (ERROR_WEIGHT - 1)) begin
+          if (index_count_q == (active_error_weight_q - 1)) begin
             o_done  <= 1'b1;
             state_q <= ST_IDLE;
           end else begin
@@ -190,7 +214,8 @@ module trike_error_support_store #(
 
 `ifndef SYNTHESIS
   always_ff @(posedge i_clk) begin
-    if ((state_q == ST_LOAD_READ) && i_index_valid && (int'(i_index) >= (3 * R_BITS))) begin
+    if ((state_q == ST_LOAD_READ) && i_index_valid &&
+        (int'(i_index) >= (3 * active_r_bits_q))) begin
       $error("trike_error_support_store index out of range");
     end
   end
@@ -202,6 +227,19 @@ module trike_error_support_store #(
     end
     if (PADDED_R_BYTES < ((R_BITS + 7) / 8)) begin
       $error("trike_error_support_store PADDED_R_BYTES is too small");
+    end
+  end
+
+  always_ff @(posedge i_clk) begin
+    if (i_rst_n && (state_q == ST_IDLE) && i_start && RUNTIME_GEOMETRY) begin
+      if ((i_runtime_r_bits < 1) || (i_runtime_r_bits > R_BITS))
+        $fatal(1, "trike_error_support_store runtime r out of range");
+      if ((i_runtime_error_weight < 1) || (i_runtime_error_weight > ERROR_WEIGHT) ||
+          (i_runtime_error_weight > (3 * i_runtime_r_bits)))
+        $fatal(1, "trike_error_support_store runtime weight out of range");
+      if ((i_runtime_padded_r_bytes < ((i_runtime_r_bits + 7) >> 3)) ||
+          (i_runtime_padded_r_bytes > PADDED_R_BYTES))
+        $fatal(1, "trike_error_support_store runtime padding out of range");
     end
   end
 `endif

@@ -15,6 +15,7 @@ module trike_decaps_syndrome_core #(
     parameter int SECRET_WEIGHT = 35,
     parameter int WORD_W = 64,
     parameter int DIGIT_W = 8,
+    parameter bit RUNTIME_GEOMETRY = 1'b0,
     parameter int WORD_ADDR_W = ((((R_BITS + WORD_W - 1) / WORD_W) > 1) ? $clog2(
         (R_BITS + WORD_W - 1) / WORD_W
     ) : 1)
@@ -22,6 +23,9 @@ module trike_decaps_syndrome_core #(
     input  logic                                           i_clk,
     input  logic                                           i_rst_n,
     input  logic                                           i_start,
+    input  logic [                                   31:0] i_runtime_r_bits,
+    input  logic [                                   31:0] i_runtime_secret_weight,
+    input  logic [                                   31:0] i_runtime_words,
     input  logic                                           i_h0_valid,
     input  logic [((R_BITS > 1) ? $clog2(R_BITS) : 1)-1:0] i_h0_index,
     output logic                                           o_h0_ready,
@@ -46,7 +50,6 @@ module trike_decaps_syndrome_core #(
   localparam int LAST_BITS = R_BITS - ((WORDS - 1) * WORD_W);
   localparam int INDEX_W = (R_BITS > 1) ? $clog2(R_BITS) : 1;
   localparam int SUPPORT_ADDR_W = (SECRET_WEIGHT > 1) ? $clog2(SECRET_WEIGHT) : 1;
-  localparam logic [WORD_W-1:0] LAST_MASK = {WORD_W{1'b1}} >> (WORD_W - LAST_BITS);
 
   typedef enum logic [4:0] {
     ST_IDLE,
@@ -76,6 +79,11 @@ module trike_decaps_syndrome_core #(
   integer                      feed_count_q;
   integer                      result_count_q;
   integer                      output_count_q;
+  integer                      active_r_bits_q;
+  integer                      active_secret_weight_q;
+  integer                      active_words_q;
+  integer                      active_last_bits_q;
+  logic   [        WORD_W-1:0] active_last_mask_c;
   logic   [        WORD_W-1:0] dense_result_q;
   logic                        dense_last_q;
 
@@ -195,42 +203,47 @@ module trike_decaps_syndrome_core #(
   );
 
   trike_poly_mul_core #(
-      .R_BITS       (R_BITS),
-      .WORD_W       (WORD_W),
-      .DIGIT_W      (DIGIT_W),
-      .SPARSE_WEIGHT(SECRET_WEIGHT)
+      .R_BITS          (R_BITS),
+      .WORD_W          (WORD_W),
+      .DIGIT_W         (DIGIT_W),
+      .SPARSE_WEIGHT   (SECRET_WEIGHT),
+      .RUNTIME_GEOMETRY(RUNTIME_GEOMETRY)
   ) u_mul (
-      .i_clk               (i_clk),
-      .i_rst_n             (i_rst_n),
-      .i_start             (mul_start),
-      .i_sparse_a          (mul_sparse_a),
-      .i_a_valid           (mul_a_valid),
-      .i_a_data            (mul_a_data),
-      .o_a_ready           (mul_a_ready),
-      .i_sparse_index_valid(mul_sparse_index_valid),
-      .i_sparse_index      (mul_sparse_index),
-      .o_sparse_index_ready(mul_sparse_index_ready),
-      .i_b_valid           (mul_b_valid),
-      .i_b_data            (mul_b_data),
-      .o_b_ready           (mul_b_ready),
-      .o_result_valid      (mul_result_valid),
-      .o_result_data       (mul_result_data),
-      .o_result_last       (mul_result_last),
-      .i_result_ready      (mul_result_ready),
-      .o_ext_a_re          (),
-      .o_ext_a_raddr       (),
-      .i_ext_a_rdata       ('0),
-      .o_ext_b_re          (),
-      .o_ext_b_raddr       (),
-      .i_ext_b_rdata       ('0),
-      .o_ext_result_we     (),
-      .o_ext_result_waddr  (),
-      .o_ext_result_wdata  (),
-      .o_busy              (mul_busy),
-      .o_done              (mul_done)
+      .i_clk                  (i_clk),
+      .i_rst_n                (i_rst_n),
+      .i_start                (mul_start),
+      .i_runtime_r_bits       (32'(active_r_bits_q)),
+      .i_runtime_words        (32'(active_words_q)),
+      .i_runtime_sparse_weight(32'(active_secret_weight_q)),
+      .i_sparse_a             (mul_sparse_a),
+      .i_a_valid              (mul_a_valid),
+      .i_a_data               (mul_a_data),
+      .o_a_ready              (mul_a_ready),
+      .i_sparse_index_valid   (mul_sparse_index_valid),
+      .i_sparse_index         (mul_sparse_index),
+      .o_sparse_index_ready   (mul_sparse_index_ready),
+      .i_b_valid              (mul_b_valid),
+      .i_b_data               (mul_b_data),
+      .o_b_ready              (mul_b_ready),
+      .o_result_valid         (mul_result_valid),
+      .o_result_data          (mul_result_data),
+      .o_result_last          (mul_result_last),
+      .i_result_ready         (mul_result_ready),
+      .o_ext_a_re             (),
+      .o_ext_a_raddr          (),
+      .i_ext_a_rdata          ('0),
+      .o_ext_b_re             (),
+      .o_ext_b_raddr          (),
+      .i_ext_b_rdata          ('0),
+      .o_ext_result_we        (),
+      .o_ext_result_waddr     (),
+      .o_ext_result_wdata     (),
+      .o_busy                 (mul_busy),
+      .o_done                 (mul_done)
   );
 
   always_comb begin
+    active_last_mask_c = {WORD_W{1'b1}} >> (WORD_W - active_last_bits_q);
     h0_we = 1'b0;
     h0_waddr = '0;
     h0_wdata = '0;
@@ -273,7 +286,7 @@ module trike_decaps_syndrome_core #(
     o_v_ready = (state_q == ST_LOAD_V);
     o_syndrome_valid = (state_q == ST_OUTPUT_DATA);
     o_syndrome_data = syndrome_rdata;
-    o_syndrome_last = (output_count_q == (WORDS - 1));
+    o_syndrome_last = (output_count_q == (active_words_q - 1));
     o_busy = (state_q != ST_IDLE);
 
     unique case (state_q)
@@ -286,19 +299,22 @@ module trike_decaps_syndrome_core #(
       ST_LOAD_T0: begin
         t0_we = i_t0_valid;
         t0_waddr = WORD_ADDR_W'(load_count_q);
-        t0_wdata = (load_count_q == (WORDS - 1)) ? (i_t0_data & LAST_MASK) : i_t0_data;
+        t0_wdata = (load_count_q == (active_words_q - 1)) ?
+            (i_t0_data & active_last_mask_c) : i_t0_data;
       end
 
       ST_LOAD_U: begin
         u_we = i_u_valid;
         u_waddr = WORD_ADDR_W'(load_count_q);
-        u_wdata = (load_count_q == (WORDS - 1)) ? (i_u_data & LAST_MASK) : i_u_data;
+        u_wdata = (load_count_q == (active_words_q - 1)) ?
+            (i_u_data & active_last_mask_c) : i_u_data;
       end
 
       ST_LOAD_V: begin
         v_we = i_v_valid;
         v_waddr = WORD_ADDR_W'(load_count_q);
-        v_wdata = (load_count_q == (WORDS - 1)) ? (i_v_data & LAST_MASK) : i_v_data;
+        v_wdata = (load_count_q == (active_words_q - 1)) ?
+            (i_v_data & active_last_mask_c) : i_v_data;
       end
 
       ST_SPARSE_START: begin
@@ -383,6 +399,10 @@ module trike_decaps_syndrome_core #(
       output_count_q <= 0;
       dense_result_q <= '0;
       dense_last_q <= 1'b0;
+      active_r_bits_q <= R_BITS;
+      active_secret_weight_q <= SECRET_WEIGHT;
+      active_words_q <= WORDS;
+      active_last_bits_q <= LAST_BITS;
       o_done <= 1'b0;
     end else begin
       o_done <= 1'b0;
@@ -391,13 +411,24 @@ module trike_decaps_syndrome_core #(
         ST_IDLE: begin
           if (i_start) begin
             load_count_q <= 0;
+            if (RUNTIME_GEOMETRY) begin
+              active_r_bits_q <= int'(i_runtime_r_bits);
+              active_secret_weight_q <= int'(i_runtime_secret_weight);
+              active_words_q <= int'(i_runtime_words);
+              active_last_bits_q <= int'(i_runtime_r_bits) - ((int'(i_runtime_words) - 1) * WORD_W);
+            end else begin
+              active_r_bits_q <= R_BITS;
+              active_secret_weight_q <= SECRET_WEIGHT;
+              active_words_q <= WORDS;
+              active_last_bits_q <= LAST_BITS;
+            end
             state_q <= ST_LOAD_H0;
           end
         end
 
         ST_LOAD_H0: begin
           if (i_h0_valid) begin
-            if (load_count_q == (SECRET_WEIGHT - 1)) begin
+            if (load_count_q == (active_secret_weight_q - 1)) begin
               load_count_q <= 0;
               state_q <= ST_LOAD_T0;
             end else begin
@@ -408,7 +439,7 @@ module trike_decaps_syndrome_core #(
 
         ST_LOAD_T0: begin
           if (i_t0_valid) begin
-            if (load_count_q == (WORDS - 1)) begin
+            if (load_count_q == (active_words_q - 1)) begin
               load_count_q <= 0;
               state_q <= ST_LOAD_U;
             end else begin
@@ -419,7 +450,7 @@ module trike_decaps_syndrome_core #(
 
         ST_LOAD_U: begin
           if (i_u_valid) begin
-            if (load_count_q == (WORDS - 1)) begin
+            if (load_count_q == (active_words_q - 1)) begin
               load_count_q <= 0;
               state_q <= ST_LOAD_V;
             end else begin
@@ -430,7 +461,7 @@ module trike_decaps_syndrome_core #(
 
         ST_LOAD_V: begin
           if (i_v_valid) begin
-            if (load_count_q == (WORDS - 1)) begin
+            if (load_count_q == (active_words_q - 1)) begin
               state_q <= ST_SPARSE_START;
             end else begin
               load_count_q <= load_count_q + 1;
@@ -447,7 +478,7 @@ module trike_decaps_syndrome_core #(
 
         ST_SPARSE_H0_DATA: begin
           if (mul_sparse_index_ready) begin
-            if (feed_count_q == (SECRET_WEIGHT - 1)) begin
+            if (feed_count_q == (active_secret_weight_q - 1)) begin
               feed_count_q <= 0;
               state_q <= ST_SPARSE_U_FETCH;
             end else begin
@@ -461,7 +492,7 @@ module trike_decaps_syndrome_core #(
 
         ST_SPARSE_U_DATA: begin
           if (mul_b_ready) begin
-            if (feed_count_q == (WORDS - 1)) begin
+            if (feed_count_q == (active_words_q - 1)) begin
               result_count_q <= 0;
               state_q <= ST_SPARSE_RESULT;
             end else begin
@@ -490,7 +521,7 @@ module trike_decaps_syndrome_core #(
 
         ST_DENSE_T0_DATA: begin
           if (mul_a_ready) begin
-            if (feed_count_q == (WORDS - 1)) begin
+            if (feed_count_q == (active_words_q - 1)) begin
               feed_count_q <= 0;
               state_q <= ST_DENSE_UV_FETCH;
             end else begin
@@ -504,7 +535,7 @@ module trike_decaps_syndrome_core #(
 
         ST_DENSE_UV_DATA: begin
           if (mul_b_ready) begin
-            if (feed_count_q == (WORDS - 1)) begin
+            if (feed_count_q == (active_words_q - 1)) begin
               result_count_q <= 0;
               state_q <= ST_DENSE_RESULT;
             end else begin
@@ -536,7 +567,7 @@ module trike_decaps_syndrome_core #(
 
         ST_OUTPUT_DATA: begin
           if (i_syndrome_ready) begin
-            if (output_count_q == (WORDS - 1)) begin
+            if (output_count_q == (active_words_q - 1)) begin
               o_done  <= 1'b1;
               state_q <= ST_IDLE;
             end else begin
@@ -556,6 +587,19 @@ module trike_decaps_syndrome_core #(
     if ((WORD_W % DIGIT_W) != 0)
       $fatal(1, "trike_decaps_syndrome_core requires WORD_W divisible by DIGIT_W");
   end
+
+`ifndef SYNTHESIS
+  always_ff @(posedge i_clk) begin
+    if (i_rst_n && (state_q == ST_IDLE) && i_start && RUNTIME_GEOMETRY) begin
+      if ((i_runtime_r_bits < 1) || (i_runtime_r_bits > R_BITS))
+        $fatal(1, "trike_decaps_syndrome_core runtime r out of range");
+      if ((i_runtime_secret_weight < 1) || (i_runtime_secret_weight > SECRET_WEIGHT))
+        $fatal(1, "trike_decaps_syndrome_core runtime weight out of range");
+      if ((i_runtime_words < 1) || (i_runtime_words > WORDS))
+        $fatal(1, "trike_decaps_syndrome_core runtime words out of range");
+    end
+  end
+`endif
 
   /* verilator lint_off UNUSED */
   logic unused_mul_status;

@@ -39,43 +39,45 @@ module tb_trike_encaps_hash_reference;
   trike_pseudohash512_stream #(
       .MESSAGE_BYTES(REF_ERROR_BYTES)
   ) u_l (
-      .i_clk           (clk),
-      .i_rst_n         (rst_n),
-      .i_start         (l_start),
-      .i_input_valid   (l_input_valid),
-      .i_input_data    (l_input_data),
-      .o_input_ready   (l_input_ready),
-      .o_input_pass    (l_input_pass),
-      .o_busy          (l_busy),
-      .o_done          (l_done),
-      .o_digest        (l_digest),
-      .o_compress_start(),
-      .o_compress_block(),
-      .o_compress_state(),
-      .i_compress_busy (1'b0),
-      .i_compress_done (1'b0),
-      .i_compress_state('0)
+      .i_clk                  (clk),
+      .i_rst_n                (rst_n),
+      .i_start                (l_start),
+      .i_runtime_message_bytes('0),
+      .i_input_valid          (l_input_valid),
+      .i_input_data           (l_input_data),
+      .o_input_ready          (l_input_ready),
+      .o_input_pass           (l_input_pass),
+      .o_busy                 (l_busy),
+      .o_done                 (l_done),
+      .o_digest               (l_digest),
+      .o_compress_start       (),
+      .o_compress_block       (),
+      .o_compress_state       (),
+      .i_compress_busy        (1'b0),
+      .i_compress_done        (1'b0),
+      .i_compress_state       ('0)
   );
 
   trike_pseudohash512_stream #(
       .MESSAGE_BYTES(REF_K_BYTES)
   ) u_k (
-      .i_clk           (clk),
-      .i_rst_n         (rst_n),
-      .i_start         (k_start),
-      .i_input_valid   (k_input_valid),
-      .i_input_data    (k_input_data),
-      .o_input_ready   (k_input_ready),
-      .o_input_pass    (k_input_pass),
-      .o_busy          (k_busy),
-      .o_done          (k_done),
-      .o_digest        (k_digest),
-      .o_compress_start(),
-      .o_compress_block(),
-      .o_compress_state(),
-      .i_compress_busy (1'b0),
-      .i_compress_done (1'b0),
-      .i_compress_state('0)
+      .i_clk                  (clk),
+      .i_rst_n                (rst_n),
+      .i_start                (k_start),
+      .i_runtime_message_bytes('0),
+      .i_input_valid          (k_input_valid),
+      .i_input_data           (k_input_data),
+      .o_input_ready          (k_input_ready),
+      .o_input_pass           (k_input_pass),
+      .o_busy                 (k_busy),
+      .o_done                 (k_done),
+      .o_digest               (k_digest),
+      .o_compress_start       (),
+      .o_compress_block       (),
+      .o_compress_state       (),
+      .i_compress_busy        (1'b0),
+      .i_compress_done        (1'b0),
+      .i_compress_state       ('0)
   );
   /* verilator lint_on PINCONNECTEMPTY */
 

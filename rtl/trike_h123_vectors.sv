@@ -129,24 +129,25 @@ module trike_h123_vectors #(
       .SEED_BYTES           (M_BYTES),
       .USE_EXTERNAL_COMPRESS(1'b1)
   ) u_instantiate (
-      .i_clk           (i_clk),
-      .i_rst_n         (i_rst_n),
-      .i_start         (instantiate_start),
-      .i_seed_valid    (i_seed_valid && (state_q == ST_WAIT_INSTANTIATE)),
-      .i_seed_data     (i_seed_data),
-      .o_seed_ready    (instantiate_seed_ready),
-      .o_seed_pass     (instantiate_seed_pass),
-      .o_busy          (),
-      .o_done          (instantiate_done),
-      .o_v             (instantiate_v),
-      .o_c             (instantiate_c),
-      .o_reseed_counter(instantiate_reseed_counter),
-      .o_compress_start(instantiate_compress_start),
-      .o_compress_block(instantiate_compress_block),
-      .o_compress_state(instantiate_compress_state),
-      .i_compress_busy (shared_compress_busy),
-      .i_compress_done (shared_compress_done),
-      .i_compress_state(shared_compress_result)
+      .i_clk               (i_clk),
+      .i_rst_n             (i_rst_n),
+      .i_start             (instantiate_start),
+      .i_runtime_seed_bytes('0),
+      .i_seed_valid        (i_seed_valid && (state_q == ST_WAIT_INSTANTIATE)),
+      .i_seed_data         (i_seed_data),
+      .o_seed_ready        (instantiate_seed_ready),
+      .o_seed_pass         (instantiate_seed_pass),
+      .o_busy              (),
+      .o_done              (instantiate_done),
+      .o_v                 (instantiate_v),
+      .o_c                 (instantiate_c),
+      .o_reseed_counter    (instantiate_reseed_counter),
+      .o_compress_start    (instantiate_compress_start),
+      .o_compress_block    (instantiate_compress_block),
+      .o_compress_state    (instantiate_compress_state),
+      .i_compress_busy     (shared_compress_busy),
+      .i_compress_done     (shared_compress_done),
+      .i_compress_state    (shared_compress_result)
   );
 
   trike_sm3_drng_generate_stream #(

@@ -33,32 +33,34 @@ module tb_trike_decaps_message_reference;
   integer                     cycle_count;
 
   trike_decaps_message_recover #(
-      .M_BYTES    (REF_M_BYTES),
-      .ERROR_BYTES(REF_ERROR_BYTES)
+      .M_BYTES       (REF_M_BYTES),
+      .ERROR_BYTES   (REF_ERROR_BYTES),
+      .RUNTIME_LENGTH(1'b1)
   ) dut (
-      .i_clk           (clk),
-      .i_rst_n         (rst_n),
-      .i_start         (start),
-      .i_c2_valid      (c2_valid),
-      .i_c2_data       (c2_data),
-      .o_c2_ready      (c2_ready),
-      .o_error_re      (error_re),
-      .o_error_raddr   (error_raddr),
-      .i_error_rdata   (error_rdata),
-      .o_message_valid (message_valid),
-      .o_message_index (message_index),
-      .o_message_data  (message_data),
-      .o_message_last  (message_last),
-      .i_message_ready (message_ready),
-      .o_busy          (busy),
-      .o_done          (done),
-      .o_l_digest      (l_digest),
-      .o_compress_start(unused_compress_start),
-      .o_compress_block(unused_compress_block),
-      .o_compress_state(unused_compress_state),
-      .i_compress_busy (1'b0),
-      .i_compress_done (1'b0),
-      .i_compress_state('0)
+      .i_clk                (clk),
+      .i_rst_n              (rst_n),
+      .i_start              (start),
+      .i_runtime_error_bytes(32'(REF_ERROR_BYTES)),
+      .i_c2_valid           (c2_valid),
+      .i_c2_data            (c2_data),
+      .o_c2_ready           (c2_ready),
+      .o_error_re           (error_re),
+      .o_error_raddr        (error_raddr),
+      .i_error_rdata        (error_rdata),
+      .o_message_valid      (message_valid),
+      .o_message_index      (message_index),
+      .o_message_data       (message_data),
+      .o_message_last       (message_last),
+      .i_message_ready      (message_ready),
+      .o_busy               (busy),
+      .o_done               (done),
+      .o_l_digest           (l_digest),
+      .o_compress_start     (unused_compress_start),
+      .o_compress_block     (unused_compress_block),
+      .o_compress_state     (unused_compress_state),
+      .i_compress_busy      (1'b0),
+      .i_compress_done      (1'b0),
+      .i_compress_state     ('0)
   );
 
   always #1 clk = ~clk;

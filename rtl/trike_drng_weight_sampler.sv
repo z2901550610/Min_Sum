@@ -9,11 +9,14 @@
 module trike_drng_weight_sampler #(
     parameter int LENGTH                = 46743,
     parameter int WEIGHT                = 263,
+    parameter bit RUNTIME_GEOMETRY      = 1'b0,
     parameter bit USE_EXTERNAL_COMPRESS = 1'b0
 ) (
     input  logic                                           i_clk,
     input  logic                                           i_rst_n,
     input  logic                                           i_start,
+    input  logic [                                   31:0] i_runtime_length,
+    input  logic [                                   31:0] i_runtime_weight,
     input  logic [                                  439:0] i_v,
     input  logic [                                  439:0] i_c,
     input  logic [                                  439:0] i_reseed_counter,
@@ -70,6 +73,8 @@ module trike_drng_weight_sampler #(
   logic   [((LENGTH > 1) ? $clog2(LENGTH) : 1)-1:0] sampler_index;
   logic                                             sampler_index_ready;
   logic                                             sampler_done;
+  logic   [                                   31:0] active_length_q;
+  logic   [                                   31:0] active_weight_q;
 
   assign generate_start        = state_q == ST_START_GENERATE;
   assign generate_output_ready = state_q == ST_COLLECT_RANDOM;
@@ -109,12 +114,15 @@ module trike_drng_weight_sampler #(
   );
 
   trike_fixed_weight_sampler #(
-      .LENGTH(LENGTH),
-      .WEIGHT(WEIGHT)
+      .LENGTH          (LENGTH),
+      .WEIGHT          (WEIGHT),
+      .RUNTIME_GEOMETRY(RUNTIME_GEOMETRY)
   ) u_sampler (
       .i_clk           (i_clk),
       .i_rst_n         (i_rst_n),
       .i_start         (sampler_start),
+      .i_runtime_length(active_length_q),
+      .i_runtime_weight(active_weight_q),
       .i_random_valid  (sampler_random_valid),
       .i_random_data   (random_word_q),
       .o_random_ready  (sampler_random_ready),
@@ -138,6 +146,8 @@ module trike_drng_weight_sampler #(
       o_v                 <= '0;
       o_c                 <= '0;
       o_reseed_counter    <= '0;
+      active_length_q     <= 32'(LENGTH);
+      active_weight_q     <= 32'(WEIGHT);
     end else begin
       o_done <= 1'b0;
 
@@ -147,7 +157,14 @@ module trike_drng_weight_sampler #(
             v_q              <= i_v;
             c_q              <= i_c;
             reseed_counter_q <= i_reseed_counter;
-            state_q          <= ST_START_SAMPLER;
+            if (RUNTIME_GEOMETRY) begin
+              active_length_q <= i_runtime_length;
+              active_weight_q <= i_runtime_weight;
+            end else begin
+              active_length_q <= 32'(LENGTH);
+              active_weight_q <= 32'(WEIGHT);
+            end
+            state_q <= ST_START_SAMPLER;
           end
         end
 
@@ -219,6 +236,16 @@ module trike_drng_weight_sampler #(
     if (LENGTH < 1) $error("trike_drng_weight_sampler LENGTH must be at least 1");
     if (WEIGHT < 1) $error("trike_drng_weight_sampler WEIGHT must be at least 1");
     if (WEIGHT > LENGTH) $error("trike_drng_weight_sampler WEIGHT must not exceed LENGTH");
+  end
+
+  always_ff @(posedge i_clk) begin
+    if (i_rst_n && (state_q == ST_IDLE) && i_start && RUNTIME_GEOMETRY) begin
+      if ((i_runtime_length < 1) || (i_runtime_length > LENGTH))
+        $fatal(1, "trike_drng_weight_sampler runtime length out of range");
+      if ((i_runtime_weight < 1) || (i_runtime_weight > WEIGHT) ||
+          (i_runtime_weight > i_runtime_length))
+        $fatal(1, "trike_drng_weight_sampler runtime weight out of range");
+    end
   end
 `endif
 

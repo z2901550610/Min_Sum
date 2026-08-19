@@ -30,6 +30,8 @@ module tb_trike_fixed_weight_sampler;
       .i_clk           (clk),
       .i_rst_n         (rst_n),
       .i_start         (start),
+      .i_runtime_length('0),
+      .i_runtime_weight('0),
       .i_random_valid  (random_valid),
       .i_random_data   (random_data),
       .o_random_ready  (random_ready),

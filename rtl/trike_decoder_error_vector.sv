@@ -1,11 +1,14 @@
 `timescale 1ns / 1ps
 
 // Reads the complete decoder decision at a fixed one-bit-per-cycle rate and
-// stores e0 || e1 || e2 with zero padding at each block boundary.
+// stores e0 || e1 || e2 with zero padding at each active block boundary.
+// Runtime geometry is a public transaction descriptor sampled with i_start;
+// the memory allocation remains sized for the maximum configured profile.
 module trike_decoder_error_vector #(
     parameter int R_BITS = 12589,
     parameter int BLOCKS = 3,
     parameter int PADDED_R_BYTES = ((R_BITS + 511) / 512) * 64,
+    parameter bit RUNTIME_GEOMETRY = 1'b0,
     parameter int COL_W = (((BLOCKS * R_BITS) > 1) ? $clog2(BLOCKS * R_BITS) : 1),
     parameter int ERROR_ADDR_W = (((BLOCKS * PADDED_R_BYTES) > 1) ? $clog2(
         BLOCKS * PADDED_R_BYTES
@@ -14,6 +17,7 @@ module trike_decoder_error_vector #(
     input  logic                    i_clk,
     input  logic                    i_rst_n,
     input  logic                    i_start,
+    input  logic [            31:0] i_runtime_r_bits,
     output logic [       COL_W-1:0] o_decision_col_idx,
     input  logic                    i_decision_data,
     input  logic                    i_error_re,
@@ -48,6 +52,9 @@ module trike_decoder_error_vector #(
   logic   [ERROR_ADDR_W-1:0] error_waddr;
   logic   [             7:0] error_wdata;
   logic                      error_re;
+  integer                    active_r_bits_q;
+  integer                    active_padded_r_bytes_q;
+  integer                    active_error_bytes_q;
 
   ram_bram #(
       .DATA_W(8),
@@ -95,6 +102,9 @@ module trike_decoder_error_vector #(
       response_byte_last_q <= 1'b0;
       response_last_q <= 1'b0;
       byte_accum_q <= '0;
+      active_r_bits_q <= R_BITS;
+      active_padded_r_bytes_q <= PADDED_R_BYTES;
+      active_error_bytes_q <= ERROR_BYTES;
       o_done <= 1'b0;
     end else begin
       o_done <= 1'b0;
@@ -108,12 +118,21 @@ module trike_decoder_error_vector #(
             issue_local_q <= '0;
             response_valid_q <= 1'b0;
             byte_accum_q <= '0;
+            if (RUNTIME_GEOMETRY) begin
+              active_r_bits_q <= int'(i_runtime_r_bits);
+              active_padded_r_bytes_q <= ((int'(i_runtime_r_bits) + 511) / 512) * 64;
+              active_error_bytes_q <= BLOCKS * (((int'(i_runtime_r_bits) + 511) / 512) * 64);
+            end else begin
+              active_r_bits_q <= R_BITS;
+              active_padded_r_bytes_q <= PADDED_R_BYTES;
+              active_error_bytes_q <= ERROR_BYTES;
+            end
             state_q <= ST_CLEAR;
           end
         end
 
         ST_CLEAR: begin
-          if (clear_addr_q == (ERROR_BYTES - 1)) begin
+          if (clear_addr_q == (active_error_bytes_q - 1)) begin
             response_valid_q <= 1'b0;
             state_q <= ST_SCAN;
           end else begin
@@ -136,13 +155,13 @@ module trike_decoder_error_vector #(
             response_valid_q <= 1'b1;
             response_bit_q <= issue_local_q[2:0];
             response_error_addr_q <= ERROR_ADDR_W'(
-                (int'(issue_block_q) * PADDED_R_BYTES) + (int'(issue_local_q) / 8));
+                (int'(issue_block_q) * active_padded_r_bytes_q) + (int'(issue_local_q) / 8));
             response_byte_last_q <= (issue_local_q[2:0] == 3'd7) ||
-                                    (issue_local_q == LOCAL_W'(R_BITS - 1));
-            response_last_q <= issue_col_q == COL_W'((BLOCKS * R_BITS) - 1);
-            if (issue_col_q != COL_W'((BLOCKS * R_BITS) - 1)) begin
+                                    (issue_local_q == LOCAL_W'(active_r_bits_q - 1));
+            response_last_q <= issue_col_q == COL_W'((BLOCKS * active_r_bits_q) - 1);
+            if (issue_col_q != COL_W'((BLOCKS * active_r_bits_q) - 1)) begin
               issue_col_q <= issue_col_q + 1'b1;
-              if (issue_local_q == LOCAL_W'(R_BITS - 1)) begin
+              if (issue_local_q == LOCAL_W'(active_r_bits_q - 1)) begin
                 issue_local_q <= '0;
                 issue_block_q <= issue_block_q + 1'b1;
               end else begin
@@ -163,5 +182,16 @@ module trike_decoder_error_vector #(
     if (PADDED_R_BYTES < ((R_BITS + 7) / 8))
       $fatal(1, "trike_decoder_error_vector padding is too small");
   end
+
+`ifndef SYNTHESIS
+  always_ff @(posedge i_clk) begin
+    if (i_rst_n && (state_q == ST_IDLE) && i_start && RUNTIME_GEOMETRY) begin
+      if ((i_runtime_r_bits < 1) || (i_runtime_r_bits > R_BITS))
+        $fatal(1, "trike_decoder_error_vector runtime r out of range");
+      if ((((int'(i_runtime_r_bits) + 511) / 512) * 64) > PADDED_R_BYTES)
+        $fatal(1, "trike_decoder_error_vector runtime padding exceeds allocation");
+    end
+  end
+`endif
 
 endmodule

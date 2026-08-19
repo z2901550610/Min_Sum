@@ -2,7 +2,12 @@
 rtl/bike_pkg.sv
 rtl/reset_sync.sv
 rtl/decoder_profile_config.sv
+rtl/trike_decaps_profile_config.sv
+rtl/trike_decaps_input_loader.sv
 rtl/ram_bram.sv
+rtl/trike_decaps_input_store.sv
+rtl/trike_decaps_support_prefetch.sv
+rtl/trike_decaps_syndrome_prefetch.sv
 rtl/ram_i.sv
 rtl/barrel_rotate.sv
 rtl/edge_addr_gen.sv
@@ -28,10 +33,14 @@ rtl/msg_signmag_to_tc.sv
 rtl/decoder_top.sv
 rtl/trike_poly_mul_core.sv
 rtl/trike_decaps_syndrome_core.sv
+rtl/trike_decaps_syndrome_store_core.sv
+rtl/trike_decaps_input_syndrome_core.sv
+rtl/trike_decaps_input_decoder_load_core.sv
 rtl/trike_fixed_support_sorter.sv
 rtl/trike_decoder_load_adapter.sv
 rtl/trike_decoder_error_vector.sv
 rtl/trike_decoder_residual_check.sv
+rtl/trike_decaps_decoder_postcheck_core.sv
 rtl/sm3_compress.sv
 rtl/trike_sm3_service.sv
 rtl/sm3_hash_stream.sv
@@ -53,4 +62,7 @@ rtl/trike_decaps_reencrypt_verify.sv
 rtl/trike_decaps_kdf.sv
 rtl/trike_decaps_postprocess_core.sv
 rtl/trike_decaps_pipeline_core.sv
+rtl/trike_decaps_runtime_pipeline_core.sv
+rtl/trike_decaps_unified_core.sv
 rtl/trike_decaps_synth_top.sv
+rtl/trike_decaps_runtime_synth_top.sv

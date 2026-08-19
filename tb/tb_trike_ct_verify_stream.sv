@@ -30,22 +30,23 @@ module tb_trike_ct_verify_stream;
       .WORD_COUNT(WORD_COUNT),
       .DATA_W    (DATA_W)
   ) dut (
-      .i_clk            (clk),
-      .i_rst_n          (rst_n),
-      .i_start          (start),
-      .i_decoder_ok     (decoder_ok),
-      .i_reference_data (reference_data),
-      .i_reference_valid(reference_valid),
-      .o_reference_ready(reference_ready),
-      .i_candidate_data (candidate_data),
-      .i_candidate_valid(candidate_valid),
-      .o_candidate_ready(candidate_ready),
-      .i_match_data     (match_data),
-      .i_mismatch_data  (mismatch_data),
-      .o_equal          (equal),
-      .o_selected_data  (selected_data),
-      .o_busy           (busy),
-      .o_done           (done)
+      .i_clk               (clk),
+      .i_rst_n             (rst_n),
+      .i_start             (start),
+      .i_runtime_word_count('0),
+      .i_decoder_ok        (decoder_ok),
+      .i_reference_data    (reference_data),
+      .i_reference_valid   (reference_valid),
+      .o_reference_ready   (reference_ready),
+      .i_candidate_data    (candidate_data),
+      .i_candidate_valid   (candidate_valid),
+      .o_candidate_ready   (candidate_ready),
+      .i_match_data        (match_data),
+      .i_mismatch_data     (mismatch_data),
+      .o_equal             (equal),
+      .o_selected_data     (selected_data),
+      .o_busy              (busy),
+      .o_done              (done)
   );
 
   always #1 clk = ~clk;

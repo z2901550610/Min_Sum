@@ -27,29 +27,31 @@ module tb_trike_decaps_kdf_reference;
   /* verilator lint_off PINCONNECTEMPTY */
   trike_decaps_kdf #(
       .M_BYTES         (REF_M_BYTES),
-      .CIPHERTEXT_BYTES(REF_CIPHERTEXT_BYTES)
+      .CIPHERTEXT_BYTES(REF_CIPHERTEXT_BYTES),
+      .RUNTIME_LENGTH  (1'b1)
   ) dut (
-      .i_clk                (clk),
-      .i_rst_n              (rst_n),
-      .i_start              (start),
-      .i_selected_message   (selected_message),
-      .o_ciphertext_re      (ciphertext_re),
-      .o_ciphertext_raddr   (ciphertext_raddr),
-      .i_ciphertext_rdata   (ciphertext_rdata),
-      .o_shared_secret_valid(shared_secret_valid),
-      .o_shared_secret_index(shared_secret_index),
-      .o_shared_secret_data (shared_secret_data),
-      .o_shared_secret_last (shared_secret_last),
-      .i_shared_secret_ready(shared_secret_ready),
-      .o_busy               (busy),
-      .o_done               (done),
-      .o_k_digest           (),
-      .o_compress_start     (),
-      .o_compress_block     (),
-      .o_compress_state     (),
-      .i_compress_busy      (1'b0),
-      .i_compress_done      (1'b0),
-      .i_compress_state     ('0)
+      .i_clk                     (clk),
+      .i_rst_n                   (rst_n),
+      .i_start                   (start),
+      .i_runtime_ciphertext_bytes(32'(REF_CIPHERTEXT_BYTES)),
+      .i_selected_message        (selected_message),
+      .o_ciphertext_re           (ciphertext_re),
+      .o_ciphertext_raddr        (ciphertext_raddr),
+      .i_ciphertext_rdata        (ciphertext_rdata),
+      .o_shared_secret_valid     (shared_secret_valid),
+      .o_shared_secret_index     (shared_secret_index),
+      .o_shared_secret_data      (shared_secret_data),
+      .o_shared_secret_last      (shared_secret_last),
+      .i_shared_secret_ready     (shared_secret_ready),
+      .o_busy                    (busy),
+      .o_done                    (done),
+      .o_k_digest                (),
+      .o_compress_start          (),
+      .o_compress_block          (),
+      .o_compress_state          (),
+      .i_compress_busy           (1'b0),
+      .i_compress_done           (1'b0),
+      .i_compress_state          ('0)
   );
   /* verilator lint_on PINCONNECTEMPTY */
 

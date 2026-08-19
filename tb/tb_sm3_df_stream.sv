@@ -25,16 +25,17 @@ module tb_sm3_df_stream;
   sm3_df_stream #(
       .INPUT_BYTES(INPUT_BYTES)
   ) dut (
-      .i_clk        (clk),
-      .i_rst_n      (rst_n),
-      .i_start      (start),
-      .i_input_valid(input_valid),
-      .i_input_data (input_data),
-      .o_input_ready(input_ready),
-      .o_input_pass (input_pass),
-      .o_busy       (busy),
-      .o_done       (done),
-      .o_seed       (seed)
+      .i_clk                (clk),
+      .i_rst_n              (rst_n),
+      .i_start              (start),
+      .i_runtime_input_bytes('0),
+      .i_input_valid        (input_valid),
+      .i_input_data         (input_data),
+      .o_input_ready        (input_ready),
+      .o_input_pass         (input_pass),
+      .o_busy               (busy),
+      .o_done               (done),
+      .o_seed               (seed)
   );
 
   initial clk = 1'b0;

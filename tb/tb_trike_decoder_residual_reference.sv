@@ -30,7 +30,8 @@ module tb_trike_decoder_residual_reference;
   trike_decoder_residual_check #(
       .R_BITS(REF_R_BITS),
       .BLOCKS(REF_BLOCKS),
-      .WEIGHT(REF_SECRET_WEIGHT)
+      .WEIGHT(REF_SECRET_WEIGHT),
+      .RUNTIME_GEOMETRY(1'b1)
   ) dut (
       .i_clk             (clk),
       .i_rst_n           (rst_n),
@@ -42,6 +43,8 @@ module tb_trike_decoder_residual_reference;
       .i_syndrome_addr   (syndrome_addr),
       .i_syndrome_data   (syndrome_data),
       .i_start           (start),
+      .i_runtime_r_bits  (32'(REF_R_BITS)),
+      .i_runtime_weight  (32'(REF_SECRET_WEIGHT)),
       .o_decision_col_idx(decision_col),
       .i_decision_data   (decision_data),
       .o_residual_zero   (residual_zero),

@@ -41,8 +41,13 @@ TRIKE_POLY_REFERENCE_KAT ?= $(TRIKE_REFERENCE_SOURCE_ROOT)/Test_Vectors/KAT_KEM_
 TRIKE_POLY_REFERENCE_FIXTURE ?= tb/generated/trike_poly_mul_reference_case.svh
 TRIKE_POLY_INV_REFERENCE_FIXTURE ?= tb/generated/trike_poly_inv_reference_case.svh
 TRIKE_MINSUM_POLY_INV_FIXTURE ?= tb/generated/trike_poly_inv_minsum_case.svh
-TRIKE_MINSUM_KEM_CASE ?= build/generated/trike_minsum_kem/trike160_seed1.json
+TRIKE_MINSUM_PROFILE ?= trike160
+TRIKE_MINSUM_PROFILES ?= trike160 trike256 trike384 trike512
+TRIKE_RUNTIME_REFERENCE_DEFINES ?=
+TRIKE_RUNTIME_REFERENCE_CFLAGS ?= -CFLAGS -O3
+TRIKE_MINSUM_KEM_CASE ?= build/generated/trike_minsum_kem/$(TRIKE_MINSUM_PROFILE)_seed1.json
 TRIKE_MINSUM_DECAPS_MESSAGE_FIXTURE ?= tb/generated/trike_decaps_message_minsum_case.svh
+TRIKE_MINSUM_RUNTIME_DECAPS_FIXTURE ?= tb/generated/trike_decaps_runtime_minsum_case.svh
 TRIKE_ENCAPS_REFERENCE_FIXTURE ?= tb/generated/trike_encaps_reference_case.svh
 TRIKE_KEYGEN_REFERENCE_FIXTURE ?= tb/generated/trike_keygen_reference_case.svh
 TRIKE_DECAPS_SYNDROME_REFERENCE_FIXTURE ?= tb/generated/trike_decaps_syndrome_reference_case.svh
@@ -92,7 +97,7 @@ TRIKE_PSEUDOHASH_RTL := $(call read_filelist,filelists/trike_pseudohash.f)
 TRIKE_ENCAPS_RTL := $(call read_filelist,filelists/trike_encaps.f)
 TRIKE_KEYGEN_RTL := $(call read_filelist,filelists/trike_keygen.f)
 TRIKE_DECAPS_SYNTH_RTL := $(call read_filelist,filelists/trike_decaps.f)
-TRIKE_DECAPS_RTL := $(filter-out rtl/trike_decaps_synth_top.sv,$(TRIKE_DECAPS_SYNTH_RTL))
+TRIKE_DECAPS_RTL := $(filter-out rtl/trike_decaps_synth_top.sv rtl/trike_decaps_runtime_synth_top.sv,$(TRIKE_DECAPS_SYNTH_RTL))
 MAINTAINED_SV := $(sort $(wildcard rtl/*.sv) $(wildcard tb/*.sv) $(wildcard formal/*.sv))
 BIKE_RANDOM_BASE_SEED ?= 1
 BIKE_RANDOM_TRIALS ?= 1
@@ -113,8 +118,8 @@ TRIKE_UNIFIED_KSIGN_TIMEOUT_CYCLES ?= 40000000
 CI_SMOKE_SEED ?= 1
 CI_NIGHTLY_TRIALS ?= 4
 
-.PHONY: all sim test test-unit test-kem-unit test-trike-weak-key-reference test-trike-keygen-secret-reference test-trike-keygen-arith-reference test-trike-keygen-core-reference test-trike-keygen-synth-reference test-trike-poly-reference test-trike-poly-inv-reference test-trike-encaps-components-reference test-trike-encaps-hash-reference test-trike-encaps-core-reference test-trike-encaps-synth-reference test-trike-decaps-syndrome-reference test-trike-error-store-reference test-trike-h4-vector-reference check-trike-sm3-sharing test-integration test-bike-random test-bike-unified-random test-trike-unified-ksign-random model-min-sum run-model-min-sum sweep-min-sum optimum-min-sum campaign-min-sum confirm-min-sum check-model-rtl check-model-rtl-bike128 software-trike-kem test-software-trike-kem test-trike-reference-kat check-local-tools format-rtl check-format-rtl lint-rtl lint-slang check-rtl formal formal-ct-select formal-ct-control verify-rtl vivado-synth vivado-synth-trike-unified-ksign vivado-impl-trike-kem-core vivado-impl-trike-poly-inv vivado-impl-trike-pseudohash vivado-impl-trike-encaps vivado-impl-trike-keygen vivado-impl-trike-decaps vivado-impl-trike-kem-cores FORCE
-.PHONY: test-trike-poly-inv-minsum-reference gen-trike-minsum-kem-case test-trike-decaps-message-reference test-trike-decaps-verify-reference test-trike-decaps-kdf-reference test-trike-decaps-postprocess-reference test-trike-decoder-residual-reference test-trike-decaps-pipeline-reference test-trike-decaps-synth-reference
+.PHONY: all sim test test-unit test-kem-unit test-trike-weak-key-reference test-trike-keygen-secret-reference test-trike-keygen-arith-reference test-trike-keygen-core-reference test-trike-keygen-synth-reference test-trike-poly-reference test-trike-poly-inv-reference test-trike-encaps-components-reference test-trike-encaps-hash-reference test-trike-encaps-core-reference test-trike-decaps-syndrome-reference test-trike-error-store-reference test-trike-h4-vector-reference check-trike-sm3-sharing test-integration test-bike-random test-bike-unified-random test-trike-unified-ksign-random model-min-sum run-model-min-sum sweep-min-sum optimum-min-sum campaign-min-sum confirm-min-sum check-model-rtl check-model-rtl-bike128 software-trike-kem test-software-trike-kem test-trike-reference-kat check-local-tools format-rtl check-format-rtl lint-rtl lint-slang check-rtl formal formal-ct-select formal-ct-control verify-rtl vivado-synth vivado-synth-trike-unified-ksign vivado-impl-trike-kem-core vivado-impl-trike-poly-inv vivado-impl-trike-pseudohash vivado-impl-trike-encaps vivado-impl-trike-keygen vivado-impl-trike-decaps vivado-impl-trike-decaps-runtime vivado-impl-trike-kem-cores FORCE
+.PHONY: test-trike-poly-inv-minsum-reference gen-trike-minsum-kem-case test-trike-pseudohash-runtime test-trike-h4-runtime test-trike-ct-verify-runtime test-trike-decaps-postprocess-runtime test-trike-decaps-input-loader test-trike-decaps-input-store test-trike-decaps-syndrome-runtime test-trike-decaps-syndrome-store-core test-trike-decaps-input-syndrome-core test-trike-decaps-support-prefetch test-trike-decaps-input-decoder-load-core test-trike-decaps-decoder-postcheck-core test-trike-fixed-support-sorter-runtime test-trike-decoder-load-adapter-runtime test-trike-decaps-message-reference test-trike-decaps-verify-reference test-trike-decaps-kdf-reference test-trike-decoder-residual-reference test-trike-decaps-pipeline-reference test-trike-decaps-synth-reference test-trike-decaps-runtime-synth-reference test-trike-decaps-runtime-four-profile-reference
 .PHONY: tool-versions check-tool-versions check-filelists check-records check-trike-reference-data lint-verilator formal-fast formal-nightly formal-ct-control-extended ci-fast ci-smoke ci-nightly ci-kem-reference
 
 all: test
@@ -155,6 +160,20 @@ test-unit: test-kem-unit
 	@$(SIM) ./obj_dir/Vtb_cnu_b +verilator+quiet
 
 test-kem-unit:
+	@$(MAKE) test-trike-pseudohash-runtime
+	@$(MAKE) test-trike-h4-runtime
+	@$(MAKE) test-trike-ct-verify-runtime
+	@$(MAKE) test-trike-decaps-postprocess-runtime
+	@$(MAKE) test-trike-decaps-input-loader
+	@$(MAKE) test-trike-decaps-input-store
+	@$(MAKE) test-trike-decaps-syndrome-runtime
+	@$(MAKE) test-trike-decaps-syndrome-store-core
+	@$(MAKE) test-trike-decaps-input-syndrome-core
+	@$(MAKE) test-trike-decaps-support-prefetch
+	@$(MAKE) test-trike-decaps-input-decoder-load-core
+	@$(MAKE) test-trike-decaps-decoder-postcheck-core
+	@$(MAKE) test-trike-fixed-support-sorter-runtime
+	@$(MAKE) test-trike-decoder-load-adapter-runtime
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_sm3_compress $(SM3_COMPRESS_RTL) tb/tb_sm3_compress.sv
 	@$(SIM) ./obj_dir/Vtb_sm3_compress +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_sm3_hash_stream $(SM3_COMPRESS_RTL) rtl/sm3_hash_stream.sv tb/tb_sm3_hash_stream.sv
@@ -272,9 +291,67 @@ gen-trike-minsum-kem-case: $(MIN_SUM_MODEL)
 	@python3 scripts/gen_trike_minsum_kem_case.py \
 		--model "$(MIN_SUM_MODEL)" \
 		--seed 1 \
+		--profile "$(TRIKE_MINSUM_PROFILE)" \
 		--work-dir "$(dir $(TRIKE_MINSUM_KEM_CASE))" \
 		--decaps-message-svh "$(TRIKE_MINSUM_DECAPS_MESSAGE_FIXTURE)" \
+		--runtime-decaps-svh "$(TRIKE_MINSUM_RUNTIME_DECAPS_FIXTURE)" \
 		--output "$(TRIKE_MINSUM_KEM_CASE)"
+
+test-trike-pseudohash-runtime:
+	@$(VERILATOR) --binary --sv -Wall -I./tb -I./rtl $(VERILATOR_WAIVER_FILE) --top-module tb_trike_pseudohash512_runtime $(SM3_COMPRESS_RTL) rtl/sm3_hash_stream.sv rtl/hmac_sm3_64byte_key_stream.sv rtl/trike_pseudohash512_stream.sv tb/tb_trike_pseudohash512_runtime.sv
+	@$(SIM) ./obj_dir/Vtb_trike_pseudohash512_runtime +verilator+quiet
+
+test-trike-h4-runtime:
+	@$(VERILATOR) --binary --sv -Wall -I./tb -I./rtl $(VERILATOR_WAIVER_FILE) --top-module tb_trike_h4_runtime $(SM3_COMPRESS_RTL) rtl/sm3_hash_stream.sv rtl/sm3_df_stream.sv rtl/trike_sm3_drng_instantiate_stream.sv rtl/trike_sm3_drng_generate_stream.sv rtl/trike_sampler_candidate.sv rtl/trike_fixed_weight_sampler.sv rtl/trike_drng_weight_sampler.sv rtl/trike_h4_error_sampler.sv rtl/ram_bram.sv rtl/trike_error_support_store.sv rtl/trike_h4_error_vector.sv tb/tb_trike_h4_runtime.sv
+	@$(SIM) ./obj_dir/Vtb_trike_h4_runtime +verilator+quiet
+
+test-trike-ct-verify-runtime:
+	@$(VERILATOR) --binary --sv -Wall -I./tb -I./rtl $(VERILATOR_WAIVER_FILE) --top-module tb_trike_ct_verify_runtime rtl/kem_ct_compare_select.sv rtl/trike_ct_verify_stream.sv tb/tb_trike_ct_verify_runtime.sv
+	@$(SIM) ./obj_dir/Vtb_trike_ct_verify_runtime +verilator+quiet
+
+test-trike-decaps-postprocess-runtime:
+	@$(VERILATOR) --binary --sv -Wall -I./tb -I./rtl $(VERILATOR_WAIVER_FILE) --top-module tb_trike_decaps_postprocess_runtime $(SM3_COMPRESS_RTL) rtl/sm3_hash_stream.sv rtl/sm3_df_stream.sv rtl/hmac_sm3_64byte_key_stream.sv rtl/trike_sm3_drng_instantiate_stream.sv rtl/trike_sm3_drng_generate_stream.sv rtl/trike_sampler_candidate.sv rtl/trike_fixed_weight_sampler.sv rtl/trike_drng_weight_sampler.sv rtl/trike_h4_error_sampler.sv rtl/ram_bram.sv rtl/trike_error_support_store.sv rtl/trike_h4_error_vector.sv rtl/kem_ct_compare_select.sv rtl/trike_ct_verify_stream.sv rtl/trike_decaps_message_recover.sv rtl/trike_decaps_reencrypt_verify.sv rtl/trike_pseudohash512_stream.sv rtl/trike_decaps_kdf.sv rtl/trike_decaps_postprocess_core.sv tb/tb_trike_decaps_postprocess_runtime.sv
+	@$(SIM) ./obj_dir/Vtb_trike_decaps_postprocess_runtime +verilator+quiet
+
+test-trike-decaps-input-loader:
+	@$(VERILATOR) --binary --sv -DTRIKE_UNIFIED_PARAMS -Wall -I./tb -I./rtl $(VERILATOR_WAIVER_FILE) --top-module tb_trike_decaps_input_loader rtl/bike_pkg.sv rtl/trike_decaps_profile_config.sv rtl/trike_decaps_input_loader.sv tb/tb_trike_decaps_input_loader.sv
+	@$(SIM) ./obj_dir/Vtb_trike_decaps_input_loader +verilator+quiet
+
+test-trike-decaps-input-store:
+	@$(VERILATOR) --binary --sv -DTRIKE_UNIFIED_PARAMS -Wall -I./tb -I./rtl $(VERILATOR_WAIVER_FILE) --top-module tb_trike_decaps_input_store rtl/bike_pkg.sv rtl/trike_decaps_profile_config.sv rtl/trike_decaps_input_loader.sv rtl/ram_bram.sv rtl/trike_decaps_input_store.sv tb/tb_trike_decaps_input_store.sv
+	@$(SIM) ./obj_dir/Vtb_trike_decaps_input_store +verilator+quiet
+
+test-trike-decaps-syndrome-runtime:
+	@$(VERILATOR) --binary --sv -Wall -I./tb -I./rtl $(VERILATOR_WAIVER_FILE) --top-module tb_trike_decaps_syndrome_runtime rtl/ram_bram.sv rtl/trike_poly_mul_core.sv rtl/trike_decaps_syndrome_core.sv tb/tb_trike_decaps_syndrome_runtime.sv
+	@$(SIM) ./obj_dir/Vtb_trike_decaps_syndrome_runtime +verilator+quiet
+
+test-trike-decaps-syndrome-store-core:
+	@$(VERILATOR) --binary --sv -DTRIKE_UNIFIED_PARAMS -Wall -I./tb -I./rtl $(VERILATOR_WAIVER_FILE) --top-module tb_trike_decaps_syndrome_store_core rtl/bike_pkg.sv rtl/ram_bram.sv rtl/trike_poly_mul_core.sv rtl/trike_decaps_syndrome_core.sv rtl/trike_decaps_syndrome_prefetch.sv rtl/trike_decaps_syndrome_store_core.sv tb/tb_trike_decaps_syndrome_store_core.sv
+	@$(SIM) ./obj_dir/Vtb_trike_decaps_syndrome_store_core +verilator+quiet
+
+test-trike-decaps-input-syndrome-core:
+	@$(VERILATOR) --binary --sv -DTRIKE_UNIFIED_PARAMS -Wall -I./tb -I./rtl $(VERILATOR_WAIVER_FILE) --top-module tb_trike_decaps_input_syndrome_core rtl/bike_pkg.sv rtl/trike_decaps_profile_config.sv rtl/trike_decaps_input_loader.sv rtl/ram_bram.sv rtl/trike_decaps_input_store.sv rtl/trike_poly_mul_core.sv rtl/trike_decaps_syndrome_core.sv rtl/trike_decaps_syndrome_prefetch.sv rtl/trike_decaps_syndrome_store_core.sv rtl/trike_decaps_input_syndrome_core.sv tb/tb_trike_decaps_input_syndrome_core.sv
+	@$(SIM) ./obj_dir/Vtb_trike_decaps_input_syndrome_core +verilator+quiet
+
+test-trike-decaps-support-prefetch:
+	@$(VERILATOR) --binary --sv -DTRIKE_UNIFIED_PARAMS -Wall -I./tb -I./rtl $(VERILATOR_WAIVER_FILE) --top-module tb_trike_decaps_support_prefetch rtl/bike_pkg.sv rtl/trike_decaps_support_prefetch.sv tb/tb_trike_decaps_support_prefetch.sv
+	@$(SIM) ./obj_dir/Vtb_trike_decaps_support_prefetch +verilator+quiet
+
+test-trike-decaps-input-decoder-load-core:
+	@$(VERILATOR) --binary --sv -DTRIKE_UNIFIED_PARAMS -Wall -I./tb -I./rtl $(VERILATOR_WAIVER_FILE) --top-module tb_trike_decaps_input_decoder_load_core rtl/bike_pkg.sv rtl/trike_decaps_profile_config.sv rtl/trike_decaps_input_loader.sv rtl/ram_bram.sv rtl/trike_decaps_input_store.sv rtl/trike_decaps_support_prefetch.sv rtl/trike_poly_mul_core.sv rtl/trike_decaps_syndrome_core.sv rtl/trike_decaps_syndrome_prefetch.sv rtl/trike_decaps_syndrome_store_core.sv rtl/trike_fixed_support_sorter.sv rtl/trike_decoder_load_adapter.sv rtl/trike_decaps_input_decoder_load_core.sv tb/tb_trike_decaps_input_decoder_load_core.sv
+	@$(SIM) ./obj_dir/Vtb_trike_decaps_input_decoder_load_core +verilator+quiet
+
+test-trike-decaps-decoder-postcheck-core:
+	@$(VERILATOR) --binary --sv -Wall -I./tb -I./rtl $(VERILATOR_WAIVER_FILE) --top-module tb_trike_decaps_decoder_postcheck_core rtl/ram_bram.sv rtl/trike_decoder_error_vector.sv rtl/trike_decoder_residual_check.sv rtl/trike_decaps_decoder_postcheck_core.sv tb/tb_trike_decaps_decoder_postcheck_core.sv
+	@$(SIM) ./obj_dir/Vtb_trike_decaps_decoder_postcheck_core +verilator+quiet
+
+test-trike-fixed-support-sorter-runtime:
+	@$(VERILATOR) --binary --sv -Wall -I./tb -I./rtl $(VERILATOR_WAIVER_FILE) --top-module tb_trike_fixed_support_sorter_runtime rtl/trike_fixed_support_sorter.sv tb/tb_trike_fixed_support_sorter_runtime.sv
+	@$(SIM) ./obj_dir/Vtb_trike_fixed_support_sorter_runtime +verilator+quiet
+
+test-trike-decoder-load-adapter-runtime:
+	@$(VERILATOR) --binary --sv -Wall -I./tb -I./rtl $(VERILATOR_WAIVER_FILE) --top-module tb_trike_decoder_load_adapter_runtime rtl/trike_fixed_support_sorter.sv rtl/trike_decoder_load_adapter.sv tb/tb_trike_decoder_load_adapter_runtime.sv
+	@$(SIM) ./obj_dir/Vtb_trike_decoder_load_adapter_runtime +verilator+quiet
 
 test-trike-decaps-message-reference: gen-trike-minsum-kem-case
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_decaps_message_reference $(SM3_COMPRESS_RTL) rtl/sm3_hash_stream.sv rtl/hmac_sm3_64byte_key_stream.sv rtl/trike_pseudohash512_stream.sv rtl/trike_decaps_message_recover.sv tb/tb_trike_decaps_message_reference.sv
@@ -303,6 +380,15 @@ test-trike-decaps-pipeline-reference: gen-trike-minsum-kem-case
 test-trike-decaps-synth-reference: gen-trike-minsum-kem-case
 	@$(VERILATOR) --binary --sv -DTRIKE_160_PARAMS -DBIKE_PARALLEL_L=32 -DBIKE_K_SIGN_K=4 -DBIKE_MSG_BITS=5 -DBIKE_SIM_DEBUG -Wall -I./tb -I./rtl $(VERILATOR_WAIVER_FILE) --top-module tb_trike_decaps_synth_reference $(TRIKE_DECAPS_SYNTH_RTL) tb/tb_trike_decaps_synth_reference.sv
 	@$(SIM) ./obj_dir/Vtb_trike_decaps_synth_reference +verilator+quiet
+
+test-trike-decaps-runtime-synth-reference: gen-trike-minsum-kem-case
+	@$(VERILATOR) --binary --sv -DTRIKE_UNIFIED_PARAMS -DBIKE_PARALLEL_L=32 -DBIKE_K_SIGN_K=4 -DBIKE_MSG_BITS=5 -DBIKE_COLS_PER_TILE=256 -DBIKE_SIM_DEBUG $(TRIKE_RUNTIME_REFERENCE_DEFINES) $(TRIKE_RUNTIME_REFERENCE_CFLAGS) -Wall -I./tb -I./rtl $(VERILATOR_WAIVER_FILE) --top-module tb_trike_decaps_runtime_synth_reference $(TRIKE_DECAPS_SYNTH_RTL) tb/tb_trike_decaps_runtime_synth_reference.sv
+	@$(SIM) ./obj_dir/Vtb_trike_decaps_runtime_synth_reference +verilator+quiet
+
+test-trike-decaps-runtime-four-profile-reference:
+	@for profile in $(TRIKE_MINSUM_PROFILES); do \
+		$(MAKE) test-trike-decaps-runtime-synth-reference TRIKE_MINSUM_PROFILE=$$profile TRIKE_RUNTIME_REFERENCE_DEFINES=-DTRIKE_RUNTIME_ACCEPT_REJECT_ONLY || exit 1; \
+	done
 
 $(TRIKE_ENCAPS_REFERENCE_FIXTURE): scripts/gen_trike_encaps_fixture.py $(TRIKE_POLY_REFERENCE_KAT)
 	@python3 scripts/gen_trike_encaps_fixture.py --kat "$(TRIKE_POLY_REFERENCE_KAT)" --output "$@"
@@ -451,6 +537,7 @@ lint-verilator:
 	@$(REAL_VERILATOR) $(VERILATOR_LINT_FLAGS) --top-module trike_keygen_synth_top $(TRIKE_KEYGEN_RTL)
 	@$(REAL_VERILATOR) $(VERILATOR_LINT_FLAGS) -DTRIKE_160_PARAMS -DBIKE_PARALLEL_L=32 -DBIKE_K_SIGN_K=4 -DBIKE_MSG_BITS=5 -DBIKE_COLS_PER_TILE=256 --top-module trike_decaps_synth_top $(TRIKE_DECAPS_SYNTH_RTL)
 	@$(REAL_VERILATOR) $(VERILATOR_LINT_FLAGS) -DTRIKE_UNIFIED_PARAMS -DBIKE_PARALLEL_L=32 -DBIKE_K_SIGN_K=4 -DBIKE_MSG_BITS=5 -DBIKE_COLS_PER_TILE=256 --top-module trike_decaps_synth_top $(TRIKE_DECAPS_SYNTH_RTL)
+	@$(REAL_VERILATOR) $(VERILATOR_LINT_FLAGS) -DTRIKE_UNIFIED_PARAMS -DBIKE_PARALLEL_L=32 -DBIKE_K_SIGN_K=4 -DBIKE_MSG_BITS=5 -DBIKE_COLS_PER_TILE=256 --top-module trike_decaps_runtime_synth_top $(TRIKE_DECAPS_SYNTH_RTL)
 
 lint-slang:
 	@$(SLANG) $(SLANG_FLAGS) -DBIKE_PARALLEL_L=$(BIKE_PARALLEL_L) --top decoder_top $(RTL)
@@ -458,6 +545,7 @@ lint-slang:
 	@$(SLANG) $(SLANG_FLAGS) --top trike_keygen_synth_top $(TRIKE_KEYGEN_RTL)
 	@$(SLANG) $(SLANG_FLAGS) -DTRIKE_160_PARAMS -DBIKE_PARALLEL_L=32 -DBIKE_K_SIGN_K=4 -DBIKE_MSG_BITS=5 -DBIKE_COLS_PER_TILE=256 --top trike_decaps_synth_top $(TRIKE_DECAPS_RTL) rtl/trike_decaps_synth_top.sv
 	@$(SLANG) $(SLANG_FLAGS) -DTRIKE_UNIFIED_PARAMS -DBIKE_PARALLEL_L=32 -DBIKE_K_SIGN_K=4 -DBIKE_MSG_BITS=5 -DBIKE_COLS_PER_TILE=256 --top trike_decaps_synth_top $(TRIKE_DECAPS_RTL) rtl/trike_decaps_synth_top.sv
+	@$(SLANG) $(SLANG_FLAGS) -DTRIKE_UNIFIED_PARAMS -DBIKE_PARALLEL_L=32 -DBIKE_K_SIGN_K=4 -DBIKE_MSG_BITS=5 -DBIKE_COLS_PER_TILE=256 --top trike_decaps_runtime_synth_top $(TRIKE_DECAPS_RTL) rtl/trike_decaps_runtime_synth_top.sv
 
 check-rtl: check-filelists check-format-rtl lint-rtl lint-verilator lint-slang
 
@@ -530,6 +618,9 @@ vivado-impl-trike-keygen:
 
 vivado-impl-trike-decaps:
 	@$(MAKE) vivado-impl-trike-kem-core TRIKE_KEM_SYNTH_TOP=trike_decaps_synth_top VIVADO_BUILD_DIR=$(VIVADO_BUILD_DIR)/trike_decaps
+
+vivado-impl-trike-decaps-runtime:
+	@$(MAKE) vivado-impl-trike-kem-core TRIKE_KEM_SYNTH_TOP=trike_decaps_runtime_synth_top VIVADO_BUILD_DIR=$(VIVADO_BUILD_DIR)/trike_decaps_runtime
 
 vivado-impl-trike-kem-cores:
 	@$(MAKE) vivado-impl-trike-poly-inv VIVADO_BUILD_DIR=$(VIVADO_BUILD_DIR)

@@ -62,22 +62,23 @@ module trike_pseudohash_synth_top (
   trike_pseudohash512_stream #(
       .MESSAGE_BYTES(32)
   ) u_pseudohash (
-      .i_clk           (i_clk),
-      .i_rst_n         (rst_n_sync),
-      .i_start         (pseudohash_start),
-      .i_input_valid   (i_input_valid),
-      .i_input_data    (i_input_data),
-      .o_input_ready   (o_input_ready),
-      .o_input_pass    (o_input_pass),
-      .o_busy          (pseudohash_busy),
-      .o_done          (pseudohash_done),
-      .o_digest        (digest),
-      .o_compress_start(),
-      .o_compress_block(),
-      .o_compress_state(),
-      .i_compress_busy (1'b0),
-      .i_compress_done (1'b0),
-      .i_compress_state('0)
+      .i_clk                  (i_clk),
+      .i_rst_n                (rst_n_sync),
+      .i_start                (pseudohash_start),
+      .i_runtime_message_bytes('0),
+      .i_input_valid          (i_input_valid),
+      .i_input_data           (i_input_data),
+      .o_input_ready          (o_input_ready),
+      .o_input_pass           (o_input_pass),
+      .o_busy                 (pseudohash_busy),
+      .o_done                 (pseudohash_done),
+      .o_digest               (digest),
+      .o_compress_start       (),
+      .o_compress_block       (),
+      .o_compress_state       (),
+      .i_compress_busy        (1'b0),
+      .i_compress_done        (1'b0),
+      .i_compress_state       ('0)
   );
   /* verilator lint_on PINCONNECTEMPTY */
 

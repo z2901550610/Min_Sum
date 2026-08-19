@@ -34,21 +34,24 @@ module tb_trike_error_support_store_reference;
       .ERROR_WEIGHT  (REF_ERROR_WEIGHT),
       .PADDED_R_BYTES(REF_PADDED_R_BYTES)
   ) dut (
-      .i_clk           (clk),
-      .i_rst_n         (rst_n),
-      .i_start         (start),
-      .i_index_valid   (index_valid),
-      .i_index_position(index_position),
-      .i_index         (index_value),
-      .o_index_ready   (index_ready),
-      .i_support_re    (support_re),
-      .i_support_raddr (support_raddr),
-      .o_support_rdata (support_rdata),
-      .i_error_re      (error_re),
-      .i_error_raddr   (error_raddr),
-      .o_error_rdata   (error_rdata),
-      .o_busy          (busy),
-      .o_done          (done)
+      .i_clk                   (clk),
+      .i_rst_n                 (rst_n),
+      .i_start                 (start),
+      .i_runtime_r_bits        ('0),
+      .i_runtime_error_weight  ('0),
+      .i_runtime_padded_r_bytes('0),
+      .i_index_valid           (index_valid),
+      .i_index_position        (index_position),
+      .i_index                 (index_value),
+      .o_index_ready           (index_ready),
+      .i_support_re            (support_re),
+      .i_support_raddr         (support_raddr),
+      .o_support_rdata         (support_rdata),
+      .i_error_re              (error_re),
+      .i_error_raddr           (error_raddr),
+      .o_error_rdata           (error_rdata),
+      .o_busy                  (busy),
+      .o_done                  (done)
   );
 
   always #5 clk = ~clk;

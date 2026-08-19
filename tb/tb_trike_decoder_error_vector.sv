@@ -31,6 +31,7 @@ module tb_trike_decoder_error_vector;
       .i_clk             (clk),
       .i_rst_n           (rst_n),
       .i_start           (start),
+      .i_runtime_r_bits  ('0),
       .o_decision_col_idx(decision_col),
       .i_decision_data   (decision_data),
       .i_error_re        (error_re),

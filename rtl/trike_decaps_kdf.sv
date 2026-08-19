@@ -6,6 +6,7 @@
 module trike_decaps_kdf #(
     parameter int M_BYTES               = 32,
     parameter int CIPHERTEXT_BYTES      = 3180,
+    parameter bit RUNTIME_LENGTH        = 1'b0,
     parameter bit USE_EXTERNAL_COMPRESS = 1'b0,
     parameter int DATA_W                = 8 * M_BYTES,
     parameter int CT_ADDR_W             = ((CIPHERTEXT_BYTES > 1) ? $clog2(CIPHERTEXT_BYTES) : 1),
@@ -14,6 +15,7 @@ module trike_decaps_kdf #(
     input  logic                 i_clk,
     input  logic                 i_rst_n,
     input  logic                 i_start,
+    input  logic [         31:0] i_runtime_ciphertext_bytes,
     input  logic [   DATA_W-1:0] i_selected_message,
     output logic                 o_ciphertext_re,
     output logic [CT_ADDR_W-1:0] o_ciphertext_raddr,
@@ -54,6 +56,8 @@ module trike_decaps_kdf #(
   integer                ciphertext_byte_c;
   logic                  unused_k_input_pass;
   logic                  unused_k_busy;
+  integer                active_ciphertext_bytes_q;
+  integer                active_k_message_bytes_q;
 
   function automatic logic [7:0] wide_byte(input  logic [DATA_W-1:0] value,
                                            input int unsigned byte_idx);
@@ -88,31 +92,33 @@ module trike_decaps_kdf #(
       o_ciphertext_re = 1'b1;
     end else if ((state_q == ST_K_RUN) && k_input_ready && (k_input_count_q >= M_BYTES)) begin
       o_ciphertext_re = 1'b1;
-      o_ciphertext_raddr = (ciphertext_byte_c == (CIPHERTEXT_BYTES - 1)) ?
+      o_ciphertext_raddr = (ciphertext_byte_c == (active_ciphertext_bytes_q - 1)) ?
           '0 : CT_ADDR_W'(ciphertext_byte_c + 1);
     end
   end
 
   trike_pseudohash512_stream #(
       .MESSAGE_BYTES        (K_MESSAGE_BYTES),
+      .RUNTIME_LENGTH       (RUNTIME_LENGTH),
       .USE_EXTERNAL_COMPRESS(USE_EXTERNAL_COMPRESS)
   ) u_k (
-      .i_clk           (i_clk),
-      .i_rst_n         (i_rst_n),
-      .i_start         (state_q == ST_K_START),
-      .i_input_valid   (state_q == ST_K_RUN),
-      .i_input_data    (k_input_data),
-      .o_input_ready   (k_input_ready),
-      .o_input_pass    (unused_k_input_pass),
-      .o_busy          (unused_k_busy),
-      .o_done          (k_done),
-      .o_digest        (k_digest),
-      .o_compress_start(o_compress_start),
-      .o_compress_block(o_compress_block),
-      .o_compress_state(o_compress_state),
-      .i_compress_busy (i_compress_busy),
-      .i_compress_done (i_compress_done),
-      .i_compress_state(i_compress_state)
+      .i_clk                  (i_clk),
+      .i_rst_n                (i_rst_n),
+      .i_start                (state_q == ST_K_START),
+      .i_runtime_message_bytes(32'(active_k_message_bytes_q)),
+      .i_input_valid          (state_q == ST_K_RUN),
+      .i_input_data           (k_input_data),
+      .o_input_ready          (k_input_ready),
+      .o_input_pass           (unused_k_input_pass),
+      .o_busy                 (unused_k_busy),
+      .o_done                 (k_done),
+      .o_digest               (k_digest),
+      .o_compress_start       (o_compress_start),
+      .o_compress_block       (o_compress_block),
+      .o_compress_state       (o_compress_state),
+      .i_compress_busy        (i_compress_busy),
+      .i_compress_done        (i_compress_done),
+      .i_compress_state       (i_compress_state)
   );
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
@@ -122,6 +128,8 @@ module trike_decaps_kdf #(
       k_input_count_q <= 0;
       ss_count_q <= '0;
       o_k_digest <= '0;
+      active_ciphertext_bytes_q <= CIPHERTEXT_BYTES;
+      active_k_message_bytes_q <= K_MESSAGE_BYTES;
       o_done <= 1'b0;
     end else begin
       o_done <= 1'b0;
@@ -132,6 +140,13 @@ module trike_decaps_kdf #(
             selected_message_q <= i_selected_message;
             k_input_count_q <= 0;
             ss_count_q <= '0;
+            if (RUNTIME_LENGTH) begin
+              active_ciphertext_bytes_q <= int'(i_runtime_ciphertext_bytes);
+              active_k_message_bytes_q  <= M_BYTES + int'(i_runtime_ciphertext_bytes);
+            end else begin
+              active_ciphertext_bytes_q <= CIPHERTEXT_BYTES;
+              active_k_message_bytes_q  <= K_MESSAGE_BYTES;
+            end
             state_q <= ST_K_START;
           end
         end
@@ -140,7 +155,8 @@ module trike_decaps_kdf #(
 
         ST_K_RUN: begin
           if (k_input_ready) begin
-            k_input_count_q <= (k_input_count_q == (K_MESSAGE_BYTES - 1)) ? 0 : k_input_count_q + 1;
+            k_input_count_q <=
+                (k_input_count_q == (active_k_message_bytes_q - 1)) ? 0 : k_input_count_q + 1;
           end
           if (k_done) begin
             o_k_digest <= k_digest;
@@ -164,5 +180,14 @@ module trike_decaps_kdf #(
       endcase
     end
   end
+
+`ifndef SYNTHESIS
+  always_ff @(posedge i_clk) begin
+    if (i_rst_n && (state_q == ST_IDLE) && i_start && RUNTIME_LENGTH) begin
+      if ((i_runtime_ciphertext_bytes < 1) || (i_runtime_ciphertext_bytes > CIPHERTEXT_BYTES))
+        $fatal(1, "trike_decaps_kdf runtime ciphertext length out of range");
+    end
+  end
+`endif
 
 endmodule

@@ -41,6 +41,8 @@ module tb_trike_drng_weight_sampler;
       .i_clk           (clk),
       .i_rst_n         (rst_n),
       .i_start         (start),
+      .i_runtime_length('0),
+      .i_runtime_weight('0),
       .i_v             (INITIAL_V),
       .i_c             (INITIAL_C),
       .i_reseed_counter(440'd1),

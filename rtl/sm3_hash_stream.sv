@@ -1,17 +1,19 @@
 `timescale 1ns / 1ps
 
-// Fixed-length streaming SM3 engine.
+// Public-length streaming SM3 engine.
 //
-// INPUT_BYTES is a public elaboration-time parameter. The input stream accepts
+// INPUT_BYTES allocates the maximum public length. The input stream accepts
 // one byte per valid/ready transfer. Padding and the 64-bit big-endian message
 // length are generated internally.
 module sm3_hash_stream #(
     parameter int INPUT_BYTES           = 32,
+    parameter bit RUNTIME_LENGTH        = 1'b0,
     parameter bit USE_EXTERNAL_COMPRESS = 1'b0
 ) (
     input  logic         i_clk,
     input  logic         i_rst_n,
     input  logic         i_start,
+    input  logic [ 31:0] i_runtime_input_bytes,
     input  logic         i_input_valid,
     input  logic [  7:0] i_input_data,
     output logic         o_input_ready,
@@ -37,8 +39,6 @@ module sm3_hash_stream #(
     32'hb0fb0e4e
   };
   localparam int INPUT_COUNT_W = (INPUT_BYTES > 1) ? $clog2(INPUT_BYTES) : 1;
-  localparam logic [INPUT_COUNT_W-1:0] INPUT_LAST = INPUT_COUNT_W'(INPUT_BYTES - 1);
-  localparam logic [63:0] MESSAGE_BITS = 64'(INPUT_BYTES) * 64'd8;
 
   typedef enum logic [2:0] {
     ST_IDLE,
@@ -61,6 +61,8 @@ module sm3_hash_stream #(
   logic    [            255:0] chaining_state_q;
   logic    [INPUT_COUNT_W-1:0] input_count_q;
   logic    [              5:0] block_byte_idx_q;
+  integer                      active_input_bytes_q;
+  logic    [             63:0] message_bits_q;
 
   logic                        compress_start;
   logic                        compress_busy;
@@ -83,11 +85,12 @@ module sm3_hash_stream #(
   endfunction
 
   function automatic logic [511:0] add_final_padding(input  logic [511:0] block_i,
-                                                     input  logic [5:0] padding_byte_idx);
+                                                     input  logic [5:0] padding_byte_idx,
+                                                     input  logic [63:0] message_bits);
     logic [511:0] block_o;
     begin
       block_o = set_block_byte(block_i, padding_byte_idx, 8'h80);
-      block_o[63:0] = MESSAGE_BITS;
+      block_o[63:0] = message_bits;
       add_final_padding = block_o;
     end
   endfunction
@@ -99,21 +102,21 @@ module sm3_hash_stream #(
     end
   endfunction
 
-  function automatic logic [511:0] make_second_padding();
+  function automatic logic [511:0] make_second_padding(input  logic [63:0] message_bits);
     logic [511:0] block_o;
     begin
       block_o             = '0;
-      block_o[63:0]       = MESSAGE_BITS;
+      block_o[63:0]       = message_bits;
       make_second_padding = block_o;
     end
   endfunction
 
-  function automatic logic [511:0] make_empty_padding();
+  function automatic logic [511:0] make_empty_padding(input  logic [63:0] message_bits);
     logic [511:0] block_o;
     begin
       block_o            = '0;
       block_o[511:504]   = 8'h80;
-      block_o[63:0]      = MESSAGE_BITS;
+      block_o[63:0]      = message_bits;
       make_empty_padding = block_o;
     end
   endfunction
@@ -149,15 +152,17 @@ module sm3_hash_stream #(
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin
-      state_q          <= ST_IDLE;
-      action_q         <= ACTION_CONTINUE;
-      block_q          <= '0;
-      chaining_state_q <= SM3_INITIAL_STATE;
-      input_count_q    <= '0;
-      block_byte_idx_q <= '0;
-      o_busy           <= 1'b0;
-      o_done           <= 1'b0;
-      o_digest         <= '0;
+      state_q              <= ST_IDLE;
+      action_q             <= ACTION_CONTINUE;
+      block_q              <= '0;
+      chaining_state_q     <= SM3_INITIAL_STATE;
+      input_count_q        <= '0;
+      block_byte_idx_q     <= '0;
+      active_input_bytes_q <= INPUT_BYTES;
+      message_bits_q       <= 64'(INPUT_BYTES) * 64'd8;
+      o_busy               <= 1'b0;
+      o_done               <= 1'b0;
+      o_digest             <= '0;
     end else begin
       o_done <= 1'b0;
 
@@ -169,19 +174,28 @@ module sm3_hash_stream #(
             chaining_state_q <= SM3_INITIAL_STATE;
             input_count_q    <= '0;
             block_byte_idx_q <= '0;
-            o_busy           <= 1'b1;
-            state_q          <= ST_ABSORB;
+            if (RUNTIME_LENGTH) begin
+              active_input_bytes_q <= int'(i_runtime_input_bytes);
+              message_bits_q <= 64'(i_runtime_input_bytes) * 64'd8;
+            end else begin
+              active_input_bytes_q <= INPUT_BYTES;
+              message_bits_q <= 64'(INPUT_BYTES) * 64'd8;
+            end
+            o_busy  <= 1'b1;
+            state_q <= ST_ABSORB;
           end
         end
 
         ST_ABSORB: begin
           if (i_input_valid && o_input_ready) begin
-            if (input_count_q == INPUT_LAST) begin
+            if (input_count_q == INPUT_COUNT_W'(active_input_bytes_q - 1)) begin
               if (block_byte_idx_q == 6'd63) begin
                 block_q  <= block_with_input;
                 action_q <= ACTION_EMPTY_PADDING;
               end else if (block_byte_idx_q <= 6'd54) begin
-                block_q  <= add_final_padding(block_with_input, block_byte_idx_q + 1'b1);
+                block_q <= add_final_padding(
+                    block_with_input, block_byte_idx_q + 1'b1, message_bits_q
+                );
                 action_q <= ACTION_FINAL;
               end else begin
                 block_q  <= add_first_padding(block_with_input, block_byte_idx_q + 1'b1);
@@ -217,14 +231,14 @@ module sm3_hash_stream #(
               end
 
               ACTION_SECOND_PADDING: begin
-                block_q          <= make_second_padding();
+                block_q          <= make_second_padding(message_bits_q);
                 chaining_state_q <= compress_state;
                 action_q         <= ACTION_FINAL;
                 state_q          <= ST_COMPRESS_START;
               end
 
               ACTION_EMPTY_PADDING: begin
-                block_q          <= make_empty_padding();
+                block_q          <= make_empty_padding(message_bits_q);
                 chaining_state_q <= compress_state;
                 action_q         <= ACTION_FINAL;
                 state_q          <= ST_COMPRESS_START;
@@ -256,6 +270,13 @@ module sm3_hash_stream #(
 `ifndef SYNTHESIS
   initial begin
     if (INPUT_BYTES < 1) $error("sm3_hash_stream INPUT_BYTES must be at least 1");
+  end
+
+  always_ff @(posedge i_clk) begin
+    if (i_rst_n && (state_q == ST_IDLE) && i_start && RUNTIME_LENGTH) begin
+      if ((i_runtime_input_bytes < 1) || (i_runtime_input_bytes > INPUT_BYTES))
+        $fatal(1, "sm3_hash_stream runtime length out of range");
+    end
   end
 `endif
 

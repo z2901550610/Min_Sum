@@ -1,19 +1,23 @@
 `timescale 1ns / 1ps
 
 // Sorts each block of sparse support coordinates in ascending order. The
-// compare-swap loop always executes WEIGHT*(WEIGHT-1)/2 cycles per block;
-// coordinate values affect only the data muxes.
+// compare-swap loop executes active_weight*(active_weight-1)/2 cycles per
+// block; coordinate values affect only the data muxes. Runtime geometry is a
+// public transaction descriptor sampled only with i_start.
 module trike_fixed_support_sorter #(
-    parameter int R_BITS  = 12589,
-    parameter int BLOCKS  = 3,
-    parameter int WEIGHT  = 35,
-    parameter int ROW_W   = ((R_BITS > 1) ? $clog2(R_BITS) : 1),
-    parameter int BLOCK_W = ((BLOCKS > 1) ? $clog2(BLOCKS) : 1),
-    parameter int DIAG_W  = ((WEIGHT > 1) ? $clog2(WEIGHT) : 1)
+    parameter int R_BITS           = 12589,
+    parameter int BLOCKS           = 3,
+    parameter int WEIGHT           = 35,
+    parameter bit RUNTIME_GEOMETRY = 1'b0,
+    parameter int ROW_W            = ((R_BITS > 1) ? $clog2(R_BITS) : 1),
+    parameter int BLOCK_W          = ((BLOCKS > 1) ? $clog2(BLOCKS) : 1),
+    parameter int DIAG_W           = ((WEIGHT > 1) ? $clog2(WEIGHT) : 1)
 ) (
     input  logic               i_clk,
     input  logic               i_rst_n,
     input  logic               i_start,
+    input  logic [       31:0] i_runtime_r_bits,
+    input  logic [       31:0] i_runtime_weight,
     input  logic               i_valid,
     input  logic [  ROW_W-1:0] i_index,
     output logic               o_ready,
@@ -40,6 +44,8 @@ module trike_fixed_support_sorter #(
   logic   [ DIAG_W-1:0] pass_q;
   logic   [ DIAG_W-1:0] compare_q;
   logic   [ DIAG_W-1:0] output_q;
+  integer               active_r_bits_q;
+  integer               active_weight_q;
 
   assign o_ready = (state_q == ST_LOAD);
   assign o_valid = (state_q == ST_OUTPUT);
@@ -56,6 +62,8 @@ module trike_fixed_support_sorter #(
       pass_q <= '0;
       compare_q <= '0;
       output_q <= '0;
+      active_r_bits_q <= R_BITS;
+      active_weight_q <= WEIGHT;
       o_done <= 1'b0;
       for (int idx = 0; idx < WEIGHT; idx++) support_q[idx] <= '0;
     end else begin
@@ -66,6 +74,13 @@ module trike_fixed_support_sorter #(
           if (i_start) begin
             block_q <= '0;
             load_q  <= '0;
+            if (RUNTIME_GEOMETRY) begin
+              active_r_bits_q <= int'(i_runtime_r_bits);
+              active_weight_q <= int'(i_runtime_weight);
+            end else begin
+              active_r_bits_q <= R_BITS;
+              active_weight_q <= WEIGHT;
+            end
             state_q <= ST_LOAD;
           end
         end
@@ -73,12 +88,12 @@ module trike_fixed_support_sorter #(
         ST_LOAD: begin
           if (i_valid) begin
             support_q[load_q] <= i_index;
-            if (load_q == DIAG_W'(WEIGHT - 1)) begin
+            if (load_q == DIAG_W'(active_weight_q - 1)) begin
               load_q <= '0;
               pass_q <= '0;
               compare_q <= '0;
               output_q <= '0;
-              if (WEIGHT == 1) state_q <= ST_OUTPUT;
+              if (active_weight_q == 1) state_q <= ST_OUTPUT;
               else state_q <= ST_SORT;
             end else begin
               load_q <= load_q + 1'b1;
@@ -91,9 +106,9 @@ module trike_fixed_support_sorter #(
             support_q[compare_q] <= support_q[compare_q+1'b1];
             support_q[compare_q+1'b1] <= support_q[compare_q];
           end
-          if (compare_q == DIAG_W'(WEIGHT - 2) - pass_q) begin
+          if (compare_q == DIAG_W'(active_weight_q - 2) - pass_q) begin
             compare_q <= '0;
-            if (pass_q == DIAG_W'(WEIGHT - 2)) begin
+            if (pass_q == DIAG_W'(active_weight_q - 2)) begin
               output_q <= '0;
               state_q  <= ST_OUTPUT;
             end else begin
@@ -106,7 +121,7 @@ module trike_fixed_support_sorter #(
 
         ST_OUTPUT: begin
           if (i_ready) begin
-            if (output_q == DIAG_W'(WEIGHT - 1)) begin
+            if (output_q == DIAG_W'(active_weight_q - 1)) begin
               output_q <= '0;
               if (block_q == BLOCK_W'(BLOCKS - 1)) begin
                 o_done  <= 1'b1;
@@ -132,5 +147,18 @@ module trike_fixed_support_sorter #(
     if ((BLOCKS <= 0) || (WEIGHT <= 0))
       $fatal(1, "trike_fixed_support_sorter requires positive support geometry");
   end
+
+`ifndef SYNTHESIS
+  always_ff @(posedge i_clk) begin
+    if (i_rst_n && (state_q == ST_IDLE) && i_start && RUNTIME_GEOMETRY) begin
+      if ((i_runtime_r_bits < 1) || (i_runtime_r_bits > R_BITS))
+        $fatal(1, "trike_fixed_support_sorter runtime r out of range");
+      if ((i_runtime_weight < 1) || (i_runtime_weight > WEIGHT))
+        $fatal(1, "trike_fixed_support_sorter runtime weight out of range");
+    end
+    if (i_rst_n && (state_q == ST_LOAD) && i_valid && (int'(i_index) >= active_r_bits_q))
+      $fatal(1, "trike_fixed_support_sorter support index out of range");
+  end
+`endif
 
 endmodule

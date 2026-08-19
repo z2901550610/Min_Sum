@@ -24,15 +24,16 @@ module sm3_hash_stream_case #(
   sm3_hash_stream #(
       .INPUT_BYTES(INPUT_BYTES)
   ) dut (
-      .i_clk        (i_clk),
-      .i_rst_n      (i_rst_n),
-      .i_start      (start),
-      .i_input_valid(input_valid),
-      .i_input_data (input_data),
-      .o_input_ready(input_ready),
-      .o_busy       (busy),
-      .o_done       (done),
-      .o_digest     (digest)
+      .i_clk                (i_clk),
+      .i_rst_n              (i_rst_n),
+      .i_start              (start),
+      .i_runtime_input_bytes('0),
+      .i_input_valid        (input_valid),
+      .i_input_data         (input_data),
+      .o_input_ready        (input_ready),
+      .o_busy               (busy),
+      .o_done               (done),
+      .o_digest             (digest)
   );
 
   always_comb begin

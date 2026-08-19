@@ -99,11 +99,11 @@ little-endian support、`h0 || t0 || r2 || sigma || sigma2`输出6,328 byte。�
 官方向量连续握手固定98,773,679拍，完整PK/SK逐byte匹配，层次检查仍只有一个`sm3_compress`。
 
 Vivado 2023.2、`xc7k355tffg901-2L`、10 ns时钟、0.100 ns uncertainty和Fully Routed下，完整KeyGen
-使用46,859 LUT、54,571 FF、21,725 Slice、21 RAMB36、2 RAMB18、5 DSP和38 IOB；support顺序输出
-RAM实际映射为1个RAMB18。整体setup WNS/TNS为+0.025 ns/0，hold WHS/THS为+0.050 ns/0，内部
-register-to-register WNS为+0.414 ns，100 MHz通过。整体最差setup路径位于`o_pk_valid`的IOB/OBUF
-边界；内部最差路径位于秘密采样FSM到440-bit状态寄存器的高扇出网络。methodology无TIMING-16，保留
-49项DPIR-1和4项SYNTH-10。无未约束路径，但未分配package pin，因此不构成板级I/O签核。
+使用46,464 LUT、54,718 FF、22,392 Slice、21 RAMB36、2 RAMB18和5 DSP。support顺序输出RAM映射为
+1个RAMB18。setup WNS/TNS为+0.025 ns/0，hold WHS/THS为+0.001 ns/0；同步数据路径WNS为+0.600 ns，
+最差路径位于弱密钥距离RAM到弱标志寄存器。methodology保留49项DPIR-1和4项SYNTH-10，无未约束路径。
+报告头未嵌入Git revision；wrapper未分配package pin，因此该结果是关联到EXP-0085的核心实现基线，
+不构成板级I/O签核。
 
 ### Encaps
 
@@ -183,23 +183,30 @@ flowchart TD
 `r=15581`译码profile并完成该profile功能/DFR验证前，不能把官方syndrome对拍与当前译码器回归合并为
 端到端Decaps KAT结论。
 
-当前完整KEM主线采用`r=12589,w=35,t=263`并建立独立的`TRIKE_MINSUM_KAT_V1`项目向量，不把官方
-BF Decaps结果作为Min-Sum golden。`scripts/gen_trike_minsum_kem_case.py`沿用官方SM3-DRNG、H123、H4和
-pseudohash字节语义，SHAKE仅用于确定性产生外层64-byte测试seed，不进入KEM内部哈希。seed 1得到候选0、
-weak score为`19/28/30/51/57/60`，PK/SK/CT长度分别为1,606/5,206/3,180 byte。H4错误重量263，
+完整KEM主线为四个项目Min-Sum profile建立独立`TRIKE_MINSUM_KAT_V1`向量，不把官方BF Decaps结果作为
+Min-Sum golden。`scripts/gen_trike_minsum_kem_case.py`沿用官方SM3-DRNG、H123、H4和pseudohash字节语义，
+SHAKE仅用于确定性产生外层64-byte测试seed，不进入KEM内部哈希。四档`r/w/t/C/alpha`取自统一decoder
+参数表，weak-key阈值按35/55/83/111重量档配置。TRIKE160 seed 1得到候选0、weak score为
+`19/28/30/51/57/60`，PK/SK/CT长度分别为1,606/5,206/3,180 byte。H4错误重量263，
 syndrome重量4,741；固定7轮Min-Sum输出重量263、residual 0并准确恢复原始错误，正常Decaps SS与
 Encaps SS一致。固定翻转`u`或`v`首bit后分别完整运行7轮，输出residual重量6,304和6,309；固定翻转
 `c2`首bit保持原译码结果但重生成比较失败。三类密文均选择`sigma2`计算拒绝SS。
 
 项目向量同时保存SK中的原始support顺序和供decoder使用的块内升序视图。DFR搜索与RTL的`low_index`
-tie规则使用升序视图。`trike_fixed_support_sorter`逐块缓存35个坐标，每块固定执行595次相邻
-compare-swap后顺序输出；三块连续握手从start到末项输出固定1,996拍。support值只控制compare-swap
-数据mux，不改变排序轮数、地址序列或decoder启动时刻；排序器已接入`trike_decoder_load_adapter`。
+tie规则使用升序视图。`trike_fixed_support_sorter`逐块缓存活动`w`个坐标，每块固定执行
+`w*(w-1)/2`次相邻compare-swap后顺序输出。support值只控制compare-swap数据mux，不改变排序轮数、
+地址序列或decoder启动时刻。`trike_decoder_load_adapter`使用同一已锁存公开`r/w`，把三块排序输出和
+恰好`r`个syndrome bit写入decoder；默认实例使用编译期几何。
 
-`trike_decoder_error_vector`在decoder完成后固定清零三块padded error RAM，再以一拍一个bit的地址序列
-读取全部`3r`项判决并按块打包。`r=12589`的padded块为1,600 byte，总存储4,800 byte，连续读接口的
-固定预算为42,569拍；13-bit toy逐byte匹配三块padded dense error布局。该存储随后可同时服务`L(e')`
-哈希输入和`e'/e_calc`流式比较。
+`trike_decaps_support_prefetch`从最大输入存储单读口读取全部`3w`项。首块support在H0 syndrome装载与
+完整H排序器同时ready时原子传输，另外两块只送排序器；因此每项只有一次同步RAM读取。
+`trike_decaps_input_decoder_load_core`在完整输入装载后同时启动共享support预取、运行时syndrome和
+运行时decoder装载桥。项目TRIKE160边界固定写入105项H与12,589个syndrome bit后产生一次decoder start。
+
+`trike_decoder_error_vector`在start锁存公开`r`，清零活动的三块padded error RAM，再以一拍一个bit的
+地址序列读取全部`3r`项判决并按块打包。每块活动跨度为`ceil(r/512)*64` byte，RAM容量由最大档确定。
+固定预算为`3*padded_r_bytes+3r+2`拍；跨512-bit padding边界的逐byte布局已经验证。该存储服务
+`L(e')`哈希输入和`e'/e_calc`流式比较。
 
 项目参数后处理已经形成三个可串联边界：`trike_decaps_message_recover`固定重放`e'`两次并恢复`m'`；
 `trike_decaps_reencrypt_verify`运行H4、完整比较4,800 byte并选择`m'/sigma2`；`trike_decaps_kdf`固定重放
@@ -209,11 +216,23 @@ compare-swap后顺序输出；三块连续握手从start到末项输出固定1,9
 `trike_sm3_service`。正常密文和`c2`首bit篡改密文均固定257,417拍，最终SS分别匹配正常与隐式拒绝
 Python golden；Yosys层次检查确认复合顶层恰好一个`sm3_compress`。
 
-Min-Sum固定7轮结束与residual为零是两个独立信号。`trike_decoder_residual_check`保存同一份排序H和
-原始syndrome，逐row执行固定`3w`次decision读取并计算`syndrome xor H*e'`。`r=12589,w=35`下完整
-检查固定2,668,869拍；项目有效判决得到0，单bit syndrome扰动得到重量1，数据不改变访问次数或完成时刻。
+SM3、HMAC-SM3和pseudohash控制器支持在start边界锁存公开活动byte数，活动长度共同约束末byte、padding
+块数和消息bit长度域。Decaps消息恢复和KDF分别以活动error/ciphertext长度重放最大几何RAM。1、55、
+56、64、65、127 byte的pseudohash digest与独立SM3 golden一致；项目TRIKE160的L/K参考结果保持逐byte
+一致。H4在start边界锁存公开`r/t/padded_r_bytes`，由活动`M_BYTES+ceil(r/8)`确定seed长度；固定重量
+采样、dense error store和完整比较均使用同一活动几何。
 
-完整Min-Sum Decaps控制由`trike_decaps_pipeline_core`形成。H输入首块在同一次valid/ready接受中送入H0
+Min-Sum固定7轮结束与residual为零是两个独立信号。`trike_decoder_residual_check`保存同一份排序H和
+原始syndrome，在start锁存公开`r/w`，逐row执行固定`3w`次decision读取并计算
+`syndrome xor H*e'`。support RAM使用最大`W`块跨度，块内只扫描活动`w`项；decision列按活动`r`
+拼接。固定预算为`r*(2+6w)+1`拍。项目TRIKE160有效判决得到0，单bit syndrome扰动得到重量1，
+两条路径均为2,668,869拍。
+
+`trike_decaps_decoder_postcheck_core`在事务start锁存一次`r/w`，把decoder单decision同步读口依次分配给
+error writer和residual checker。`r/w=7/1、13/3、521/5`的组合周期分别为275、497、18,625拍；
+每档不同decision/support数据及residual结果不改变完成时刻。
+
+固定profile Min-Sum Decaps控制由`trike_decaps_pipeline_core`形成。H输入首块在同一次valid/ready接受中送入H0
 syndrome RAM和三块support排序器；排序输出与syndrome bit分别同时写入decoder和residual checker。
 Min-Sum固定轮结束后，decision同步读口按公开FSM顺序分配给4,800-byte padded error writer和全residual
 扫描，之后由单SM3 postprocess读取error、r2和完整ciphertext。`r=12589,w=35,t=263,L=32,K=4`的
@@ -227,6 +246,38 @@ seed 1正常与u/v/c2首bit篡改路径均固定4,734,246拍，RTL residual分�
 专用support/64-bit word/byte RAM或sigma2寄存器。连续输入和SS接收下，正常与u/v/c2篡改四条路径均
 固定4,743,972拍。该wrapper每次复位执行一项事务，Vivado入口固定使用TRIKE160、L32、K4和256-column
 tile；资源映射、routed timing和Fmax待实现报告。
+
+四档输入事务边界由`trike_decaps_profile_config`和`trike_decaps_input_loader`定义。公开profile在
+`i_start`锁存，随后产生固定的`r/w/t`、word数、padded error尺寸及SK/CT长度；外部profile端口在事务
+期间的变化不改变接受字节数、RAM写次数或地址范围。最大几何存储接口按字段输出support、t0、r2、
+sigma2、u、v和完整ciphertext写命令，H0与sigma保持固定消费。连续输入时四档loader的start/done周期
+分别为8,387、19,752、40,953和68,169拍；每档两组不同payload的周期及写地址序列一致。
+
+`trike_decaps_runtime_pipeline_core`把loader、最大几何输入RAM、syndrome与decoder装载、decoder后检查和
+postprocess组成一个公开FSM。decoder完成后，同一decision同步读口先生成活动padded error，再完成
+residual全扫描。单口ciphertext RAM在message阶段按`2*r_bytes+c2_index`预取32 byte，在KDF阶段重放
+完整活动ciphertext；两个读窗口互斥。`trike_decaps_unified_core`接入运行时`decoder_top`，
+`trike_decaps_runtime_synth_top`提供2-bit profile与8-bit输入/输出边界。
+decoder H校验状态在复位时初始化，因此该物理边界每次复位接受一项事务。
+
+四档seed-1有效路径均为candidate 0、decoder residual 0并精确恢复；u/v/c2首bit篡改的软件golden均进入
+隐式拒绝。统一运行时RTL的有效与c2篡改路径分别固定4,743,324、19,970,378、71,565,719和
+177,759,567拍，逐byte匹配对应SS；TRIKE160另覆盖u/v两条RTL非收敛路径。输入连续供给、SS持续ready，
+周期边界为start到done。生成fixture使用逐byte hex文件承载最大68,168-byte输入。
+
+`trike_decaps_input_store`承接运行时流水线的最大几何RAM生命周期。support以17-bit index保存，t0/u/v以
+64-bit同步word保存，r2和完整ciphertext以byte RAM保存，sigma2保存在256-bit寄存器。活动写入范围和
+后续读取上界由已锁存profile描述符确定，未通过复位清零大RAM。四档验证逐项读回全部有效地址，并检查
+little-endian word组装与非64-bit对齐末word的高位清零。运行时综合入口包含该层；现有Decaps Vivado
+基线对应固定profile `trike_decaps_synth_top`，不作为该入口的物理结果。
+
+syndrome环算术由公开运行时几何控制。`trike_poly_mul_core`和`trike_decaps_syndrome_core`在start边界
+锁存`r`、word数和稀疏重量；这些值固定控制操作数接受数、清零范围、稠密归约、稀疏地址回卷、末word
+mask和输出last。`trike_decaps_syndrome_prefetch`用同步读FETCH/DATA状态按`h0/t0/u/v`顺序访问输入
+RAM；`trike_decaps_input_syndrome_core`在完整输入装载后启动预取与算术。小几何逐word结果匹配独立模型；
+项目TRIKE160的8,386-byte输入到197-word syndrome两套payload均匹配golden并固定1,349,546拍。
+既有TRIKE syndrome reference保持2,038,763拍。较大三档syndrome结果包含在完整运行时Decaps byte
+golden中；独立逐word周期与Vivado物理结果属于后续验证边界。
 
 ## BIKE v5.2总体流程
 
@@ -826,31 +877,19 @@ Python多项式Euclid计算golden并额外验证$h_0h_0^{-1}=1$；RTL使用Refer
 缓冲；密文和共享密钥分别经片内暂存寄存器及IOB输出寄存器，切开内部RAM/byte mux到芯片边缘的长路径。
 连续流固定2,384,421拍，完整CT/SS匹配。wrapper包含5,974拍固定接口开销。
 
-用户提供的修改前Fully Routed报告使用Vivado 2023.2、`xc7k355tffg901-2L`、10 ns时钟、0.100 ns
-不确定度和2 ns I/O max delay。资源为48,575 LUT、60,982 FF、24,554 Slice、15 RAMB36、3 RAMB18、
-4 DSP和37 IOB。整体setup WNS/TNS为-3.937 ns/-214.375 ns，435个失败端点，hold WHS为+0.034 ns；
-输出RAM到byte mux/OBUF是整体最差路径。内部寄存器路径WNS为-1.534 ns，H123完成脉冲扇出1,322且
-11.158 ns路径中10.856 ns为路由；另一组内部负裕量路径从稀疏乘法B word地址到result RAM写数据，含
-34级逻辑。methodology报告的DPIR-1共49项来自采样器32x32 multiply-high输入的异步复位寄存器，
-SYNTH-10共4项对应预期的4个DSP；这两类告警不属于本次最差内部路径。
+Vivado 2023.2、`xc7k355tffg901-2L`、10 ns时钟、0.100 ns uncertainty和Fully Routed下，完整Encaps
+使用47,349 LUT、61,308 FF、24,349 Slice、15 RAMB36、3 RAMB18和4 DSP。H4错误存储映射为
+2 RAMB36/1 RAMB18，UV与乘法存储映射为7 RAMB36/2 RAMB18，其余六个多项式RAM各使用1个RAMB36。
+setup WNS/TNS为+0.025 ns/0，hold WHS/THS为+0.014 ns/0，无未约束路径。
 
-寄存I/O边界、H123完成脉冲复制和稀疏贡献/地址寄存的同条件Vivado复测使用47,859 LUT、61,222 FF、
-23,354 Slice、15 RAMB36、3 RAMB18、4 DSP和37 IOB。整体setup WNS/TNS为+0.025 ns/0，hold
-WHS/THS为+0.050 ns/0，内部register-to-register WNS为+0.378 ns，100 MHz通过。相对修改前检查点
-减少716 LUT和1,200 Slice、增加240 FF，BRAM/DSP/IOB不变。固定2,127,733拍在100 MHz下为
-21.27733 ms。
-
-内部最差路径从共享SM3的状态寄存器到L的H2摘要寄存器，9.761 ns数据路径中9.538 ns为route、逻辑级数
-为0；H123完成脉冲和稀疏乘法写数据路径退出内部前20条。高扇出表中reset BUFG slack为+6.335 ns，
-其余1320级DRNG控制网最差slack不低于+1.638 ns。当前物理优化不需要继续给H123或乘法器加流水。
-
-Vivado工程读取的导入XDC副本仍包含不带`-max/-min`的2 ns I/O delay，因此methodology保留35项
-XDCH-2；仓库XDC已经写为max 2 ns、min 0 ns。板级I/O签核前需要替换工程约束副本并重新生成timing与
-methodology报告。49项DPIR-1来自采样器DSP输入的异步复位寄存器，4项SYNTH-10对应预期DSP乘法；两者
-均未进入当前最差路径。
+同步数据路径WNS为+0.441 ns；最差路径从共享SM3状态寄存器到L的H1摘要寄存器，9.409 ns数据路径中
+9.186 ns为布线且无组合逻辑级。methodology保留49项DPIR-1和4项SYNTH-10，分别对应采样器异步复位DSP
+输入和宽乘法分解。报告头未嵌入Git revision；wrapper未分配package pin，因此该结果是关联到EXP-0086
+的核心实现基线，不构成板级I/O签核。
 
 ## 后续实现顺序
 
-1. 在Vivado工程中替换旧XDC导入副本，复核I/O min/max与methodology；
-2. 若KeyGen目标高于100 MHz，分别探索440-bit状态控制扇出与稀疏乘法贡献生成，不在一次实验中混合；
-3. 连接Min-Sum Decaps、错误重生成、固定长度比较和隐式拒绝选择。
+1. 对`trike_decaps_runtime_synth_top`执行C=256同条件Vivado实现，记录资源、setup/hold和内部同步路径；
+2. 结合四档完整周期与routed Fmax评估syndrome多项式乘法、decoder C值和共享RAM的`cycles/Fmax`；
+3. 为TRIKE256/384/512补充u/v非收敛RTL长回归，保持与有效/c2门禁分层；
+4. 建立KeyGen、Encaps和Decaps的同条件系统资源/周期表，评估统一`trike_kem_top`的跨流程复用边界。

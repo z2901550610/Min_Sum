@@ -119,42 +119,44 @@ module trike_sm3_drng_generate_stream #(
       .INPUT_BYTES          (55),
       .USE_EXTERNAL_COMPRESS(1'b1)
   ) u_generate_hash (
-      .i_clk           (i_clk),
-      .i_rst_n         (i_rst_n),
-      .i_start         (generate_hash_start),
-      .i_input_valid   (state_q == ST_GENERATE_HASH_FEED),
-      .i_input_data    (generate_hash_input_data),
-      .o_input_ready   (generate_hash_input_ready),
-      .o_busy          (),
-      .o_done          (generate_hash_done),
-      .o_digest        (generate_hash_digest),
-      .o_compress_start(generate_compress_start),
-      .o_compress_block(generate_compress_block),
-      .o_compress_state(generate_compress_state),
-      .i_compress_busy (shared_compress_busy),
-      .i_compress_done (shared_compress_done),
-      .i_compress_state(shared_compress_result)
+      .i_clk                (i_clk),
+      .i_rst_n              (i_rst_n),
+      .i_start              (generate_hash_start),
+      .i_runtime_input_bytes('0),
+      .i_input_valid        (state_q == ST_GENERATE_HASH_FEED),
+      .i_input_data         (generate_hash_input_data),
+      .o_input_ready        (generate_hash_input_ready),
+      .o_busy               (),
+      .o_done               (generate_hash_done),
+      .o_digest             (generate_hash_digest),
+      .o_compress_start     (generate_compress_start),
+      .o_compress_block     (generate_compress_block),
+      .o_compress_state     (generate_compress_state),
+      .i_compress_busy      (shared_compress_busy),
+      .i_compress_done      (shared_compress_done),
+      .i_compress_state     (shared_compress_result)
   );
 
   sm3_hash_stream #(
       .INPUT_BYTES          (56),
       .USE_EXTERNAL_COMPRESS(1'b1)
   ) u_update_hash (
-      .i_clk           (i_clk),
-      .i_rst_n         (i_rst_n),
-      .i_start         (update_hash_start),
-      .i_input_valid   (state_q == ST_UPDATE_HASH_FEED),
-      .i_input_data    (update_hash_input_data),
-      .o_input_ready   (update_hash_input_ready),
-      .o_busy          (),
-      .o_done          (update_hash_done),
-      .o_digest        (update_hash_digest),
-      .o_compress_start(update_compress_start),
-      .o_compress_block(update_compress_block),
-      .o_compress_state(update_compress_state),
-      .i_compress_busy (shared_compress_busy),
-      .i_compress_done (shared_compress_done),
-      .i_compress_state(shared_compress_result)
+      .i_clk                (i_clk),
+      .i_rst_n              (i_rst_n),
+      .i_start              (update_hash_start),
+      .i_runtime_input_bytes('0),
+      .i_input_valid        (state_q == ST_UPDATE_HASH_FEED),
+      .i_input_data         (update_hash_input_data),
+      .o_input_ready        (update_hash_input_ready),
+      .o_busy               (),
+      .o_done               (update_hash_done),
+      .o_digest             (update_hash_digest),
+      .o_compress_start     (update_compress_start),
+      .o_compress_block     (update_compress_block),
+      .o_compress_state     (update_compress_state),
+      .i_compress_busy      (shared_compress_busy),
+      .i_compress_done      (shared_compress_done),
+      .i_compress_state     (shared_compress_result)
   );
 
   generate

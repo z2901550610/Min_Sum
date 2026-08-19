@@ -47,6 +47,8 @@ module tb_trike_decoder_residual_check;
       .i_syndrome_addr   (syndrome_addr),
       .i_syndrome_data   (syndrome_data),
       .i_start           (start),
+      .i_runtime_r_bits  ('0),
+      .i_runtime_weight  ('0),
       .o_decision_col_idx(decision_col),
       .i_decision_data   (decision_data),
       .o_residual_zero   (residual_zero),

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
+from dataclasses import dataclass
 import hashlib
 import json
 from pathlib import Path
@@ -14,20 +15,54 @@ import subprocess
 
 from gen_trike_encaps_fixture import Sm3Drng, pseudohash
 from gen_trike_poly_inv_fixture import cyclic_multiply, polynomial_inverse
+from run_bike_random import PARAM_SETS
 
 
-R_BITS = 12589
-SECRET_WEIGHT = 35
-ERROR_WEIGHT = 263
 M_BYTES = 32
 CANDIDATE_COUNT = 16
-SELF_THRESHOLD = 46
-CROSS_THRESHOLD = 83
-ITERATIONS = 7
-MSG_BITS = 5
-C_VAL = 4
-ALPHA_SHIFT_0 = 3
-ALPHA_SHIFT_1 = 4
+
+
+@dataclass(frozen=True)
+class Profile:
+    name: str
+    profile_id: int
+    r_bits: int
+    secret_weight: int
+    error_weight: int
+    iterations: int
+    msg_bits: int
+    c_val: int
+    alpha_shift_0: int
+    alpha_shift_1: int
+    self_threshold: int
+    cross_threshold: int
+
+
+PROFILE_METADATA = {
+    "trike160": {"profile_id": 0, "self_threshold": 46, "cross_threshold": 83},
+    "trike256": {"profile_id": 1, "self_threshold": 105, "cross_threshold": 172},
+    "trike384": {"profile_id": 2, "self_threshold": 235, "cross_threshold": 405},
+    "trike512": {"profile_id": 3, "self_threshold": 433, "cross_threshold": 737},
+}
+
+
+def load_profile(name: str) -> Profile:
+    decoder = PARAM_SETS[name]
+    metadata = PROFILE_METADATA[name]
+    return Profile(
+        name=name,
+        profile_id=metadata["profile_id"],
+        r_bits=decoder["r"],
+        secret_weight=decoder["w"],
+        error_weight=decoder["error_count"],
+        iterations=decoder["i_max"],
+        msg_bits=decoder["msg_bits"],
+        c_val=decoder["c_val"],
+        alpha_shift_0=decoder["alpha_shift_0"],
+        alpha_shift_1=decoder["alpha_shift_1"],
+        self_threshold=metadata["self_threshold"],
+        cross_threshold=metadata["cross_threshold"],
+    )
 
 
 def sample_indices(drng: Sm3Drng, length: int, weight: int) -> list[int]:
@@ -63,20 +98,22 @@ def weak_scores(blocks: list[list[int]], r_bits: int) -> tuple[int, ...]:
     return tuple(self_scores + cross_scores)
 
 
-def select_secret_support(key_seed: bytes) -> tuple[list[list[int]], int, tuple[int, ...]]:
+def select_secret_support(
+    key_seed: bytes, profile: Profile
+) -> tuple[list[list[int]], int, tuple[int, ...]]:
     drng = Sm3Drng(key_seed)
     selected = None
     selected_number = 0
     selected_scores = (0, 0, 0, 0, 0, 0)
     for candidate_number in range(CANDIDATE_COUNT):
         blocks = [
-            sample_indices(drng, R_BITS, SECRET_WEIGHT),
-            sample_indices(drng, R_BITS, SECRET_WEIGHT),
-            sample_indices(drng, R_BITS, SECRET_WEIGHT),
+            sample_indices(drng, profile.r_bits, profile.secret_weight),
+            sample_indices(drng, profile.r_bits, profile.secret_weight),
+            sample_indices(drng, profile.r_bits, profile.secret_weight),
         ]
-        scores = weak_scores(blocks, R_BITS)
-        weak = any(score > SELF_THRESHOLD for score in scores[:3]) or any(
-            score > CROSS_THRESHOLD for score in scores[3:]
+        scores = weak_scores(blocks, profile.r_bits)
+        weak = any(score > profile.self_threshold for score in scores[:3]) or any(
+            score > profile.cross_threshold for score in scores[3:]
         )
         if selected is None and not weak:
             selected = blocks
@@ -124,19 +161,25 @@ def padded_error_bytes(blocks: tuple[int, int, int], r_bits: int) -> bytes:
 
 
 def serialize_key_pair(
-    support: list[list[int]], t1: bytes, t2: bytes, r1: bytes, sigma: bytes, sigma2: bytes
+    support: list[list[int]],
+    t1: bytes,
+    t2: bytes,
+    r1: bytes,
+    sigma: bytes,
+    sigma2: bytes,
+    profile: Profile,
 ) -> tuple[bytes, bytes, bytes, bytes]:
     h_values = [sum(1 << coefficient for coefficient in block) for block in support]
     t1_value = int.from_bytes(t1, "little")
     t2_value = int.from_bytes(t2, "little")
     r1_value = int.from_bytes(r1, "little")
-    denominator1_inv = polynomial_inverse(t1_value ^ r1_value, R_BITS)
-    numerator1 = cyclic_multiply(h_values[0], r1_value, R_BITS) ^ h_values[1]
-    t0_value = cyclic_multiply(numerator1, denominator1_inv, R_BITS)
-    denominator2_inv = polynomial_inverse(t0_value ^ h_values[0], R_BITS)
-    numerator2 = cyclic_multiply(t0_value, t2_value, R_BITS) ^ h_values[2]
-    r2_value = cyclic_multiply(numerator2, denominator2_inv, R_BITS)
-    r_bytes = (R_BITS + 7) // 8
+    denominator1_inv = polynomial_inverse(t1_value ^ r1_value, profile.r_bits)
+    numerator1 = cyclic_multiply(h_values[0], r1_value, profile.r_bits) ^ h_values[1]
+    t0_value = cyclic_multiply(numerator1, denominator1_inv, profile.r_bits)
+    denominator2_inv = polynomial_inverse(t0_value ^ h_values[0], profile.r_bits)
+    numerator2 = cyclic_multiply(t0_value, t2_value, profile.r_bits) ^ h_values[2]
+    r2_value = cyclic_multiply(numerator2, denominator2_inv, profile.r_bits)
+    r_bytes = (profile.r_bits + 7) // 8
     h0 = h_values[0].to_bytes(r_bytes, "little")
     t0 = t0_value.to_bytes(r_bytes, "little")
     r2 = r2_value.to_bytes(r_bytes, "little")
@@ -151,19 +194,20 @@ def write_decoder_fixture(
     sorted_support: list[list[int]],
     error_positions: list[int],
     syndrome_positions: list[int],
+    profile: Profile,
 ) -> None:
     lines = [
         "MIN_SUM_FIXTURE_V1",
         "seed 1",
         "n0 3",
-        f"r {R_BITS}",
-        f"w {SECRET_WEIGHT}",
+        f"r {profile.r_bits}",
+        f"w {profile.secret_weight}",
         f"error_count {len(error_positions)}",
-        f"iterations {ITERATIONS}",
-        f"msg_bits {MSG_BITS}",
-        f"c_val {C_VAL}",
-        f"alpha_shift_0 {ALPHA_SHIFT_0}",
-        f"alpha_shift_1 {ALPHA_SHIFT_1}",
+        f"iterations {profile.iterations}",
+        f"msg_bits {profile.msg_bits}",
+        f"c_val {profile.c_val}",
+        f"alpha_shift_0 {profile.alpha_shift_0}",
+        f"alpha_shift_1 {profile.alpha_shift_1}",
     ]
     for block, values in enumerate(sorted_support):
         lines.append(f"h {block} " + " ".join(str(value) for value in values))
@@ -188,11 +232,14 @@ def run_decoder(
     decoder_support: list[list[int]],
     expected_error: list[int],
     syndrome_value: int,
+    profile: Profile,
 ) -> tuple[list[int], int, str]:
-    syndrome_positions = [bit for bit in range(R_BITS) if (syndrome_value >> bit) & 1]
+    syndrome_positions = [bit for bit in range(profile.r_bits) if (syndrome_value >> bit) & 1]
     fixture_path = work_dir / f"decoder_fixture_{label}.txt"
     decision_path = work_dir / f"decoder_decision_{label}.txt"
-    write_decoder_fixture(fixture_path, decoder_support, expected_error, syndrome_positions)
+    write_decoder_fixture(
+        fixture_path, decoder_support, expected_error, syndrome_positions, profile
+    )
     model = subprocess.run(
         [str(model_path), "--fixture-in", str(fixture_path), "--decision-out", str(decision_path)],
         check=True,
@@ -213,11 +260,14 @@ def evaluate_decapsulation(
     residual_weight: int,
     r2: bytes,
     sigma2: bytes,
+    profile: Profile,
 ) -> dict[str, object]:
-    decoded_blocks = support_blocks(decoded_positions, R_BITS)
-    decoded_l = pseudohash(padded_error_bytes(decoded_blocks, R_BITS))
+    decoded_blocks = support_blocks(decoded_positions, profile.r_bits)
+    decoded_l = pseudohash(padded_error_bytes(decoded_blocks, profile.r_bits))
     message_prime = bytes(left ^ right for left, right in zip(c2, decoded_l[:M_BYTES]))
-    calculated_error = sample_indices(Sm3Drng(message_prime + r2), 3 * R_BITS, ERROR_WEIGHT)
+    calculated_error = sample_indices(
+        Sm3Drng(message_prime + r2), 3 * profile.r_bits, profile.error_weight
+    )
     error_equal = sorted(decoded_positions) == sorted(calculated_error)
     valid = residual_weight == 0 and error_equal
     selected_message = message_prime if valid else sigma2
@@ -244,11 +294,14 @@ def write_decaps_message_fixture(
     decoder_support: list[list[int]],
     syndrome_positions: list[int],
     tampered_cases: dict[str, dict[str, object]],
+    profile: Profile,
 ) -> None:
-    error_bytes = padded_error_bytes(support_blocks(decoded_positions, R_BITS), R_BITS)
+    error_bytes = padded_error_bytes(
+        support_blocks(decoded_positions, profile.r_bits), profile.r_bits
+    )
     l_digest = pseudohash(error_bytes)
     tampered_ciphertext = bytearray(ciphertext)
-    tampered_ciphertext[2 * ((R_BITS + 7) // 8)] ^= 1
+    tampered_ciphertext[2 * ((profile.r_bits + 7) // 8)] ^= 1
     tampered_ciphertext = bytes(tampered_ciphertext)
     tampered_c2 = tampered_ciphertext[-M_BYTES:]
     tampered_u = bytearray(u)
@@ -261,7 +314,7 @@ def write_decaps_message_fixture(
     v_tampered_ciphertext = bytes.fromhex(str(tampered_cases["v_bit0"]["ciphertext"]))
     u_tampered_shared_secret = bytes.fromhex(str(tampered_cases["u_bit0"]["shared_secret"]))
     v_tampered_shared_secret = bytes.fromhex(str(tampered_cases["v_bit0"]["shared_secret"]))
-    row_width = (R_BITS - 1).bit_length()
+    row_width = (profile.r_bits - 1).bit_length()
     raw_support_packed = 0
     for position, value in enumerate(value for block in raw_support for value in block):
         raw_support_packed |= value << (position * row_width)
@@ -269,7 +322,7 @@ def write_decaps_message_fixture(
     for position, value in enumerate(value for block in decoder_support for value in block):
         support_packed |= value << (position * row_width)
     word_w = 64
-    words = (R_BITS + word_w - 1) // word_w
+    words = (profile.r_bits + word_w - 1) // word_w
     word_bytes = word_w // 8
 
     def pack_words(data: bytes) -> int:
@@ -279,18 +332,20 @@ def write_decaps_message_fixture(
     syndrome_packed = sum(1 << value for value in syndrome_positions)
     lines = [
         "// Generated by scripts/gen_trike_minsum_kem_case.py",
-        f"localparam int REF_R_BITS = {R_BITS};",
+        f"localparam logic [1:0] REF_PARAM_LEVEL = 2'd{profile.profile_id};",
+        f'localparam string REF_PROFILE_NAME = "{profile.name}";',
+        f"localparam int REF_R_BITS = {profile.r_bits};",
         "localparam int REF_BLOCKS = 3;",
         f"localparam int REF_M_BYTES = {M_BYTES};",
         f"localparam int REF_ERROR_BYTES = {len(error_bytes)};",
-        f"localparam int REF_SECRET_WEIGHT = {SECRET_WEIGHT};",
+        f"localparam int REF_SECRET_WEIGHT = {profile.secret_weight};",
         f"localparam int REF_ROW_WIDTH = {row_width};",
         f"localparam int REF_WORD_W = {word_w};",
         f"localparam int REF_WORDS = {words};",
-        f"localparam logic [{3 * SECRET_WEIGHT * row_width - 1}:0] REF_H_SUPPORT_RAW = "
-        f"{3 * SECRET_WEIGHT * row_width}'h{raw_support_packed:x};",
-        f"localparam logic [{3 * SECRET_WEIGHT * row_width - 1}:0] REF_H_SUPPORT = "
-        f"{3 * SECRET_WEIGHT * row_width}'h{support_packed:x};",
+        f"localparam logic [{3 * profile.secret_weight * row_width - 1}:0] REF_H_SUPPORT_RAW = "
+        f"{3 * profile.secret_weight * row_width}'h{raw_support_packed:x};",
+        f"localparam logic [{3 * profile.secret_weight * row_width - 1}:0] REF_H_SUPPORT = "
+        f"{3 * profile.secret_weight * row_width}'h{support_packed:x};",
         f"localparam logic [{word_w * words - 1}:0] REF_T0_WORDS = "
         f"{word_w * words}'h{pack_words(t0):x};",
         f"localparam logic [{word_w * words - 1}:0] REF_U_WORDS = "
@@ -301,10 +356,10 @@ def write_decaps_message_fixture(
         f"{word_w * words}'h{pack_words(v):x};",
         f"localparam logic [{word_w * words - 1}:0] REF_V_TAMPERED_WORDS = "
         f"{word_w * words}'h{pack_words(tampered_v):x};",
-        f"localparam logic [{3 * R_BITS - 1}:0] REF_DECISION = "
-        f"{3 * R_BITS}'h{decision_packed:x};",
-        f"localparam logic [{R_BITS - 1}:0] REF_SYNDROME = "
-        f"{R_BITS}'h{syndrome_packed:x};",
+        f"localparam logic [{3 * profile.r_bits - 1}:0] REF_DECISION = "
+        f"{3 * profile.r_bits}'h{decision_packed:x};",
+        f"localparam logic [{profile.r_bits - 1}:0] REF_SYNDROME = "
+        f"{profile.r_bits}'h{syndrome_packed:x};",
         f"localparam logic [{8 * len(error_bytes) - 1}:0] REF_ERROR_DATA = "
         f"{8 * len(error_bytes)}'h{int.from_bytes(error_bytes, 'little'):x};",
         f"localparam logic [{8 * M_BYTES - 1}:0] REF_C2 = "
@@ -349,15 +404,63 @@ def write_decaps_message_fixture(
     path.write_text("\n".join(lines) + "\n", encoding="ascii")
 
 
+def write_runtime_decaps_fixture(
+    path: Path,
+    secret_key: bytes,
+    ciphertext: bytes,
+    tampered_cases: dict[str, dict[str, object]],
+    shared_secret: bytes,
+    profile: Profile,
+) -> None:
+    fixture_dir = path.parent / f"trike_decaps_runtime_minsum_{profile.name}"
+    fixture_dir.mkdir(parents=True, exist_ok=True)
+    inputs = {
+        "valid": secret_key + ciphertext,
+        "u_tampered": secret_key + bytes.fromhex(str(tampered_cases["u_bit0"]["ciphertext"])),
+        "v_tampered": secret_key + bytes.fromhex(str(tampered_cases["v_bit0"]["ciphertext"])),
+        "c2_tampered": secret_key + bytes.fromhex(str(tampered_cases["c2_bit0"]["ciphertext"])),
+    }
+    for label, data in inputs.items():
+        (fixture_dir / f"{label}.hex").write_text(
+            "".join(f"{byte:02x}\n" for byte in data), encoding="ascii"
+        )
+
+    relative_dir = fixture_dir.as_posix()
+    lines = [
+        "// Generated by scripts/gen_trike_minsum_kem_case.py",
+        f"localparam logic [1:0] REF_PARAM_LEVEL = 2'd{profile.profile_id};",
+        f'localparam string REF_PROFILE_NAME = "{profile.name}";',
+        f"localparam int REF_R_BITS = {profile.r_bits};",
+        f"localparam int REF_M_BYTES = {M_BYTES};",
+        f"localparam int REF_INPUT_BYTES = {len(secret_key) + len(ciphertext)};",
+        f'localparam string REF_VALID_INPUT_HEX = "{relative_dir}/valid.hex";',
+        f'localparam string REF_U_TAMPERED_INPUT_HEX = "{relative_dir}/u_tampered.hex";',
+        f'localparam string REF_V_TAMPERED_INPUT_HEX = "{relative_dir}/v_tampered.hex";',
+        f'localparam string REF_C2_TAMPERED_INPUT_HEX = "{relative_dir}/c2_tampered.hex";',
+        f"localparam logic [{8 * M_BYTES - 1}:0] REF_SHARED_SECRET = "
+        f"{8 * M_BYTES}'h{int.from_bytes(shared_secret, 'little'):x};",
+        f"localparam logic [{8 * M_BYTES - 1}:0] REF_U_TAMPERED_SHARED_SECRET = "
+        f"{8 * M_BYTES}'h{int.from_bytes(bytes.fromhex(str(tampered_cases['u_bit0']['shared_secret'])), 'little'):x};",
+        f"localparam logic [{8 * M_BYTES - 1}:0] REF_V_TAMPERED_SHARED_SECRET = "
+        f"{8 * M_BYTES}'h{int.from_bytes(bytes.fromhex(str(tampered_cases['v_bit0']['shared_secret'])), 'little'):x};",
+        f"localparam logic [{8 * M_BYTES - 1}:0] REF_TAMPERED_SHARED_SECRET = "
+        f"{8 * M_BYTES}'h{int.from_bytes(bytes.fromhex(str(tampered_cases['c2_bit0']['shared_secret'])), 'little'):x};",
+    ]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n", encoding="ascii")
+
+
 def generate_case(
     output_path: Path,
     model_path: Path,
     work_dir: Path,
     seed_number: int,
     decaps_message_svh: Path | None,
+    runtime_decaps_svh: Path | None,
+    profile: Profile,
 ) -> None:
     kat_seed = hashlib.shake_256(
-        f"trike-minsum-kat-r{R_BITS}-seed{seed_number}".encode("ascii")
+        f"trike-minsum-kat-r{profile.r_bits}-seed{seed_number}".encode("ascii")
     ).digest(64)
     global_drng = Sm3Drng(kat_seed)
     key_seed = global_drng.generate(M_BYTES)
@@ -365,24 +468,32 @@ def generate_case(
     sigma = global_drng.generate(M_BYTES)
     message = global_drng.generate(M_BYTES)
 
-    support, selected_candidate, scores = select_secret_support(key_seed)
+    support, selected_candidate, scores = select_secret_support(key_seed, profile)
     decoder_support = [sorted(block) for block in support]
-    t1, t2, r1 = h123_vectors(sigma, R_BITS)
-    public_key, secret_key, t0, r2 = serialize_key_pair(support, t1, t2, r1, sigma, sigma2)
+    t1, t2, r1 = h123_vectors(sigma, profile.r_bits)
+    public_key, secret_key, t0, r2 = serialize_key_pair(
+        support, t1, t2, r1, sigma, sigma2, profile
+    )
 
-    error_support = sample_indices(Sm3Drng(message + r2), 3 * R_BITS, ERROR_WEIGHT)
-    error_blocks = support_blocks(error_support, R_BITS)
+    error_support = sample_indices(
+        Sm3Drng(message + r2), 3 * profile.r_bits, profile.error_weight
+    )
+    error_blocks = support_blocks(error_support, profile.r_bits)
     r1_value = int.from_bytes(r1, "little")
     r2_value = int.from_bytes(r2, "little")
     t1_value = int.from_bytes(t1, "little")
     t2_value = int.from_bytes(t2, "little")
     e0, e1, e2 = error_blocks
-    u_value = e0 ^ cyclic_multiply(e1, r1_value, R_BITS) ^ cyclic_multiply(e2, r2_value, R_BITS)
-    v_value = e0 ^ cyclic_multiply(e1, t1_value, R_BITS) ^ cyclic_multiply(e2, t2_value, R_BITS)
-    r_bytes = (R_BITS + 7) // 8
+    u_value = e0 ^ cyclic_multiply(e1, r1_value, profile.r_bits) ^ cyclic_multiply(
+        e2, r2_value, profile.r_bits
+    )
+    v_value = e0 ^ cyclic_multiply(e1, t1_value, profile.r_bits) ^ cyclic_multiply(
+        e2, t2_value, profile.r_bits
+    )
+    r_bytes = (profile.r_bits + 7) // 8
     u = u_value.to_bytes(r_bytes, "little")
     v = v_value.to_bytes(r_bytes, "little")
-    error_bytes = padded_error_bytes(error_blocks, R_BITS)
+    error_bytes = padded_error_bytes(error_blocks, profile.r_bits)
     l_digest = pseudohash(error_bytes)
     c2 = bytes(left ^ right for left, right in zip(message, l_digest[:M_BYTES]))
     ciphertext = u + v + c2
@@ -390,8 +501,8 @@ def generate_case(
 
     h0_value = sum(1 << coefficient for coefficient in support[0])
     t0_value = int.from_bytes(t0, "little")
-    syndrome_value = cyclic_multiply(h0_value, u_value, R_BITS) ^ cyclic_multiply(
-        t0_value, u_value ^ v_value, R_BITS
+    syndrome_value = cyclic_multiply(h0_value, u_value, profile.r_bits) ^ cyclic_multiply(
+        t0_value, u_value ^ v_value, profile.r_bits
     )
     work_dir.mkdir(parents=True, exist_ok=True)
     decoded_positions, residual_weight, model_output = run_decoder(
@@ -401,9 +512,10 @@ def generate_case(
         decoder_support,
         sorted(error_support),
         syndrome_value,
+        profile,
     )
     decapsulation = evaluate_decapsulation(
-        ciphertext, c2, decoded_positions, residual_weight, r2, sigma2
+        ciphertext, c2, decoded_positions, residual_weight, r2, sigma2, profile
     )
 
     tampered_cases = {}
@@ -414,8 +526,10 @@ def generate_case(
         tampered_u = int.from_bytes(tampered_ciphertext[:r_bytes], "little")
         tampered_v = int.from_bytes(tampered_ciphertext[r_bytes : 2 * r_bytes], "little")
         tampered_c2 = tampered_ciphertext[2 * r_bytes :]
-        tampered_syndrome = cyclic_multiply(h0_value, tampered_u, R_BITS) ^ cyclic_multiply(
-            t0_value, tampered_u ^ tampered_v, R_BITS
+        tampered_syndrome = cyclic_multiply(
+            h0_value, tampered_u, profile.r_bits
+        ) ^ cyclic_multiply(
+            t0_value, tampered_u ^ tampered_v, profile.r_bits
         )
         if label == "c2_bit0":
             tampered_decoded = decoded_positions
@@ -430,6 +544,7 @@ def generate_case(
                 decoder_support,
                 sorted(error_support),
                 tampered_syndrome,
+                profile,
             )
             decoder_reused = False
         tampered_result = evaluate_decapsulation(
@@ -439,6 +554,7 @@ def generate_case(
             tampered_residual,
             r2,
             sigma2,
+            profile,
         )
         if tampered_result["ciphertext_valid"]:
             raise ValueError(f"directed {label} corruption unexpectedly passed verification")
@@ -458,14 +574,18 @@ def generate_case(
     result = {
         "format": "TRIKE_MINSUM_KAT_V1",
         "profile": {
-            "r": R_BITS,
-            "w": SECRET_WEIGHT,
-            "t": ERROR_WEIGHT,
-            "iterations": ITERATIONS,
-            "msg_bits": MSG_BITS,
-            "c_val": C_VAL,
-            "alpha_shift_0": ALPHA_SHIFT_0,
-            "alpha_shift_1": ALPHA_SHIFT_1,
+            "name": profile.name,
+            "profile_id": profile.profile_id,
+            "r": profile.r_bits,
+            "w": profile.secret_weight,
+            "t": profile.error_weight,
+            "iterations": profile.iterations,
+            "msg_bits": profile.msg_bits,
+            "c_val": profile.c_val,
+            "alpha_shift_0": profile.alpha_shift_0,
+            "alpha_shift_1": profile.alpha_shift_1,
+            "self_threshold": profile.self_threshold,
+            "cross_threshold": profile.cross_threshold,
         },
         "seed": kat_seed.hex(),
         "selected_candidate": selected_candidate,
@@ -488,7 +608,9 @@ def generate_case(
         "v": v.hex(),
         "c2": c2.hex(),
         "ciphertext": ciphertext.hex(),
-        "syndrome_positions": [bit for bit in range(R_BITS) if (syndrome_value >> bit) & 1],
+        "syndrome_positions": [
+            bit for bit in range(profile.r_bits) if (syndrome_value >> bit) & 1
+        ],
         "decoded_positions": decoded_positions,
         "decoder_residual_weight": residual_weight,
         "decoder_exact_original_error": sorted(decoded_positions) == sorted(error_support),
@@ -516,12 +638,23 @@ def generate_case(
             ciphertext,
             support,
             decoder_support,
-            [bit for bit in range(R_BITS) if (syndrome_value >> bit) & 1],
+            [bit for bit in range(profile.r_bits) if (syndrome_value >> bit) & 1],
             tampered_cases,
+            profile,
+        )
+    if runtime_decaps_svh is not None:
+        write_runtime_decaps_fixture(
+            runtime_decaps_svh,
+            secret_key,
+            ciphertext,
+            tampered_cases,
+            encaps_ss,
+            profile,
         )
     print(
         "TRIKE Min-Sum KEM case PASS "
-        f"r={R_BITS} candidate={selected_candidate} residual={residual_weight} "
+        f"profile={profile.name} r={profile.r_bits} candidate={selected_candidate} "
+        f"residual={residual_weight} "
         f"exact={result['decoder_exact_original_error']} "
         f"valid={decapsulation['ciphertext_valid']} tampered_rejected={len(tampered_cases)}"
     )
@@ -533,13 +666,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model", type=Path, required=True)
     parser.add_argument("--work-dir", type=Path, required=True)
     parser.add_argument("--seed", type=int, default=1)
+    parser.add_argument("--profile", choices=PROFILE_METADATA, default="trike160")
     parser.add_argument("--decaps-message-svh", type=Path)
+    parser.add_argument("--runtime-decaps-svh", type=Path)
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    generate_case(args.output, args.model, args.work_dir, args.seed, args.decaps_message_svh)
+    generate_case(
+        args.output,
+        args.model,
+        args.work_dir,
+        args.seed,
+        args.decaps_message_svh,
+        args.runtime_decaps_svh,
+        load_profile(args.profile),
+    )
     return 0
 
 

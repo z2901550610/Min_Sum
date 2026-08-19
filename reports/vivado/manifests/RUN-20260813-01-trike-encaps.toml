@@ -1,0 +1,58 @@
+schema_version = 1
+run_id = "RUN-20260813-01-trike-encaps"
+experiment_id = "EXP-0086"
+date = "2026-08-13"
+status = "pass"
+verdict = "retained"
+source_revision = "unrecorded-windows-copy"
+dirty_tree = true
+report_root = "D:/trike_reports/RUN-20260813-01-trike-encaps"
+notes = "The six supplied reports identify trike_encaps_synth_top, Vivado 2023.2 and the correct part, but their commands accidentally wrote into RUN-20260811-02-trike-keygen and overwrote same-named KeyGen files. This run ID is the Encaps archive destination. Headers do not embed Git revision or filelist digest; no board package-pin constraint is present."
+
+[artifacts]
+files = [
+  "post_route_utilization.rpt",
+  "post_route_utilization_hier.rpt",
+  "post_route_ram_utilization.rpt",
+  "post_route_timing_summary.rpt",
+  "post_route_internal_data_setup_paths.rpt",
+  "post_route_methodology.rpt",
+]
+sha256_manifest = ""
+
+[design]
+top = "trike_encaps_synth_top"
+profile = "TRIKE-2 narrow-I/O current shared polynomial-multiply schedule"
+memory_geometry = "15 RAMB36 plus 3 RAMB18; H4 store 2/1, UV and multiply 7/2, outer polynomial memories 6/0"
+
+[tool]
+vivado = "2023.2 build 4029153"
+part = "xc7k355tffg901-2L"
+xdc = "constraints/trike_kem_core.xdc"
+report_stage = "fully_routed"
+clock_period_ns = 10.0
+clock_uncertainty_ns = 0.100
+
+[functional]
+fixed_cycles = 2384421
+tests = [
+  "make check-rtl",
+  "make check-trike-sm3-sharing",
+  "make test-trike-encaps-core-reference test-trike-encaps-synth-reference",
+]
+result = "core and narrow-I/O wrapper passed CT/SS byte golden and fixed-cycle checks"
+
+[results]
+lut = "47349"
+ff = "61308"
+slice = "24349"
+block_ram_tile = "16.5"
+ramb36 = "15"
+ramb18 = "3"
+dsp = "4"
+setup_wns_ns = "0.025"
+setup_tns_ns = "0.000"
+hold_whs_ns = "0.014"
+hold_ths_ns = "0.000"
+internal_data_setup_wns_ns = "0.441"
+comparison_run = "legacy-stage67-no-manifest"

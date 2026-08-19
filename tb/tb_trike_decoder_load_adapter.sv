@@ -52,6 +52,8 @@ module tb_trike_decoder_load_adapter;
       .i_clk             (clk),
       .i_rst_n           (rst_n),
       .i_start           (start),
+      .i_runtime_r_bits  ('0),
+      .i_runtime_weight  ('0),
       .i_h_valid         (h_valid),
       .i_h_index         (h_index),
       .o_h_ready         (h_ready),

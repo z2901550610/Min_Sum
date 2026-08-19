@@ -29,18 +29,19 @@ module tb_trike_sm3_drng_instantiate_stream;
   trike_sm3_drng_instantiate_stream #(
       .SEED_BYTES(SEED_BYTES)
   ) dut (
-      .i_clk           (clk),
-      .i_rst_n         (rst_n),
-      .i_start         (start),
-      .i_seed_valid    (seed_valid),
-      .i_seed_data     (seed_data),
-      .o_seed_ready    (seed_ready),
-      .o_seed_pass     (seed_pass),
-      .o_busy          (busy),
-      .o_done          (done),
-      .o_v             (v),
-      .o_c             (c),
-      .o_reseed_counter(reseed_counter)
+      .i_clk               (clk),
+      .i_rst_n             (rst_n),
+      .i_start             (start),
+      .i_runtime_seed_bytes('0),
+      .i_seed_valid        (seed_valid),
+      .i_seed_data         (seed_data),
+      .o_seed_ready        (seed_ready),
+      .o_seed_pass         (seed_pass),
+      .o_busy              (busy),
+      .o_done              (done),
+      .o_v                 (v),
+      .o_c                 (c),
+      .o_reseed_counter    (reseed_counter)
   );
 
   initial clk = 1'b0;

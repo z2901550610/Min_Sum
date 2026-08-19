@@ -19,6 +19,7 @@ module trike_poly_mul_core #(
     parameter int DIGIT_W = 8,
     parameter int SPARSE_WEIGHT = 263,
     parameter bit USE_EXTERNAL_DENSE_RAM = 1'b0,
+    parameter bit RUNTIME_GEOMETRY = 1'b0,
     parameter int WORD_ADDR_W = ((((R_BITS + WORD_W - 1) / WORD_W) > 1) ? $clog2(
         (R_BITS + WORD_W - 1) / WORD_W
     ) : 1)
@@ -26,6 +27,9 @@ module trike_poly_mul_core #(
     input  logic                                           i_clk,
     input  logic                                           i_rst_n,
     input  logic                                           i_start,
+    input  logic [                                   31:0] i_runtime_r_bits,
+    input  logic [                                   31:0] i_runtime_words,
+    input  logic [                                   31:0] i_runtime_sparse_weight,
     input  logic                                           i_sparse_a,
     input  logic                                           i_a_valid,
     input  logic [                             WORD_W-1:0] i_a_data,
@@ -62,7 +66,6 @@ module trike_poly_mul_core #(
   localparam int SPARSE_ADDR_W = (SPARSE_WEIGHT > 1) ? $clog2(SPARSE_WEIGHT) : 1;
   localparam int SPARSE_SUM_W = INDEX_W + 1;
   localparam int SOURCE_BITS_W = $clog2(WORD_W + 1);
-  localparam logic [WORD_W-1:0] LAST_MASK = {WORD_W{1'b1}} >> (WORD_W - LAST_BITS);
 
   typedef enum logic [4:0] {
     ST_IDLE,
@@ -104,6 +107,11 @@ module trike_poly_mul_core #(
   integer                                           digit_idx_q;
   integer                                           product_idx_q;
   integer                                           output_idx_q;
+  integer                                           active_r_bits_q;
+  integer                                           active_words_q;
+  integer                                           active_sparse_weight_q;
+  integer                                           active_last_bits_q;
+  logic   [                             WORD_W-1:0] active_last_mask_c;
 
   logic   [((R_BITS > 1) ? $clog2(R_BITS) : 1)-1:0] sparse_index_q;
   logic   [                             WORD_W-1:0] a_word_q;
@@ -263,8 +271,9 @@ module trike_poly_mul_core #(
   assign o_ext_result_wdata = result_wdata;
 
   always_comb begin
+    active_last_mask_c = {WORD_W{1'b1}} >> (WORD_W - active_last_bits_q);
     b_word_c = b_rdata;
-    if (b_word_idx_q == (WORDS - 1)) b_word_c = b_word_c & LAST_MASK;
+    if (b_word_idx_q == (active_words_q - 1)) b_word_c = b_word_c & active_last_mask_c;
 
     a_digit_c = a_word_q[(digit_idx_q*DIGIT_W)+:DIGIT_W];
     partial_base_c = '0;
@@ -276,22 +285,23 @@ module trike_poly_mul_core #(
     partial_shifted_c = partial_base_c << (digit_idx_q * DIGIT_W);
 
     sparse_source_word_c = b_rdata;
-    if (b_word_idx_q == (WORDS - 1)) begin
-      sparse_source_word_c = sparse_source_word_c & LAST_MASK;
+    if (b_word_idx_q == (active_words_q - 1)) begin
+      sparse_source_word_c = sparse_source_word_c & active_last_mask_c;
     end
     sparse_sum_c = SPARSE_SUM_W'(b_word_idx_q) * SPARSE_SUM_W'(WORD_W) +
                    SPARSE_SUM_W'(sparse_index_q);
     sparse_dest_start_c = sparse_sum_c;
-    if (sparse_sum_c >= SPARSE_SUM_W'(R_BITS)) begin
-      sparse_dest_start_c = sparse_sum_c - SPARSE_SUM_W'(R_BITS);
+    if (sparse_sum_c >= SPARSE_SUM_W'(active_r_bits_q)) begin
+      sparse_dest_start_c = sparse_sum_c - SPARSE_SUM_W'(active_r_bits_q);
     end
     sparse_source_bits_c = SOURCE_BITS_W'(WORD_W);
-    if (b_word_idx_q == (WORDS - 1)) sparse_source_bits_c = SOURCE_BITS_W'(LAST_BITS);
+    if (b_word_idx_q == (active_words_q - 1))
+      sparse_source_bits_c = SOURCE_BITS_W'(active_last_bits_q);
 
     // Register the public cyclic-address reduction before the masks and
     // variable shifts.  This splits the carry chain without adding a
     // data-dependent branch to the sparse multiplication schedule.
-    sparse_available_c   = SPARSE_SUM_W'(R_BITS) - sparse_dest_start_q;
+    sparse_available_c   = SPARSE_SUM_W'(active_r_bits_q) - sparse_dest_start_q;
     sparse_dest_word_c   = 0;
     sparse_dest_offset_c = 0;
     sparse_first_len_c   = WORD_W;
@@ -301,7 +311,7 @@ module trike_poly_mul_core #(
       sparse_contribution_c[contribution_idx] = '0;
       sparse_result_addr_c[contribution_idx]  = '0;
     end
-    if (int'(sparse_index_q) < R_BITS) begin
+    if (int'(sparse_index_q) < active_r_bits_q) begin
       sparse_dest_word_c   = int'(sparse_dest_start_q) / WORD_W;
       sparse_dest_offset_c = int'(sparse_dest_start_q) % WORD_W;
       sparse_first_len_c   = int'(sparse_available_c);
@@ -315,19 +325,19 @@ module trike_poly_mul_core #(
       sparse_contribution_c[0] = sparse_first_wide_c[WORD_W-1:0];
       sparse_result_addr_c[0] = WORD_ADDR_W'(sparse_dest_word_c);
       sparse_contribution_c[1] = sparse_first_wide_c[(2*WORD_W)-1:WORD_W];
-      if ((sparse_dest_word_c + 1) < WORDS) begin
+      if ((sparse_dest_word_c + 1) < active_words_q) begin
         sparse_result_addr_c[1] = WORD_ADDR_W'(sparse_dest_word_c + 1);
       end
       sparse_contribution_c[2] = sparse_source_word_q >> sparse_first_len_c;
     end
 
-    if (LAST_BITS == WORD_W) begin
+    if (active_last_bits_q == WORD_W) begin
       reduced_word_c = reduce_low_q ^ product_rdata;
     end else begin
-      reduced_word_c = reduce_low_q ^ (reduce_high0_q >> LAST_BITS) ^
-                       (product_rdata << (WORD_W - LAST_BITS));
+      reduced_word_c = reduce_low_q ^ (reduce_high0_q >> active_last_bits_q) ^
+                       (product_rdata << (WORD_W - active_last_bits_q));
     end
-    if (product_idx_q == (WORDS - 1)) reduced_word_c = reduced_word_c & LAST_MASK;
+    if (product_idx_q == (active_words_q - 1)) reduced_word_c = reduced_word_c & active_last_mask_c;
   end
 
   always_comb begin
@@ -362,8 +372,8 @@ module trike_poly_mul_core #(
         if (i_a_valid) begin
           a_we = 1'b1;
           a_waddr = WORD_ADDR_W'(word_idx_q);
-          if (word_idx_q == (WORDS - 1)) begin
-            a_wdata = i_a_data & LAST_MASK;
+          if (word_idx_q == (active_words_q - 1)) begin
+            a_wdata = i_a_data & active_last_mask_c;
           end else begin
             a_wdata = i_a_data;
           end
@@ -382,8 +392,8 @@ module trike_poly_mul_core #(
         if (i_b_valid) begin
           b_we = 1'b1;
           b_waddr = WORD_ADDR_W'(word_idx_q);
-          if (word_idx_q == (WORDS - 1)) begin
-            b_wdata = i_b_data & LAST_MASK;
+          if (word_idx_q == (active_words_q - 1)) begin
+            b_wdata = i_b_data & active_last_mask_c;
           end else begin
             b_wdata = i_b_data;
           end
@@ -439,12 +449,12 @@ module trike_poly_mul_core #(
 
       ST_REDUCE_READ_HIGH0: begin
         product_re = 1'b1;
-        product_raddr = PRODUCT_ADDR_W'(product_idx_q + WORDS - 1);
+        product_raddr = PRODUCT_ADDR_W'(product_idx_q + active_words_q - 1);
       end
 
       ST_REDUCE_READ_HIGH1: begin
         product_re = 1'b1;
-        product_raddr = PRODUCT_ADDR_W'(product_idx_q + WORDS);
+        product_raddr = PRODUCT_ADDR_W'(product_idx_q + active_words_q);
       end
 
       ST_REDUCE_WRITE: begin
@@ -514,25 +524,29 @@ module trike_poly_mul_core #(
   assign o_b_ready = (state_q == ST_LOAD_B);
   assign o_result_valid = (state_q == ST_OUTPUT_VALID);
   assign o_result_data = result_rdata;
-  assign o_result_last = (output_idx_q == (WORDS - 1));
+  assign o_result_last = (output_idx_q == (active_words_q - 1));
   assign o_busy = (state_q != ST_IDLE);
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin
-      state_q        <= ST_IDLE;
-      sparse_mode_q  <= 1'b0;
-      word_idx_q     <= 0;
-      sparse_idx_q   <= 0;
-      a_word_idx_q   <= 0;
-      b_word_idx_q   <= 0;
-      digit_idx_q    <= 0;
-      product_idx_q  <= 0;
-      output_idx_q   <= 0;
-      sparse_index_q <= '0;
-      a_word_q       <= '0;
-      reduce_low_q   <= '0;
-      reduce_high0_q <= '0;
-      o_done         <= 1'b0;
+      state_q                <= ST_IDLE;
+      sparse_mode_q          <= 1'b0;
+      word_idx_q             <= 0;
+      sparse_idx_q           <= 0;
+      a_word_idx_q           <= 0;
+      b_word_idx_q           <= 0;
+      digit_idx_q            <= 0;
+      product_idx_q          <= 0;
+      output_idx_q           <= 0;
+      sparse_index_q         <= '0;
+      a_word_q               <= '0;
+      reduce_low_q           <= '0;
+      reduce_high0_q         <= '0;
+      active_r_bits_q        <= R_BITS;
+      active_words_q         <= WORDS;
+      active_sparse_weight_q <= SPARSE_WEIGHT;
+      active_last_bits_q     <= LAST_BITS;
+      o_done                 <= 1'b0;
     end else begin
       o_done <= 1'b0;
 
@@ -541,6 +555,17 @@ module trike_poly_mul_core #(
           if (i_start) begin
             sparse_mode_q <= i_sparse_a;
             word_idx_q    <= 0;
+            if (RUNTIME_GEOMETRY) begin
+              active_r_bits_q <= int'(i_runtime_r_bits);
+              active_words_q <= int'(i_runtime_words);
+              active_sparse_weight_q <= int'(i_runtime_sparse_weight);
+              active_last_bits_q <= int'(i_runtime_r_bits) - ((int'(i_runtime_words) - 1) * WORD_W);
+            end else begin
+              active_r_bits_q <= R_BITS;
+              active_words_q <= WORDS;
+              active_sparse_weight_q <= SPARSE_WEIGHT;
+              active_last_bits_q <= LAST_BITS;
+            end
             if (USE_EXTERNAL_DENSE_RAM) begin
               state_q <= ST_CLEAR_PRODUCT;
             end else if (i_sparse_a) begin
@@ -554,7 +579,7 @@ module trike_poly_mul_core #(
 
         ST_LOAD_A: begin
           if (i_a_valid) begin
-            if (word_idx_q == (WORDS - 1)) begin
+            if (word_idx_q == (active_words_q - 1)) begin
               word_idx_q <= 0;
               state_q    <= ST_LOAD_B;
             end else begin
@@ -565,7 +590,7 @@ module trike_poly_mul_core #(
 
         ST_LOAD_SPARSE: begin
           if (i_sparse_index_valid) begin
-            if (sparse_idx_q == (SPARSE_WEIGHT - 1)) begin
+            if (sparse_idx_q == (active_sparse_weight_q - 1)) begin
               word_idx_q <= 0;
               state_q    <= ST_LOAD_B;
             end else begin
@@ -576,7 +601,7 @@ module trike_poly_mul_core #(
 
         ST_LOAD_B: begin
           if (i_b_valid) begin
-            if (word_idx_q == (WORDS - 1)) begin
+            if (word_idx_q == (active_words_q - 1)) begin
               word_idx_q <= 0;
               if (sparse_mode_q) begin
                 state_q <= ST_CLEAR_RESULT;
@@ -590,7 +615,7 @@ module trike_poly_mul_core #(
         end
 
         ST_CLEAR_RESULT: begin
-          if (word_idx_q == (WORDS - 1)) begin
+          if (word_idx_q == (active_words_q - 1)) begin
             sparse_idx_q <= 0;
             b_word_idx_q <= 0;
             state_q      <= ST_SPARSE_FETCH_INDEX;
@@ -600,7 +625,7 @@ module trike_poly_mul_core #(
         end
 
         ST_CLEAR_PRODUCT: begin
-          if (word_idx_q == (PRODUCT_WORDS - 1)) begin
+          if (word_idx_q == ((2 * active_words_q) - 1)) begin
             a_word_idx_q <= 0;
             b_word_idx_q <= 0;
             digit_idx_q  <= 0;
@@ -616,7 +641,7 @@ module trike_poly_mul_core #(
 
         ST_MUL_FETCH_B: begin
           a_word_q <= a_rdata;
-          if (a_word_idx_q == (WORDS - 1)) a_word_q <= a_rdata & LAST_MASK;
+          if (a_word_idx_q == (active_words_q - 1)) a_word_q <= a_rdata & active_last_mask_c;
           state_q <= ST_MUL_READ_LOW;
         end
 
@@ -635,9 +660,9 @@ module trike_poly_mul_core #(
         ST_MUL_WRITE_HIGH: begin
           if (digit_idx_q == (DIGITS_PER_WORD - 1)) begin
             digit_idx_q <= 0;
-            if (b_word_idx_q == (WORDS - 1)) begin
+            if (b_word_idx_q == (active_words_q - 1)) begin
               b_word_idx_q <= 0;
-              if (a_word_idx_q == (WORDS - 1)) begin
+              if (a_word_idx_q == (active_words_q - 1)) begin
                 product_idx_q <= 0;
                 state_q       <= ST_REDUCE_READ_LOW;
               end else begin
@@ -669,7 +694,7 @@ module trike_poly_mul_core #(
         end
 
         ST_REDUCE_WRITE: begin
-          if (product_idx_q == (WORDS - 1)) begin
+          if (product_idx_q == (active_words_q - 1)) begin
             if (USE_EXTERNAL_DENSE_RAM) begin
               o_done  <= 1'b1;
               state_q <= ST_IDLE;
@@ -724,9 +749,9 @@ module trike_poly_mul_core #(
         end
 
         ST_SPARSE_WRITE_2: begin
-          if (b_word_idx_q == (WORDS - 1)) begin
+          if (b_word_idx_q == (active_words_q - 1)) begin
             b_word_idx_q <= 0;
-            if (sparse_idx_q == (SPARSE_WEIGHT - 1)) begin
+            if (sparse_idx_q == (active_sparse_weight_q - 1)) begin
               output_idx_q <= 0;
               state_q      <= ST_OUTPUT_FETCH;
             end else begin
@@ -745,7 +770,7 @@ module trike_poly_mul_core #(
 
         ST_OUTPUT_VALID: begin
           if (i_result_ready) begin
-            if (output_idx_q == (WORDS - 1)) begin
+            if (output_idx_q == (active_words_q - 1)) begin
               o_done  <= 1'b1;
               state_q <= ST_IDLE;
             end else begin
@@ -766,6 +791,16 @@ module trike_poly_mul_core #(
   always_ff @(posedge i_clk) begin
     if ((state_q == ST_IDLE) && i_start && USE_EXTERNAL_DENSE_RAM && i_sparse_a) begin
       $error("trike_poly_mul_core external RAM mode supports dense multiplication only");
+    end
+    if ((state_q == ST_IDLE) && i_start && RUNTIME_GEOMETRY) begin
+      if ((i_runtime_r_bits < 1) || (i_runtime_r_bits > R_BITS))
+        $error("trike_poly_mul_core runtime r out of range");
+      if ((i_runtime_words < 1) || (i_runtime_words > WORDS))
+        $error("trike_poly_mul_core runtime words out of range");
+      if ((i_runtime_sparse_weight < 1) || (i_runtime_sparse_weight > SPARSE_WEIGHT))
+        $error("trike_poly_mul_core runtime sparse weight out of range");
+      if (i_runtime_words != ((i_runtime_r_bits + WORD_W - 1) / WORD_W))
+        $error("trike_poly_mul_core runtime word count mismatch");
     end
   end
 

@@ -5,17 +5,20 @@
 // order within each block. Syndrome words are little-endian by coefficient and
 // are serialized into exactly R_BITS single-bit writes.
 module trike_decoder_load_adapter #(
-    parameter int R_BITS  = 15581,
-    parameter int BLOCKS  = 3,
-    parameter int WEIGHT  = 35,
-    parameter int WORD_W  = 64,
-    parameter int ROW_W   = ((R_BITS > 1) ? $clog2(R_BITS) : 1),
-    parameter int BLOCK_W = ((BLOCKS > 1) ? $clog2(BLOCKS) : 1),
-    parameter int DIAG_W  = ((WEIGHT > 1) ? $clog2(WEIGHT) : 1)
+    parameter int R_BITS           = 15581,
+    parameter int BLOCKS           = 3,
+    parameter int WEIGHT           = 35,
+    parameter int WORD_W           = 64,
+    parameter bit RUNTIME_GEOMETRY = 1'b0,
+    parameter int ROW_W            = ((R_BITS > 1) ? $clog2(R_BITS) : 1),
+    parameter int BLOCK_W          = ((BLOCKS > 1) ? $clog2(BLOCKS) : 1),
+    parameter int DIAG_W           = ((WEIGHT > 1) ? $clog2(WEIGHT) : 1)
 ) (
     input  logic               i_clk,
     input  logic               i_rst_n,
     input  logic               i_start,
+    input  logic [       31:0] i_runtime_r_bits,
+    input  logic [       31:0] i_runtime_weight,
     input  logic               i_h_valid,
     input  logic [  ROW_W-1:0] i_h_index,
     output logic               o_h_ready,
@@ -62,6 +65,7 @@ module trike_decoder_load_adapter #(
   logic   [  ROW_W-1:0] sorter_index;
   logic                 sorter_busy;
   logic                 sorter_done;
+  integer               active_r_bits_q;
 
   assign o_h_ready = (state_q == ST_H_LOAD) && sorter_input_ready;
   assign o_h_we = (state_q == ST_H_LOAD) && sorter_output_valid;
@@ -79,25 +83,28 @@ module trike_decoder_load_adapter #(
   trike_fixed_support_sorter #(
       .R_BITS(R_BITS),
       .BLOCKS(BLOCKS),
-      .WEIGHT(WEIGHT)
+      .WEIGHT(WEIGHT),
+      .RUNTIME_GEOMETRY(RUNTIME_GEOMETRY)
   ) support_sorter (
-      .i_clk      (i_clk),
-      .i_rst_n    (i_rst_n),
-      .i_start    ((state_q == ST_IDLE) && i_start),
-      .i_valid    (i_h_valid),
-      .i_index    (i_h_index),
-      .o_ready    (sorter_input_ready),
-      .o_valid    (sorter_output_valid),
-      .o_block_idx(sorter_block_idx),
-      .o_diag_idx (sorter_diag_idx),
-      .o_index    (sorter_index),
-      .i_ready    (state_q == ST_H_LOAD),
-      .o_busy     (sorter_busy),
-      .o_done     (sorter_done)
+      .i_clk           (i_clk),
+      .i_rst_n         (i_rst_n),
+      .i_start         ((state_q == ST_IDLE) && i_start),
+      .i_runtime_r_bits(i_runtime_r_bits),
+      .i_runtime_weight(i_runtime_weight),
+      .i_valid         (i_h_valid),
+      .i_index         (i_h_index),
+      .o_ready         (sorter_input_ready),
+      .o_valid         (sorter_output_valid),
+      .o_block_idx     (sorter_block_idx),
+      .o_diag_idx      (sorter_diag_idx),
+      .o_index         (sorter_index),
+      .i_ready         (state_q == ST_H_LOAD),
+      .o_busy          (sorter_busy),
+      .o_done          (sorter_done)
   );
 
   always_comb begin
-    last_syndrome_bit_c = (syndrome_addr_q == ROW_W'(R_BITS - 1));
+    last_syndrome_bit_c = (syndrome_addr_q == ROW_W'(active_r_bits_q - 1));
   end
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
@@ -106,6 +113,7 @@ module trike_decoder_load_adapter #(
       syndrome_bit_q <= '0;
       syndrome_addr_q <= '0;
       syndrome_data_q <= '0;
+      active_r_bits_q <= R_BITS;
       o_error <= 1'b0;
       o_done <= 1'b0;
     end else begin
@@ -117,6 +125,8 @@ module trike_decoder_load_adapter #(
             syndrome_bit_q <= '0;
             syndrome_addr_q <= '0;
             o_error <= 1'b0;
+            if (RUNTIME_GEOMETRY) active_r_bits_q <= int'(i_runtime_r_bits);
+            else active_r_bits_q <= R_BITS;
             state_q <= ST_H_LOAD;
           end
         end
@@ -176,5 +186,16 @@ module trike_decoder_load_adapter #(
     if ((BLOCKS <= 0) || (WEIGHT <= 0))
       $fatal(1, "trike_decoder_load_adapter requires positive H geometry");
   end
+
+`ifndef SYNTHESIS
+  always_ff @(posedge i_clk) begin
+    if (i_rst_n && (state_q == ST_IDLE) && i_start && RUNTIME_GEOMETRY) begin
+      if ((i_runtime_r_bits < 1) || (i_runtime_r_bits > R_BITS))
+        $fatal(1, "trike_decoder_load_adapter runtime r out of range");
+      if ((i_runtime_weight < 1) || (i_runtime_weight > WEIGHT))
+        $fatal(1, "trike_decoder_load_adapter runtime weight out of range");
+    end
+  end
+`endif
 
 endmodule

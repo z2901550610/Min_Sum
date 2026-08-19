@@ -6,6 +6,7 @@
 module trike_decaps_message_recover #(
     parameter int M_BYTES               = 32,
     parameter int ERROR_BYTES           = 4800,
+    parameter bit RUNTIME_LENGTH        = 1'b0,
     parameter bit USE_EXTERNAL_COMPRESS = 1'b0,
     parameter int ERROR_ADDR_W          = ((ERROR_BYTES > 1) ? $clog2(ERROR_BYTES) : 1),
     parameter int MESSAGE_IDX_W         = ((M_BYTES > 1) ? $clog2(M_BYTES) : 1)
@@ -13,6 +14,7 @@ module trike_decaps_message_recover #(
     input  logic                     i_clk,
     input  logic                     i_rst_n,
     input  logic                     i_start,
+    input  logic [             31:0] i_runtime_error_bytes,
     input  logic                     i_c2_valid,
     input  logic [              7:0] i_c2_data,
     output logic                     o_c2_ready,
@@ -53,6 +55,7 @@ module trike_decaps_message_recover #(
   logic                       l_done;
   logic                       unused_l_input_pass;
   logic                       unused_l_busy;
+  integer                     active_error_bytes_q;
 
   function automatic logic [7:0] digest_byte(input  logic [511:0] value,
                                              input int unsigned byte_idx);
@@ -76,31 +79,33 @@ module trike_decaps_message_recover #(
       o_error_raddr = '0;
     end else if ((state_q == ST_L_RUN) && l_input_ready) begin
       o_error_re = 1'b1;
-      o_error_raddr = (l_input_count_q == (ERROR_BYTES - 1)) ?
+      o_error_raddr = (l_input_count_q == (active_error_bytes_q - 1)) ?
           '0 : ERROR_ADDR_W'(l_input_count_q + 1);
     end
   end
 
   trike_pseudohash512_stream #(
       .MESSAGE_BYTES        (ERROR_BYTES),
+      .RUNTIME_LENGTH       (RUNTIME_LENGTH),
       .USE_EXTERNAL_COMPRESS(USE_EXTERNAL_COMPRESS)
   ) u_l (
-      .i_clk           (i_clk),
-      .i_rst_n         (i_rst_n),
-      .i_start         (state_q == ST_L_START),
-      .i_input_valid   (state_q == ST_L_RUN),
-      .i_input_data    (i_error_rdata),
-      .o_input_ready   (l_input_ready),
-      .o_input_pass    (unused_l_input_pass),
-      .o_busy          (unused_l_busy),
-      .o_done          (l_done),
-      .o_digest        (l_digest),
-      .o_compress_start(o_compress_start),
-      .o_compress_block(o_compress_block),
-      .o_compress_state(o_compress_state),
-      .i_compress_busy (i_compress_busy),
-      .i_compress_done (i_compress_done),
-      .i_compress_state(i_compress_state)
+      .i_clk                  (i_clk),
+      .i_rst_n                (i_rst_n),
+      .i_start                (state_q == ST_L_START),
+      .i_runtime_message_bytes(32'(active_error_bytes_q)),
+      .i_input_valid          (state_q == ST_L_RUN),
+      .i_input_data           (i_error_rdata),
+      .o_input_ready          (l_input_ready),
+      .o_input_pass           (unused_l_input_pass),
+      .o_busy                 (unused_l_busy),
+      .o_done                 (l_done),
+      .o_digest               (l_digest),
+      .o_compress_start       (o_compress_start),
+      .o_compress_block       (o_compress_block),
+      .o_compress_state       (o_compress_state),
+      .i_compress_busy        (i_compress_busy),
+      .i_compress_done        (i_compress_done),
+      .i_compress_state       (i_compress_state)
   );
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
@@ -110,6 +115,7 @@ module trike_decaps_message_recover #(
       l_input_count_q <= 0;
       message_count_q <= '0;
       o_l_digest <= '0;
+      active_error_bytes_q <= ERROR_BYTES;
       o_done <= 1'b0;
       for (int idx = 0; idx < M_BYTES; idx++) c2_mem[idx] <= '0;
     end else begin
@@ -121,6 +127,8 @@ module trike_decaps_message_recover #(
             c2_count_q <= 0;
             l_input_count_q <= 0;
             message_count_q <= '0;
+            if (RUNTIME_LENGTH) active_error_bytes_q <= int'(i_runtime_error_bytes);
+            else active_error_bytes_q <= ERROR_BYTES;
             state_q <= ST_C2_LOAD;
           end
         end
@@ -141,7 +149,8 @@ module trike_decaps_message_recover #(
 
         ST_L_RUN: begin
           if (l_input_ready) begin
-            l_input_count_q <= (l_input_count_q == (ERROR_BYTES - 1)) ? 0 : l_input_count_q + 1;
+            l_input_count_q <=
+                (l_input_count_q == (active_error_bytes_q - 1)) ? 0 : l_input_count_q + 1;
           end
           if (l_done) begin
             o_l_digest <= l_digest;
@@ -166,9 +175,17 @@ module trike_decaps_message_recover #(
     end
   end
 
+`ifndef SYNTHESIS
   initial begin
     if ((M_BYTES <= 0) || (ERROR_BYTES <= 0))
       $fatal(1, "trike_decaps_message_recover requires positive message lengths");
   end
 
+  always_ff @(posedge i_clk) begin
+    if (i_rst_n && (state_q == ST_IDLE) && i_start && RUNTIME_LENGTH) begin
+      if ((i_runtime_error_bytes < 1) || (i_runtime_error_bytes > ERROR_BYTES))
+        $fatal(1, "trike_decaps_message_recover runtime length out of range");
+    end
+  end
+`endif
 endmodule

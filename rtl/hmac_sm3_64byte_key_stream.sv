@@ -1,17 +1,19 @@
 `timescale 1ns / 1ps
 
-// Fixed-length HMAC-SM3 engine for a 64-byte key.
+// Public-length HMAC-SM3 engine for a 64-byte key.
 //
 // i_key uses network byte order: key byte zero occupies i_key[511:504].
-// MESSAGE_BYTES is public and fixed at elaboration time. The message stream is
+// MESSAGE_BYTES allocates the maximum public length. The message stream is
 // consumed once; the inner and outer SM3 passes have data-independent work.
 module hmac_sm3_64byte_key_stream #(
     parameter int MESSAGE_BYTES         = 32,
+    parameter bit RUNTIME_LENGTH        = 1'b0,
     parameter bit USE_EXTERNAL_COMPRESS = 1'b0
 ) (
     input  logic         i_clk,
     input  logic         i_rst_n,
     input  logic         i_start,
+    input  logic [ 31:0] i_runtime_message_bytes,
     input  logic [511:0] i_key,
     input  logic         i_input_valid,
     input  logic [  7:0] i_input_data,
@@ -28,7 +30,6 @@ module hmac_sm3_64byte_key_stream #(
 );
 
   localparam int MESSAGE_COUNT_W = (MESSAGE_BYTES > 1) ? $clog2(MESSAGE_BYTES) : 1;
-  localparam logic [MESSAGE_COUNT_W-1:0] MESSAGE_LAST = MESSAGE_COUNT_W'(MESSAGE_BYTES - 1);
 
   typedef enum logic [3:0] {
     ST_IDLE,
@@ -77,6 +78,7 @@ module hmac_sm3_64byte_key_stream #(
   logic                         internal_compress_done;
   logic   [              255:0] internal_compress_result;
   logic                         select_outer_compress;
+  integer                       active_message_bytes_q;
 
   assign o_input_ready = (state_q == ST_INNER_MESSAGE) && inner_input_ready;
 
@@ -106,44 +108,47 @@ module hmac_sm3_64byte_key_stream #(
 
   sm3_hash_stream #(
       .INPUT_BYTES          (64 + MESSAGE_BYTES),
+      .RUNTIME_LENGTH       (RUNTIME_LENGTH),
       .USE_EXTERNAL_COMPRESS(1'b1)
   ) u_inner_hash (
-      .i_clk           (i_clk),
-      .i_rst_n         (i_rst_n),
-      .i_start         (inner_start),
-      .i_input_valid   (inner_input_valid),
-      .i_input_data    (inner_input_data),
-      .o_input_ready   (inner_input_ready),
-      .o_busy          (),
-      .o_done          (inner_done),
-      .o_digest        (inner_digest),
-      .o_compress_start(inner_compress_start),
-      .o_compress_block(inner_compress_block),
-      .o_compress_state(inner_compress_state),
-      .i_compress_busy (shared_compress_busy),
-      .i_compress_done (shared_compress_done),
-      .i_compress_state(shared_compress_result)
+      .i_clk                (i_clk),
+      .i_rst_n              (i_rst_n),
+      .i_start              (inner_start),
+      .i_runtime_input_bytes(32'(64 + active_message_bytes_q)),
+      .i_input_valid        (inner_input_valid),
+      .i_input_data         (inner_input_data),
+      .o_input_ready        (inner_input_ready),
+      .o_busy               (),
+      .o_done               (inner_done),
+      .o_digest             (inner_digest),
+      .o_compress_start     (inner_compress_start),
+      .o_compress_block     (inner_compress_block),
+      .o_compress_state     (inner_compress_state),
+      .i_compress_busy      (shared_compress_busy),
+      .i_compress_done      (shared_compress_done),
+      .i_compress_state     (shared_compress_result)
   );
 
   sm3_hash_stream #(
       .INPUT_BYTES          (96),
       .USE_EXTERNAL_COMPRESS(1'b1)
   ) u_outer_hash (
-      .i_clk           (i_clk),
-      .i_rst_n         (i_rst_n),
-      .i_start         (outer_start),
-      .i_input_valid   (outer_input_valid),
-      .i_input_data    (outer_input_data),
-      .o_input_ready   (outer_input_ready),
-      .o_busy          (),
-      .o_done          (outer_done),
-      .o_digest        (outer_digest),
-      .o_compress_start(outer_compress_start),
-      .o_compress_block(outer_compress_block),
-      .o_compress_state(outer_compress_state),
-      .i_compress_busy (shared_compress_busy),
-      .i_compress_done (shared_compress_done),
-      .i_compress_state(shared_compress_result)
+      .i_clk                (i_clk),
+      .i_rst_n              (i_rst_n),
+      .i_start              (outer_start),
+      .i_runtime_input_bytes('0),
+      .i_input_valid        (outer_input_valid),
+      .i_input_data         (outer_input_data),
+      .o_input_ready        (outer_input_ready),
+      .o_busy               (),
+      .o_done               (outer_done),
+      .o_digest             (outer_digest),
+      .o_compress_start     (outer_compress_start),
+      .o_compress_block     (outer_compress_block),
+      .o_compress_state     (outer_compress_state),
+      .i_compress_busy      (shared_compress_busy),
+      .i_compress_done      (shared_compress_done),
+      .i_compress_state     (shared_compress_result)
   );
 
   generate
@@ -167,15 +172,16 @@ module hmac_sm3_64byte_key_stream #(
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin
-      state_q           <= ST_IDLE;
-      key_q             <= '0;
-      key_byte_idx_q    <= '0;
-      message_count_q   <= '0;
-      digest_byte_idx_q <= '0;
-      inner_digest_q    <= '0;
-      o_busy            <= 1'b0;
-      o_done            <= 1'b0;
-      o_digest          <= '0;
+      state_q                <= ST_IDLE;
+      key_q                  <= '0;
+      key_byte_idx_q         <= '0;
+      message_count_q        <= '0;
+      digest_byte_idx_q      <= '0;
+      inner_digest_q         <= '0;
+      active_message_bytes_q <= MESSAGE_BYTES;
+      o_busy                 <= 1'b0;
+      o_done                 <= 1'b0;
+      o_digest               <= '0;
     end else begin
       o_done <= 1'b0;
 
@@ -186,8 +192,10 @@ module hmac_sm3_64byte_key_stream #(
             key_byte_idx_q    <= '0;
             message_count_q   <= '0;
             digest_byte_idx_q <= '0;
-            o_busy            <= 1'b1;
-            state_q           <= ST_INNER_START;
+            if (RUNTIME_LENGTH) active_message_bytes_q <= int'(i_runtime_message_bytes);
+            else active_message_bytes_q <= MESSAGE_BYTES;
+            o_busy  <= 1'b1;
+            state_q <= ST_INNER_START;
           end
         end
 
@@ -208,7 +216,7 @@ module hmac_sm3_64byte_key_stream #(
 
         ST_INNER_MESSAGE: begin
           if (i_input_valid && o_input_ready) begin
-            if (message_count_q == MESSAGE_LAST) begin
+            if (message_count_q == MESSAGE_COUNT_W'(active_message_bytes_q - 1)) begin
               state_q <= ST_INNER_WAIT;
             end else begin
               message_count_q <= message_count_q + 1'b1;
@@ -270,6 +278,13 @@ module hmac_sm3_64byte_key_stream #(
 `ifndef SYNTHESIS
   initial begin
     if (MESSAGE_BYTES < 1) $error("hmac_sm3_64byte_key_stream MESSAGE_BYTES must be at least 1");
+  end
+
+  always_ff @(posedge i_clk) begin
+    if (i_rst_n && (state_q == ST_IDLE) && i_start && RUNTIME_LENGTH) begin
+      if ((i_runtime_message_bytes < 1) || (i_runtime_message_bytes > MESSAGE_BYTES))
+        $fatal(1, "hmac_sm3_64byte_key_stream runtime length out of range");
+    end
   end
 `endif
 

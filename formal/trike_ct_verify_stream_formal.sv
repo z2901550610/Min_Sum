@@ -44,22 +44,23 @@ module trike_ct_verify_stream_formal #(
       .WORD_COUNT(WORD_COUNT),
       .DATA_W    (8)
   ) u_trace_a (
-      .i_clk            (i_clk),
-      .i_rst_n          (i_rst_n),
-      .i_start          (i_start),
-      .i_decoder_ok     (i_decoder_ok_a),
-      .i_reference_data (i_reference_data_a),
-      .i_reference_valid(i_reference_valid),
-      .o_reference_ready(reference_ready_a),
-      .i_candidate_data (i_candidate_data_a),
-      .i_candidate_valid(i_candidate_valid),
-      .o_candidate_ready(candidate_ready_a),
-      .i_match_data     (i_match_data_a),
-      .i_mismatch_data  (i_mismatch_data_a),
-      .o_equal          (equal_a),
-      .o_selected_data  (selected_data_a),
-      .o_busy           (busy_a),
-      .o_done           (done_a)
+      .i_clk               (i_clk),
+      .i_rst_n             (i_rst_n),
+      .i_start             (i_start),
+      .i_runtime_word_count('0),
+      .i_decoder_ok        (i_decoder_ok_a),
+      .i_reference_data    (i_reference_data_a),
+      .i_reference_valid   (i_reference_valid),
+      .o_reference_ready   (reference_ready_a),
+      .i_candidate_data    (i_candidate_data_a),
+      .i_candidate_valid   (i_candidate_valid),
+      .o_candidate_ready   (candidate_ready_a),
+      .i_match_data        (i_match_data_a),
+      .i_mismatch_data     (i_mismatch_data_a),
+      .o_equal             (equal_a),
+      .o_selected_data     (selected_data_a),
+      .o_busy              (busy_a),
+      .o_done              (done_a)
   );
 
   trike_ct_verify_stream #(
@@ -67,22 +68,23 @@ module trike_ct_verify_stream_formal #(
       .WORD_COUNT(WORD_COUNT),
       .DATA_W    (8)
   ) u_trace_b (
-      .i_clk            (i_clk),
-      .i_rst_n          (i_rst_n),
-      .i_start          (i_start),
-      .i_decoder_ok     (i_decoder_ok_b),
-      .i_reference_data (i_reference_data_b),
-      .i_reference_valid(i_reference_valid),
-      .o_reference_ready(reference_ready_b),
-      .i_candidate_data (i_candidate_data_b),
-      .i_candidate_valid(i_candidate_valid),
-      .o_candidate_ready(candidate_ready_b),
-      .i_match_data     (i_match_data_b),
-      .i_mismatch_data  (i_mismatch_data_b),
-      .o_equal          (equal_b),
-      .o_selected_data  (selected_data_b),
-      .o_busy           (busy_b),
-      .o_done           (done_b)
+      .i_clk               (i_clk),
+      .i_rst_n             (i_rst_n),
+      .i_start             (i_start),
+      .i_runtime_word_count('0),
+      .i_decoder_ok        (i_decoder_ok_b),
+      .i_reference_data    (i_reference_data_b),
+      .i_reference_valid   (i_reference_valid),
+      .o_reference_ready   (reference_ready_b),
+      .i_candidate_data    (i_candidate_data_b),
+      .i_candidate_valid   (i_candidate_valid),
+      .o_candidate_ready   (candidate_ready_b),
+      .i_match_data        (i_match_data_b),
+      .i_mismatch_data     (i_mismatch_data_b),
+      .o_equal             (equal_b),
+      .o_selected_data     (selected_data_b),
+      .o_busy              (busy_b),
+      .o_done              (done_b)
   );
 
   always_ff @(posedge i_clk) begin

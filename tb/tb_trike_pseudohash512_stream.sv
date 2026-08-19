@@ -25,16 +25,17 @@ module tb_trike_pseudohash512_stream;
   trike_pseudohash512_stream #(
       .MESSAGE_BYTES(MESSAGE_BYTES)
   ) dut (
-      .i_clk        (clk),
-      .i_rst_n      (rst_n),
-      .i_start      (start),
-      .i_input_valid(input_valid),
-      .i_input_data (input_data),
-      .o_input_ready(input_ready),
-      .o_input_pass (input_pass),
-      .o_busy       (busy),
-      .o_done       (done),
-      .o_digest     (digest)
+      .i_clk                  (clk),
+      .i_rst_n                (rst_n),
+      .i_start                (start),
+      .i_runtime_message_bytes('0),
+      .i_input_valid          (input_valid),
+      .i_input_data           (input_data),
+      .o_input_ready          (input_ready),
+      .o_input_pass           (input_pass),
+      .o_busy                 (busy),
+      .o_done                 (done),
+      .o_digest               (digest)
   );
 
   initial clk = 1'b0;

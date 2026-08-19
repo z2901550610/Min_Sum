@@ -111,9 +111,8 @@ byte，SK为三组32-bit little-endian support以及`h0 || t0 || r2 || sigma || 
 
 ### Min-Sum Decaps
 
-当前完整Decaps profile为TRIKE160项目参数`r=12589,w=35,t=263,L=32,K=4`。它使用
-`TRIKE_MINSUM_KAT_V1`项目向量；官方TRIKE-2 KAT的`r=15581`不能作为该译码profile的端到端
-Decaps golden。
+完整运行时Decaps覆盖TRIKE160/256/384/512四个项目参数，使用`TRIKE_MINSUM_KAT_V1`项目向量。
+官方TRIKE-2/5/7/9 KAT具有不同`r`和高档消息长度，不能作为这些译码profile的端到端Decaps golden。
 
 流水顺序为：
 
@@ -137,17 +136,65 @@ error writer和residual checker，之后postprocess才读取error RAM。
 | residual checker | 2,668,869 | residual 0与单bit syndrome扰动 |
 | pipeline core | 4,734,246 | 正常及`u/v/c2`三种篡改 |
 | `trike_decaps_synth_top` | 4,743,972 | 8-bit `SK || CT`输入和SS输出 |
+| `trike_decaps_runtime_synth_top`，TRIKE160 | 4,743,324 | 有效及u/v/c2三种篡改 |
+| `trike_decaps_runtime_synth_top`，TRIKE256 | 19,970,378 | 有效及c2隐式拒绝 |
+| `trike_decaps_runtime_synth_top`，TRIKE384 | 71,565,719 | 有效及c2隐式拒绝 |
+| `trike_decaps_runtime_synth_top`，TRIKE512 | 177,759,567 | 有效及c2隐式拒绝 |
 
 四条pipeline路径的RTL residual重量为`0/6233/6314/0`。正常路径输出Encaps SS，三条篡改路径均输出
 `K(sigma2,tampered_ct)`。非收敛`u/v`样本只要求双方residual非零与最终隐式拒绝SS一致，不声明
 Min-Sum判决与软件模型bit-exact。
 
+四档Decaps输入事务前端由`trike_decaps_profile_config`和`trike_decaps_input_loader`组成。profile仅在
+start边界锁存，TRIKE160/256/384/512分别固定接受8,386/19,751/40,952/68,168 byte，并按档产生
+support、t0、r2、sigma2、u、v和ciphertext的最大几何RAM写命令。每档两组不同payload均通过精确
+写次数、连续地址、profile锁存和`input_bytes+1`周期检查。该结果是前端RTL验证，不是完整四档Decaps
+功能或Vivado物理证据。
+
+`trike_decaps_input_store`按TRIKE512最大几何承接上述写命令，提供support、t0、r2、u、v和完整
+ciphertext的同步读口，并保存32-byte sigma2。四档全部有效地址已逐项读回，包含little-endian word
+组装和末word高位清零检查。大RAM不执行复位清零，事务消费者只访问锁存profile给出的活动范围。
+
+syndrome和共享`trike_poly_mul_core`支持可选运行时公开环几何。start边界锁存`r/w/word`后，活动值固定
+控制加载、清零、稠密归约、稀疏回卷和输出长度。固定预取器使用一拍同步读的FETCH/DATA状态，按
+`h0/t0/u/v`顺序访问最大几何输入RAM；valid等待期间保持数据且不重复读。`r=7/13/23`小几何逐word
+golden通过。项目TRIKE160完整`SK || CT`装载、预取和syndrome输出接受8,386 byte、输出197个word，
+两套payload均匹配golden并固定为1,349,546拍。原TRIKE syndrome reference保持2,038,763拍，独立
+稠密/稀疏乘法reference保持1,967,372/69,366拍。
+
+support排序器和decoder装载桥支持可选运行时公开几何。start边界锁存`r/w`后，三块support分别固定执行
+`w*(w-1)/2`次compare-swap并输出`w`项；syndrome按活动`r`逐bit写入并只产生一次decoder start。
+`r/w=7/1、13/3、23/5`下排序器分别固定7/28/61拍，组合装载桥分别固定22/50/94拍；每档两套
+payload的坐标、地址、数据、访问次数和周期一致。
+
+`trike_decaps_support_prefetch`使用一个同步RAM读口读取全部`3w`项。首块support原子广播到syndrome H0
+装载与完整H排序器，另外两块只送排序器；消费者停顿时保持数据且不重复读取。项目TRIKE160最大RAM
+实例从8,386-byte输入开始，固定写入105项升序H和12,589个syndrome bit并产生一次decoder start，
+两套payload均匹配golden且固定1,361,944拍。该边界的decoder完成信号由testbench固定延迟模型提供。
+
+decoder后检查使用最大容量error、support和syndrome RAM，在事务start锁存公开`r/w`。error writer只清零
+活动`3*ceil(r/512)*64` byte并扫描`3r`项判决；residual checker逐row固定读取`3w`项，support物理块
+保持最大`W`跨度，decision列按活动`r`拼接。共享decision读口的组合边界在`r/w=7/1、13/3、521/5`
+下分别固定275、497、18,625拍，每档两套数据的error逐byte匹配，residual为0与单bit扰动重量1的周期
+一致。项目TRIKE160运行时residual reference固定2,668,869拍。
+
 ## 验证状态
 
-2026-08-10当前源码通过：
+2026-08-18当前源码通过：
 
 - `make ci-fast`：工具锁、记录/filelist检查、Verible/Slang/Verilator、形式proof/cover、单元测试和toy
-  集成；toy结果为`residual=0, exact=1, cycles=154`。
+  集成；toy结果为`residual=0, exact=1, cycles=154`，四档Decaps输入/最大几何存储及运行时decoder
+  装载/后检查边界包含在该门禁中。
+- `make test-trike-decaps-synth-reference`：既有TRIKE160正常及`u/v/c2`篡改路径保持4,743,972拍并通过
+  逐byte shared-secret golden。
+- `make test-trike-decaps-runtime-synth-reference`：最大几何统一入口选择TRIKE160，正常及`u/v/c2`篡改
+  均固定4,743,324拍并通过逐byte shared-secret golden。
+- 同一目标逐档选择TRIKE256/384/512并运行有效及`c2`篡改路径，分别固定19,970,378、71,565,719和
+  177,759,567拍；接受与拒绝SS均逐byte匹配项目golden。
+- 四档统一K=4 seed-1 decoder：337,245/1,252,957/3,866,043/8,538,564拍，全部residual 0且exact 1。
+
+2026-08-10发布门禁记录包含：
+
 - `make ci-kem-reference`：官方TRIKE-2/5/7/9 C KAT哈希、四档软件KEM自测，以及完整
   KeyGen/Encaps/Min-Sum Decaps参考链。
 - 默认K=4、`L=32`四档随机译码：固定周期与预算一致，`residual=0`、`exact=1`。
@@ -157,12 +204,23 @@ fixture未用参数、testbench同步观察复位与DUT异步复位、以及显�
 
 ## Vivado证据边界
 
-2026-08-11的四档统一最大几何Decaps报告Fully Routed并满足100 MHz：63,386 LUT、60,521 FF、
+2026-08-11的固定profile最大几何Decaps物理包络报告Fully Routed并满足100 MHz：63,386 LUT、60,521 FF、
 25,759 Slice、635 Block RAM Tile、575 RAMB36、120 RAMB18、4 DSP，setup WNS/TNS为
 `+0.033 ns/0`，hold WHS/THS为`+0.051 ns/0`。该结果见
-[EXP-0084](../experiments/EXP-0084-four-profile-decaps-route.md)，是当前统一Decaps物理基线。
+[EXP-0084](../experiments/EXP-0084-four-profile-decaps-route.md)，对应`trike_decaps_synth_top`，不包含
+运行时输入与流水线入口。
 数据pin限定的同步register-to-register报告给出内部setup WNS `+0.635 ns`；最差路径位于decoder
 `ram_m`读地址控制，96.98%的数据路径延迟来自布线。
+
+2026-08-13的TRIKE-2窄I/O KeyGen报告Fully Routed并满足100 MHz：46,464 LUT、54,718 FF、
+22,392 Slice、22 Block RAM Tile、21 RAMB36、2 RAMB18和5 DSP，setup WNS/TNS为`+0.025 ns/0`，
+hold WHS/THS为`+0.001 ns/0`。同步数据路径WNS为`+0.600 ns`，最差路径位于弱密钥距离判定；该结果见
+[EXP-0085](../experiments/EXP-0085-current-keygen-route.md)。
+
+同日的TRIKE-2窄I/O Encaps报告Fully Routed并满足100 MHz：47,349 LUT、61,308 FF、24,349 Slice、
+16.5 Block RAM Tile、15 RAMB36、3 RAMB18和4 DSP，setup WNS/TNS为`+0.025 ns/0`，hold WHS/THS为
+`+0.014 ns/0`。同步数据路径WNS为`+0.441 ns`，最差路径位于共享SM3状态到L摘要寄存器；该结果见
+[EXP-0086](../experiments/EXP-0086-current-encaps-route.md)。
 
 每次新运行使用`RUN-YYYYMMDD-NN-<top>`标识，在
 `reports/vivado/manifests/`提交运行manifest，原始`.rpt/.dcp`保存在
@@ -170,22 +228,28 @@ fixture未用参数、testbench同步观察复位与DUT异步复位、以及显�
 Fully Routed结果才可更新[Vivado基线注册表](vivado_baseline_registry.md)。wrapper没有package pin约束，
 因此核心100 MHz通过不等于板级I/O签核。
 
-实现入口与产物说明见[项目工作流](../project_workflow.md)。统一decoder嵌入Decaps的最大档物理包络复测使用
+实现入口与产物说明见[项目工作流](../project_workflow.md)。固定profile Decaps最大档物理包络复测使用
 `TRIKE_UNIFIED_PARAMS`、`BIKE_PARALLEL_L=32`、`BIKE_K_SIGN_K=4`、`BIKE_MSG_BITS=5`和
 `BIKE_COLS_PER_TILE=256`，重置synthesis/implementation后重新运行`trike_decaps_synth_top`。新报告需
 记录LUT/FF/Slice/BRAM/DSP、setup WNS/TNS、hold WHS/THS、未约束路径和关键routed path，再用
 `cycles/Fmax`评价体系级延时。同步数据路径报告必须把起点限制为register output pin、终点限制为register
 data pin，避免async recovery路径占满top-N列表。
 
+运行时统一入口使用`make vivado-impl-trike-decaps-runtime`，综合定义保持
+`TRIKE_UNIFIED_PARAMS/L32/K4/C256`。该目标生成完整post-route报告与checkpoint；形成物理结论前必须分配
+新run ID并提交匹配manifest。
+
 ## 当前限制
 
 - 官方TRIKE-2的`r=15581`与项目Min-Sum profile的`r=12589`是两个验证域；官方端到端Decaps KAT需要
   单独建立`r=15581`译码profile及DFR证据。
-- `decoder_top`已通过2-bit公开profile选择适配四档；`trike_decaps_synth_top`的字节布局和
-  pipeline profile仍为编译期边界。四档完整KEM统一还需在wrapper暴露公开profile，并为各档固定
-  `SK/CT`长度建立分档事务调度和逐档golden。
+- `trike_decaps_runtime_synth_top`通过2-bit公开profile连接最大几何输入存储、运行时syndrome、统一decoder、
+  decoder后检查和postprocess。四档具备有效与`c2`隐式拒绝完整KEM golden；u/v非收敛RTL深测覆盖TRIKE160，
+  其余三档由软件golden和分层运行时RTL测试覆盖。
+- 运行时综合入口没有Vivado placed/routed结果；EXP-0084的资源与时序只适用于固定profile
+  `trike_decaps_synth_top`最大物理包络。
 - 当前Min-Sum端到端向量证明功能闭环、固定周期和隐式拒绝，不构成有限样本之外的DFR/FLS结论。
-- 完整Decaps、当前KeyGen和当前Encaps需要同条件Vivado复测；板级接口还需要真实pin与I/O delay约束。
+- KeyGen、Encaps和完整Decaps的板级接口还需要真实pin与I/O delay约束。
 
 ## 实现判据
 

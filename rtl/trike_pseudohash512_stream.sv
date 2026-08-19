@@ -7,11 +7,13 @@
 // SM3(message || 0x02 || 0x00). The final digest is h1 || SM3(k1 || h1).
 module trike_pseudohash512_stream #(
     parameter int MESSAGE_BYTES         = 32,
+    parameter bit RUNTIME_LENGTH        = 1'b0,
     parameter bit USE_EXTERNAL_COMPRESS = 1'b0
 ) (
     input  logic         i_clk,
     input  logic         i_rst_n,
     input  logic         i_start,
+    input  logic [ 31:0] i_runtime_message_bytes,
     input  logic         i_input_valid,
     input  logic [  7:0] i_input_data,
     output logic         o_input_ready,
@@ -28,7 +30,6 @@ module trike_pseudohash512_stream #(
 );
 
   localparam int MESSAGE_COUNT_W = (MESSAGE_BYTES > 1) ? $clog2(MESSAGE_BYTES) : 1;
-  localparam logic [MESSAGE_COUNT_W-1:0] MESSAGE_LAST = MESSAGE_COUNT_W'(MESSAGE_BYTES - 1);
   localparam logic [511:0] ICCS_HMAC_KEY = {
     256'h5307f6d5eb6a3ced3d24c53cc9c82cce2f8936397023f0695c26c80c1ab182a7,
     256'h1db02ba92f544018115a96e719662ca32b7c7efc0a6d2482150766ba6f655b8e
@@ -93,6 +94,7 @@ module trike_pseudohash512_stream #(
   logic                         internal_compress_busy;
   logic                         internal_compress_done;
   logic   [              255:0] internal_compress_result;
+  integer                       active_message_bytes_q;
 
   function automatic logic [7:0] digest_byte(input  logic [255:0] value, input  logic [5:0] byte_idx);
     begin
@@ -149,66 +151,71 @@ module trike_pseudohash512_stream #(
 
   hmac_sm3_64byte_key_stream #(
       .MESSAGE_BYTES        (MESSAGE_BYTES + 2),
+      .RUNTIME_LENGTH       (RUNTIME_LENGTH),
       .USE_EXTERNAL_COMPRESS(1'b1)
   ) u_hmac (
-      .i_clk           (i_clk),
-      .i_rst_n         (i_rst_n),
-      .i_start         (hmac_start),
-      .i_key           (ICCS_HMAC_KEY),
-      .i_input_valid   (hmac_input_valid),
-      .i_input_data    (hmac_input_data),
-      .o_input_ready   (hmac_input_ready),
-      .o_busy          (),
-      .o_done          (hmac_done),
-      .o_digest        (hmac_digest),
-      .o_compress_start(hmac_compress_start),
-      .o_compress_block(hmac_compress_block),
-      .o_compress_state(hmac_compress_state),
-      .i_compress_busy (shared_compress_busy),
-      .i_compress_done (shared_compress_done),
-      .i_compress_state(shared_compress_result)
+      .i_clk                  (i_clk),
+      .i_rst_n                (i_rst_n),
+      .i_start                (hmac_start),
+      .i_runtime_message_bytes(32'(active_message_bytes_q + 2)),
+      .i_key                  (ICCS_HMAC_KEY),
+      .i_input_valid          (hmac_input_valid),
+      .i_input_data           (hmac_input_data),
+      .o_input_ready          (hmac_input_ready),
+      .o_busy                 (),
+      .o_done                 (hmac_done),
+      .o_digest               (hmac_digest),
+      .o_compress_start       (hmac_compress_start),
+      .o_compress_block       (hmac_compress_block),
+      .o_compress_state       (hmac_compress_state),
+      .i_compress_busy        (shared_compress_busy),
+      .i_compress_done        (shared_compress_done),
+      .i_compress_state       (shared_compress_result)
   );
 
   sm3_hash_stream #(
       .INPUT_BYTES          (MESSAGE_BYTES + 2),
+      .RUNTIME_LENGTH       (RUNTIME_LENGTH),
       .USE_EXTERNAL_COMPRESS(1'b1)
   ) u_h1 (
-      .i_clk           (i_clk),
-      .i_rst_n         (i_rst_n),
-      .i_start         (h1_start),
-      .i_input_valid   (h1_input_valid),
-      .i_input_data    (h1_input_data),
-      .o_input_ready   (h1_input_ready),
-      .o_busy          (),
-      .o_done          (h1_done),
-      .o_digest        (h1_digest),
-      .o_compress_start(h1_compress_start),
-      .o_compress_block(h1_compress_block),
-      .o_compress_state(h1_compress_state),
-      .i_compress_busy (shared_compress_busy),
-      .i_compress_done (shared_compress_done),
-      .i_compress_state(shared_compress_result)
+      .i_clk                (i_clk),
+      .i_rst_n              (i_rst_n),
+      .i_start              (h1_start),
+      .i_runtime_input_bytes(32'(active_message_bytes_q + 2)),
+      .i_input_valid        (h1_input_valid),
+      .i_input_data         (h1_input_data),
+      .o_input_ready        (h1_input_ready),
+      .o_busy               (),
+      .o_done               (h1_done),
+      .o_digest             (h1_digest),
+      .o_compress_start     (h1_compress_start),
+      .o_compress_block     (h1_compress_block),
+      .o_compress_state     (h1_compress_state),
+      .i_compress_busy      (shared_compress_busy),
+      .i_compress_done      (shared_compress_done),
+      .i_compress_state     (shared_compress_result)
   );
 
   sm3_hash_stream #(
       .INPUT_BYTES          (64),
       .USE_EXTERNAL_COMPRESS(1'b1)
   ) u_h2 (
-      .i_clk           (i_clk),
-      .i_rst_n         (i_rst_n),
-      .i_start         (h2_start),
-      .i_input_valid   (state_q == ST_H2_FEED),
-      .i_input_data    (h2_input_data),
-      .o_input_ready   (h2_input_ready),
-      .o_busy          (),
-      .o_done          (h2_done),
-      .o_digest        (h2_digest),
-      .o_compress_start(h2_compress_start),
-      .o_compress_block(h2_compress_block),
-      .o_compress_state(h2_compress_state),
-      .i_compress_busy (shared_compress_busy),
-      .i_compress_done (shared_compress_done),
-      .i_compress_state(shared_compress_result)
+      .i_clk                (i_clk),
+      .i_rst_n              (i_rst_n),
+      .i_start              (h2_start),
+      .i_runtime_input_bytes('0),
+      .i_input_valid        (state_q == ST_H2_FEED),
+      .i_input_data         (h2_input_data),
+      .o_input_ready        (h2_input_ready),
+      .o_busy               (),
+      .o_done               (h2_done),
+      .o_digest             (h2_digest),
+      .o_compress_start     (h2_compress_start),
+      .o_compress_block     (h2_compress_block),
+      .o_compress_state     (h2_compress_state),
+      .i_compress_busy      (shared_compress_busy),
+      .i_compress_done      (shared_compress_done),
+      .i_compress_state     (shared_compress_result)
   );
 
   generate
@@ -232,16 +239,17 @@ module trike_pseudohash512_stream #(
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin
-      state_q         <= ST_IDLE;
-      input_pass_q    <= 1'b0;
-      affix_idx_q     <= '0;
-      message_count_q <= '0;
-      h2_feed_idx_q   <= '0;
-      k1_q            <= '0;
-      h1_q            <= '0;
-      o_busy          <= 1'b0;
-      o_done          <= 1'b0;
-      o_digest        <= '0;
+      state_q                <= ST_IDLE;
+      input_pass_q           <= 1'b0;
+      affix_idx_q            <= '0;
+      message_count_q        <= '0;
+      h2_feed_idx_q          <= '0;
+      k1_q                   <= '0;
+      h1_q                   <= '0;
+      active_message_bytes_q <= MESSAGE_BYTES;
+      o_busy                 <= 1'b0;
+      o_done                 <= 1'b0;
+      o_digest               <= '0;
     end else begin
       o_done <= 1'b0;
 
@@ -251,8 +259,10 @@ module trike_pseudohash512_stream #(
             input_pass_q    <= 1'b0;
             affix_idx_q     <= '0;
             message_count_q <= '0;
-            o_busy          <= 1'b1;
-            state_q         <= ST_HMAC_START;
+            if (RUNTIME_LENGTH) active_message_bytes_q <= int'(i_runtime_message_bytes);
+            else active_message_bytes_q <= MESSAGE_BYTES;
+            o_busy  <= 1'b1;
+            state_q <= ST_HMAC_START;
           end
         end
 
@@ -274,7 +284,7 @@ module trike_pseudohash512_stream #(
 
         ST_HMAC_MESSAGE: begin
           if (i_input_valid && o_input_ready) begin
-            if (message_count_q == MESSAGE_LAST) begin
+            if (message_count_q == MESSAGE_COUNT_W'(active_message_bytes_q - 1)) begin
               state_q <= ST_HMAC_WAIT;
             end else begin
               message_count_q <= message_count_q + 1'b1;
@@ -297,7 +307,7 @@ module trike_pseudohash512_stream #(
 
         ST_H1_MESSAGE: begin
           if (i_input_valid && o_input_ready) begin
-            if (message_count_q == MESSAGE_LAST) begin
+            if (message_count_q == MESSAGE_COUNT_W'(active_message_bytes_q - 1)) begin
               affix_idx_q <= '0;
               state_q     <= ST_H1_SUFFIX;
             end else begin
@@ -359,6 +369,13 @@ module trike_pseudohash512_stream #(
 `ifndef SYNTHESIS
   initial begin
     if (MESSAGE_BYTES < 1) $error("trike_pseudohash512_stream MESSAGE_BYTES must be at least 1");
+  end
+
+  always_ff @(posedge i_clk) begin
+    if (i_rst_n && (state_q == ST_IDLE) && i_start && RUNTIME_LENGTH) begin
+      if ((i_runtime_message_bytes < 1) || (i_runtime_message_bytes > MESSAGE_BYTES))
+        $fatal(1, "trike_pseudohash512_stream runtime length out of range");
+    end
   end
 `endif
 

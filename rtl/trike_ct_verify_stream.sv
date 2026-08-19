@@ -7,13 +7,15 @@
 // mismatch position and of i_decoder_ok. Input backpressure may extend the
 // outer transaction, but it does not change the number of accepted words.
 module trike_ct_verify_stream #(
-    parameter int WORD_W     = 64,
-    parameter int WORD_COUNT = 1,
-    parameter int DATA_W     = 256
+    parameter int WORD_W        = 64,
+    parameter int WORD_COUNT    = 1,
+    parameter int DATA_W        = 256,
+    parameter bit RUNTIME_COUNT = 1'b0
 ) (
     input  logic              i_clk,
     input  logic              i_rst_n,
     input  logic              i_start,
+    input  logic [      31:0] i_runtime_word_count,
     input  logic              i_decoder_ok,
     input  logic [WORD_W-1:0] i_reference_data,
     input  logic              i_reference_valid,
@@ -46,6 +48,7 @@ module trike_ct_verify_stream #(
   logic   [        1:0] compare_a_c;
   logic                 select_equal_c;
   logic   [ DATA_W-1:0] selected_data_c;
+  logic   [COUNT_W-1:0] active_last_word_q;
 
   assign o_reference_ready = (state_q == ST_COMPARE) && i_candidate_valid;
   assign o_candidate_ready = (state_q == ST_COMPARE) && i_reference_valid;
@@ -70,15 +73,16 @@ module trike_ct_verify_stream #(
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin
-      state_q         <= ST_IDLE;
-      word_count_q    <= '0;
-      difference_q    <= 1'b0;
-      decoder_ok_q    <= 1'b0;
-      match_data_q    <= '0;
-      mismatch_data_q <= '0;
-      o_equal         <= 1'b0;
-      o_selected_data <= '0;
-      o_done          <= 1'b0;
+      state_q            <= ST_IDLE;
+      word_count_q       <= '0;
+      difference_q       <= 1'b0;
+      decoder_ok_q       <= 1'b0;
+      match_data_q       <= '0;
+      mismatch_data_q    <= '0;
+      o_equal            <= 1'b0;
+      o_selected_data    <= '0;
+      o_done             <= 1'b0;
+      active_last_word_q <= COUNT_W'(WORD_COUNT - 1);
     end else begin
       o_done <= 1'b0;
 
@@ -90,14 +94,16 @@ module trike_ct_verify_stream #(
             decoder_ok_q    <= i_decoder_ok;
             match_data_q    <= i_match_data;
             mismatch_data_q <= i_mismatch_data;
-            state_q         <= ST_COMPARE;
+            if (RUNTIME_COUNT) active_last_word_q <= COUNT_W'(i_runtime_word_count - 1'b1);
+            else active_last_word_q <= COUNT_W'(WORD_COUNT - 1);
+            state_q <= ST_COMPARE;
           end
         end
 
         ST_COMPARE: begin
           if (i_reference_valid && i_candidate_valid) begin
             difference_q <= final_difference_c;
-            if (word_count_q == COUNT_W'(WORD_COUNT - 1)) begin
+            if (word_count_q == active_last_word_q) begin
               o_equal         <= select_equal_c;
               o_selected_data <= selected_data_c;
               o_done          <= 1'b1;
@@ -113,8 +119,19 @@ module trike_ct_verify_stream #(
     end
   end
 
+`ifndef SYNTHESIS
   initial begin
     if (WORD_COUNT <= 0) $fatal(1, "trike_ct_verify_stream requires WORD_COUNT > 0");
   end
+
+`ifndef FORMAL
+  always_ff @(posedge i_clk) begin
+    if (i_rst_n && (state_q == ST_IDLE) && i_start && RUNTIME_COUNT) begin
+      if ((i_runtime_word_count < 1) || (i_runtime_word_count > WORD_COUNT))
+        $fatal(1, "trike_ct_verify_stream runtime word count out of range");
+    end
+  end
+`endif
+`endif
 
 endmodule

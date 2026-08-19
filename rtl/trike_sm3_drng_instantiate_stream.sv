@@ -6,11 +6,13 @@
 // reseed counter use big-endian 55-byte integer layout.
 module trike_sm3_drng_instantiate_stream #(
     parameter int SEED_BYTES            = 32,
+    parameter bit RUNTIME_LENGTH        = 1'b0,
     parameter bit USE_EXTERNAL_COMPRESS = 1'b0
 ) (
     input  logic         i_clk,
     input  logic         i_rst_n,
     input  logic         i_start,
+    input  logic [ 31:0] i_runtime_seed_bytes,
     input  logic         i_seed_valid,
     input  logic [  7:0] i_seed_data,
     output logic         o_seed_ready,
@@ -66,6 +68,7 @@ module trike_sm3_drng_instantiate_stream #(
   logic           internal_compress_done;
   logic   [255:0] internal_compress_result;
   logic           select_c_compress;
+  logic   [ 31:0] active_seed_bytes_q;
 
   function automatic logic [7:0] state_byte(input  logic [439:0] value, input  logic [5:0] byte_idx);
     begin
@@ -91,46 +94,49 @@ module trike_sm3_drng_instantiate_stream #(
 
   sm3_df_stream #(
       .INPUT_BYTES          (SEED_BYTES),
+      .RUNTIME_LENGTH       (RUNTIME_LENGTH),
       .USE_EXTERNAL_COMPRESS(1'b1)
   ) u_seed_df (
-      .i_clk           (i_clk),
-      .i_rst_n         (i_rst_n),
-      .i_start         (seed_df_start),
-      .i_input_valid   (i_seed_valid && (state_q == ST_SEED_DF_RUN)),
-      .i_input_data    (i_seed_data),
-      .o_input_ready   (seed_df_input_ready),
-      .o_input_pass    (seed_df_input_pass),
-      .o_busy          (),
-      .o_done          (seed_df_done),
-      .o_seed          (seed_df_output),
-      .o_compress_start(seed_compress_start),
-      .o_compress_block(seed_compress_block),
-      .o_compress_state(seed_compress_state),
-      .i_compress_busy (shared_compress_busy),
-      .i_compress_done (shared_compress_done),
-      .i_compress_state(shared_compress_result)
+      .i_clk                (i_clk),
+      .i_rst_n              (i_rst_n),
+      .i_start              (seed_df_start),
+      .i_runtime_input_bytes(active_seed_bytes_q),
+      .i_input_valid        (i_seed_valid && (state_q == ST_SEED_DF_RUN)),
+      .i_input_data         (i_seed_data),
+      .o_input_ready        (seed_df_input_ready),
+      .o_input_pass         (seed_df_input_pass),
+      .o_busy               (),
+      .o_done               (seed_df_done),
+      .o_seed               (seed_df_output),
+      .o_compress_start     (seed_compress_start),
+      .o_compress_block     (seed_compress_block),
+      .o_compress_state     (seed_compress_state),
+      .i_compress_busy      (shared_compress_busy),
+      .i_compress_done      (shared_compress_done),
+      .i_compress_state     (shared_compress_result)
   );
 
   sm3_df_stream #(
       .INPUT_BYTES          (56),
       .USE_EXTERNAL_COMPRESS(1'b1)
   ) u_c_df (
-      .i_clk           (i_clk),
-      .i_rst_n         (i_rst_n),
-      .i_start         (c_df_start),
-      .i_input_valid   (state_q == ST_C_DF_RUN),
-      .i_input_data    (c_df_input_data),
-      .o_input_ready   (c_df_input_ready),
-      .o_input_pass    (),
-      .o_busy          (),
-      .o_done          (c_df_done),
-      .o_seed          (c_df_output),
-      .o_compress_start(c_compress_start),
-      .o_compress_block(c_compress_block),
-      .o_compress_state(c_compress_state),
-      .i_compress_busy (shared_compress_busy),
-      .i_compress_done (shared_compress_done),
-      .i_compress_state(shared_compress_result)
+      .i_clk                (i_clk),
+      .i_rst_n              (i_rst_n),
+      .i_start              (c_df_start),
+      .i_runtime_input_bytes('0),
+      .i_input_valid        (state_q == ST_C_DF_RUN),
+      .i_input_data         (c_df_input_data),
+      .o_input_ready        (c_df_input_ready),
+      .o_input_pass         (),
+      .o_busy               (),
+      .o_done               (c_df_done),
+      .o_seed               (c_df_output),
+      .o_compress_start     (c_compress_start),
+      .o_compress_block     (c_compress_block),
+      .o_compress_state     (c_compress_state),
+      .i_compress_busy      (shared_compress_busy),
+      .i_compress_done      (shared_compress_done),
+      .i_compress_state     (shared_compress_result)
   );
 
   generate
@@ -154,14 +160,15 @@ module trike_sm3_drng_instantiate_stream #(
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin
-      state_q          <= ST_IDLE;
-      v_q              <= '0;
-      c_input_count_q  <= '0;
-      o_busy           <= 1'b0;
-      o_done           <= 1'b0;
-      o_v              <= '0;
-      o_c              <= '0;
-      o_reseed_counter <= '0;
+      state_q             <= ST_IDLE;
+      v_q                 <= '0;
+      c_input_count_q     <= '0;
+      o_busy              <= 1'b0;
+      o_done              <= 1'b0;
+      o_v                 <= '0;
+      o_c                 <= '0;
+      o_reseed_counter    <= '0;
+      active_seed_bytes_q <= 32'(SEED_BYTES);
     end else begin
       o_done <= 1'b0;
 
@@ -169,8 +176,10 @@ module trike_sm3_drng_instantiate_stream #(
         ST_IDLE: begin
           if (i_start) begin
             c_input_count_q <= '0;
-            o_busy          <= 1'b1;
-            state_q         <= ST_SEED_DF_START;
+            if (RUNTIME_LENGTH) active_seed_bytes_q <= i_runtime_seed_bytes;
+            else active_seed_bytes_q <= 32'(SEED_BYTES);
+            o_busy  <= 1'b1;
+            state_q <= ST_SEED_DF_START;
           end
         end
 
@@ -221,6 +230,13 @@ module trike_sm3_drng_instantiate_stream #(
 `ifndef SYNTHESIS
   initial begin
     if (SEED_BYTES < 1) $error("trike_sm3_drng_instantiate_stream SEED_BYTES must be at least 1");
+  end
+
+  always_ff @(posedge i_clk) begin
+    if (i_rst_n && (state_q == ST_IDLE) && i_start && RUNTIME_LENGTH) begin
+      if ((i_runtime_seed_bytes < 1) || (i_runtime_seed_bytes > SEED_BYTES))
+        $fatal(1, "trike_sm3_drng_instantiate_stream runtime seed length out of range");
+    end
   end
 `endif
 

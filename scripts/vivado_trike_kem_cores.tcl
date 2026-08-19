@@ -65,6 +65,7 @@ set filelist_by_top [dict create \
   trike_encaps_synth_top filelists/trike_encaps.f \
   trike_keygen_synth_top filelists/trike_keygen.f \
   trike_decaps_synth_top filelists/trike_decaps.f \
+  trike_decaps_runtime_synth_top filelists/trike_decaps.f \
 ]
 
 if {![dict exists $filelist_by_top $top]} {
@@ -74,7 +75,8 @@ set rtl_filelist [file join $repo_root [dict get $filelist_by_top $top]]
 set rtl_files [read_rtl_filelist $rtl_filelist $repo_root]
 puts "RTL filelist: $rtl_filelist"
 
-if {$top eq "trike_decaps_synth_top"} {
+if {($top eq "trike_decaps_synth_top") ||
+    ($top eq "trike_decaps_runtime_synth_top")} {
   set verilog_defines [list \
     TRIKE_UNIFIED_PARAMS \
     BIKE_PARALLEL_L=32 \
@@ -135,10 +137,11 @@ report_timing -delay_type max -max_paths 20 -sort_by group \
   -file [file join $build_dir post_route_setup_paths.rpt]
 report_timing -delay_type min -max_paths 20 -sort_by group \
   -file [file join $build_dir post_route_hold_paths.rpt]
-set core_registers [all_registers -clock [get_clocks core_clk]]
-report_timing -from $core_registers -to $core_registers -delay_type max \
+set core_register_outputs [all_registers -clock [get_clocks core_clk] -output_pins]
+set core_register_data_pins [all_registers -clock [get_clocks core_clk] -data_pins]
+report_timing -from $core_register_outputs -to $core_register_data_pins -delay_type max \
   -max_paths 20 -sort_by slack \
-  -file [file join $build_dir post_route_internal_setup_paths.rpt]
+  -file [file join $build_dir post_route_internal_data_setup_paths.rpt]
 report_high_fanout_nets -timing -load_types -max_nets 30 \
   -file [file join $build_dir post_route_high_fanout.rpt]
 report_clock_utilization -file [file join $build_dir post_route_clock_utilization.rpt]

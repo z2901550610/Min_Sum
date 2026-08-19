@@ -35,19 +35,21 @@ module tb_trike_fixed_support_sorter;
       .BLOCKS(BLOCKS),
       .WEIGHT(WEIGHT)
   ) dut (
-      .i_clk      (clk),
-      .i_rst_n    (rst_n),
-      .i_start    (start),
-      .i_valid    (valid),
-      .i_index    (index_in),
-      .o_ready    (ready_in),
-      .o_valid    (valid_out),
-      .o_block_idx(block_out),
-      .o_diag_idx (diag_out),
-      .o_index    (index_out),
-      .i_ready    (ready_out),
-      .o_busy     (busy),
-      .o_done     (done)
+      .i_clk           (clk),
+      .i_rst_n         (rst_n),
+      .i_start         (start),
+      .i_runtime_r_bits('0),
+      .i_runtime_weight('0),
+      .i_valid         (valid),
+      .i_index         (index_in),
+      .o_ready         (ready_in),
+      .o_valid         (valid_out),
+      .o_block_idx     (block_out),
+      .o_diag_idx      (diag_out),
+      .o_index         (index_out),
+      .i_ready         (ready_out),
+      .o_busy          (busy),
+      .o_done          (done)
   );
 
   always #1 clk = ~clk;

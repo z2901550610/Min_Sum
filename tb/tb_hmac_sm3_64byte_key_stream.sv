@@ -24,16 +24,17 @@ module tb_hmac_sm3_64byte_key_stream;
   hmac_sm3_64byte_key_stream #(
       .MESSAGE_BYTES(MESSAGE_BYTES)
   ) dut (
-      .i_clk        (clk),
-      .i_rst_n      (rst_n),
-      .i_start      (start),
-      .i_key        (ICCS_KEY),
-      .i_input_valid(input_valid),
-      .i_input_data (input_data),
-      .o_input_ready(input_ready),
-      .o_busy       (busy),
-      .o_done       (done),
-      .o_digest     (digest)
+      .i_clk                  (clk),
+      .i_rst_n                (rst_n),
+      .i_start                (start),
+      .i_runtime_message_bytes('0),
+      .i_key                  (ICCS_KEY),
+      .i_input_valid          (input_valid),
+      .i_input_data           (input_data),
+      .o_input_ready          (input_ready),
+      .o_busy                 (busy),
+      .o_done                 (done),
+      .o_digest               (digest)
   );
 
   always_comb begin
