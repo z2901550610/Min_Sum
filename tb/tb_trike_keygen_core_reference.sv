@@ -7,8 +7,8 @@ module tb_trike_keygen_core_reference #(
 
   `include "generated/trike_keygen_reference_case.svh"
 
-  localparam int EXPECTED_BUSY_CYCLES = 98766108;
-  localparam int EXPECTED_SYNTH_BUSY_CYCLES = 98773679;
+  localparam int EXPECTED_BUSY_CYCLES = 53995036;
+  localparam int EXPECTED_SYNTH_BUSY_CYCLES = 54002607;
 
   logic       clk;
   logic       rst_n;
@@ -71,7 +71,7 @@ module tb_trike_keygen_core_reference #(
           .SECRET_WEIGHT  (REF_SECRET_WEIGHT),
           .CANDIDATE_COUNT(REF_CANDIDATE_COUNT),
           .WORD_W         (64),
-          .DIGIT_W        (8)
+          .DIGIT_W        (16)
       ) dut (
           .i_clk         (clk),
           .i_rst_n       (rst_n),

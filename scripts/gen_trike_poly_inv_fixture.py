@@ -129,7 +129,7 @@ def generate_fixture(
         f"// Generated from {source_comment}.",
         f"localparam int REF_INV_R_BITS = {r_bits};",
         f"localparam int REF_INV_WORD_W = {WORD_W};",
-        "localparam int REF_INV_DIGIT_W = 8;",
+        "localparam int REF_INV_DIGIT_W = 16;",
         f"localparam int REF_INV_WORDS = {word_count};",
         f"localparam int REF_INV_PERMUTATIONS = {permutations};",
         f"localparam int REF_INV_MULTIPLICATIONS = {multiplications};",

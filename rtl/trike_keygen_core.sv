@@ -11,7 +11,7 @@ module trike_keygen_core #(
     parameter int SECRET_WEIGHT = 35,
     parameter int CANDIDATE_COUNT = 16,
     parameter int WORD_W = 64,
-    parameter int DIGIT_W = 8,
+    parameter int DIGIT_W = 16,
     parameter int WORD_ADDR_W = ((((R_BITS + WORD_W - 1) / WORD_W) > 1) ? $clog2(
         (R_BITS + WORD_W - 1) / WORD_W
     ) : 1)

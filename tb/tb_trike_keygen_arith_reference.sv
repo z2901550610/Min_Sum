@@ -6,7 +6,7 @@ module tb_trike_keygen_arith_reference;
 
   localparam int WORD_ADDR_W = $clog2(REF_WORDS);
   localparam int POSITION_W = $clog2(REF_SECRET_WEIGHT);
-  localparam int EXPECTED_BUSY_CYCLES = 93933246;
+  localparam int EXPECTED_BUSY_CYCLES = 49162174;
 
   logic                   clk;
   logic                   rst_n;
@@ -36,7 +36,7 @@ module tb_trike_keygen_arith_reference;
       .R_BITS       (REF_R_BITS),
       .SECRET_WEIGHT(REF_SECRET_WEIGHT),
       .WORD_W       (64),
-      .DIGIT_W      (8)
+      .DIGIT_W      (16)
   ) dut (
       .i_clk             (clk),
       .i_rst_n           (rst_n),

@@ -6,7 +6,7 @@
 // not contend for the maximum-geometry memories.
 module trike_decaps_input_syndrome_core #(
     parameter int WORD_W            = 64,
-    parameter int DIGIT_W           = 8,
+    parameter int DIGIT_W           = 16,
     parameter int M_BYTES           = 32,
     parameter int MAX_R_BITS        = bike_pkg::P_R_VALS                [3],
     parameter int MAX_SECRET_WEIGHT = bike_pkg::P_W_VALS                [3],

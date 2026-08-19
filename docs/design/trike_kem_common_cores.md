@@ -82,8 +82,9 @@ flowchart TD
 
 `trike_keygen_arith_core`保存三组support与`t1/t2/r1`，用一个通用`trike_poly_mul_core`顺序完成
 `h0*r1`、`t0`、`t0*t2`和`r2`四次乘法，用一个`trike_poly_inv_core`顺序完成两个分母的固定链求逆。
-分子加`h1/h2`与第二个分母加`h0`在RAM写入或读取边界直接XOR稀疏word mask。TRIKE-2连续握手固定
-93,933,246拍，逐word匹配官方`t0/r2`。该功能基线包含两个物理乘法数据通路：外层通用乘法器一条，
+分子加`h1/h2`与第二个分母加`h0`在RAM写入或读取边界直接XOR稀疏word mask。生产稠密路径使用
+`WORD_W=64, DIGIT_W=16`；TRIKE-2连续握手固定49,162,174拍，逐word匹配官方`t0/r2`。该功能
+边界包含两个物理乘法数据通路：外层通用乘法器一条，
 求逆核内部复用的一条；收敛为单一乘法器需要给求逆核增加外部乘法服务接口并重新验证周期与时序。
 
 `trike_keygen_core`的随机输入为96 byte，顺序是`key_seed || sigma2 || sigma`，对应Reference C向外部
@@ -91,19 +92,20 @@ flowchart TD
 采样与H123通过公开FSM复用一个`trike_sm3_service`。三组support同时写入稀疏视图、算术核和32-bit顺序
 输出RAM；SK阶段按公开地址fetch每个support word。PK按`r2 || sigma`输出1,980 byte，SK按三组32-bit
 little-endian support、`h0 || t0 || r2 || sigma || sigma2`输出6,328 byte。官方候选0合格和候选0弱/
-候选1合格两组输入均逐byte匹配软件golden，连续输入输出时固定98,766,108拍。`success`只报告16组候选
+候选1合格两组输入均逐byte匹配软件golden，连续输入输出时固定53,995,036拍。`success`只报告16组候选
 内是否找到合格support，不改变H123、算术或序列化调度。
 
 `trike_keygen_synth_top`把完整核封装为可实现的窄物理边界。随机输入、PK和SK均为8-bit流，输入和两路
 输出分别设置一项片内缓冲，外部输出使用IOB寄存器；多项式word、support数组和密钥RAM不进入顶层端口。
-官方向量连续握手固定98,773,679拍，完整PK/SK逐byte匹配，层次检查仍只有一个`sm3_compress`。
+官方向量连续握手固定54,002,607拍，完整PK/SK逐byte匹配，层次检查仍只有一个`sm3_compress`。
 
-Vivado 2023.2、`xc7k355tffg901-2L`、10 ns时钟、0.100 ns uncertainty和Fully Routed下，完整KeyGen
+当前16-bit digit KeyGen的资源与时序为`待测`。8-bit digit历史参考在Vivado 2023.2、
+`xc7k355tffg901-2L`、10 ns时钟、0.100 ns uncertainty和Fully Routed下，完整KeyGen
 使用46,464 LUT、54,718 FF、22,392 Slice、21 RAMB36、2 RAMB18和5 DSP。support顺序输出RAM映射为
 1个RAMB18。setup WNS/TNS为+0.025 ns/0，hold WHS/THS为+0.001 ns/0；同步数据路径WNS为+0.600 ns，
 最差路径位于弱密钥距离RAM到弱标志寄存器。methodology保留49项DPIR-1和4项SYNTH-10，无未约束路径。
-报告头未嵌入Git revision；wrapper未分配package pin，因此该结果是关联到EXP-0085的核心实现基线，
-不构成板级I/O签核。
+报告头未嵌入Git revision；wrapper未分配package pin，因此该结果只关联EXP-0085配置，不构成当前
+16-bit digit物理证据或板级I/O签核。
 
 ### Encaps
 
@@ -174,7 +176,7 @@ flowchart TD
 `trike_decaps_syndrome_core`先固定装载`h0` support、`t0/u/v`，再顺序复用一个
 `trike_poly_mul_core`计算`h0*u`和`t0*(u+v)`。第一项写入syndrome RAM，第二项在同一RAM写回边界
 执行XOR。官方TRIKE-2 Count=0的244个64-bit输出word全部匹配独立Python环乘模型，连续握手固定
-2,038,763拍。`trike_decoder_load_adapter`接受block-major原始H support，经固定排序后写入三组H，
+1,086,187拍。`trike_decoder_load_adapter`接受block-major原始H support，经固定排序后写入三组H，
 把little-endian syndrome word固定展开为恰好`r`次单bit写，等待H校验完成后只发一次decoder start；
 13-bit toy接口回归通过。
 
@@ -236,7 +238,7 @@ decision lane分配给residual checker。`r/w=7/1、13/3、521/5`的组合周期
 syndrome RAM和三块support排序器；排序输出与syndrome bit分别同时写入decoder和residual checker。
 Min-Sum固定轮结束后，decision同步读口按公开FSM顺序分配给4,800-byte padded error writer和全residual
 扫描，之后由单SM3 postprocess读取error、r2和完整ciphertext。`r=12589,w=35,t=263,L=32,K=4`的
-seed 1正常与u/v/c2首bit篡改路径均固定3,406,213拍，RTL residual分别为0/6,233/6,314/0，正常路径
+seed 1正常与u/v/c2首bit篡改路径均固定2,785,269拍，RTL residual分别为0/6,233/6,314/0，正常路径
 输出Encaps SS，三条篡改路径均输出对应`sigma2`隐式拒绝SS。非收敛u/v样本的C模型residual为
 6,304/6,309，因此这里只对拍KEM接受/拒绝与最终byte结果，不声明失败判决bit-exact。该结果是Verilator
 功能/周期证据；外部r2/ciphertext RAM的Vivado映射和完整顶层资源、时序均待测。
@@ -244,8 +246,8 @@ seed 1正常与u/v/c2首bit篡改路径均固定3,406,213拍，RTL residual分�
 `trike_decaps_synth_top`把物理接口收窄为8-bit `SK || CT`输入和8-bit SS输出。输入生命周期依次为
 420-byte原始support、H0、t0、r2、sigma、sigma2、u、v和c2；H0与sigma固定消费但不存储，其他字段写入
 专用support/64-bit word/byte RAM或sigma2寄存器。连续输入和SS接收下，正常与u/v/c2篡改四条路径均
-固定3,415,939拍。该wrapper每次复位执行一项事务，Vivado入口固定使用TRIKE160、L32、K4和256-column
-tile；资源映射、routed timing和Fmax待实现报告。
+固定2,794,995拍。该wrapper每次复位执行一项事务，Vivado入口固定使用TRIKE160、L32、K4和256-column
+tile；当前16-bit digit配置的资源映射、routed timing和Fmax均为`待测`。
 
 四档输入事务边界由`trike_decaps_profile_config`和`trike_decaps_input_loader`定义。公开profile在
 `i_start`锁存，随后产生固定的`r/w/t`、word数、padded error尺寸及SK/CT长度；外部profile端口在事务
@@ -261,22 +263,22 @@ residual全扫描。单口ciphertext RAM在message阶段按`2*r_bytes+c2_index`�
 decoder H校验状态在复位时初始化，因此该物理边界每次复位接受一项事务。
 
 四档seed-1有效路径均为candidate 0、decoder residual 0并精确恢复；u/v/c2首bit篡改的软件golden均进入
-隐式拒绝。统一运行时RTL的有效与c2篡改路径分别固定3,415,291、14,941,165、55,654,606和
-142,148,438拍，逐byte匹配对应SS；TRIKE160另覆盖u/v两条RTL非收敛路径。输入连续供给、SS持续ready，
+隐式拒绝。统一运行时RTL的有效与c2篡改路径分别固定2,794,347、11,331,165、39,750,462和
+97,579,462拍，逐byte匹配对应SS；TRIKE160另覆盖u/v两条RTL非收敛路径。输入连续供给、SS持续ready，
 周期边界为start到done。生成fixture使用逐byte hex文件承载最大68,168-byte输入。
 
 `trike_decaps_input_store`承接运行时流水线的最大几何RAM生命周期。support以17-bit index保存，t0/u/v以
 64-bit同步word保存，r2和完整ciphertext以byte RAM保存，sigma2保存在256-bit寄存器。活动写入范围和
 后续读取上界由已锁存profile描述符确定，未通过复位清零大RAM。四档验证逐项读回全部有效地址，并检查
-little-endian word组装与非64-bit对齐末word的高位清零。运行时综合入口包含该层；现有Decaps Vivado
-基线对应固定profile `trike_decaps_synth_top`，不作为该入口的物理结果。
+little-endian word组装与非64-bit对齐末word的高位清零。运行时综合入口包含该层；8-bit digit Decaps
+routed结果不作为当前固定profile或运行时统一入口的物理结果。
 
 syndrome环算术由公开运行时几何控制。`trike_poly_mul_core`和`trike_decaps_syndrome_core`在start边界
 锁存`r`、word数和稀疏重量；这些值固定控制操作数接受数、清零范围、稠密归约、稀疏地址回卷、末word
 mask和输出last。`trike_decaps_syndrome_prefetch`用同步读FETCH/DATA状态按`h0/t0/u/v`顺序访问输入
 RAM；`trike_decaps_input_syndrome_core`在完整输入装载后启动预取与算术。小几何逐word结果匹配独立模型；
-项目TRIKE160的8,386-byte输入到197-word syndrome两套payload均匹配golden并固定1,349,546拍。
-既有TRIKE syndrome reference保持2,038,763拍。较大三档syndrome结果包含在完整运行时Decaps byte
+项目TRIKE160的8,386-byte输入到197-word syndrome两套payload均匹配golden并固定728,602拍。
+TRIKE syndrome reference为1,086,187拍。较大三档syndrome结果包含在完整运行时Decaps byte
 golden中；独立逐word周期与Vivado物理结果属于后续验证边界。
 
 ## BIKE v5.2总体流程
@@ -782,8 +784,8 @@ KEM顶层需要用公开地址调度的RAM连续驱动这些接口，或把固�
 KeyGen秘密support阶段采用16组公开固定候选预算。官方Count=0在候选0合格；补充种子使候选0弱、候选1
 合格，两组连续握手总周期均为4,778,975拍。10,000个确定性软件样本中出现22个首候选弱密钥，最长连续
 弱候选为1；该结果只用于工程预算选择，不是16组失败概率的证明。完整KeyGen在候选0合格和候选1才合格
-两种输入下均固定98,766,108拍。Encaps顶层在连续输入和连续接收条件下具有固定总周期；Decaps仍需在
-固定7轮译码、错误重生成和重加密检查接通后整体证明。
+两种输入下均固定53,995,036拍。Encaps顶层在连续输入和连续接收条件下具有固定总周期；完整Decaps的
+有效与拒绝路径按公开profile保持相同固定周期。
 
 ## 验证
 
@@ -809,9 +811,9 @@ KeyGen秘密support阶段采用16组公开固定候选预算。官方Count=0在�
 | `tb_trike_keygen_secret_sampler_reference` | 官方TRIKE-2 Count=0的105个秘密索引、六项分数、最终DRNG状态和固定4,778,975拍 |
 | `tb_trike_keygen_secret_sampler_schedule` | 候选0为弱、候选1合格时的首合格选择、完整support和相同4,778,975拍 |
 | `tb_trike_keygen_arith_core` | 13-bit环的两组完整`t0/r2`计算、结果padding与相同928拍 |
-| `tb_trike_keygen_arith_reference` | 官方TRIKE-2的`t1/t2/r1`和三组support输入，逐word检查`t0/r2`及固定93,933,246拍 |
-| `tb_trike_keygen_core_reference` | 官方与弱首候选两组完整KeyGen，逐byte检查1,980-byte PK、6,328-byte SK及相同98,766,108拍 |
-| `tb_trike_keygen_core_reference`，`USE_SYNTH_TOP=1` | 官方向量经输入/PK/SK寄存窄流wrapper，逐byte检查完整密钥及固定98,773,679拍 |
+| `tb_trike_keygen_arith_reference` | 官方TRIKE-2的`t1/t2/r1`和三组support输入，逐word检查`t0/r2`及固定49,162,174拍 |
+| `tb_trike_keygen_core_reference` | 官方与弱首候选两组完整KeyGen，逐byte检查1,980-byte PK、6,328-byte SK及相同53,995,036拍 |
+| `tb_trike_keygen_core_reference`，`USE_SYNTH_TOP=1` | 官方向量经输入/PK/SK寄存窄流wrapper，逐byte检查完整密钥及固定54,002,607拍 |
 | `tb_trike_error_support_store_reference` | 官方TRIKE-2的263个support位置、5,952-byte padded error RAM和固定6,478拍 |
 | `tb_trike_h4_error_vector_reference` | 官方TRIKE-2 H4至两种错误表示的组合服务，完整RAM逐byte/逐index对拍和固定207,018拍 |
 | `tb_trike_poly_mul_core` | 13-bit非word对齐环的稠密/稀疏乘法、越界index dummy写回、数据无关周期和backpressure稳定性 |
@@ -823,7 +825,7 @@ KeyGen秘密support阶段采用16组公开固定候选预算。官方Count=0在�
 | `tb_trike_poly_inv_reference` | 从官方TRIKE-2 KAT提取稠密$h_0$，逐word对拍独立Euclid逆元golden |
 | `tb_trike_decoder_load_adapter` | 3组H support的block/diag/row坐标、13次syndrome bit写和单次decoder start |
 | `tb_trike_ct_verify_stream` | 全相等、首/中/末word不等、decoder失败、固定接收数和输入停顿 |
-| `tb_trike_decaps_syndrome_reference` | 官方TRIKE-2 SK/CT派生syndrome的244个word及固定2,038,763拍 |
+| `tb_trike_decaps_syndrome_reference` | 官方TRIKE-2 SK/CT派生syndrome的244个word及固定1,086,187拍 |
 | `tb_keccak_f1600` | 全零状态的25个标准输出lane；24轮固定延迟 |
 | `tb_shake256_stream` | 多absorb/squeeze block和输出backpressure |
 | `tb_kem_ct_compare_select` | 全相等、每个比较bit单独翻转和随机比较/选择 |
@@ -853,13 +855,13 @@ KeyGen/Encaps/Decaps向量，并在统一LF换行后逐byte比较随包官方KAT
 最新四档KAT结论。
 
 `make test-trike-poly-reference`从TRIKE-2官方KAT第0组解析私钥中的$t_0$、$h_0$支持集以及公钥$r_2$，
-独立计算环乘golden。`WORD_W=64, DIGIT_W=8`时，稠密$t_0r_2$输出固定1,967,372拍，稀疏
+独立计算环乘golden。`WORD_W=64, DIGIT_W=16`时，稠密$t_0r_2$输出固定1,014,796拍，稀疏
 $h_0r_2$输出固定69,366拍，两组15581-bit结果均逐word匹配。13-bit toy回归的稠密/稀疏周期分别为
 58/62拍；输出停顿3拍时总busy增加3拍。
 
 `make test-trike-poly-inv-reference`使用同一官方TRIKE-2 KAT中的稠密$h_0$。fixture生成器使用独立
 Python多项式Euclid计算golden并额外验证$h_0h_0^{-1}=1$；RTL使用Reference C固定Frobenius加法链，
-15581-bit结果逐word匹配，连续流busy周期固定为43,978,192拍。toy回归对两组不同可逆输入均为417拍，
+15581-bit结果逐word匹配，连续流busy周期固定为23,021,520拍。toy回归对两组不同可逆输入均为417拍，
 并检查结果输出停顿期间payload保持稳定、busy只增加公开停顿拍数。
 
 `make test-trike-encaps-components-reference`使用`gen_trike_encaps_fixture.py`恢复的官方Count=0中间量。

@@ -16,7 +16,7 @@
 module trike_poly_mul_core #(
     parameter int R_BITS = 15581,
     parameter int WORD_W = 64,
-    parameter int DIGIT_W = 8,
+    parameter int DIGIT_W = 16,
     parameter int SPARSE_WEIGHT = 263,
     parameter bit USE_EXTERNAL_DENSE_RAM = 1'b0,
     parameter bit RUNTIME_GEOMETRY = 1'b0,

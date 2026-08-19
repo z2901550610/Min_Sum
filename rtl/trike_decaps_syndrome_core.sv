@@ -14,7 +14,7 @@ module trike_decaps_syndrome_core #(
     parameter int R_BITS = 15581,
     parameter int SECRET_WEIGHT = 35,
     parameter int WORD_W = 64,
-    parameter int DIGIT_W = 8,
+    parameter int DIGIT_W = 16,
     parameter bit RUNTIME_GEOMETRY = 1'b0,
     parameter int WORD_ADDR_W = ((((R_BITS + WORD_W - 1) / WORD_W) > 1) ? $clog2(
         (R_BITS + WORD_W - 1) / WORD_W

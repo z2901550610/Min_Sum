@@ -6,7 +6,7 @@
 // the other two blocks feed only the sorter.
 module trike_decaps_input_decoder_load_core #(
     parameter int WORD_W            = 64,
-    parameter int DIGIT_W           = 8,
+    parameter int DIGIT_W           = 16,
     parameter int BLOCKS            = 3,
     parameter int M_BYTES           = 32,
     parameter int MAX_R_BITS        = bike_pkg::P_R_VALS                [3],

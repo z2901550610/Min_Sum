@@ -6,7 +6,7 @@
 // Decoder H validation state makes this a one-transaction-per-reset boundary.
 module trike_decaps_runtime_pipeline_core #(
     parameter int WORD_W             = 64,
-    parameter int DIGIT_W            = 8,
+    parameter int DIGIT_W            = 16,
     parameter int BLOCKS             = 3,
     parameter int M_BYTES            = 32,
     parameter int MAX_R_BITS         = bike_pkg::P_R_VALS             [3],

@@ -5,7 +5,7 @@
 // the core's load-state ready signals provide the fixed stream schedule.
 module trike_decaps_syndrome_store_core #(
     parameter int WORD_W            = 64,
-    parameter int DIGIT_W           = 8,
+    parameter int DIGIT_W           = 16,
     parameter int MAX_R_BITS        = bike_pkg::P_R_VALS                        [3],
     parameter int MAX_SECRET_WEIGHT = bike_pkg::P_W_VALS                        [3],
     parameter bit EXTERNAL_H0       = 1'b0,

@@ -385,7 +385,7 @@ flowchart TB
 - $r_1h_0$ 可由 $h_0$ support 驱动固定 $d$ 槽稀疏乘法；$h_1/h_2$ 通过固定长度 XOR 注入；
 - 其余公钥派生乘法按稠密模式执行。
 
-本仓库 [trike_poly_inv_core.sv](../../rtl/trike_poly_inv_core.sv) 使用公开 $r$ 决定的 Frobenius/addition-chain 调度，链长、乘法次数和 RAM 地址数不依赖输入系数。TRIKE-2 官方 KAT 的求逆 reference 对拍周期为 43,978,192 拍；该数字是 RTL 固定周期，不是端到端 KeyGen 周期。
+本仓库 [trike_poly_inv_core.sv](../../rtl/trike_poly_inv_core.sv) 使用公开 $r$ 决定的 Frobenius/addition-chain 调度，链长、乘法次数和 RAM 地址数不依赖输入系数。`WORD_W=64, DIGIT_W=16`时，TRIKE-2 官方 KAT 的求逆 reference 对拍周期为 23,021,520 拍；该数字是 RTL 固定周期，不是端到端 KeyGen 周期。
 
 ### 10.2 weak-key test 与固定周期
 
@@ -704,7 +704,7 @@ flowchart TB
 | parity mapper | [trike_parity_map_stream.sv](../../rtl/trike_parity_map_stream.sv) | 偶/奇映射、padding清零和固定周期toy测试 |
 | fixed-weight采样 | [trike_fixed_weight_sampler.sv](../../rtl/trike_fixed_weight_sampler.sv) | 碰撞/无碰撞结果与相同周期测试 |
 | 环乘法 | [trike_poly_mul_core.sv](../../rtl/trike_poly_mul_core.sv) | toy与TRIKE-2 KAT派生fixture对拍 |
-| 环求逆 | [trike_poly_inv_core.sv](../../rtl/trike_poly_inv_core.sv) | toy 417拍；TRIKE-2 KAT 43,978,192拍 |
+| 环求逆 | [trike_poly_inv_core.sv](../../rtl/trike_poly_inv_core.sv) | toy 417拍；TRIKE-2 KAT 23,021,520拍 |
 
 这些结果证明 RTL 功能、固定控制边界和层次实例收敛。LUT、FF、Slice、Block RAM Tile、DSP、setup WNS/TNS、hold WHS、Fmax 和 `cycles/Fmax` 需要目标 Vivado 在同一器件、XDC、参数和报告阶段给出，不能由逻辑 bit 数或 Yosys 实例数推断。
 

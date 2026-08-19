@@ -161,7 +161,7 @@ module trike_keygen_synth_top (
       .SECRET_WEIGHT  (35),
       .CANDIDATE_COUNT(16),
       .WORD_W         (64),
-      .DIGIT_W        (8)
+      .DIGIT_W        (16)
   ) u_keygen (
       .i_clk         (i_clk),
       .i_rst_n       (rst_n_sync),

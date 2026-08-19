@@ -27,7 +27,7 @@ module trike_poly_inv_synth_top (
   trike_poly_inv_core #(
       .R_BITS (15581),
       .WORD_W (64),
-      .DIGIT_W(8)
+      .DIGIT_W(16)
   ) u_inv (
       .i_clk         (i_clk),
       .i_rst_n       (rst_n_sync),

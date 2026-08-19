@@ -51,7 +51,9 @@ module trike_decaps_unified_core
   logic [            31:0] runtime_input_bytes;
   logic [      ITER_W-1:0] decoder_iter_count;
 
-  trike_decaps_runtime_pipeline_core u_runtime_pipeline (
+  trike_decaps_runtime_pipeline_core #(
+      .DIGIT_W(16)
+  ) u_runtime_pipeline (
       .i_clk                     (i_clk),
       .i_rst_n                   (i_rst_n),
       .i_start                   (i_start),

@@ -88,9 +88,9 @@ byte，SK为三组32-bit little-endian support以及`h0 || t0 || r2 || sigma || 
 | 边界 | 固定周期 | golden范围 |
 | --- | ---: | --- |
 | 秘密support调度 | 4,778,975 | 候选0合格与候选1才合格 |
-| KeyGen算术 | 93,933,246 | 官方TRIKE-2 `t0/r2`逐word |
-| KeyGen core | 98,766,108 | PK/SK逐byte，两种候选路径 |
-| `trike_keygen_synth_top` | 98,773,679 | 8-bit输入、PK、SK流逐byte |
+| KeyGen算术 | 49,162,174 | 官方TRIKE-2 `t0/r2`逐word |
+| KeyGen core | 53,995,036 | PK/SK逐byte，两种候选路径 |
+| `trike_keygen_synth_top` | 54,002,607 | 8-bit输入、PK、SK流逐byte |
 
 `success`只报告固定候选集合中是否找到合格support，不改变H123、算术或序列化调度。
 
@@ -105,7 +105,8 @@ byte，SK为三组32-bit little-endian support以及`h0 || t0 || r2 || sigma || 
 | Encaps core | 2,378,447 | 3,928-byte CT与32-byte SS |
 | `trike_encaps_synth_top` | 2,384,421 | 窄I/O完整输出 |
 
-稀疏环乘在TRIKE-2参数下固定69,366拍，稠密环乘固定1,967,372拍。稀疏调度逐support index和B word
+生产KEM稠密路径使用`WORD_W=64, DIGIT_W=16`。TRIKE-2参数下稀疏环乘固定69,366拍，稠密环乘固定
+1,014,796拍。稀疏调度逐support index和B word
 执行一次地址准备及三组result RAM读改写，周期为
 `4*WORDS + 2*S + 8*S*WORDS`。
 
@@ -128,18 +129,18 @@ error writer和residual checker，之后postprocess才读取error RAM。
 
 | 边界 | 固定周期 | 当前验证 |
 | --- | ---: | --- |
-| syndrome core | 2,038,763 | 244个word匹配独立模型 |
+| syndrome core | 1,086,187 | 244个word匹配独立模型 |
 | message recover | 28,431 | 正常与全零error |
 | reencrypt verify | 209,659 | 匹配与首byte扰动 |
 | KDF | 19,323 | 接受与拒绝SS逐byte |
 | postprocess | 257,417 | 正常与`c2`篡改 |
 | residual checker | 1,340,836 | 双行扫描，residual 0与单bit syndrome扰动 |
-| pipeline core | 3,406,213 | 正常及`u/v/c2`三种篡改 |
-| `trike_decaps_synth_top` | 3,415,939 | 8-bit `SK || CT`输入和SS输出 |
-| `trike_decaps_runtime_synth_top`，TRIKE160 | 3,415,291 | 有效及u/v/c2三种篡改 |
-| `trike_decaps_runtime_synth_top`，TRIKE256 | 14,941,165 | 有效及c2隐式拒绝 |
-| `trike_decaps_runtime_synth_top`，TRIKE384 | 55,654,606 | 有效及c2隐式拒绝 |
-| `trike_decaps_runtime_synth_top`，TRIKE512 | 142,148,438 | 有效及c2隐式拒绝 |
+| pipeline core | 2,785,269 | 正常及`u/v/c2`三种篡改 |
+| `trike_decaps_synth_top` | 2,794,995 | 8-bit `SK || CT`输入和SS输出 |
+| `trike_decaps_runtime_synth_top`，TRIKE160 | 2,794,347 | 有效及u/v/c2三种篡改 |
+| `trike_decaps_runtime_synth_top`，TRIKE256 | 11,331,165 | 有效及c2隐式拒绝 |
+| `trike_decaps_runtime_synth_top`，TRIKE384 | 39,750,462 | 有效及c2隐式拒绝 |
+| `trike_decaps_runtime_synth_top`，TRIKE512 | 97,579,462 | 有效及c2隐式拒绝 |
 
 四条pipeline路径的RTL residual重量为`0/6233/6314/0`。正常路径输出Encaps SS，三条篡改路径均输出
 `K(sigma2,tampered_ct)`。非收敛`u/v`样本只要求双方residual非零与最终隐式拒绝SS一致，不声明
@@ -159,8 +160,8 @@ syndrome和共享`trike_poly_mul_core`支持可选运行时公开环几何。sta
 控制加载、清零、稠密归约、稀疏回卷和输出长度。固定预取器使用一拍同步读的FETCH/DATA状态，按
 `h0/t0/u/v`顺序访问最大几何输入RAM；valid等待期间保持数据且不重复读。`r=7/13/23`小几何逐word
 golden通过。项目TRIKE160完整`SK || CT`装载、预取和syndrome输出接受8,386 byte、输出197个word，
-两套payload均匹配golden并固定为1,349,546拍。原TRIKE syndrome reference保持2,038,763拍，独立
-稠密/稀疏乘法reference保持1,967,372/69,366拍。
+两套payload均匹配golden并固定为728,602拍。TRIKE syndrome reference为1,086,187拍，独立
+稠密/稀疏乘法reference为1,014,796/69,366拍。
 
 support排序器和decoder装载桥支持可选运行时公开几何。start边界锁存`r/w`后，三块support分别固定执行
 `w*(w-1)/2`次compare-swap并输出`w`项；syndrome按活动`r`逐bit写入并只产生一次decoder start。
@@ -170,7 +171,7 @@ payload的坐标、地址、数据、访问次数和周期一致。
 `trike_decaps_support_prefetch`使用一个同步RAM读口读取全部`3w`项。首块support原子广播到syndrome H0
 装载与完整H排序器，另外两块只送排序器；消费者停顿时保持数据且不重复读取。项目TRIKE160最大RAM
 实例从8,386-byte输入开始，固定写入105项升序H和12,589个syndrome bit并产生一次decoder start，
-两套payload均匹配golden且固定1,361,944拍。该边界的decoder完成信号由testbench固定延迟模型提供。
+两套payload均匹配golden且固定741,000拍。该边界的decoder完成信号由testbench固定延迟模型提供。
 
 decoder后检查使用最大容量error、support和syndrome RAM，在事务start锁存公开`r/w`。error writer只清零
 活动`3*ceil(r/512)*64` byte并扫描`3r`项判决；residual checker用同一support读数处理相邻两行，
@@ -180,29 +181,32 @@ K-sign全局记录RAM在译码完成后提供两个不同bank的decision读数�
 
 ## 验证状态
 
-2026-08-19当前源码通过：
+2026-08-20当前源码通过：
 
 - `make ci-fast`：工具锁、记录/filelist检查、Verible/Slang/Verilator、形式proof/cover、单元测试和toy
   集成；toy结果为`residual=0, exact=1, cycles=154`，四档Decaps输入/最大几何存储及运行时decoder
   装载/后检查边界包含在该门禁中。
-- `make test-trike-decaps-synth-reference`：TRIKE160正常及`u/v/c2`篡改路径固定3,415,939拍并通过
+- `make ci-kem-reference`：官方TRIKE-2/5/7/9 C KAT哈希、四档软件KEM自测，以及完整
+  KeyGen/Encaps/Min-Sum Decaps参考链通过；KeyGen两种候选路径保持53,995,036拍。
+- `make test-trike-decaps-synth-reference`：TRIKE160正常及`u/v/c2`篡改路径固定2,794,995拍并通过
   逐byte shared-secret golden。
 - `make test-trike-decaps-runtime-synth-reference`：最大几何统一入口选择TRIKE160，正常及`u/v/c2`篡改
-  均固定3,415,291拍并通过逐byte shared-secret golden。
-- 同一目标逐档选择TRIKE256/384/512并运行有效及`c2`篡改路径，分别固定14,941,165、55,654,606和
-  142,148,438拍；接受与拒绝SS均逐byte匹配项目golden。
+  均固定2,794,347拍并通过逐byte shared-secret golden。
+- 同一目标逐档选择TRIKE256/384/512并运行有效及`c2`篡改路径，分别固定11,331,165、39,750,462和
+  97,579,462拍；接受与拒绝SS均逐byte匹配项目golden。
 - 四档统一K=4 seed-1 decoder：337,245/1,252,957/3,866,043/8,538,564拍，全部residual 0且exact 1。
 
-2026-08-10发布门禁记录包含：
+2026-08-10发布门禁记录还包含：
 
-- `make ci-kem-reference`：官方TRIKE-2/5/7/9 C KAT哈希、四档软件KEM自测，以及完整
-  KeyGen/Encaps/Min-Sum Decaps参考链。
 - 默认K=4、`L=32`四档随机译码：固定周期与预算一致，`residual=0`、`exact=1`。
 
 严格Verilator告警门使用[精确waiver文件](../../config/verilator_waivers.vlt)。waiver只覆盖已知的生成
 fixture未用参数、testbench同步观察复位与DUT异步复位、以及显式未消费的测试输出；RTL规则保持启用。
 
 ## Vivado证据边界
+
+当前16-bit digit KeyGen、poly-inv、固定profile Decaps和运行时统一Decaps的Vivado资源、RAM映射、
+setup/hold与Fmax均为`待测`。以下8-bit digit结果只作为同器件和约束的历史物理参考。
 
 2026-08-11的固定profile最大几何Decaps物理包络报告Fully Routed并满足100 MHz：63,386 LUT、60,521 FF、
 25,759 Slice、635 Block RAM Tile、575 RAMB36、120 RAMB18、4 DSP，setup WNS/TNS为

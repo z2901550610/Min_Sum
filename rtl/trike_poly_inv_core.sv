@@ -9,7 +9,7 @@
 module trike_poly_inv_core #(
     parameter int R_BITS  = 15581,
     parameter int WORD_W  = 64,
-    parameter int DIGIT_W = 8
+    parameter int DIGIT_W = 16
 ) (
     input  logic              i_clk,
     input  logic              i_rst_n,

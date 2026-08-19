@@ -36,7 +36,7 @@ module tb_trike_decaps_syndrome_reference;
       .R_BITS       (REF_R_BITS),
       .SECRET_WEIGHT(REF_SECRET_WEIGHT),
       .WORD_W       (REF_WORD_W),
-      .DIGIT_W      (8)
+      .DIGIT_W      (16)
   ) dut (
       .i_clk                  (clk),
       .i_rst_n                (rst_n),
