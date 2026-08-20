@@ -2,18 +2,23 @@ schema_version = 1
 run_id = "RUN-20260820-01-trike-poly-inv"
 experiment_id = "EXP-0099"
 date = "2026-08-20"
-status = "pending"
-verdict = "pending"
+status = "fail"
+verdict = "incomparable"
 source_revision = "unrecorded-windows-copy"
 dirty_tree = true
 report_root = "D:/trike_reports/RUN-20260820-01-trike-poly-inv"
-notes = "The two user-supplied attachments are byte-identical copies of one Fully Placed utilization report. The header identifies the top, Vivado build and part, but does not embed Git revision, DIGIT_W, XDC or timing constraints. The run was supplied after e354b10 and is expected to represent the 16-bit candidate, but that association is unconfirmed. Timing, methodology and routed reports are absent; this run is not comparable with the stage-62 8-bit routed reference. The run directory is the assigned archive destination."
+notes = "The four user-supplied attachments contain two byte-identical Fully Placed utilization copies, one Routed timing summary and one Routed synchronous register-output-pin to register-data-pin setup report. The headers identify the top, Vivado build and part, but do not embed Git revision, DIGIT_W, filelist digest or XDC filename. The run was supplied after e354b10 and is expected to represent the 16-bit candidate, but that association is unconfirmed. Overall top-level setup fails on a RAMB36-to-output-port path while the internal synchronous query passes; this run is not a retained or comparable replacement for the stage-62 8-bit routed reference. No methodology, DRC, hierarchical utilization or RAM utilization report was supplied. The run directory is the assigned archive destination."
 
 [artifacts]
 files = [
   "trike_poly_inv_synth_top_utilization_placed.rpt",
+  "post_route_timing_summary.rpt",
+  "post_route_internal_data_setup_paths.rpt",
 ]
-sha256_manifest = "b30927c501f6b32d3114adca2f7da06870ec316eb4e9e33f58a4fb60142068f7"
+sha256_manifest = ""
+placed_utilization_sha256 = "b30927c501f6b32d3114adca2f7da06870ec316eb4e9e33f58a4fb60142068f7"
+post_route_timing_summary_sha256 = "7e3235e7ed61c78895b0ea539daf39b41b84dd5322d741f43513d075a981b552"
+post_route_internal_data_setup_paths_sha256 = "d27093c91957a04099f389b69881dded7c037e9c8f954400680c1217dc2de28b"
 
 [design]
 top = "trike_poly_inv_synth_top"
@@ -23,8 +28,8 @@ memory_geometry = "Observed 4 RAMB36, 0 RAMB18; 4 Block RAM Tile"
 [tool]
 vivado = "2023.2 build 4029153"
 part = "xc7k355tffg901-2L"
-xdc = "unreported in supplied utilization report"
-report_stage = "fully_placed"
+xdc = "filename unreported; constraints are consistent with constraints/trike_kem_core.xdc, including 2 ns output delay, 0 ns input delay, reset false path and 0.1 ns uncertainty"
+report_stage = "fully_routed"
 clock_period_ns = 10.0
 clock_uncertainty_ns = 0.100
 
@@ -46,9 +51,15 @@ ramb36 = "4"
 ramb18 = "0"
 dsp = "0"
 bonded_iob = "138"
-setup_wns_ns = ""
-setup_tns_ns = ""
-hold_whs_ns = ""
-hold_ths_ns = ""
-internal_data_setup_wns_ns = ""
+setup_wns_ns = "-2.636"
+setup_tns_ns = "-152.573"
+setup_failing_endpoints = "69"
+hold_whs_ns = "0.018"
+hold_ths_ns = "0.000"
+pulse_width_wps_ns = "4.600"
+async_recovery_wns_ns = "3.655"
+internal_data_setup_wns_ns = "0.447"
+internal_wns_derived_fmax_mhz = "104.68 estimate; not higher-frequency signoff"
+overall_setup_path = "u_inv/u_g_mem RAMB36E1 CLKARDCLK to o_result_data[6]; 6.242 ns data path, one OBUF level, -4.259 ns clock skew and 2.000 ns output delay"
+internal_setup_path = "u_inv/u_mul/state_q_reg[0] to u_inv/perm_bit_idx_q_reg[*]/CE; 8.832 ns data path, 0.635 ns logic, 8.197 ns route, seven LUT levels"
 comparison_run = "legacy-stage62-poly-inv-routed-reference"

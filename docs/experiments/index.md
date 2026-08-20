@@ -22,7 +22,7 @@
 | EXP-0096 | 2026-08-18 | 四档运行时Decaps流水线集成 | 最大几何，L32/K4/C256，8-bit I/O | TRIKE160完整golden、四档decoder分层通过 | 待测 | `retained` | [详情](EXP-0096-unified-runtime-decaps-pipeline.md) |
 | EXP-0097 | 2026-08-18 | 四档运行时Decaps端到端golden | 四档项目Min-Sum参数，L32/K4/C256 | 全档有效/c2拒绝byte golden与固定周期通过 | 待测 | `retained` | [详情](EXP-0097-four-profile-runtime-decaps-golden.md) |
 | EXP-0098 | 2026-08-19 | 双行并行residual扫描 | 两个decision读bank，相邻row固定配对 | 四档byte golden，residual与固定周期通过 | 待测 | `retained` | [详情](EXP-0098-dual-row-residual-scan.md) |
-| EXP-0099 | 2026-08-20 | KEM稠密乘法16-bit digit并行化 | 64-bit word，16-bit digit，KeyGen与四档Decaps | KeyGen及四档Decaps golden/固定周期通过 | [placed待补时序](../../reports/vivado/manifests/RUN-20260820-01-trike-poly-inv.toml) | `retained` | [详情](EXP-0099-kem-dense-mul-digit16.md) |
+| EXP-0099 | 2026-08-20 | KEM稠密乘法16-bit digit并行化 | 64-bit word，16-bit digit，KeyGen与四档Decaps | KeyGen及四档Decaps golden/固定周期通过 | [routed内部+0.447 ns，顶层I/O失败](../../reports/vivado/manifests/RUN-20260820-01-trike-poly-inv.toml) | `retained` | [详情](EXP-0099-kem-dense-mul-digit16.md) |
 
 新实验只追加一行。需要详细说明时，详情列链接到`EXP-xxxx-<slug>.md`；Vivado列链接到
 `reports/vivado/manifests/<run-id>.toml`。

@@ -205,8 +205,12 @@ fixture未用参数、testbench同步观察复位与DUT异步复位、以及显�
 
 ## Vivado证据边界
 
-当前16-bit digit KeyGen、poly-inv、固定profile Decaps和运行时统一Decaps的Vivado资源、RAM映射、
-setup/hold与Fmax均为`待测`。以下8-bit digit结果只作为同器件和约束的历史物理参考。
+16-bit digit poly-inv的Routed参考报告为2,138 LUT、833 FF、704 Slice、4 RAMB36和0 DSP。顶层
+setup WNS/TNS为`-2.636 ns/-152.573 ns`，69个失败端点；最差路径从结果RAMB36直达输出端口。
+同步register-output-pin到register-data-pin查询的内部setup WNS为`+0.447 ns`，最差为乘法状态高扇出
+控制到置换bit计数器CE，数据路径8.832 ns且92.8%为布线；hold WHS/THS为`+0.018 ns/0`。
+该报告未嵌入revision、`DIGIT_W`或XDC文件名，只作为16-bit候选的不可比物理参考。16-bit digit KeyGen、
+固定profile Decaps和运行时统一Decaps仍为`待测`。以下8-bit digit结果只作为历史物理参考。
 
 2026-08-11的固定profile最大几何Decaps物理包络报告Fully Routed并满足100 MHz：63,386 LUT、60,521 FF、
 25,759 Slice、635 Block RAM Tile、575 RAMB36、120 RAMB18、4 DSP，setup WNS/TNS为
