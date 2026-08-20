@@ -29,8 +29,10 @@ KeyGen的两次固定链求逆和Decaps的syndrome稠密乘法共享digit-serial
 | TRIKE384 | 55,654,606 | 39,750,462 | 28.58% |
 | TRIKE512 | 142,148,438 | 97,579,462 | 31.35% |
 
-四档有效/c2拒绝路径逐byteSS和固定周期通过，TRIKE160另覆盖u/v拒绝路径；`make ci-fast`通过。Vivado
-资源、RAM映射、setup/hold、Fmax及`cycles/Fmax`为`待测`，既有8-bit routed结果不作为本配置物理证据。
+四档有效/c2拒绝路径逐byteSS和固定周期通过，TRIKE160另覆盖u/v拒绝路径；`make ci-fast`通过。
+[RUN-20260820-01](../../reports/vivado/manifests/RUN-20260820-01-trike-poly-inv.toml)的Fully Placed求逆核
+为2,138 LUT、833 FF、704 Slice、4 RAMB36、0 DSP和138 IOB；两份附件内容相同，revision/参数未嵌入，
+setup/hold、Fmax及`cycles/Fmax`仍为`待测`，不与8-bit历史routed结果计算物理增减。
 
 ## 结论
 

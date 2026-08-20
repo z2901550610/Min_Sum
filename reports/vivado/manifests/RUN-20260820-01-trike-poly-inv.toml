@@ -1,0 +1,54 @@
+schema_version = 1
+run_id = "RUN-20260820-01-trike-poly-inv"
+experiment_id = "EXP-0099"
+date = "2026-08-20"
+status = "pending"
+verdict = "pending"
+source_revision = "unrecorded-windows-copy"
+dirty_tree = true
+report_root = "D:/trike_reports/RUN-20260820-01-trike-poly-inv"
+notes = "The two user-supplied attachments are byte-identical copies of one Fully Placed utilization report. The header identifies the top, Vivado build and part, but does not embed Git revision, DIGIT_W, XDC or timing constraints. The run was supplied after e354b10 and is expected to represent the 16-bit candidate, but that association is unconfirmed. Timing, methodology and routed reports are absent; this run is not comparable with the stage-62 8-bit routed reference. The run directory is the assigned archive destination."
+
+[artifacts]
+files = [
+  "trike_poly_inv_synth_top_utilization_placed.rpt",
+]
+sha256_manifest = "b30927c501f6b32d3114adca2f7da06870ec316eb4e9e33f58a4fb60142068f7"
+
+[design]
+top = "trike_poly_inv_synth_top"
+profile = "TRIKE-2 narrow-I/O; expected DIGIT_W=16 but parameter is not embedded in the supplied report"
+memory_geometry = "Observed 4 RAMB36, 0 RAMB18; 4 Block RAM Tile"
+
+[tool]
+vivado = "2023.2 build 4029153"
+part = "xc7k355tffg901-2L"
+xdc = "unreported in supplied utilization report"
+report_stage = "fully_placed"
+clock_period_ns = 10.0
+clock_uncertainty_ns = 0.100
+
+[functional]
+fixed_cycles = 23021520
+tests = [
+  "make ci-fast",
+  "make ci-kem-reference",
+  "make test-trike-poly-inv-reference",
+]
+result = "16-bit RTL reference and fixed-cycle tests passed separately; the supplied utilization report does not identify its source revision"
+
+[results]
+lut = "2138"
+ff = "833"
+slice = "704"
+block_ram_tile = "4"
+ramb36 = "4"
+ramb18 = "0"
+dsp = "0"
+bonded_iob = "138"
+setup_wns_ns = ""
+setup_tns_ns = ""
+hold_whs_ns = ""
+hold_ths_ns = ""
+internal_data_setup_wns_ns = ""
+comparison_run = "legacy-stage62-poly-inv-routed-reference"
