@@ -1,0 +1,67 @@
+schema_version = 1
+run_id = "RUN-20260820-02-trike-keygen"
+experiment_id = "EXP-0099"
+date = "2026-08-20"
+status = "pass"
+verdict = "incomparable"
+source_revision = "unrecorded-windows-copy"
+dirty_tree = true
+report_root = "D:/trike_reports/RUN-20260820-02-trike-keygen"
+notes = "The two user-supplied reports contain one Fully Placed utilization report and one Routed timing summary for trike_keygen_synth_top. Their headers identify the top, Vivado build and part, but do not embed Git revision, DIGIT_W, filelist digest or XDC filename. The run was supplied after e354b10 and is expected to represent the 16-bit candidate; the changed physical counts distinguish it from RUN-20260811-02, but do not prove the source association. All reported timing constraints pass. The overall worst path is a registered output boundary; the report's first internal setup path is a secret-sampler high-fanout control net and not the dense polynomial partial-product path. No dedicated 20-path internal query, current methodology, DRC, hierarchical utilization or RAM utilization report was supplied. The run is therefore a useful physical reference but not a retained comparable baseline. The run directory is the assigned archive destination."
+
+[artifacts]
+files = [
+  "trike_keygen_synth_top_utilization_placed.rpt",
+  "trike_keygen_synth_top_timing_summary_routed.rpt",
+]
+sha256_manifest = ""
+placed_utilization_sha256 = "9d23b5113a3e885f51061272d46d9fd4d55a644e8fb88af4078db0327ea70a42"
+routed_timing_summary_sha256 = "f9035720287b5ae0f6b1911d626d44758d7d9adf896b6c6f5930e9b04e138a1e"
+
+[design]
+top = "trike_keygen_synth_top"
+profile = "TRIKE-2 narrow-I/O; expected DIGIT_W=16 but parameter is not embedded in the supplied reports"
+memory_geometry = "Observed 21 RAMB36 plus 2 RAMB18; 22 Block RAM Tile"
+
+[tool]
+vivado = "2023.2 build 4029153"
+part = "xc7k355tffg901-2L"
+xdc = "filename unreported; constraints are consistent with constraints/trike_kem_core.xdc, including 2 ns I/O delays, reset false path and 0.1 ns uncertainty"
+report_stage = "fully_routed"
+clock_period_ns = 10.0
+clock_uncertainty_ns = 0.100
+
+[functional]
+fixed_cycles = 54002607
+tests = [
+  "make ci-fast",
+  "make ci-kem-reference",
+  "make test-trike-keygen-arith-reference",
+  "make test-trike-keygen-core-reference",
+  "make test-trike-keygen-synth-reference",
+]
+result = "16-bit RTL arithmetic, core and narrow-I/O byte-golden/fixed-cycle tests passed separately; the supplied reports do not identify their source revision"
+
+[results]
+lut = "46441"
+ff = "54731"
+slice = "22042"
+block_ram_tile = "22"
+ramb36 = "21"
+ramb18 = "2"
+dsp = "5"
+bonded_iob = "38"
+setup_wns_ns = "0.025"
+setup_tns_ns = "0.000"
+setup_failing_endpoints = "0"
+hold_whs_ns = "0.049"
+hold_ths_ns = "0.000"
+pulse_width_wps_ns = "4.600"
+async_recovery_wns_ns = "6.528"
+async_removal_whs_ns = "0.974"
+internal_data_setup_wns_ns = "0.040"
+internal_wns_derived_fmax_mhz = "100.40 estimate; not higher-frequency signoff"
+overall_setup_path = "o_pk_valid_reg_rep to o_pk_valid; 2.747 ns OBUF path, -5.093 ns clock skew and 2.000 ns output delay"
+internal_setup_path = "u_keygen/u_secret_sampler/FSM_onehot_state_q_reg[1] to reseed_counter_q_reg[318]; 9.864 ns data path, 0.266 ns logic, 9.598 ns route, one LUT2 level and source fanout 1321"
+methodology_summary = "cached report_methodology: DPIR-1 warning 49; SYNTH-10 warning 4; freshness unconfirmed"
+comparison_run = "RUN-20260811-02-trike-keygen"

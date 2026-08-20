@@ -30,11 +30,11 @@ KeyGen的两次固定链求逆和Decaps的syndrome稠密乘法共享digit-serial
 | TRIKE512 | 142,148,438 | 97,579,462 | 31.35% |
 
 四档有效/c2拒绝路径逐byteSS和固定周期通过，TRIKE160另覆盖u/v拒绝路径；`make ci-fast`通过。
-[RUN-20260820-01](../../reports/vivado/manifests/RUN-20260820-01-trike-poly-inv.toml)的Routed求逆核为
-2,138 LUT、833 FF、704 Slice和4 RAMB36。顶层setup为`-2.636 ns`，最差为RAMB36到输出端口；内部同步
-setup为`+0.447 ns`，最差为高扇出状态到置换计数器CE且92.8%为布线。revision/参数未嵌入，故不可比。
-
+[求逆](../../reports/vivado/manifests/RUN-20260820-01-trike-poly-inv.toml)为2,138 LUT、4 RAMB36，内部setup
+`+0.447 ns`；[KeyGen](../../reports/vivado/manifests/RUN-20260820-02-trike-keygen.toml)为46,441 LUT、
+54,731 FF、22,042 Slice、22 BRAM Tile和5 DSP，整体/内部setup为`+0.025/+0.040 ns`；内部最差为
+采样状态高扇出控制且97.3%为布线，不是部分积路径。两次run均未嵌入revision/参数，标记为不可比参考。
 ## 结论
 
-`retained`。16-bit digit保留为生产KEM稠密路径配置；内部路径满足100 MHz，未出现部分积关键路径。
-下一物理门禁为同源revision/XDC下的KeyGen route；求逆独立顶层输出边界不作为核心Fmax结论。
+`retained`。16-bit digit保留为生产KEM稠密路径配置；求逆与完整KeyGen均未出现部分积关键路径。
+下一物理门禁为同源revision/XDC下的固定profile Decaps route，随后复测运行时统一Decaps。

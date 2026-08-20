@@ -209,8 +209,14 @@ fixture未用参数、testbench同步观察复位与DUT异步复位、以及显�
 setup WNS/TNS为`-2.636 ns/-152.573 ns`，69个失败端点；最差路径从结果RAMB36直达输出端口。
 同步register-output-pin到register-data-pin查询的内部setup WNS为`+0.447 ns`，最差为乘法状态高扇出
 控制到置换bit计数器CE，数据路径8.832 ns且92.8%为布线；hold WHS/THS为`+0.018 ns/0`。
-该报告未嵌入revision、`DIGIT_W`或XDC文件名，只作为16-bit候选的不可比物理参考。16-bit digit KeyGen、
-固定profile Decaps和运行时统一Decaps仍为`待测`。以下8-bit digit结果只作为历史物理参考。
+该报告未嵌入revision、`DIGIT_W`或XDC文件名，只作为16-bit候选的不可比物理参考。
+
+16-bit digit KeyGen的Routed参考报告为46,441 LUT、54,731 FF、22,042 Slice、22 Block RAM Tile、
+21 RAMB36、2 RAMB18和5 DSP。setup WNS/TNS为`+0.025 ns/0`，hold WHS/THS为`+0.049 ns/0`。
+整体最差路径为`o_pk_valid`虚拟输出边界；报告中最差内部setup为`+0.040 ns`，位于秘密采样FSM到
+reseed counter的fanout-1321控制网，数据路径9.864 ns且97.3%为布线，不属于稠密乘法部分积。
+该报告同样未嵌入revision、`DIGIT_W`或XDC文件名，只作为不可比参考。固定profile Decaps和运行时统一
+Decaps仍为`待测`。以下8-bit digit结果只作为历史物理参考。
 
 2026-08-11的固定profile最大几何Decaps物理包络报告Fully Routed并满足100 MHz：63,386 LUT、60,521 FF、
 25,759 Slice、635 Block RAM Tile、575 RAMB36、120 RAMB18、4 DSP，setup WNS/TNS为
