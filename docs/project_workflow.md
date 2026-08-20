@@ -20,7 +20,8 @@ Git负责普通修改，不为格式化、拼写、局部bugfix或等价重构�
 2. 提交可复现的起点，一次实验只改一个主要结构变量。
 3. 记录功能、固定周期、K=3/K=4和公开参数覆盖；未运行的层明确写`pending`。
 4. 每次Vivado运行分配唯一`RUN-YYYYMMDD-NN-<top>`，原始报告放在同名外部目录，
-   仓库仅提交TOML manifest。
+   仓库仅提交TOML manifest。KEM实现脚本同时生成`run_provenance.txt`，记录run ID、Git revision、
+   dirty状态、filelist、defines、XDC、器件和实现directive。
 5. 将器件、Vivado、XDC、参数、`L/K`、存储几何、时钟和报告阶段完全一致的运行
    标记为`comparable`；否则只能单列。
 6. 结论只使用`retained`、`rejected`、`pending`、`incomparable`或`superseded`。

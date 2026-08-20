@@ -17,6 +17,8 @@ set route_directive [expr {[info exists ::env(VIVADO_ROUTE_DIRECTIVE)] ?
                           $::env(VIVADO_ROUTE_DIRECTIVE) : "Explore"}]
 set xdc_file [expr {[info exists ::env(VIVADO_XDC)] ?
                     $::env(VIVADO_XDC) : "constraints/trike_kem_core.xdc"}]
+set run_id [expr {[info exists ::env(VIVADO_RUN_ID)] ?
+                  $::env(VIVADO_RUN_ID) : [file tail [file normalize $build_dir]]}]
 
 file mkdir $build_dir
 set_param general.maxThreads $threads
@@ -37,6 +39,13 @@ proc run_step {name command} {
     return -code error $result
   }
   puts "End: [clock format [clock seconds] -format {%Y-%m-%d %H:%M:%S}]"
+}
+
+proc command_output {args} {
+  if {[catch {exec {*}$args} result]} {
+    return "unavailable: [string trim $result]"
+  }
+  return [string trim $result]
 }
 
 set verilog_defines [list]
@@ -85,6 +94,37 @@ if {($top eq "trike_decaps_synth_top") ||
     BIKE_COLS_PER_TILE=256 \
   ]
 }
+
+set source_revision [command_output git -C $repo_root rev-parse HEAD]
+set source_status [command_output git -C $repo_root status --short]
+set dirty_tree [expr {$source_status eq "" ? "false" : "true"}]
+set provenance_file [file join $build_dir run_provenance.txt]
+set provenance_channel [open $provenance_file w]
+puts $provenance_channel "format_version=1"
+puts $provenance_channel "run_id=$run_id"
+puts $provenance_channel "generated_at=[clock format [clock seconds] -format {%Y-%m-%dT%H:%M:%S%z}]"
+puts $provenance_channel "vivado_version=[version -short]"
+puts $provenance_channel "top=$top"
+puts $provenance_channel "part=$part"
+puts $provenance_channel "xdc=[file normalize $xdc_file]"
+puts $provenance_channel "rtl_filelist=[file normalize $rtl_filelist]"
+puts $provenance_channel "verilog_defines=[join $verilog_defines { }]"
+puts $provenance_channel "synth_directive=$synth_directive"
+puts $provenance_channel "place_directive=$place_directive"
+puts $provenance_channel "phys_opt_directive=$phys_opt_directive"
+puts $provenance_channel "route_directive=$route_directive"
+puts $provenance_channel "source_revision=$source_revision"
+puts $provenance_channel "dirty_tree=$dirty_tree"
+puts $provenance_channel "source_status_begin"
+puts $provenance_channel $source_status
+puts $provenance_channel "source_status_end"
+puts $provenance_channel "rtl_files_begin"
+foreach rtl_file $rtl_files {
+  puts $provenance_channel [file normalize $rtl_file]
+}
+puts $provenance_channel "rtl_files_end"
+close $provenance_channel
+puts "Run provenance: $provenance_file"
 
 run_step "read_verilog" {
   if {[llength $verilog_defines] > 0} {
