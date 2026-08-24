@@ -218,6 +218,8 @@ test-kem-unit:
 	@$(SIM) ./obj_dir/Vtb_trike_keygen_arith_core +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) -GUSE_EXTERNAL_RESULT_STORE=1 --top-module tb_trike_keygen_arith_core rtl/trike_inv_schedule_pkg.sv rtl/ram_bram.sv rtl/trike_poly_mul_core.sv rtl/trike_poly_inv_core.sv rtl/trike_keygen_arith_core.sv tb/tb_trike_keygen_arith_core.sv
 	@$(SIM) ./obj_dir/Vtb_trike_keygen_arith_core +verilator+quiet
+	@$(VERILATOR) $(VERILATOR_FLAGS) -GUSE_EXTERNAL_RESULT_STORE=1 -GUSE_EXTERNAL_SUPPORT_STORE=1 --top-module tb_trike_keygen_arith_core rtl/trike_inv_schedule_pkg.sv rtl/ram_bram.sv rtl/trike_poly_mul_core.sv rtl/trike_poly_inv_core.sv rtl/trike_keygen_arith_core.sv tb/tb_trike_keygen_arith_core.sv
+	@$(SIM) ./obj_dir/Vtb_trike_keygen_arith_core +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_keccak_f1600 rtl/keccak_f1600.sv tb/tb_keccak_f1600.sv
 	@$(SIM) ./obj_dir/Vtb_keccak_f1600 +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_shake256_stream rtl/keccak_f1600.sv rtl/shake256_stream.sv tb/tb_shake256_stream.sv

@@ -80,7 +80,8 @@ flowchart TD
 弱检测RAM地址或复制周期。16组均不合格时仍按相同周期完成，输出`success=0`和全零support；上层将该次
 调用作为显式失败返回，不在核内执行数据相关重试。
 
-`trike_keygen_arith_core`保存三组support与`t1/t2/r1`，用一个通用`trike_poly_mul_core`顺序完成
+`trike_keygen_arith_core`通过本地或外部只读视图取得三组support，并保存`t1/t2/r1`，用一个通用
+`trike_poly_mul_core`顺序完成
 `h0*r1`、`t0`、`t0*t2`和`r2`四次乘法，用一个`trike_poly_inv_core`顺序完成两个分母的固定链求逆。
 分子加`h1/h2`与第二个分母加`h0`在RAM写入或读取边界直接XOR稀疏word mask。生产稠密路径使用
 `WORD_W=64, DIGIT_W=16`；TRIKE-2连续握手固定49,162,174拍，逐word匹配官方`t0/r2`。该功能
@@ -95,14 +96,15 @@ result store。算术逐word、KeyGen core和窄I/O reference分别保持49,162,
 
 `trike_keygen_core`的随机输入为96 byte，顺序是`key_seed || sigma2 || sigma`，对应Reference C向外部
 随机源发出的三次32-byte请求。顶层顺序运行固定候选秘密采样、H1/H2/H3、KeyGen算术和密钥输出；秘密
-采样与H123通过公开FSM复用一个`trike_sm3_service`。三组support同时写入稀疏视图、算术核和32-bit顺序
-输出RAM；SK阶段按公开地址fetch每个support word。PK按`r2 || sigma`输出1,980 byte，SK按三组32-bit
+采样与H123通过公开FSM复用一个`trike_sm3_service`。三组support保存在一份寄存视图中，供算术核稀疏
+运算与`h0`稠密序列化读取；同一输入流写入32-bit顺序输出RAM，SK阶段按公开地址fetch每个support word。
+PK按`r2 || sigma`输出1,980 byte，SK按三组32-bit
 little-endian support、`h0 || t0 || r2 || sigma || sigma2`输出6,328 byte。官方候选0合格和候选0弱/
 候选1合格两组输入均逐byte匹配软件golden，连续输入输出时固定53,995,036拍。`success`只报告16组候选
 内是否找到合格support，不改变H123、算术或序列化调度。
 
 `trike_keygen_synth_top`把完整核封装为可实现的窄物理边界。随机输入、PK和SK均为8-bit流，输入和两路
-输出分别设置一项片内缓冲，外部输出使用IOB寄存器；多项式word、support数组和密钥RAM不进入顶层端口。
+输出分别设置一项片内缓冲，外部输出使用IOB寄存器；多项式word、support数组和密钥RAM不进入物理端口。
 官方向量连续握手固定54,002,607拍，完整PK/SK逐byte匹配，层次检查仍只有一个`sm3_compress`。
 
 当前16-bit digit KeyGen的资源与时序为`待测`。8-bit digit历史参考在Vivado 2023.2、

@@ -166,11 +166,22 @@ def main() -> None:
         item.get("type") == "GENBLOCK" and item.get("name") == "gen_local_result_store"
         for item in objects
     )
+    keygen_external_support_store_count = sum(
+        item.get("type") == "GENBLOCK"
+        and item.get("name") == "gen_external_support_store"
+        for item in objects
+    )
+    keygen_local_support_store_count = sum(
+        item.get("type") == "GENBLOCK" and item.get("name") == "gen_local_support_store"
+        for item in objects
+    )
     if (
         len(keygen_arith_modules) != 1
         or len(keygen_core_modules) != 1
         or keygen_external_result_store_count != 1
         or keygen_local_result_store_count != 0
+        or keygen_external_support_store_count != 1
+        or keygen_local_support_store_count != 0
         or "u_numerator_r2_mem" in keygen_arith_cells
         or "u_t0_mem" in keygen_arith_cells
         or "u_t0_output_mem" not in keygen_core_cells
@@ -183,6 +194,8 @@ def main() -> None:
             f"core_modules={len(keygen_core_modules)} "
             f"external={keygen_external_result_store_count} "
             f"local={keygen_local_result_store_count} "
+            f"external_support={keygen_external_support_store_count} "
+            f"local_support={keygen_local_support_store_count} "
             f"arith_cells={sorted(keygen_arith_cells)} "
             f"core_cells={sorted(keygen_core_cells)}"
         )
@@ -194,6 +207,7 @@ def main() -> None:
     print("Unified TRIKE KEM structure PASS: one H123 vector store")
     print("Unified TRIKE KEM structure PASS: Encaps UV reuses persistent u/v store")
     print("Unified TRIKE KEM structure PASS: KeyGen reuses two persistent result RAMs")
+    print("Unified TRIKE KEM structure PASS: KeyGen arithmetic reuses the stage support view")
 
 
 if __name__ == "__main__":

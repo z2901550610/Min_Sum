@@ -119,11 +119,12 @@ Encaps与Decaps的H4 support和三块padded dense error连接同一最大几何`
 ### KeyGen
 
 `trike_keygen_core`接收`key_seed || sigma2 || sigma`共96 byte，固定扫描16组秘密support候选，随后执行
-H1/H2/H3和多项式算术。support同时写入稀疏运算视图和SK顺序输出RAM。PK为`r2 || sigma`共1,980
-byte，SK为三组32-bit little-endian support以及`h0 || t0 || r2 || sigma || sigma2`共6,328 byte。
+H1/H2/H3和多项式算术。三组support保存在一份寄存视图中，供算术核与`h0`序列化读取；同一输入流写入
+SK顺序输出RAM，保持同步读取时序边界。PK为`r2 || sigma`共1,980 byte，SK为三组32-bit little-endian
+support以及`h0 || t0 || r2 || sigma || sigma2`共6,328 byte。
 外层两组244x64-bit持久RAM直接连接算术核的external result store接口：一组保存`t0`，另一组依次保存
 两阶段numerator与最终`r2`。最终乘法完整接受两路操作数后，`r2`按固定输出顺序原位覆盖numerator；
-算术结果重放、PK与SK序列化从同一RAM读取。结构门禁要求算术核只展开external result store分支。
+算术结果重放、PK与SK序列化从同一RAM读取。结构门禁要求算术核只展开external support/result store分支。
 
 | 边界 | 固定周期 | golden范围 |
 | --- | ---: | --- |

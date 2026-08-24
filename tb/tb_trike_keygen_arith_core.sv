@@ -1,7 +1,8 @@
 `timescale 1ns / 1ps
 
 module tb_trike_keygen_arith_core #(
-    parameter bit USE_EXTERNAL_RESULT_STORE = 1'b0
+    parameter bit USE_EXTERNAL_RESULT_STORE  = 1'b0,
+    parameter bit USE_EXTERNAL_SUPPORT_STORE = 1'b0
 );
 
   localparam int R_BITS = 13;
@@ -11,56 +12,58 @@ module tb_trike_keygen_arith_core #(
   localparam int INDEX_W = $clog2(R_BITS);
   localparam int EXPECTED_BUSY_CYCLES = 928;
 
-  logic                  clk;
-  logic                  rst_n;
-  logic                  support_valid;
-  logic [           1:0] support_block;
-  logic [POSITION_W-1:0] support_position;
-  logic [   INDEX_W-1:0] support_index;
-  logic                  support_ready;
-  logic                  vector_valid;
-  logic [           1:0] vector_select;
-  logic [           0:0] vector_word;
-  logic [    WORD_W-1:0] vector_data;
-  logic                  vector_ready;
-  logic                  start;
-  logic                  result_valid;
-  logic                  result_select;
-  logic [           0:0] result_word;
-  logic [    WORD_W-1:0] result_data;
-  logic                  result_last;
-  logic                  result_ready;
-  logic                  busy;
-  logic                  done;
-  logic                  h123_t1_re;
-  logic [           0:0] h123_t1_raddr;
-  logic                  h123_t2_re;
-  logic [           0:0] h123_t2_raddr;
-  logic                  h123_r1_re;
-  logic [           0:0] h123_r1_raddr;
-  logic                  store_t0_we;
-  logic [           0:0] store_t0_waddr;
-  logic [    WORD_W-1:0] store_t0_wdata;
-  logic                  store_t0_re;
-  logic [           0:0] store_t0_raddr;
-  logic [    WORD_W-1:0] store_t0_rdata;
-  logic                  store_numerator_r2_we;
-  logic [           0:0] store_numerator_r2_waddr;
-  logic [    WORD_W-1:0] store_numerator_r2_wdata;
-  logic                  store_numerator_r2_re;
-  logic [           0:0] store_numerator_r2_raddr;
-  logic [    WORD_W-1:0] store_numerator_r2_rdata;
+  logic                               clk;
+  logic                               rst_n;
+  logic                               support_valid;
+  logic [                        1:0] support_block;
+  logic [             POSITION_W-1:0] support_position;
+  logic [                INDEX_W-1:0] support_index;
+  logic [3*SECRET_WEIGHT*INDEX_W-1:0] support_store;
+  logic                               support_ready;
+  logic                               vector_valid;
+  logic [                        1:0] vector_select;
+  logic [                        0:0] vector_word;
+  logic [                 WORD_W-1:0] vector_data;
+  logic                               vector_ready;
+  logic                               start;
+  logic                               result_valid;
+  logic                               result_select;
+  logic [                        0:0] result_word;
+  logic [                 WORD_W-1:0] result_data;
+  logic                               result_last;
+  logic                               result_ready;
+  logic                               busy;
+  logic                               done;
+  logic                               h123_t1_re;
+  logic [                        0:0] h123_t1_raddr;
+  logic                               h123_t2_re;
+  logic [                        0:0] h123_t2_raddr;
+  logic                               h123_r1_re;
+  logic [                        0:0] h123_r1_raddr;
+  logic                               store_t0_we;
+  logic [                        0:0] store_t0_waddr;
+  logic [                 WORD_W-1:0] store_t0_wdata;
+  logic                               store_t0_re;
+  logic [                        0:0] store_t0_raddr;
+  logic [                 WORD_W-1:0] store_t0_rdata;
+  logic                               store_numerator_r2_we;
+  logic [                        0:0] store_numerator_r2_waddr;
+  logic [                 WORD_W-1:0] store_numerator_r2_wdata;
+  logic                               store_numerator_r2_re;
+  logic [                        0:0] store_numerator_r2_raddr;
+  logic [                 WORD_W-1:0] store_numerator_r2_rdata;
 
-  int                    supports                 [0:2][0:SECRET_WEIGHT-1];
-  int                    busy_cycles;
-  int                    first_cycles;
+  int                                 supports                 [0:2][0:SECRET_WEIGHT-1];
+  int                                 busy_cycles;
+  int                                 first_cycles;
 
   trike_keygen_arith_core #(
-      .R_BITS                   (R_BITS),
-      .SECRET_WEIGHT            (SECRET_WEIGHT),
-      .WORD_W                   (WORD_W),
-      .DIGIT_W                  (8),
-      .USE_EXTERNAL_RESULT_STORE(USE_EXTERNAL_RESULT_STORE)
+      .R_BITS                    (R_BITS),
+      .SECRET_WEIGHT             (SECRET_WEIGHT),
+      .WORD_W                    (WORD_W),
+      .DIGIT_W                   (8),
+      .USE_EXTERNAL_SUPPORT_STORE(USE_EXTERNAL_SUPPORT_STORE),
+      .USE_EXTERNAL_RESULT_STORE (USE_EXTERNAL_RESULT_STORE)
   ) dut (
       .i_clk                     (clk),
       .i_rst_n                   (rst_n),
@@ -68,6 +71,7 @@ module tb_trike_keygen_arith_core #(
       .i_support_block           (support_block),
       .i_support_position        (support_position),
       .i_support_index           (support_index),
+      .i_support_store           (support_store),
       .o_support_ready           (support_ready),
       .i_vector_valid            (vector_valid),
       .i_vector_select           (vector_select),
@@ -159,6 +163,7 @@ module tb_trike_keygen_arith_core #(
         support_block = 2'(block);
         support_position = POSITION_W'(position);
         support_index = INDEX_W'(supports[block][position]);
+        support_store[(block*SECRET_WEIGHT+position)*INDEX_W+:INDEX_W] = support_index;
         if (!support_ready) $fatal(1, "support input was not accepted");
       end
     end
@@ -221,6 +226,7 @@ module tb_trike_keygen_arith_core #(
     support_block = '0;
     support_position = '0;
     support_index = '0;
+    support_store = '0;
     vector_valid = 1'b0;
     vector_select = '0;
     vector_word = '0;
@@ -235,8 +241,8 @@ module tb_trike_keygen_arith_core #(
     @(negedge clk);
     run_case(13'h0898, 13'h0408, 13'h1053, 13'h0914, 13'h0d87, 1'b1);
     run_case(13'h039f, 13'h05dd, 13'h056e, 13'h0da1, 13'h17b9, 1'b0);
-    $display("tb_trike_keygen_arith_core PASS external_store=%0d cycles=%0d",
-             USE_EXTERNAL_RESULT_STORE, first_cycles);
+    $display("tb_trike_keygen_arith_core PASS external_result=%0d external_support=%0d cycles=%0d",
+             USE_EXTERNAL_RESULT_STORE, USE_EXTERNAL_SUPPORT_STORE, first_cycles);
     $finish;
   end
 

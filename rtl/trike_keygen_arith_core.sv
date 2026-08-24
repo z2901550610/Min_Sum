@@ -14,6 +14,7 @@ module trike_keygen_arith_core #(
     parameter int DIGIT_W = 16,
     parameter bit USE_EXTERNAL_MUL = 1'b0,
     parameter bit USE_EXTERNAL_H123_STORE = 1'b0,
+    parameter bit USE_EXTERNAL_SUPPORT_STORE = 1'b0,
     parameter bit USE_EXTERNAL_RESULT_STORE = 1'b0,
     parameter int MUL_INDEX_W = ((R_BITS > 1) ? $clog2(R_BITS) : 1),
     parameter int WORD_ADDR_W = ((((R_BITS + WORD_W - 1) / WORD_W) > 1) ? $clog2(
@@ -26,6 +27,7 @@ module trike_keygen_arith_core #(
     input  logic [1:0] i_support_block,
     input  logic [((SECRET_WEIGHT > 1) ? $clog2(SECRET_WEIGHT) : 1)-1:0] i_support_position,
     input  logic [((R_BITS > 1) ? $clog2(R_BITS) : 1)-1:0] i_support_index,
+    input  logic [(3*SECRET_WEIGHT*((R_BITS > 1) ? $clog2(R_BITS) : 1))-1:0] i_support_store,
     output logic o_support_ready,
     input  logic i_vector_valid,
     input  logic [1:0] i_vector_select,
@@ -136,7 +138,7 @@ module trike_keygen_arith_core #(
 
   state_t                          state_q;
   operation_t                      operation_q;
-  logic          [    INDEX_W-1:0] support_q[0:2][0:SECRET_WEIGHT-1];
+  logic          [    INDEX_W-1:0] support_view[0:2][0:SECRET_WEIGHT-1];
 
   integer                          mul_a_request_q;
   integer                          mul_b_request_q;
@@ -234,7 +236,7 @@ module trike_keygen_arith_core #(
     begin
       value = '0;
       for (int position = 0; position < SECRET_WEIGHT; position++) begin
-        coefficient = int'(support_q[block_index][position]);
+        coefficient = int'(support_view[block_index][position]);
         if ((coefficient / WORD_W) == int'(word_index)) begin
           value[coefficient%WORD_W] = 1'b1;
         end
@@ -256,7 +258,7 @@ module trike_keygen_arith_core #(
   assign mul_sparse_valid = (state_q == ST_MUL_RUN) &&
                             (operation_q == OP_MUL_H0_R1) &&
                             (sparse_position_q < SECRET_WEIGHT);
-  assign mul_sparse_index = support_q[0][POSITION_W'(sparse_position_q)];
+  assign mul_sparse_index = support_view[0][POSITION_W'(sparse_position_q)];
 
   assign o_mul_start = mul_start;
   assign o_mul_runtime_r_bits = 32'(R_BITS);
@@ -291,11 +293,42 @@ module trike_keygen_arith_core #(
   assign inv_input_valid = read_data_valid_q && (read_operand_q == READ_OPERAND_INV);
   assign inv_input_data = read_data_q;
 
-  assign o_result_valid = state_q == ST_OUTPUT_VALID;
+  generate
+    if (USE_EXTERNAL_SUPPORT_STORE) begin : gen_external_support_store
+      for (genvar block = 0; block < 3; block++) begin : gen_support_block
+        for (genvar position = 0; position < SECRET_WEIGHT; position++) begin : gen_support_position
+          localparam int FLAT_POSITION = block * SECRET_WEIGHT + position;
+          assign support_view[block][position] = i_support_store[FLAT_POSITION*INDEX_W+:INDEX_W];
+        end
+      end
+    end else begin : gen_local_support_store
+      logic [INDEX_W-1:0] support_q[0:2][0:SECRET_WEIGHT-1];
+
+      for (genvar block = 0; block < 3; block++) begin : gen_support_block
+        for (genvar position = 0; position < SECRET_WEIGHT; position++) begin : gen_support_position
+          assign support_view[block][position] = support_q[block][position];
+        end
+      end
+
+      always_ff @(posedge i_clk or negedge i_rst_n) begin
+        if (!i_rst_n) begin
+          for (int block = 0; block < 3; block++) begin
+            for (int position = 0; position < SECRET_WEIGHT; position++) begin
+              support_q[block][position] <= '0;
+            end
+          end
+        end else if (i_support_valid && o_support_ready) begin
+          support_q[i_support_block][i_support_position] <= i_support_index;
+        end
+      end
+    end
+  endgenerate
+
+  assign o_result_valid  = state_q == ST_OUTPUT_VALID;
   assign o_result_select = output_select_q;
-  assign o_result_word = WORD_ADDR_W'(output_word_q);
-  assign o_result_data = output_select_q ? r2_rdata : t0_rdata;
-  assign o_result_last = output_word_q == (WORDS - 1);
+  assign o_result_word   = WORD_ADDR_W'(output_word_q);
+  assign o_result_data   = output_select_q ? r2_rdata : t0_rdata;
+  assign o_result_last   = output_word_q == (WORDS - 1);
 
   /* verilator lint_off PINCONNECTEMPTY */
   generate
@@ -659,17 +692,8 @@ module trike_keygen_arith_core #(
       output_select_q <= 1'b0;
       output_word_q <= 0;
       o_done <= 1'b0;
-      for (int block = 0; block < 3; block++) begin
-        for (int position = 0; position < SECRET_WEIGHT; position++) begin
-          support_q[block][position] <= '0;
-        end
-      end
     end else begin
       o_done <= 1'b0;
-
-      if (i_support_valid && o_support_ready) begin
-        support_q[i_support_block][i_support_position] <= i_support_index;
-      end
 
       if (read_issue_c) begin
         read_pending_q <= 1'b1;

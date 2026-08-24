@@ -50,6 +50,7 @@ module tb_trike_keygen_arith_reference;
       .i_support_block   (support_block),
       .i_support_position(support_position),
       .i_support_index   (support_index),
+      .i_support_store   ('0),
       .o_support_ready   (support_ready),
       .i_vector_valid    (vector_valid),
       .i_vector_select   (vector_select),

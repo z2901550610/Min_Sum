@@ -134,6 +134,7 @@ module trike_keygen_core #(
   logic [7:0] sigma_q[0:M_BYTES-1];
   logic [7:0] sigma2_q[0:M_BYTES-1];
   logic [INDEX_W-1:0] support_q[0:2][0:SECRET_WEIGHT-1];
+  logic [SUPPORT_COUNT*INDEX_W-1:0] arith_support_store;
   integer random_byte_q;
   integer seed_replay_byte_q;
   logic [WORD_W-1:0] h123_word_accum_q;
@@ -240,6 +241,17 @@ module trike_keygen_core #(
   assign h123_seed_valid = state_q == ST_WAIT_H123;
   assign h123_seed_data = sigma_q[seed_replay_byte_q];
   assign arith_start = state_q == ST_START_ARITH;
+
+  generate
+    for (genvar block = 0; block < 3; block++) begin : gen_arith_support_block
+      for (
+          genvar position = 0; position < SECRET_WEIGHT; position++
+      ) begin : gen_arith_support_position
+        localparam int FLAT_POSITION = block * SECRET_WEIGHT + position;
+        assign arith_support_store[FLAT_POSITION*INDEX_W+:INDEX_W] = support_q[block][position];
+      end
+    end
+  endgenerate
 
   assign o_h123_start = h123_start;
   assign o_h123_seed_valid = h123_seed_valid;
@@ -363,14 +375,15 @@ module trike_keygen_core #(
   endgenerate
 
   trike_keygen_arith_core #(
-      .R_BITS                   (R_BITS),
-      .SECRET_WEIGHT            (SECRET_WEIGHT),
-      .WORD_W                   (WORD_W),
-      .DIGIT_W                  (DIGIT_W),
-      .USE_EXTERNAL_MUL         (USE_EXTERNAL_MUL),
-      .USE_EXTERNAL_H123_STORE  (USE_EXTERNAL_H123_STORE),
-      .USE_EXTERNAL_RESULT_STORE(1'b1),
-      .MUL_INDEX_W              (MUL_INDEX_W)
+      .R_BITS                    (R_BITS),
+      .SECRET_WEIGHT             (SECRET_WEIGHT),
+      .WORD_W                    (WORD_W),
+      .DIGIT_W                   (DIGIT_W),
+      .USE_EXTERNAL_MUL          (USE_EXTERNAL_MUL),
+      .USE_EXTERNAL_H123_STORE   (USE_EXTERNAL_H123_STORE),
+      .USE_EXTERNAL_SUPPORT_STORE(1'b1),
+      .USE_EXTERNAL_RESULT_STORE (1'b1),
+      .MUL_INDEX_W               (MUL_INDEX_W)
   ) u_arith (
       .i_clk                      (i_clk),
       .i_rst_n                    (i_rst_n),
@@ -378,6 +391,7 @@ module trike_keygen_core #(
       .i_support_block            (secret_support_block),
       .i_support_position         (secret_support_position),
       .i_support_index            (secret_support_index),
+      .i_support_store            (arith_support_store),
       .o_support_ready            (arith_support_ready),
       .i_vector_valid             (arith_vector_valid),
       .i_vector_select            (arith_vector_select),
