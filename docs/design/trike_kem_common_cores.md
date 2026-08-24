@@ -443,8 +443,8 @@ flowchart TD
 | 验证服务 | `trike_ct_verify_stream` | 固定word数比较、累计difference并调用`kem_ct_compare_select` |
 
 `trike_kem_asic_top`实例化三个固定阶段控制器，三个阶段只在被选operation下接收start和输入流。SM3
-压缩数据通路、H1/H2/H3向量生成、固定重量采样和普通多项式乘法数据通路为芯片级共享资源；seed
-Instantiate控制、弱密钥检测和stage RAM保留各自层次，作为服务化与生命周期分配边界。
+压缩数据通路、H1/H2/H3向量生成、固定重量采样、H4结果存储和普通多项式乘法数据通路为芯片级共享
+资源；seed Instantiate控制、弱密钥检测和其他stage RAM位于各自层次，作为服务化与生命周期分配边界。
 
 ## 跨流程复用矩阵
 
@@ -455,6 +455,7 @@ Instantiate控制、弱密钥检测和stage RAM保留各自层次，作为服务
 | parity mapper | t1、t2、r1 | t1、t2、r1 | t1、t2、r1 | 1 | 三个向量依次处理，目标parity为公开命令字段 |
 | fixed-weight sampler | 三次`length=r, weight=d` | 一次`length=3r, weight=t` | H4检查一次 | 1 | 核按最大`t`配置，实际length/weight是公开运行参数 |
 | sampler index RAM | 临时生成h0/h1/h2 | 临时生成e | 临时生成e_calc | 1 | 每组index输出后写入持久SK或错误RAM，临时RAM即可覆盖 |
+| H4 support/error RAM | 不使用 | 保存e的index和dense error | 保存e_calc的index和dense error | 1 | 两个operation单发射，存储保留至各自事务完成 |
 | 循环多项式乘法核 | t0、r2 | u、v | syndrome s | 1 | 面积基线按公开固定顺序串行；增加lane只用于固定延时/面积折中 |
 | 多项式求逆核 | 两次求逆 | 不使用 | Reference C存储t0/r2后不使用 | 1 | 只服务KeyGen；固定轮调度 |
 | `decoder_top` | 不使用 | 不使用 | 恢复e' | 1 | 保持译码器内部RAM和固定调度边界 |
@@ -494,8 +495,14 @@ sigma seed客户端和三路vector返回客户端；服务内部只有一组DRNG
 四档最大值`length=3*106781,weight=877`确定物理位宽和RAM深度，并在command中装载当前参数与DRNG
 state。KeyGen、Encaps和Decaps通过锁存operation选择一个`trike_drng_weight_sampler`客户端；服务的
 Generate压缩请求进入全局SM3。每次采样固定执行`weight`个候选和`weight^2`次index读取。三组秘密
-索引写入持久SK RAM，H4索引写入错误RAM；结构门禁要求完整层次恰好一个DRNG sampler与一个fixed
-weight sampler。三阶段外置reference保持53,995,036、2,378,447和257,417拍。
+索引写入持久SK RAM，H4索引写入共享`trike_error_support_store`；结构门禁要求完整层次恰好一个DRNG
+sampler、一个fixed-weight sampler和一个H4 support/error store。三阶段外置reference保持53,995,036、
+2,378,447和257,417拍。
+
+H4 store按四档最大`r=106781,t=877`确定support深度与三块padded error容量。公开命令锁存
+`r/t/padded_r_bytes`，生成阶段固定清零活动error范围并写入全部`t`个index；消费阶段通过同步support和
+error读口服务Encaps UV/L与Decaps重加密比较。两阶段的store生命周期由锁存operation互斥，完整层次
+结构门禁要求一个`trike_error_support_store`。
 
 ### 多项式数据通路收敛
 
@@ -566,17 +573,16 @@ Decaps中`s`写完后，`u/v/t1/t2/r1`不再参与译码，可以将对应scratc
 面积优先完成态采用：
 
 1. 一个物理SM3压缩核；
-2. 一组DRNG状态寄存器；
-3. 一个运行时公开参数的固定重量采样核和临时index RAM；
-4. 一个支持两种模式的循环多项式乘法核；
-5. 一个KeyGen求逆核；
+2. 一个H1/H2/H3向量服务和parity mapper；
+3. 一个运行时公开参数的固定重量采样核；
+4. 一组Encaps/Decaps H4 support/error结果RAM；
+5. 一个支持两种模式的循环多项式乘法核和一个KeyGen求逆核内乘法器；
 6. 一个`decoder_top`；
-7. 一个统一KEM微程序控制器、IO控制器和静态scratch RAM分配表。
+7. 一个公开operation单发射控制器。
 
-`trike_kem_asic_top`落实第1项和第7项的单发射控制部分。第2至第5项以及统一scratch RAM分配仍为待实现
-服务边界。统一入口资源收益、Fmax和端到端周期为待测。完整KAT通过前不复制第二个SM3或乘法lane；若
-端到端结果表明某共享核成为主要固定延时瓶颈，再保持接口不变增加公开参数控制的lane数，并用
-`cycles/Fmax`与BRAM/LUT共同判断。
+`trike_kem_asic_top`按以上实例数形成结构门禁。H123、算术、序列化和其他跨阶段scratch RAM保持静态
+stage边界，生命周期合并属于后续资源收敛边界。统一入口资源收益、Fmax和端到端周期为待测；增加SM3或
+乘法lane需要用完整KEM周期、同条件Vivado和`cycles/Fmax`与BRAM/LUT共同判断。
 
 ## 已有实现与论文
 

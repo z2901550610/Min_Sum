@@ -1,8 +1,9 @@
 `timescale 1ns / 1ps
 
 module tb_trike_decaps_postprocess_reference #(
-    parameter bit USE_SHARED_SM3     = 1'b0,
-    parameter bit USE_SHARED_SAMPLER = 1'b0
+    parameter bit USE_SHARED_SM3      = 1'b0,
+    parameter bit USE_SHARED_SAMPLER  = 1'b0,
+    parameter bit USE_SHARED_H4_STORE = 1'b0
 );
   `include "generated/trike_decaps_message_minsum_case.svh"
 
@@ -64,6 +65,22 @@ module tb_trike_decaps_postprocess_reference #(
   logic                         sampler_compress_start;
   logic   [              511:0] sampler_compress_block;
   logic   [              255:0] sampler_compress_state;
+  logic                         h4_store_start;
+  logic   [               31:0] h4_store_r_bits;
+  logic   [               31:0] h4_store_error_weight;
+  logic   [               31:0] h4_store_padded_r_bytes;
+  logic                         h4_store_index_valid;
+  logic   [                8:0] h4_store_index_position;
+  logic   [SAMPLER_INDEX_W-1:0] h4_store_index;
+  logic                         h4_store_index_ready;
+  logic                         h4_store_support_re;
+  logic   [                8:0] h4_store_support_raddr;
+  logic   [SAMPLER_INDEX_W-1:0] h4_store_support_rdata;
+  logic                         h4_store_error_re;
+  logic   [   ERROR_ADDR_W-1:0] h4_store_error_raddr;
+  logic   [                7:0] h4_store_error_rdata;
+  logic                         h4_store_busy;
+  logic                         h4_store_done;
   /* verilator lint_on UNUSEDSIGNAL */
   logic                         tampered_case;
   integer                       c2_count;
@@ -78,59 +95,75 @@ module tb_trike_decaps_postprocess_reference #(
       .CIPHERTEXT_BYTES     (REF_CIPHERTEXT_BYTES),
       .RUNTIME_GEOMETRY     (1'b1),
       .USE_EXTERNAL_COMPRESS(USE_SHARED_SM3),
-      .USE_EXTERNAL_SAMPLER (USE_SHARED_SAMPLER)
+      .USE_EXTERNAL_SAMPLER (USE_SHARED_SAMPLER),
+      .USE_EXTERNAL_H4_STORE(USE_SHARED_H4_STORE)
   ) dut (
-      .i_clk                     (clk),
-      .i_rst_n                   (rst_n),
-      .i_start                   (start),
-      .i_runtime_r_bits          (32'(REF_R_BITS)),
-      .i_runtime_error_weight    (32'd263),
-      .i_runtime_r_bytes         (32'((REF_R_BITS + 7) / 8)),
-      .i_runtime_padded_r_bytes  (32'(PADDED_R_BYTES)),
-      .i_runtime_error_bytes     (32'(3 * PADDED_R_BYTES)),
-      .i_runtime_ciphertext_bytes(32'(REF_CIPHERTEXT_BYTES)),
-      .i_decoder_ok              (1'b1),
-      .i_sigma2                  (REF_SIGMA2),
-      .i_c2_valid                (c2_valid),
-      .i_c2_data                 (c2_data),
-      .o_c2_ready                (c2_ready),
-      .o_reference_re            (reference_re),
-      .o_reference_raddr         (reference_raddr),
-      .i_reference_rdata         (reference_rdata),
-      .o_r2_re                   (r2_re),
-      .o_r2_raddr                (r2_raddr),
-      .i_r2_rdata                (r2_rdata),
-      .o_ciphertext_re           (ciphertext_re),
-      .o_ciphertext_raddr        (ciphertext_raddr),
-      .i_ciphertext_rdata        (ciphertext_rdata),
-      .o_ciphertext_equal        (ciphertext_equal),
-      .o_shared_secret_valid     (shared_secret_valid),
-      .o_shared_secret_index     (shared_secret_index),
-      .o_shared_secret_data      (shared_secret_data),
-      .o_shared_secret_last      (shared_secret_last),
-      .i_shared_secret_ready     (1'b1),
-      .o_busy                    (busy),
-      .o_done                    (done),
-      .o_compress_start          (compress_start),
-      .o_compress_block          (compress_block),
-      .o_compress_state          (compress_input_state),
-      .i_compress_busy           (compress_busy),
-      .i_compress_done           (compress_done),
-      .i_compress_state          (compress_output_state),
-      .o_sampler_start           (sampler_start),
-      .o_sampler_runtime_length  (sampler_length),
-      .o_sampler_runtime_weight  (sampler_weight),
-      .o_sampler_v               (sampler_input_v),
-      .o_sampler_c               (sampler_input_c),
-      .o_sampler_reseed_counter  (sampler_input_reseed_counter),
-      .i_sampler_index_valid     (sampler_index_valid),
-      .i_sampler_index_position  (sampler_index_position),
-      .i_sampler_index           (sampler_index),
-      .o_sampler_index_ready     (sampler_index_ready),
-      .i_sampler_done            (sampler_done),
-      .i_sampler_v               (sampler_output_v),
-      .i_sampler_c               (sampler_output_c),
-      .i_sampler_reseed_counter  (sampler_output_reseed_counter)
+      .i_clk                            (clk),
+      .i_rst_n                          (rst_n),
+      .i_start                          (start),
+      .i_runtime_r_bits                 (32'(REF_R_BITS)),
+      .i_runtime_error_weight           (32'd263),
+      .i_runtime_r_bytes                (32'((REF_R_BITS + 7) / 8)),
+      .i_runtime_padded_r_bytes         (32'(PADDED_R_BYTES)),
+      .i_runtime_error_bytes            (32'(3 * PADDED_R_BYTES)),
+      .i_runtime_ciphertext_bytes       (32'(REF_CIPHERTEXT_BYTES)),
+      .i_decoder_ok                     (1'b1),
+      .i_sigma2                         (REF_SIGMA2),
+      .i_c2_valid                       (c2_valid),
+      .i_c2_data                        (c2_data),
+      .o_c2_ready                       (c2_ready),
+      .o_reference_re                   (reference_re),
+      .o_reference_raddr                (reference_raddr),
+      .i_reference_rdata                (reference_rdata),
+      .o_r2_re                          (r2_re),
+      .o_r2_raddr                       (r2_raddr),
+      .i_r2_rdata                       (r2_rdata),
+      .o_ciphertext_re                  (ciphertext_re),
+      .o_ciphertext_raddr               (ciphertext_raddr),
+      .i_ciphertext_rdata               (ciphertext_rdata),
+      .o_ciphertext_equal               (ciphertext_equal),
+      .o_shared_secret_valid            (shared_secret_valid),
+      .o_shared_secret_index            (shared_secret_index),
+      .o_shared_secret_data             (shared_secret_data),
+      .o_shared_secret_last             (shared_secret_last),
+      .i_shared_secret_ready            (1'b1),
+      .o_busy                           (busy),
+      .o_done                           (done),
+      .o_compress_start                 (compress_start),
+      .o_compress_block                 (compress_block),
+      .o_compress_state                 (compress_input_state),
+      .i_compress_busy                  (compress_busy),
+      .i_compress_done                  (compress_done),
+      .i_compress_state                 (compress_output_state),
+      .o_sampler_start                  (sampler_start),
+      .o_sampler_runtime_length         (sampler_length),
+      .o_sampler_runtime_weight         (sampler_weight),
+      .o_sampler_v                      (sampler_input_v),
+      .o_sampler_c                      (sampler_input_c),
+      .o_sampler_reseed_counter         (sampler_input_reseed_counter),
+      .i_sampler_index_valid            (sampler_index_valid),
+      .i_sampler_index_position         (sampler_index_position),
+      .i_sampler_index                  (sampler_index),
+      .o_sampler_index_ready            (sampler_index_ready),
+      .i_sampler_done                   (sampler_done),
+      .i_sampler_v                      (sampler_output_v),
+      .i_sampler_c                      (sampler_output_c),
+      .i_sampler_reseed_counter         (sampler_output_reseed_counter),
+      .o_h4_store_start                 (h4_store_start),
+      .o_h4_store_runtime_r_bits        (h4_store_r_bits),
+      .o_h4_store_runtime_error_weight  (h4_store_error_weight),
+      .o_h4_store_runtime_padded_r_bytes(h4_store_padded_r_bytes),
+      .o_h4_store_index_valid           (h4_store_index_valid),
+      .o_h4_store_index_position        (h4_store_index_position),
+      .o_h4_store_index                 (h4_store_index),
+      .i_h4_store_index_ready           (h4_store_index_ready),
+      .o_h4_store_support_re            (h4_store_support_re),
+      .o_h4_store_support_raddr         (h4_store_support_raddr),
+      .i_h4_store_support_rdata         (h4_store_support_rdata),
+      .o_h4_store_error_re              (h4_store_error_re),
+      .o_h4_store_error_raddr           (h4_store_error_raddr),
+      .i_h4_store_error_rdata           (h4_store_error_rdata),
+      .i_h4_store_done                  (h4_store_done)
   );
 
   always_comb begin
@@ -205,6 +238,39 @@ module tb_trike_decaps_postprocess_reference #(
       assign sampler_compress_start = 1'b0;
       assign sampler_compress_block = '0;
       assign sampler_compress_state = '0;
+    end
+
+    if (USE_SHARED_H4_STORE) begin : g_shared_h4_store
+      trike_error_support_store #(
+          .R_BITS          (REF_R_BITS),
+          .ERROR_WEIGHT    (263),
+          .PADDED_R_BYTES  (PADDED_R_BYTES),
+          .RUNTIME_GEOMETRY(1'b1)
+      ) u_h4_store_service (
+          .i_clk                   (clk),
+          .i_rst_n                 (rst_n),
+          .i_start                 (h4_store_start),
+          .i_runtime_r_bits        (h4_store_r_bits),
+          .i_runtime_error_weight  (h4_store_error_weight),
+          .i_runtime_padded_r_bytes(h4_store_padded_r_bytes),
+          .i_index_valid           (h4_store_index_valid),
+          .i_index_position        (h4_store_index_position),
+          .i_index                 (h4_store_index),
+          .o_index_ready           (h4_store_index_ready),
+          .i_support_re            (h4_store_support_re),
+          .i_support_raddr         (h4_store_support_raddr),
+          .o_support_rdata         (h4_store_support_rdata),
+          .i_error_re              (h4_store_error_re),
+          .i_error_raddr           (h4_store_error_raddr),
+          .o_error_rdata           (h4_store_error_rdata),
+          .o_busy                  (h4_store_busy),
+          .o_done                  (h4_store_done)
+      );
+    end else begin : g_local_h4_store
+      assign h4_store_index_ready = 1'b0;
+      assign h4_store_support_rdata = '0;
+      assign h4_store_error_rdata = '0;
+      assign h4_store_done = 1'b0;
     end
   endgenerate
 

@@ -1,6 +1,6 @@
 # 实验索引
 
-下一个实验ID：`EXP-0104`。
+下一个实验ID：`EXP-0105`。
 
 | ID | 日期 | 主题 | 配置/比较键 | 功能与周期 | Vivado | 结论 | 详情 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -27,6 +27,7 @@
 | EXP-0101 | 2026-08-24 | 统一KEM运行时几何多项式服务 | 单发射operation，最大`r`/`weight`乘法核 | KeyGen/Encaps/Decaps外置乘法golden与固定周期通过；完整层次2个乘法核 | 待测 | `retained` | [详情](EXP-0101-unified-kem-poly-mul-service.md) |
 | EXP-0102 | 2026-08-24 | KeyGen/Encaps共享H1/H2/H3服务 | 官方TRIKE-2，单发射operation | 两阶段外置H123 byte golden与固定周期通过；完整层次单H123/parity实例 | 待测 | `retained` | [详情](EXP-0102-unified-kem-h123-service.md) |
 | EXP-0103 | 2026-08-24 | 三阶段共享固定重量采样服务 | 最大`length=320343,weight=877`，运行时公开几何 | 三阶段外置sampler golden/固定周期通过；完整层次单采样链 | 待测 | `retained` | [详情](EXP-0103-unified-kem-weight-sampler-service.md) |
+| EXP-0104 | 2026-08-24 | Encaps/Decaps共享H4结果存储 | 最大`r=106781,t=877`，support与dense error RAM | 两阶段外置store byte golden/固定周期通过；完整层次单H4 store | 待测 | `retained` | [详情](EXP-0104-unified-kem-h4-store-service.md) |
 
 新实验只追加一行。需要详细说明时，详情列链接到`EXP-xxxx-<slug>.md`；Vivado列链接到
 `reports/vivado/manifests/<run-id>.toml`。

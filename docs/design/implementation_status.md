@@ -99,10 +99,16 @@ Instantiate/Generate状态并复用一个`trike_parity_map_stream`，seed与vect
 KeyGen秘密support、Encaps H4和Decaps重加密H4连接同一最大几何`trike_drng_weight_sampler`。命令装载
 公开`length/weight`与DRNG state，index和最终state只返回活动stage。完整层次恰好一个
 `trike_drng_weight_sampler`及其`trike_fixed_weight_sampler`；三阶段外置reference分别保持53,995,036、
-2,378,447和257,417拍并通过golden。seed Instantiate控制、弱密钥检测和持久结果RAM保留在stage层次。
+2,378,447和257,417拍并通过golden。seed Instantiate控制、KeyGen弱密钥检测和秘密support RAM位于stage
+层次。
+
+Encaps与Decaps的H4 support和三块padded dense error连接同一最大几何`trike_error_support_store`。
+命令锁存公开`r/t/padded_r_bytes`，index写入及后续support/error同步读取只选择活动operation。完整层次
+恰好一个H4 store；两阶段外置store reference分别保持2,378,447和257,417拍，并通过CT/SS byte golden及
+有效/拒绝成对固定周期验证。Decaps decoder error RAM属于译码后检查生命周期，不接入该服务。
 
 该入口的KeyGen/Encaps采用官方TRIKE-2 `r=15581,w=35,t=263`，Decaps采用四档项目K-sign profile。
-两者是显式分离的参数验证域。工作RAM位于stage层次，统一入口的Vivado资源、时序与功耗为`待测`。
+两者是显式分离的参数验证域。其他工作RAM位于stage层次，统一入口的Vivado资源、时序与功耗为`待测`。
 
 ### KeyGen
 
@@ -282,8 +288,8 @@ data pin，避免async recovery路径占满top-N列表。
 
 - 官方TRIKE-2的`r=15581`与项目Min-Sum profile的`r=12589`是两个验证域；官方端到端Decaps KAT需要
   单独建立`r=15581`译码profile及DFR证据。
-- `trike_kem_asic_top`完成公开operation单发射、全局SM3、H1/H2/H3向量、固定重量采样和普通多项式
-  乘法共享；跨阶段scratch RAM生命周期分配是独立资源收敛边界。
+- `trike_kem_asic_top`包含公开operation单发射、全局SM3、H1/H2/H3向量、固定重量采样、H4结果存储和
+  普通多项式乘法共享；H123、算术、序列化及其他跨阶段scratch RAM生命周期分配是独立资源收敛边界。
 - `trike_decaps_runtime_synth_top`通过2-bit公开profile连接最大几何输入存储、运行时syndrome、统一decoder、
   decoder后检查和postprocess。四档具备有效与`c2`隐式拒绝完整KEM golden；u/v非收敛RTL深测覆盖TRIKE160，
   其余三档由软件golden和分层运行时RTL测试覆盖。

@@ -3,10 +3,10 @@
 // Single-issue TRIKE KEM integration boundary. i_operation is public and is
 // latched for the full transaction: 0=KeyGen, 1=Encaps, 2=Decaps. All three
 // modes share one SM3 compression service, one H1/H2/H3 vector service, one
-// runtime-geometry fixed-weight sampler, and one streaming polynomial
-// multiplier; inactive modes receive no start or input traffic. KeyGen/Encaps
-// use the official TRIKE-2 geometry while Decaps retains the validated runtime
-// K-sign profile table.
+// runtime-geometry fixed-weight sampler, one H4 support/error store, and one
+// streaming polynomial multiplier; inactive modes receive no start or input
+// traffic. KeyGen/Encaps use the official TRIKE-2 geometry while Decaps retains
+// the validated runtime K-sign profile table.
 module trike_kem_asic_top
   import bike_pkg::*;
 (
@@ -52,177 +52,218 @@ module trike_kem_asic_top
   localparam int ENCAPS_SAMPLER_INDEX_W = $clog2(3 * 15581);
   localparam int SAMPLER_POSITION_W = $clog2(P_T_VALS[3]);
   localparam int SAMPLER_INDEX_W = $clog2(3 * P_R_VALS[3]);
+  localparam int ENCAPS_H4_ERROR_ADDR_W = $clog2(3 * (((15581 + 511) / 512) * 64));
+  localparam int H4_STORE_PADDED_R_BYTES = ((P_R_VALS[3] + 511) / 512) * 64;
+  localparam int H4_STORE_ERROR_ADDR_W = $clog2(3 * H4_STORE_PADDED_R_BYTES);
 
-  logic                          keygen_start;
-  logic                          encaps_start;
-  logic                          decaps_start;
-  logic [                   1:0] active_operation;
-  logic                          control_error;
+  logic                                 keygen_start;
+  logic                                 encaps_start;
+  logic                                 decaps_start;
+  logic [                          1:0] active_operation;
+  logic                                 control_error;
 
-  logic                          keygen_input_ready;
-  logic                          keygen_pk_valid;
-  logic [                   7:0] keygen_pk_data;
-  logic                          keygen_pk_last;
-  logic                          keygen_sk_valid;
-  logic [                   7:0] keygen_sk_data;
-  logic                          keygen_sk_last;
-  logic                          keygen_busy;
-  logic                          keygen_done;
-  logic                          keygen_compress_start;
-  logic [                 511:0] keygen_compress_block;
-  logic [                 255:0] keygen_compress_state;
-  logic                          keygen_mul_start;
-  logic [                  31:0] keygen_mul_r_bits;
-  logic [                  31:0] keygen_mul_words;
-  logic [                  31:0] keygen_mul_sparse_weight;
-  logic                          keygen_mul_sparse_a;
-  logic                          keygen_mul_a_valid;
-  logic [                  63:0] keygen_mul_a_data;
-  logic                          keygen_mul_sparse_index_valid;
-  logic [         ROW_IDX_W-1:0] keygen_mul_sparse_index;
-  logic                          keygen_mul_b_valid;
-  logic [                  63:0] keygen_mul_b_data;
-  logic                          keygen_mul_result_ready;
-  logic                          keygen_h123_start;
-  logic                          keygen_h123_seed_valid;
-  logic [                   7:0] keygen_h123_seed_data;
-  logic                          keygen_h123_vector_ready;
-  logic                          keygen_sampler_start;
-  logic [                  31:0] keygen_sampler_length;
-  logic [                  31:0] keygen_sampler_weight;
-  logic [                 439:0] keygen_sampler_v;
-  logic [                 439:0] keygen_sampler_c;
-  logic [                 439:0] keygen_sampler_reseed_counter;
-  logic                          keygen_sampler_index_ready;
+  logic                                 keygen_input_ready;
+  logic                                 keygen_pk_valid;
+  logic [                          7:0] keygen_pk_data;
+  logic                                 keygen_pk_last;
+  logic                                 keygen_sk_valid;
+  logic [                          7:0] keygen_sk_data;
+  logic                                 keygen_sk_last;
+  logic                                 keygen_busy;
+  logic                                 keygen_done;
+  logic                                 keygen_compress_start;
+  logic [                        511:0] keygen_compress_block;
+  logic [                        255:0] keygen_compress_state;
+  logic                                 keygen_mul_start;
+  logic [                         31:0] keygen_mul_r_bits;
+  logic [                         31:0] keygen_mul_words;
+  logic [                         31:0] keygen_mul_sparse_weight;
+  logic                                 keygen_mul_sparse_a;
+  logic                                 keygen_mul_a_valid;
+  logic [                         63:0] keygen_mul_a_data;
+  logic                                 keygen_mul_sparse_index_valid;
+  logic [                ROW_IDX_W-1:0] keygen_mul_sparse_index;
+  logic                                 keygen_mul_b_valid;
+  logic [                         63:0] keygen_mul_b_data;
+  logic                                 keygen_mul_result_ready;
+  logic                                 keygen_h123_start;
+  logic                                 keygen_h123_seed_valid;
+  logic [                          7:0] keygen_h123_seed_data;
+  logic                                 keygen_h123_vector_ready;
+  logic                                 keygen_sampler_start;
+  logic [                         31:0] keygen_sampler_length;
+  logic [                         31:0] keygen_sampler_weight;
+  logic [                        439:0] keygen_sampler_v;
+  logic [                        439:0] keygen_sampler_c;
+  logic [                        439:0] keygen_sampler_reseed_counter;
+  logic                                 keygen_sampler_index_ready;
 
-  logic                          encaps_input_ready;
-  logic                          encaps_ciphertext_valid;
-  logic [                   7:0] encaps_ciphertext_data;
-  logic                          encaps_ciphertext_last;
-  logic                          encaps_shared_secret_valid;
-  logic [                   7:0] encaps_shared_secret_data;
-  logic                          encaps_shared_secret_last;
-  logic                          encaps_busy;
-  logic                          encaps_done;
-  logic                          encaps_compress_start;
-  logic [                 511:0] encaps_compress_block;
-  logic [                 255:0] encaps_compress_state;
-  logic                          encaps_mul_start;
-  logic [                  31:0] encaps_mul_r_bits;
-  logic [                  31:0] encaps_mul_words;
-  logic [                  31:0] encaps_mul_sparse_weight;
-  logic                          encaps_mul_sparse_a;
-  logic                          encaps_mul_a_valid;
-  logic [                  63:0] encaps_mul_a_data;
-  logic                          encaps_mul_sparse_index_valid;
-  logic [         ROW_IDX_W-1:0] encaps_mul_sparse_index;
-  logic                          encaps_mul_b_valid;
-  logic [                  63:0] encaps_mul_b_data;
-  logic                          encaps_mul_result_ready;
-  logic                          encaps_h123_start;
-  logic                          encaps_h123_seed_valid;
-  logic [                   7:0] encaps_h123_seed_data;
-  logic                          encaps_h123_vector_ready;
-  logic                          encaps_sampler_start;
-  logic [                  31:0] encaps_sampler_length;
-  logic [                  31:0] encaps_sampler_weight;
-  logic [                 439:0] encaps_sampler_v;
-  logic [                 439:0] encaps_sampler_c;
-  logic [                 439:0] encaps_sampler_reseed_counter;
-  logic                          encaps_sampler_index_ready;
+  logic                                 encaps_input_ready;
+  logic                                 encaps_ciphertext_valid;
+  logic [                          7:0] encaps_ciphertext_data;
+  logic                                 encaps_ciphertext_last;
+  logic                                 encaps_shared_secret_valid;
+  logic [                          7:0] encaps_shared_secret_data;
+  logic                                 encaps_shared_secret_last;
+  logic                                 encaps_busy;
+  logic                                 encaps_done;
+  logic                                 encaps_compress_start;
+  logic [                        511:0] encaps_compress_block;
+  logic [                        255:0] encaps_compress_state;
+  logic                                 encaps_mul_start;
+  logic [                         31:0] encaps_mul_r_bits;
+  logic [                         31:0] encaps_mul_words;
+  logic [                         31:0] encaps_mul_sparse_weight;
+  logic                                 encaps_mul_sparse_a;
+  logic                                 encaps_mul_a_valid;
+  logic [                         63:0] encaps_mul_a_data;
+  logic                                 encaps_mul_sparse_index_valid;
+  logic [                ROW_IDX_W-1:0] encaps_mul_sparse_index;
+  logic                                 encaps_mul_b_valid;
+  logic [                         63:0] encaps_mul_b_data;
+  logic                                 encaps_mul_result_ready;
+  logic                                 encaps_h123_start;
+  logic                                 encaps_h123_seed_valid;
+  logic [                          7:0] encaps_h123_seed_data;
+  logic                                 encaps_h123_vector_ready;
+  logic                                 encaps_sampler_start;
+  logic [                         31:0] encaps_sampler_length;
+  logic [                         31:0] encaps_sampler_weight;
+  logic [                        439:0] encaps_sampler_v;
+  logic [                        439:0] encaps_sampler_c;
+  logic [                        439:0] encaps_sampler_reseed_counter;
+  logic                                 encaps_sampler_index_ready;
+  logic                                 encaps_h4_store_start;
+  logic [                         31:0] encaps_h4_store_r_bits;
+  logic [                         31:0] encaps_h4_store_error_weight;
+  logic [                         31:0] encaps_h4_store_padded_r_bytes;
+  logic                                 encaps_h4_store_index_valid;
+  logic [ENCAPS_SAMPLER_POSITION_W-1:0] encaps_h4_store_index_position;
+  logic [   ENCAPS_SAMPLER_INDEX_W-1:0] encaps_h4_store_index;
+  logic                                 encaps_h4_store_support_re;
+  logic [ENCAPS_SAMPLER_POSITION_W-1:0] encaps_h4_store_support_raddr;
+  logic                                 encaps_h4_store_error_re;
+  logic [   ENCAPS_H4_ERROR_ADDR_W-1:0] encaps_h4_store_error_raddr;
 
-  logic                          decaps_input_ready;
-  logic                          decaps_shared_secret_valid;
-  logic [                   7:0] decaps_shared_secret_data;
-  logic                          decaps_shared_secret_last;
-  logic                          decaps_error;
-  logic                          decaps_busy;
-  logic                          decaps_done;
-  logic                          decaps_compress_start;
-  logic [                 511:0] decaps_compress_block;
-  logic [                 255:0] decaps_compress_state;
-  logic [         ROW_IDX_W-1:0] decaps_residual_weight;
-  logic [                   4:0] decaps_shared_secret_index;
-  logic                          decaps_mul_start;
-  logic [                  31:0] decaps_mul_r_bits;
-  logic [                  31:0] decaps_mul_words;
-  logic [                  31:0] decaps_mul_sparse_weight;
-  logic                          decaps_mul_sparse_a;
-  logic                          decaps_mul_a_valid;
-  logic [                  63:0] decaps_mul_a_data;
-  logic                          decaps_mul_sparse_index_valid;
-  logic [         ROW_IDX_W-1:0] decaps_mul_sparse_index;
-  logic                          decaps_mul_b_valid;
-  logic [                  63:0] decaps_mul_b_data;
-  logic                          decaps_mul_result_ready;
-  logic                          decaps_sampler_start;
-  logic [                  31:0] decaps_sampler_length;
-  logic [                  31:0] decaps_sampler_weight;
-  logic [                 439:0] decaps_sampler_v;
-  logic [                 439:0] decaps_sampler_c;
-  logic [                 439:0] decaps_sampler_reseed_counter;
-  logic                          decaps_sampler_index_ready;
+  logic                                 decaps_input_ready;
+  logic                                 decaps_shared_secret_valid;
+  logic [                          7:0] decaps_shared_secret_data;
+  logic                                 decaps_shared_secret_last;
+  logic                                 decaps_error;
+  logic                                 decaps_busy;
+  logic                                 decaps_done;
+  logic                                 decaps_compress_start;
+  logic [                        511:0] decaps_compress_block;
+  logic [                        255:0] decaps_compress_state;
+  logic [                ROW_IDX_W-1:0] decaps_residual_weight;
+  logic [                          4:0] decaps_shared_secret_index;
+  logic                                 decaps_mul_start;
+  logic [                         31:0] decaps_mul_r_bits;
+  logic [                         31:0] decaps_mul_words;
+  logic [                         31:0] decaps_mul_sparse_weight;
+  logic                                 decaps_mul_sparse_a;
+  logic                                 decaps_mul_a_valid;
+  logic [                         63:0] decaps_mul_a_data;
+  logic                                 decaps_mul_sparse_index_valid;
+  logic [                ROW_IDX_W-1:0] decaps_mul_sparse_index;
+  logic                                 decaps_mul_b_valid;
+  logic [                         63:0] decaps_mul_b_data;
+  logic                                 decaps_mul_result_ready;
+  logic                                 decaps_sampler_start;
+  logic [                         31:0] decaps_sampler_length;
+  logic [                         31:0] decaps_sampler_weight;
+  logic [                        439:0] decaps_sampler_v;
+  logic [                        439:0] decaps_sampler_c;
+  logic [                        439:0] decaps_sampler_reseed_counter;
+  logic                                 decaps_sampler_index_ready;
+  logic                                 decaps_h4_store_start;
+  logic [                         31:0] decaps_h4_store_r_bits;
+  logic [                         31:0] decaps_h4_store_error_weight;
+  logic [                         31:0] decaps_h4_store_padded_r_bytes;
+  logic                                 decaps_h4_store_index_valid;
+  logic [       SAMPLER_POSITION_W-1:0] decaps_h4_store_index_position;
+  logic [          SAMPLER_INDEX_W-1:0] decaps_h4_store_index;
+  logic                                 decaps_h4_store_support_re;
+  logic [       SAMPLER_POSITION_W-1:0] decaps_h4_store_support_raddr;
+  logic                                 decaps_h4_store_error_re;
+  logic [    H4_STORE_ERROR_ADDR_W-1:0] decaps_h4_store_error_raddr;
 
-  logic                          shared_compress_start;
-  logic [                 511:0] shared_compress_block;
-  logic [                 255:0] shared_compress_input_state;
-  logic                          shared_compress_busy;
-  logic                          shared_compress_done;
-  logic [                 255:0] shared_compress_output_state;
+  logic                                 shared_compress_start;
+  logic [                        511:0] shared_compress_block;
+  logic [                        255:0] shared_compress_input_state;
+  logic                                 shared_compress_busy;
+  logic                                 shared_compress_done;
+  logic [                        255:0] shared_compress_output_state;
 
-  logic                          shared_mul_start;
-  logic [                  31:0] shared_mul_r_bits;
-  logic [                  31:0] shared_mul_words;
-  logic [                  31:0] shared_mul_sparse_weight;
-  logic                          shared_mul_sparse_a;
-  logic                          shared_mul_a_valid;
-  logic [                  63:0] shared_mul_a_data;
-  logic                          shared_mul_a_ready;
-  logic                          shared_mul_sparse_index_valid;
-  logic [         ROW_IDX_W-1:0] shared_mul_sparse_index;
-  logic                          shared_mul_sparse_index_ready;
-  logic                          shared_mul_b_valid;
-  logic [                  63:0] shared_mul_b_data;
-  logic                          shared_mul_b_ready;
-  logic                          shared_mul_result_valid;
-  logic [                  63:0] shared_mul_result_data;
-  logic                          shared_mul_result_last;
-  logic                          shared_mul_result_ready;
-  logic                          shared_mul_done;
+  logic                                 shared_mul_start;
+  logic [                         31:0] shared_mul_r_bits;
+  logic [                         31:0] shared_mul_words;
+  logic [                         31:0] shared_mul_sparse_weight;
+  logic                                 shared_mul_sparse_a;
+  logic                                 shared_mul_a_valid;
+  logic [                         63:0] shared_mul_a_data;
+  logic                                 shared_mul_a_ready;
+  logic                                 shared_mul_sparse_index_valid;
+  logic [                ROW_IDX_W-1:0] shared_mul_sparse_index;
+  logic                                 shared_mul_sparse_index_ready;
+  logic                                 shared_mul_b_valid;
+  logic [                         63:0] shared_mul_b_data;
+  logic                                 shared_mul_b_ready;
+  logic                                 shared_mul_result_valid;
+  logic [                         63:0] shared_mul_result_data;
+  logic                                 shared_mul_result_last;
+  logic                                 shared_mul_result_ready;
+  logic                                 shared_mul_done;
 
-  logic                          shared_h123_start;
-  logic                          shared_h123_seed_valid;
-  logic [                   7:0] shared_h123_seed_data;
-  logic                          shared_h123_seed_ready;
-  logic                          shared_h123_vector_valid;
-  logic [                   1:0] shared_h123_vector_select;
-  logic [       H123_BYTE_W-1:0] shared_h123_vector_byte;
-  logic [                   7:0] shared_h123_vector_data;
-  logic                          shared_h123_vector_ready;
-  logic                          shared_h123_busy;
-  logic                          shared_h123_done;
-  logic                          shared_h123_compress_start;
-  logic [                 511:0] shared_h123_compress_block;
-  logic [                 255:0] shared_h123_compress_state;
+  logic                                 shared_h123_start;
+  logic                                 shared_h123_seed_valid;
+  logic [                          7:0] shared_h123_seed_data;
+  logic                                 shared_h123_seed_ready;
+  logic                                 shared_h123_vector_valid;
+  logic [                          1:0] shared_h123_vector_select;
+  logic [              H123_BYTE_W-1:0] shared_h123_vector_byte;
+  logic [                          7:0] shared_h123_vector_data;
+  logic                                 shared_h123_vector_ready;
+  logic                                 shared_h123_busy;
+  logic                                 shared_h123_done;
+  logic                                 shared_h123_compress_start;
+  logic [                        511:0] shared_h123_compress_block;
+  logic [                        255:0] shared_h123_compress_state;
 
-  logic                          shared_sampler_start;
-  logic [                  31:0] shared_sampler_length;
-  logic [                  31:0] shared_sampler_weight;
-  logic [                 439:0] shared_sampler_input_v;
-  logic [                 439:0] shared_sampler_input_c;
-  logic [                 439:0] shared_sampler_input_reseed_counter;
-  logic                          shared_sampler_index_valid;
-  logic [SAMPLER_POSITION_W-1:0] shared_sampler_index_position;
-  logic [   SAMPLER_INDEX_W-1:0] shared_sampler_index;
-  logic                          shared_sampler_index_ready;
-  logic                          shared_sampler_busy;
-  logic                          shared_sampler_done;
-  logic [                 439:0] shared_sampler_output_v;
-  logic [                 439:0] shared_sampler_output_c;
-  logic [                 439:0] shared_sampler_output_reseed_counter;
-  logic                          shared_sampler_compress_start;
-  logic [                 511:0] shared_sampler_compress_block;
-  logic [                 255:0] shared_sampler_compress_state;
+  logic                                 shared_sampler_start;
+  logic [                         31:0] shared_sampler_length;
+  logic [                         31:0] shared_sampler_weight;
+  logic [                        439:0] shared_sampler_input_v;
+  logic [                        439:0] shared_sampler_input_c;
+  logic [                        439:0] shared_sampler_input_reseed_counter;
+  logic                                 shared_sampler_index_valid;
+  logic [       SAMPLER_POSITION_W-1:0] shared_sampler_index_position;
+  logic [          SAMPLER_INDEX_W-1:0] shared_sampler_index;
+  logic                                 shared_sampler_index_ready;
+  logic                                 shared_sampler_busy;
+  logic                                 shared_sampler_done;
+  logic [                        439:0] shared_sampler_output_v;
+  logic [                        439:0] shared_sampler_output_c;
+  logic [                        439:0] shared_sampler_output_reseed_counter;
+  logic                                 shared_sampler_compress_start;
+  logic [                        511:0] shared_sampler_compress_block;
+  logic [                        255:0] shared_sampler_compress_state;
+
+  logic                                 shared_h4_store_start;
+  logic [                         31:0] shared_h4_store_r_bits;
+  logic [                         31:0] shared_h4_store_error_weight;
+  logic [                         31:0] shared_h4_store_padded_r_bytes;
+  logic                                 shared_h4_store_index_valid;
+  logic [       SAMPLER_POSITION_W-1:0] shared_h4_store_index_position;
+  logic [          SAMPLER_INDEX_W-1:0] shared_h4_store_index;
+  logic                                 shared_h4_store_index_ready;
+  logic                                 shared_h4_store_support_re;
+  logic [       SAMPLER_POSITION_W-1:0] shared_h4_store_support_raddr;
+  logic [          SAMPLER_INDEX_W-1:0] shared_h4_store_support_rdata;
+  logic                                 shared_h4_store_error_re;
+  logic [    H4_STORE_ERROR_ADDR_W-1:0] shared_h4_store_error_raddr;
+  logic [                          7:0] shared_h4_store_error_rdata;
+  logic                                 shared_h4_store_done;
 
   trike_kem_operation_control u_operation_control (
       .i_clk             (i_clk),
@@ -331,6 +372,7 @@ module trike_kem_asic_top
       .USE_EXTERNAL_MUL     (1'b1),
       .USE_EXTERNAL_H123    (1'b1),
       .USE_EXTERNAL_SAMPLER (1'b1),
+      .USE_EXTERNAL_H4_STORE(1'b1),
       .MUL_INDEX_W          (ROW_IDX_W)
   ) u_encaps (
       .i_clk(i_clk),
@@ -396,13 +438,29 @@ module trike_kem_asic_top
       .i_sampler_done(shared_sampler_done && (active_operation == OP_ENCAPS)),
       .i_sampler_v(shared_sampler_output_v),
       .i_sampler_c(shared_sampler_output_c),
-      .i_sampler_reseed_counter(shared_sampler_output_reseed_counter)
+      .i_sampler_reseed_counter(shared_sampler_output_reseed_counter),
+      .o_h4_store_start(encaps_h4_store_start),
+      .o_h4_store_runtime_r_bits(encaps_h4_store_r_bits),
+      .o_h4_store_runtime_error_weight(encaps_h4_store_error_weight),
+      .o_h4_store_runtime_padded_r_bytes(encaps_h4_store_padded_r_bytes),
+      .o_h4_store_index_valid(encaps_h4_store_index_valid),
+      .o_h4_store_index_position(encaps_h4_store_index_position),
+      .o_h4_store_index(encaps_h4_store_index),
+      .i_h4_store_index_ready(shared_h4_store_index_ready && (active_operation == OP_ENCAPS)),
+      .o_h4_store_support_re(encaps_h4_store_support_re),
+      .o_h4_store_support_raddr(encaps_h4_store_support_raddr),
+      .i_h4_store_support_rdata(shared_h4_store_support_rdata[ENCAPS_SAMPLER_INDEX_W-1:0]),
+      .o_h4_store_error_re(encaps_h4_store_error_re),
+      .o_h4_store_error_raddr(encaps_h4_store_error_raddr),
+      .i_h4_store_error_rdata(shared_h4_store_error_rdata),
+      .i_h4_store_done(shared_h4_store_done && (active_operation == OP_ENCAPS))
   );
 
   trike_decaps_unified_core #(
       .USE_EXTERNAL_COMPRESS(1'b1),
       .USE_EXTERNAL_MUL     (1'b1),
-      .USE_EXTERNAL_SAMPLER (1'b1)
+      .USE_EXTERNAL_SAMPLER (1'b1),
+      .USE_EXTERNAL_H4_STORE(1'b1)
   ) u_decaps (
       .i_clk(i_clk),
       .i_rst_n(i_rst_n),
@@ -459,7 +517,22 @@ module trike_kem_asic_top
       .i_sampler_done(shared_sampler_done && (active_operation == OP_DECAPS)),
       .i_sampler_v(shared_sampler_output_v),
       .i_sampler_c(shared_sampler_output_c),
-      .i_sampler_reseed_counter(shared_sampler_output_reseed_counter)
+      .i_sampler_reseed_counter(shared_sampler_output_reseed_counter),
+      .o_h4_store_start(decaps_h4_store_start),
+      .o_h4_store_runtime_r_bits(decaps_h4_store_r_bits),
+      .o_h4_store_runtime_error_weight(decaps_h4_store_error_weight),
+      .o_h4_store_runtime_padded_r_bytes(decaps_h4_store_padded_r_bytes),
+      .o_h4_store_index_valid(decaps_h4_store_index_valid),
+      .o_h4_store_index_position(decaps_h4_store_index_position),
+      .o_h4_store_index(decaps_h4_store_index),
+      .i_h4_store_index_ready(shared_h4_store_index_ready && (active_operation == OP_DECAPS)),
+      .o_h4_store_support_re(decaps_h4_store_support_re),
+      .o_h4_store_support_raddr(decaps_h4_store_support_raddr),
+      .i_h4_store_support_rdata(shared_h4_store_support_rdata),
+      .o_h4_store_error_re(decaps_h4_store_error_re),
+      .o_h4_store_error_raddr(decaps_h4_store_error_raddr),
+      .i_h4_store_error_rdata(shared_h4_store_error_rdata),
+      .i_h4_store_done(shared_h4_store_done && (active_operation == OP_DECAPS))
   );
 
   always_comb begin
@@ -502,6 +575,17 @@ module trike_kem_asic_top
     shared_sampler_input_c = '0;
     shared_sampler_input_reseed_counter = '0;
     shared_sampler_index_ready = 1'b0;
+    shared_h4_store_start = 1'b0;
+    shared_h4_store_r_bits = '0;
+    shared_h4_store_error_weight = '0;
+    shared_h4_store_padded_r_bytes = '0;
+    shared_h4_store_index_valid = 1'b0;
+    shared_h4_store_index_position = '0;
+    shared_h4_store_index = '0;
+    shared_h4_store_support_re = 1'b0;
+    shared_h4_store_support_raddr = '0;
+    shared_h4_store_error_re = 1'b0;
+    shared_h4_store_error_raddr = '0;
 
     case (active_operation)
       OP_KEYGEN: begin
@@ -573,6 +657,17 @@ module trike_kem_asic_top
         shared_sampler_input_c = encaps_sampler_c;
         shared_sampler_input_reseed_counter = encaps_sampler_reseed_counter;
         shared_sampler_index_ready = encaps_sampler_index_ready;
+        shared_h4_store_start = encaps_h4_store_start;
+        shared_h4_store_r_bits = encaps_h4_store_r_bits;
+        shared_h4_store_error_weight = encaps_h4_store_error_weight;
+        shared_h4_store_padded_r_bytes = encaps_h4_store_padded_r_bytes;
+        shared_h4_store_index_valid = encaps_h4_store_index_valid;
+        shared_h4_store_index_position = SAMPLER_POSITION_W'(encaps_h4_store_index_position);
+        shared_h4_store_index = SAMPLER_INDEX_W'(encaps_h4_store_index);
+        shared_h4_store_support_re = encaps_h4_store_support_re;
+        shared_h4_store_support_raddr = SAMPLER_POSITION_W'(encaps_h4_store_support_raddr);
+        shared_h4_store_error_re = encaps_h4_store_error_re;
+        shared_h4_store_error_raddr = H4_STORE_ERROR_ADDR_W'(encaps_h4_store_error_raddr);
       end
       OP_DECAPS: begin
         o_input_ready = decaps_input_ready && o_busy;
@@ -601,6 +696,17 @@ module trike_kem_asic_top
         shared_sampler_input_c = decaps_sampler_c;
         shared_sampler_input_reseed_counter = decaps_sampler_reseed_counter;
         shared_sampler_index_ready = decaps_sampler_index_ready;
+        shared_h4_store_start = decaps_h4_store_start;
+        shared_h4_store_r_bits = decaps_h4_store_r_bits;
+        shared_h4_store_error_weight = decaps_h4_store_error_weight;
+        shared_h4_store_padded_r_bytes = decaps_h4_store_padded_r_bytes;
+        shared_h4_store_index_valid = decaps_h4_store_index_valid;
+        shared_h4_store_index_position = decaps_h4_store_index_position;
+        shared_h4_store_index = decaps_h4_store_index;
+        shared_h4_store_support_re = decaps_h4_store_support_re;
+        shared_h4_store_support_raddr = decaps_h4_store_support_raddr;
+        shared_h4_store_error_re = decaps_h4_store_error_re;
+        shared_h4_store_error_raddr = decaps_h4_store_error_raddr;
       end
       default: ;
     endcase
@@ -681,6 +787,34 @@ module trike_kem_asic_top
       .i_compress_busy (shared_compress_busy),
       .i_compress_done (shared_compress_done),
       .i_compress_state(shared_compress_output_state)
+  );
+  /* verilator lint_on PINCONNECTEMPTY */
+
+  /* verilator lint_off PINCONNECTEMPTY */
+  trike_error_support_store #(
+      .R_BITS          (P_R_VALS[3]),
+      .ERROR_WEIGHT    (P_T_VALS[3]),
+      .PADDED_R_BYTES  (H4_STORE_PADDED_R_BYTES),
+      .RUNTIME_GEOMETRY(1'b1)
+  ) u_h4_store_service (
+      .i_clk                   (i_clk),
+      .i_rst_n                 (i_rst_n),
+      .i_start                 (shared_h4_store_start),
+      .i_runtime_r_bits        (shared_h4_store_r_bits),
+      .i_runtime_error_weight  (shared_h4_store_error_weight),
+      .i_runtime_padded_r_bytes(shared_h4_store_padded_r_bytes),
+      .i_index_valid           (shared_h4_store_index_valid),
+      .i_index_position        (shared_h4_store_index_position),
+      .i_index                 (shared_h4_store_index),
+      .o_index_ready           (shared_h4_store_index_ready),
+      .i_support_re            (shared_h4_store_support_re),
+      .i_support_raddr         (shared_h4_store_support_raddr),
+      .o_support_rdata         (shared_h4_store_support_rdata),
+      .i_error_re              (shared_h4_store_error_re),
+      .i_error_raddr           (shared_h4_store_error_raddr),
+      .o_error_rdata           (shared_h4_store_error_rdata),
+      .o_busy                  (),
+      .o_done                  (shared_h4_store_done)
   );
   /* verilator lint_on PINCONNECTEMPTY */
 
