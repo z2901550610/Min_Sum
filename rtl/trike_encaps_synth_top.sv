@@ -195,7 +195,17 @@ module trike_encaps_synth_top (
       .i_mul_result_valid         (1'b0),
       .i_mul_result_data          ('0),
       .i_mul_result_last          (1'b0),
-      .o_mul_result_ready         ()
+      .o_mul_result_ready         (),
+      .o_h123_start               (),
+      .o_h123_seed_valid          (),
+      .o_h123_seed_data           (),
+      .i_h123_seed_ready          (1'b0),
+      .i_h123_vector_valid        (1'b0),
+      .i_h123_vector_select       ('0),
+      .i_h123_vector_byte         ('0),
+      .i_h123_vector_data         ('0),
+      .o_h123_vector_ready        (),
+      .i_h123_done                (1'b0)
   );
 
 endmodule

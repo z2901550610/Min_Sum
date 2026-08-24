@@ -443,8 +443,8 @@ flowchart TD
 | 验证服务 | `trike_ct_verify_stream` | 固定word数比较、累计difference并调用`kem_ct_compare_select` |
 
 `trike_kem_asic_top`实例化三个固定阶段控制器，三个阶段只在被选operation下接收start和输入流。SM3
-压缩数据通路和普通多项式乘法数据通路为芯片级共享资源；DRNG、采样和stage RAM保留各自层次，作为
-服务化与生命周期分配边界。
+压缩数据通路、H1/H2/H3向量生成和普通多项式乘法数据通路为芯片级共享资源；秘密/H4采样和stage RAM
+保留各自层次，作为服务化与生命周期分配边界。
 
 ## 跨流程复用矩阵
 
@@ -484,6 +484,11 @@ reference路径分别保持逐byte golden与53,995,036、2,378,447和257,417固�
 是否增加第二个SM3 lane需要根据完整KEM周期与同条件Vivado的资源、Fmax和`cycles/Fmax`决定。
 
 ### 采样器物理实例收敛
+
+KeyGen与Encaps的H1/H2/H3使用一个固定TRIKE-2 `trike_h123_vectors`服务。公开operation选择32-byte
+sigma seed客户端和三路vector返回客户端；服务内部只有一组DRNG Instantiate/Generate状态与一个
+`trike_parity_map_stream`。压缩命令进入全局SM3服务，KeyGen秘密采样与Encaps后续H4阶段均与H123按
+各自公开FSM串行。结构门禁要求统一层次恰好一个H123服务和一个parity mapper。
 
 秘密多项式采样和H4使用同一`generate_random_idx`算法，只是公开`length/weight`不同。完成态采样器以
 四档最大值确定物理位宽和RAM深度，并在command中装载当前参数。每次采样固定执行`weight`个候选和

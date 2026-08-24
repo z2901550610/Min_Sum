@@ -1,9 +1,10 @@
 `timescale 1ns / 1ps
 
 module tb_trike_encaps_core_reference #(
-    parameter bit USE_SYNTH_TOP  = 1'b0,
-    parameter bit USE_SHARED_SM3 = 1'b0,
-    parameter bit USE_SHARED_MUL = 1'b0
+    parameter bit USE_SYNTH_TOP   = 1'b0,
+    parameter bit USE_SHARED_SM3  = 1'b0,
+    parameter bit USE_SHARED_MUL  = 1'b0,
+    parameter bit USE_SHARED_H123 = 1'b0
 );
 
   /* verilator lint_off UNUSEDPARAM */
@@ -40,6 +41,9 @@ module tb_trike_encaps_core_reference #(
   logic                   compress_busy;
   logic                   compress_done;
   logic [          255:0] compress_output_state;
+  logic                   selected_compress_start;
+  logic [          511:0] selected_compress_block;
+  logic [          255:0] selected_compress_state;
   logic                   mul_start;
   logic [           31:0] mul_runtime_r_bits;
   logic [           31:0] mul_runtime_words;
@@ -58,6 +62,20 @@ module tb_trike_encaps_core_reference #(
   logic [           63:0] mul_result_data;
   logic                   mul_result_last;
   logic                   mul_result_ready;
+  logic                   h123_start;
+  logic                   h123_seed_valid;
+  logic [            7:0] h123_seed_data;
+  logic                   h123_seed_ready;
+  logic                   h123_vector_valid;
+  logic [            1:0] h123_vector_select;
+  logic [           10:0] h123_vector_byte;
+  logic [            7:0] h123_vector_data;
+  logic                   h123_vector_ready;
+  logic                   h123_done;
+  logic                   h123_busy;
+  logic                   h123_compress_start;
+  logic [          511:0] h123_compress_block;
+  logic [          255:0] h123_compress_state;
   /* verilator lint_on UNUSEDSIGNAL */
 
   int                     busy_cycles;
@@ -92,6 +110,7 @@ module tb_trike_encaps_core_reference #(
           .WORD_W               (64),
           .USE_EXTERNAL_COMPRESS(USE_SHARED_SM3),
           .USE_EXTERNAL_MUL     (USE_SHARED_MUL),
+          .USE_EXTERNAL_H123    (USE_SHARED_H123),
           .MUL_INDEX_W          (MUL_INDEX_W)
       ) dut (
           .i_clk                      (clk),
@@ -133,16 +152,37 @@ module tb_trike_encaps_core_reference #(
           .i_mul_result_valid         (mul_result_valid),
           .i_mul_result_data          (mul_result_data),
           .i_mul_result_last          (mul_result_last),
-          .o_mul_result_ready         (mul_result_ready)
+          .o_mul_result_ready         (mul_result_ready),
+          .o_h123_start               (h123_start),
+          .o_h123_seed_valid          (h123_seed_valid),
+          .o_h123_seed_data           (h123_seed_data),
+          .i_h123_seed_ready          (h123_seed_ready),
+          .i_h123_vector_valid        (h123_vector_valid),
+          .i_h123_vector_select       (h123_vector_select),
+          .i_h123_vector_byte         (h123_vector_byte),
+          .i_h123_vector_data         (h123_vector_data),
+          .o_h123_vector_ready        (h123_vector_ready),
+          .i_h123_done                (h123_done)
       );
+
+      always_comb begin
+        selected_compress_start = compress_start;
+        selected_compress_block = compress_block;
+        selected_compress_state = compress_input_state;
+        if (h123_busy || h123_start) begin
+          selected_compress_start = h123_compress_start;
+          selected_compress_block = h123_compress_block;
+          selected_compress_state = h123_compress_state;
+        end
+      end
 
       if (USE_SHARED_SM3) begin : g_shared_sm3
         trike_sm3_service u_sm3_service (
             .i_clk  (clk),
             .i_rst_n(rst_n),
-            .i_start(compress_start),
-            .i_block(compress_block),
-            .i_state(compress_input_state),
+            .i_start(selected_compress_start),
+            .i_block(selected_compress_block),
+            .i_state(selected_compress_state),
             .o_busy (compress_busy),
             .o_done (compress_done),
             .o_state(compress_output_state)
@@ -151,6 +191,49 @@ module tb_trike_encaps_core_reference #(
         assign compress_busy = 1'b0;
         assign compress_done = 1'b0;
         assign compress_output_state = '0;
+      end
+
+      if (USE_SHARED_H123) begin : g_shared_h123
+        trike_h123_vectors #(
+            .M_BYTES              (REF_M_BYTES),
+            .R_BITS               (REF_R_BITS),
+            .USE_EXTERNAL_COMPRESS(1'b1)
+        ) u_h123_service (
+            .i_clk           (clk),
+            .i_rst_n         (rst_n),
+            .i_start         (h123_start),
+            .i_seed_valid    (h123_seed_valid),
+            .i_seed_data     (h123_seed_data),
+            .o_seed_ready    (h123_seed_ready),
+            .o_seed_pass     (),
+            .o_vector_valid  (h123_vector_valid),
+            .o_vector_select (h123_vector_select),
+            .o_vector_byte   (h123_vector_byte),
+            .o_vector_data   (h123_vector_data),
+            .i_vector_ready  (h123_vector_ready),
+            .o_busy          (h123_busy),
+            .o_done          (h123_done),
+            .o_v             (),
+            .o_c             (),
+            .o_reseed_counter(),
+            .o_compress_start(h123_compress_start),
+            .o_compress_block(h123_compress_block),
+            .o_compress_state(h123_compress_state),
+            .i_compress_busy (compress_busy),
+            .i_compress_done (compress_done),
+            .i_compress_state(compress_output_state)
+        );
+      end else begin : g_local_h123
+        assign h123_seed_ready = 1'b0;
+        assign h123_vector_valid = 1'b0;
+        assign h123_vector_select = '0;
+        assign h123_vector_byte = '0;
+        assign h123_vector_data = '0;
+        assign h123_done = 1'b0;
+        assign h123_busy = 1'b0;
+        assign h123_compress_start = 1'b0;
+        assign h123_compress_block = '0;
+        assign h123_compress_state = '0;
       end
 
       if (USE_SHARED_MUL) begin : g_shared_mul

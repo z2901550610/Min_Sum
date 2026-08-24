@@ -14,53 +14,64 @@ module trike_keygen_core #(
     parameter int DIGIT_W = 16,
     parameter bit USE_EXTERNAL_COMPRESS = 1'b0,
     parameter bit USE_EXTERNAL_MUL = 1'b0,
+    parameter bit USE_EXTERNAL_H123 = 1'b0,
     parameter int MUL_INDEX_W = ((R_BITS > 1) ? $clog2(R_BITS) : 1),
     parameter int WORD_ADDR_W = ((((R_BITS + WORD_W - 1) / WORD_W) > 1) ? $clog2(
         (R_BITS + WORD_W - 1) / WORD_W
     ) : 1)
 ) (
-    input  logic                   i_clk,
-    input  logic                   i_rst_n,
-    input  logic                   i_start,
-    input  logic                   i_random_valid,
-    input  logic [            7:0] i_random_data,
-    output logic                   o_random_ready,
-    output logic                   o_pk_valid,
-    output logic [            7:0] o_pk_data,
-    output logic                   o_pk_last,
-    input  logic                   i_pk_ready,
-    output logic                   o_sk_valid,
-    output logic [            7:0] o_sk_data,
-    output logic                   o_sk_last,
-    input  logic                   i_sk_ready,
-    output logic                   o_busy,
-    output logic                   o_done,
-    output logic                   o_success,
-    output logic                   o_compress_start,
-    output logic [          511:0] o_compress_block,
-    output logic [          255:0] o_compress_state,
-    input  logic                   i_compress_busy,
-    input  logic                   i_compress_done,
-    input  logic [          255:0] i_compress_state,
-    output logic                   o_mul_start,
-    output logic [           31:0] o_mul_runtime_r_bits,
-    output logic [           31:0] o_mul_runtime_words,
-    output logic [           31:0] o_mul_runtime_sparse_weight,
-    output logic                   o_mul_sparse_a,
-    output logic                   o_mul_a_valid,
-    output logic [     WORD_W-1:0] o_mul_a_data,
-    input  logic                   i_mul_a_ready,
-    output logic                   o_mul_sparse_index_valid,
+    input  logic i_clk,
+    input  logic i_rst_n,
+    input  logic i_start,
+    input  logic i_random_valid,
+    input  logic [7:0] i_random_data,
+    output logic o_random_ready,
+    output logic o_pk_valid,
+    output logic [7:0] o_pk_data,
+    output logic o_pk_last,
+    input  logic i_pk_ready,
+    output logic o_sk_valid,
+    output logic [7:0] o_sk_data,
+    output logic o_sk_last,
+    input  logic i_sk_ready,
+    output logic o_busy,
+    output logic o_done,
+    output logic o_success,
+    output logic o_compress_start,
+    output logic [511:0] o_compress_block,
+    output logic [255:0] o_compress_state,
+    input  logic i_compress_busy,
+    input  logic i_compress_done,
+    input  logic [255:0] i_compress_state,
+    output logic o_mul_start,
+    output logic [31:0] o_mul_runtime_r_bits,
+    output logic [31:0] o_mul_runtime_words,
+    output logic [31:0] o_mul_runtime_sparse_weight,
+    output logic o_mul_sparse_a,
+    output logic o_mul_a_valid,
+    output logic [WORD_W-1:0] o_mul_a_data,
+    input  logic i_mul_a_ready,
+    output logic o_mul_sparse_index_valid,
     output logic [MUL_INDEX_W-1:0] o_mul_sparse_index,
-    input  logic                   i_mul_sparse_index_ready,
-    output logic                   o_mul_b_valid,
-    output logic [     WORD_W-1:0] o_mul_b_data,
-    input  logic                   i_mul_b_ready,
-    input  logic                   i_mul_result_valid,
-    input  logic [     WORD_W-1:0] i_mul_result_data,
-    input  logic                   i_mul_result_last,
-    output logic                   o_mul_result_ready,
-    input  logic                   i_mul_done
+    input  logic i_mul_sparse_index_ready,
+    output logic o_mul_b_valid,
+    output logic [WORD_W-1:0] o_mul_b_data,
+    input  logic i_mul_b_ready,
+    input  logic i_mul_result_valid,
+    input  logic [WORD_W-1:0] i_mul_result_data,
+    input  logic i_mul_result_last,
+    output logic o_mul_result_ready,
+    input  logic i_mul_done,
+    output logic o_h123_start,
+    output logic o_h123_seed_valid,
+    output logic [7:0] o_h123_seed_data,
+    input  logic i_h123_seed_ready,
+    input  logic i_h123_vector_valid,
+    input  logic [1:0] i_h123_vector_select,
+    input  logic [((((R_BITS + 7) / 8) > 1) ? $clog2((R_BITS + 7) / 8) : 1)-1:0] i_h123_vector_byte,
+    input  logic [7:0] i_h123_vector_data,
+    output logic o_h123_vector_ready,
+    input  logic i_h123_done
 );
 
   localparam int R_BYTES = (R_BITS + 7) / 8;
@@ -120,6 +131,8 @@ module trike_keygen_core #(
   logic [255:0] secret_compress_state;
 
   logic h123_start;
+  logic h123_seed_valid;
+  logic [7:0] h123_seed_data;
   logic h123_seed_ready;
   logic h123_vector_valid;
   logic [1:0] h123_vector_select;
@@ -187,7 +200,14 @@ module trike_keygen_core #(
   assign secret_start = state_q == ST_START_SECRET;
   assign secret_support_ready = (state_q == ST_WAIT_SECRET) && arith_support_ready;
   assign h123_start = state_q == ST_START_H123;
+  assign h123_seed_valid = state_q == ST_WAIT_H123;
+  assign h123_seed_data = sigma_q[seed_replay_byte_q];
   assign arith_start = state_q == ST_START_ARITH;
+
+  assign o_h123_start = h123_start;
+  assign o_h123_seed_valid = h123_seed_valid;
+  assign o_h123_seed_data = h123_seed_data;
+  assign o_h123_vector_ready = h123_vector_ready;
 
   always_comb begin
     h123_word_data_c = h123_word_accum_q;
@@ -246,35 +266,49 @@ module trike_keygen_core #(
       .i_compress_state    (shared_compress_result)
   );
 
-  trike_h123_vectors #(
-      .M_BYTES              (M_BYTES),
-      .R_BITS               (R_BITS),
-      .USE_EXTERNAL_COMPRESS(1'b1)
-  ) u_h123 (
-      .i_clk           (i_clk),
-      .i_rst_n         (i_rst_n),
-      .i_start         (h123_start),
-      .i_seed_valid    (state_q == ST_WAIT_H123),
-      .i_seed_data     (sigma_q[seed_replay_byte_q]),
-      .o_seed_ready    (h123_seed_ready),
-      .o_seed_pass     (),
-      .o_vector_valid  (h123_vector_valid),
-      .o_vector_select (h123_vector_select),
-      .o_vector_byte   (h123_vector_byte),
-      .o_vector_data   (h123_vector_data),
-      .i_vector_ready  (h123_vector_ready),
-      .o_busy          (),
-      .o_done          (h123_done),
-      .o_v             (),
-      .o_c             (),
-      .o_reseed_counter(),
-      .o_compress_start(h123_compress_start),
-      .o_compress_block(h123_compress_block),
-      .o_compress_state(h123_compress_state),
-      .i_compress_busy (shared_compress_busy),
-      .i_compress_done (shared_compress_done),
-      .i_compress_state(shared_compress_result)
-  );
+  generate
+    if (USE_EXTERNAL_H123) begin : gen_external_h123
+      assign h123_seed_ready = i_h123_seed_ready;
+      assign h123_vector_valid = i_h123_vector_valid;
+      assign h123_vector_select = i_h123_vector_select;
+      assign h123_vector_byte = i_h123_vector_byte;
+      assign h123_vector_data = i_h123_vector_data;
+      assign h123_done = i_h123_done;
+      assign h123_compress_start = 1'b0;
+      assign h123_compress_block = '0;
+      assign h123_compress_state = '0;
+    end else begin : gen_local_h123
+      trike_h123_vectors #(
+          .M_BYTES              (M_BYTES),
+          .R_BITS               (R_BITS),
+          .USE_EXTERNAL_COMPRESS(1'b1)
+      ) u_h123 (
+          .i_clk           (i_clk),
+          .i_rst_n         (i_rst_n),
+          .i_start         (h123_start),
+          .i_seed_valid    (h123_seed_valid),
+          .i_seed_data     (h123_seed_data),
+          .o_seed_ready    (h123_seed_ready),
+          .o_seed_pass     (),
+          .o_vector_valid  (h123_vector_valid),
+          .o_vector_select (h123_vector_select),
+          .o_vector_byte   (h123_vector_byte),
+          .o_vector_data   (h123_vector_data),
+          .i_vector_ready  (h123_vector_ready),
+          .o_busy          (),
+          .o_done          (h123_done),
+          .o_v             (),
+          .o_c             (),
+          .o_reseed_counter(),
+          .o_compress_start(h123_compress_start),
+          .o_compress_block(h123_compress_block),
+          .o_compress_state(h123_compress_state),
+          .i_compress_busy (shared_compress_busy),
+          .i_compress_done (shared_compress_done),
+          .i_compress_state(shared_compress_result)
+      );
+    end
+  endgenerate
 
   trike_keygen_arith_core #(
       .R_BITS          (R_BITS),

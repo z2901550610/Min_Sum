@@ -2,10 +2,10 @@
 
 // Single-issue TRIKE KEM integration boundary. i_operation is public and is
 // latched for the full transaction: 0=KeyGen, 1=Encaps, 2=Decaps. All three
-// modes share one SM3 compression service and one runtime-geometry streaming
-// polynomial multiplier; inactive modes receive no start or input traffic.
-// KeyGen/Encaps use the official TRIKE-2 geometry while Decaps retains the
-// validated runtime K-sign profile table.
+// modes share one SM3 compression service, one H1/H2/H3 vector service, and one
+// runtime-geometry streaming polynomial multiplier; inactive modes receive no
+// start or input traffic. KeyGen/Encaps use the official TRIKE-2 geometry while
+// Decaps retains the validated runtime K-sign profile table.
 module trike_kem_asic_top
   import bike_pkg::*;
 (
@@ -44,114 +44,138 @@ module trike_kem_asic_top
   localparam logic [1:0] OP_KEYGEN = 2'd0;
   localparam logic [1:0] OP_ENCAPS = 2'd1;
   localparam logic [1:0] OP_DECAPS = 2'd2;
+  localparam int H123_BYTE_W = $clog2((15581 + 7) / 8);
 
-  logic                 keygen_start;
-  logic                 encaps_start;
-  logic                 decaps_start;
-  logic [          1:0] active_operation;
-  logic                 control_error;
+  logic                   keygen_start;
+  logic                   encaps_start;
+  logic                   decaps_start;
+  logic [            1:0] active_operation;
+  logic                   control_error;
 
-  logic                 keygen_input_ready;
-  logic                 keygen_pk_valid;
-  logic [          7:0] keygen_pk_data;
-  logic                 keygen_pk_last;
-  logic                 keygen_sk_valid;
-  logic [          7:0] keygen_sk_data;
-  logic                 keygen_sk_last;
-  logic                 keygen_busy;
-  logic                 keygen_done;
-  logic                 keygen_compress_start;
-  logic [        511:0] keygen_compress_block;
-  logic [        255:0] keygen_compress_state;
-  logic                 keygen_mul_start;
-  logic [         31:0] keygen_mul_r_bits;
-  logic [         31:0] keygen_mul_words;
-  logic [         31:0] keygen_mul_sparse_weight;
-  logic                 keygen_mul_sparse_a;
-  logic                 keygen_mul_a_valid;
-  logic [         63:0] keygen_mul_a_data;
-  logic                 keygen_mul_sparse_index_valid;
-  logic [ROW_IDX_W-1:0] keygen_mul_sparse_index;
-  logic                 keygen_mul_b_valid;
-  logic [         63:0] keygen_mul_b_data;
-  logic                 keygen_mul_result_ready;
+  logic                   keygen_input_ready;
+  logic                   keygen_pk_valid;
+  logic [            7:0] keygen_pk_data;
+  logic                   keygen_pk_last;
+  logic                   keygen_sk_valid;
+  logic [            7:0] keygen_sk_data;
+  logic                   keygen_sk_last;
+  logic                   keygen_busy;
+  logic                   keygen_done;
+  logic                   keygen_compress_start;
+  logic [          511:0] keygen_compress_block;
+  logic [          255:0] keygen_compress_state;
+  logic                   keygen_mul_start;
+  logic [           31:0] keygen_mul_r_bits;
+  logic [           31:0] keygen_mul_words;
+  logic [           31:0] keygen_mul_sparse_weight;
+  logic                   keygen_mul_sparse_a;
+  logic                   keygen_mul_a_valid;
+  logic [           63:0] keygen_mul_a_data;
+  logic                   keygen_mul_sparse_index_valid;
+  logic [  ROW_IDX_W-1:0] keygen_mul_sparse_index;
+  logic                   keygen_mul_b_valid;
+  logic [           63:0] keygen_mul_b_data;
+  logic                   keygen_mul_result_ready;
+  logic                   keygen_h123_start;
+  logic                   keygen_h123_seed_valid;
+  logic [            7:0] keygen_h123_seed_data;
+  logic                   keygen_h123_vector_ready;
 
-  logic                 encaps_input_ready;
-  logic                 encaps_ciphertext_valid;
-  logic [          7:0] encaps_ciphertext_data;
-  logic                 encaps_ciphertext_last;
-  logic                 encaps_shared_secret_valid;
-  logic [          7:0] encaps_shared_secret_data;
-  logic                 encaps_shared_secret_last;
-  logic                 encaps_busy;
-  logic                 encaps_done;
-  logic                 encaps_compress_start;
-  logic [        511:0] encaps_compress_block;
-  logic [        255:0] encaps_compress_state;
-  logic                 encaps_mul_start;
-  logic [         31:0] encaps_mul_r_bits;
-  logic [         31:0] encaps_mul_words;
-  logic [         31:0] encaps_mul_sparse_weight;
-  logic                 encaps_mul_sparse_a;
-  logic                 encaps_mul_a_valid;
-  logic [         63:0] encaps_mul_a_data;
-  logic                 encaps_mul_sparse_index_valid;
-  logic [ROW_IDX_W-1:0] encaps_mul_sparse_index;
-  logic                 encaps_mul_b_valid;
-  logic [         63:0] encaps_mul_b_data;
-  logic                 encaps_mul_result_ready;
+  logic                   encaps_input_ready;
+  logic                   encaps_ciphertext_valid;
+  logic [            7:0] encaps_ciphertext_data;
+  logic                   encaps_ciphertext_last;
+  logic                   encaps_shared_secret_valid;
+  logic [            7:0] encaps_shared_secret_data;
+  logic                   encaps_shared_secret_last;
+  logic                   encaps_busy;
+  logic                   encaps_done;
+  logic                   encaps_compress_start;
+  logic [          511:0] encaps_compress_block;
+  logic [          255:0] encaps_compress_state;
+  logic                   encaps_mul_start;
+  logic [           31:0] encaps_mul_r_bits;
+  logic [           31:0] encaps_mul_words;
+  logic [           31:0] encaps_mul_sparse_weight;
+  logic                   encaps_mul_sparse_a;
+  logic                   encaps_mul_a_valid;
+  logic [           63:0] encaps_mul_a_data;
+  logic                   encaps_mul_sparse_index_valid;
+  logic [  ROW_IDX_W-1:0] encaps_mul_sparse_index;
+  logic                   encaps_mul_b_valid;
+  logic [           63:0] encaps_mul_b_data;
+  logic                   encaps_mul_result_ready;
+  logic                   encaps_h123_start;
+  logic                   encaps_h123_seed_valid;
+  logic [            7:0] encaps_h123_seed_data;
+  logic                   encaps_h123_vector_ready;
 
-  logic                 decaps_input_ready;
-  logic                 decaps_shared_secret_valid;
-  logic [          7:0] decaps_shared_secret_data;
-  logic                 decaps_shared_secret_last;
-  logic                 decaps_error;
-  logic                 decaps_busy;
-  logic                 decaps_done;
-  logic                 decaps_compress_start;
-  logic [        511:0] decaps_compress_block;
-  logic [        255:0] decaps_compress_state;
-  logic [ROW_IDX_W-1:0] decaps_residual_weight;
-  logic [          4:0] decaps_shared_secret_index;
-  logic                 decaps_mul_start;
-  logic [         31:0] decaps_mul_r_bits;
-  logic [         31:0] decaps_mul_words;
-  logic [         31:0] decaps_mul_sparse_weight;
-  logic                 decaps_mul_sparse_a;
-  logic                 decaps_mul_a_valid;
-  logic [         63:0] decaps_mul_a_data;
-  logic                 decaps_mul_sparse_index_valid;
-  logic [ROW_IDX_W-1:0] decaps_mul_sparse_index;
-  logic                 decaps_mul_b_valid;
-  logic [         63:0] decaps_mul_b_data;
-  logic                 decaps_mul_result_ready;
+  logic                   decaps_input_ready;
+  logic                   decaps_shared_secret_valid;
+  logic [            7:0] decaps_shared_secret_data;
+  logic                   decaps_shared_secret_last;
+  logic                   decaps_error;
+  logic                   decaps_busy;
+  logic                   decaps_done;
+  logic                   decaps_compress_start;
+  logic [          511:0] decaps_compress_block;
+  logic [          255:0] decaps_compress_state;
+  logic [  ROW_IDX_W-1:0] decaps_residual_weight;
+  logic [            4:0] decaps_shared_secret_index;
+  logic                   decaps_mul_start;
+  logic [           31:0] decaps_mul_r_bits;
+  logic [           31:0] decaps_mul_words;
+  logic [           31:0] decaps_mul_sparse_weight;
+  logic                   decaps_mul_sparse_a;
+  logic                   decaps_mul_a_valid;
+  logic [           63:0] decaps_mul_a_data;
+  logic                   decaps_mul_sparse_index_valid;
+  logic [  ROW_IDX_W-1:0] decaps_mul_sparse_index;
+  logic                   decaps_mul_b_valid;
+  logic [           63:0] decaps_mul_b_data;
+  logic                   decaps_mul_result_ready;
 
-  logic                 shared_compress_start;
-  logic [        511:0] shared_compress_block;
-  logic [        255:0] shared_compress_input_state;
-  logic                 shared_compress_busy;
-  logic                 shared_compress_done;
-  logic [        255:0] shared_compress_output_state;
+  logic                   shared_compress_start;
+  logic [          511:0] shared_compress_block;
+  logic [          255:0] shared_compress_input_state;
+  logic                   shared_compress_busy;
+  logic                   shared_compress_done;
+  logic [          255:0] shared_compress_output_state;
 
-  logic                 shared_mul_start;
-  logic [         31:0] shared_mul_r_bits;
-  logic [         31:0] shared_mul_words;
-  logic [         31:0] shared_mul_sparse_weight;
-  logic                 shared_mul_sparse_a;
-  logic                 shared_mul_a_valid;
-  logic [         63:0] shared_mul_a_data;
-  logic                 shared_mul_a_ready;
-  logic                 shared_mul_sparse_index_valid;
-  logic [ROW_IDX_W-1:0] shared_mul_sparse_index;
-  logic                 shared_mul_sparse_index_ready;
-  logic                 shared_mul_b_valid;
-  logic [         63:0] shared_mul_b_data;
-  logic                 shared_mul_b_ready;
-  logic                 shared_mul_result_valid;
-  logic [         63:0] shared_mul_result_data;
-  logic                 shared_mul_result_last;
-  logic                 shared_mul_result_ready;
-  logic                 shared_mul_done;
+  logic                   shared_mul_start;
+  logic [           31:0] shared_mul_r_bits;
+  logic [           31:0] shared_mul_words;
+  logic [           31:0] shared_mul_sparse_weight;
+  logic                   shared_mul_sparse_a;
+  logic                   shared_mul_a_valid;
+  logic [           63:0] shared_mul_a_data;
+  logic                   shared_mul_a_ready;
+  logic                   shared_mul_sparse_index_valid;
+  logic [  ROW_IDX_W-1:0] shared_mul_sparse_index;
+  logic                   shared_mul_sparse_index_ready;
+  logic                   shared_mul_b_valid;
+  logic [           63:0] shared_mul_b_data;
+  logic                   shared_mul_b_ready;
+  logic                   shared_mul_result_valid;
+  logic [           63:0] shared_mul_result_data;
+  logic                   shared_mul_result_last;
+  logic                   shared_mul_result_ready;
+  logic                   shared_mul_done;
+
+  logic                   shared_h123_start;
+  logic                   shared_h123_seed_valid;
+  logic [            7:0] shared_h123_seed_data;
+  logic                   shared_h123_seed_ready;
+  logic                   shared_h123_vector_valid;
+  logic [            1:0] shared_h123_vector_select;
+  logic [H123_BYTE_W-1:0] shared_h123_vector_byte;
+  logic [            7:0] shared_h123_vector_data;
+  logic                   shared_h123_vector_ready;
+  logic                   shared_h123_busy;
+  logic                   shared_h123_done;
+  logic                   shared_h123_compress_start;
+  logic [          511:0] shared_h123_compress_block;
+  logic [          255:0] shared_h123_compress_state;
 
   trike_kem_operation_control u_operation_control (
       .i_clk             (i_clk),
@@ -179,6 +203,7 @@ module trike_kem_asic_top
       .DIGIT_W              (16),
       .USE_EXTERNAL_COMPRESS(1'b1),
       .USE_EXTERNAL_MUL     (1'b1),
+      .USE_EXTERNAL_H123    (1'b1),
       .MUL_INDEX_W          (ROW_IDX_W)
   ) u_keygen (
       .i_clk(i_clk),
@@ -222,7 +247,17 @@ module trike_kem_asic_top
       .i_mul_result_data(shared_mul_result_data),
       .i_mul_result_last(shared_mul_result_last),
       .o_mul_result_ready(keygen_mul_result_ready),
-      .i_mul_done(shared_mul_done && (active_operation == OP_KEYGEN))
+      .i_mul_done(shared_mul_done && (active_operation == OP_KEYGEN)),
+      .o_h123_start(keygen_h123_start),
+      .o_h123_seed_valid(keygen_h123_seed_valid),
+      .o_h123_seed_data(keygen_h123_seed_data),
+      .i_h123_seed_ready(shared_h123_seed_ready && (active_operation == OP_KEYGEN)),
+      .i_h123_vector_valid(shared_h123_vector_valid && (active_operation == OP_KEYGEN)),
+      .i_h123_vector_select(shared_h123_vector_select),
+      .i_h123_vector_byte(shared_h123_vector_byte),
+      .i_h123_vector_data(shared_h123_vector_data),
+      .o_h123_vector_ready(keygen_h123_vector_ready),
+      .i_h123_done(shared_h123_done && (active_operation == OP_KEYGEN))
   );
 
   trike_encaps_core #(
@@ -232,6 +267,7 @@ module trike_kem_asic_top
       .WORD_W               (64),
       .USE_EXTERNAL_COMPRESS(1'b1),
       .USE_EXTERNAL_MUL     (1'b1),
+      .USE_EXTERNAL_H123    (1'b1),
       .MUL_INDEX_W          (ROW_IDX_W)
   ) u_encaps (
       .i_clk(i_clk),
@@ -273,7 +309,17 @@ module trike_kem_asic_top
       .i_mul_result_valid(shared_mul_result_valid && (active_operation == OP_ENCAPS)),
       .i_mul_result_data(shared_mul_result_data),
       .i_mul_result_last(shared_mul_result_last),
-      .o_mul_result_ready(encaps_mul_result_ready)
+      .o_mul_result_ready(encaps_mul_result_ready),
+      .o_h123_start(encaps_h123_start),
+      .o_h123_seed_valid(encaps_h123_seed_valid),
+      .o_h123_seed_data(encaps_h123_seed_data),
+      .i_h123_seed_ready(shared_h123_seed_ready && (active_operation == OP_ENCAPS)),
+      .i_h123_vector_valid(shared_h123_vector_valid && (active_operation == OP_ENCAPS)),
+      .i_h123_vector_select(shared_h123_vector_select),
+      .i_h123_vector_byte(shared_h123_vector_byte),
+      .i_h123_vector_data(shared_h123_vector_data),
+      .o_h123_vector_ready(encaps_h123_vector_ready),
+      .i_h123_done(shared_h123_done && (active_operation == OP_ENCAPS))
   );
 
   trike_decaps_unified_core #(
@@ -353,6 +399,10 @@ module trike_kem_asic_top
     shared_mul_b_valid = 1'b0;
     shared_mul_b_data = '0;
     shared_mul_result_ready = 1'b0;
+    shared_h123_start = 1'b0;
+    shared_h123_seed_valid = 1'b0;
+    shared_h123_seed_data = '0;
+    shared_h123_vector_ready = 1'b0;
 
     case (active_operation)
       OP_KEYGEN: begin
@@ -378,6 +428,10 @@ module trike_kem_asic_top
         shared_mul_b_valid = keygen_mul_b_valid;
         shared_mul_b_data = keygen_mul_b_data;
         shared_mul_result_ready = keygen_mul_result_ready;
+        shared_h123_start = keygen_h123_start;
+        shared_h123_seed_valid = keygen_h123_seed_valid;
+        shared_h123_seed_data = keygen_h123_seed_data;
+        shared_h123_vector_ready = keygen_h123_vector_ready;
       end
       OP_ENCAPS: begin
         o_input_ready = encaps_input_ready && o_busy;
@@ -402,6 +456,10 @@ module trike_kem_asic_top
         shared_mul_b_valid = encaps_mul_b_valid;
         shared_mul_b_data = encaps_mul_b_data;
         shared_mul_result_ready = encaps_mul_result_ready;
+        shared_h123_start = encaps_h123_start;
+        shared_h123_seed_valid = encaps_h123_seed_valid;
+        shared_h123_seed_data = encaps_h123_seed_data;
+        shared_h123_vector_ready = encaps_h123_vector_ready;
       end
       OP_DECAPS: begin
         o_input_ready = decaps_input_ready && o_busy;
@@ -426,9 +484,47 @@ module trike_kem_asic_top
       end
       default: ;
     endcase
+
+    if (shared_h123_busy || shared_h123_start) begin
+      shared_compress_start = shared_h123_compress_start;
+      shared_compress_block = shared_h123_compress_block;
+      shared_compress_input_state = shared_h123_compress_state;
+    end
   end
 
   assign o_error = control_error || ((active_operation == OP_DECAPS) && decaps_error);
+
+  /* verilator lint_off PINCONNECTEMPTY */
+  trike_h123_vectors #(
+      .M_BYTES              (32),
+      .R_BITS               (15581),
+      .USE_EXTERNAL_COMPRESS(1'b1)
+  ) u_h123_service (
+      .i_clk           (i_clk),
+      .i_rst_n         (i_rst_n),
+      .i_start         (shared_h123_start),
+      .i_seed_valid    (shared_h123_seed_valid),
+      .i_seed_data     (shared_h123_seed_data),
+      .o_seed_ready    (shared_h123_seed_ready),
+      .o_seed_pass     (),
+      .o_vector_valid  (shared_h123_vector_valid),
+      .o_vector_select (shared_h123_vector_select),
+      .o_vector_byte   (shared_h123_vector_byte),
+      .o_vector_data   (shared_h123_vector_data),
+      .i_vector_ready  (shared_h123_vector_ready),
+      .o_busy          (shared_h123_busy),
+      .o_done          (shared_h123_done),
+      .o_v             (),
+      .o_c             (),
+      .o_reseed_counter(),
+      .o_compress_start(shared_h123_compress_start),
+      .o_compress_block(shared_h123_compress_block),
+      .o_compress_state(shared_h123_compress_state),
+      .i_compress_busy (shared_compress_busy),
+      .i_compress_done (shared_compress_done),
+      .i_compress_state(shared_compress_output_state)
+  );
+  /* verilator lint_on PINCONNECTEMPTY */
 
   trike_sm3_service u_sm3_service (
       .i_clk  (i_clk),

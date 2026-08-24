@@ -257,7 +257,7 @@ test-trike-keygen-core-reference: $(TRIKE_KEYGEN_REFERENCE_FIXTURE)
 	@$(SIM) ./obj_dir/Vtb_trike_keygen_core_reference +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) -GUSE_SHARED_SM3=1 --top-module tb_trike_keygen_core_reference rtl/trike_inv_schedule_pkg.sv rtl/ram_bram.sv $(SM3_COMPRESS_RTL) rtl/sm3_hash_stream.sv rtl/sm3_df_stream.sv rtl/trike_sm3_drng_instantiate_stream.sv rtl/trike_sm3_drng_generate_stream.sv rtl/trike_sampler_candidate.sv rtl/trike_fixed_weight_sampler.sv rtl/trike_drng_weight_sampler.sv rtl/trike_weak_key_test.sv rtl/trike_keygen_secret_sampler.sv rtl/trike_parity_map_stream.sv rtl/trike_h123_vectors.sv rtl/trike_poly_mul_core.sv rtl/trike_poly_inv_core.sv rtl/trike_keygen_arith_core.sv rtl/trike_keygen_core.sv tb/tb_trike_keygen_core_reference.sv
 	@$(SIM) ./obj_dir/Vtb_trike_keygen_core_reference +verilator+quiet
-	@$(VERILATOR) $(VERILATOR_FLAGS) -GUSE_SHARED_SM3=1 -GUSE_SHARED_MUL=1 --top-module tb_trike_keygen_core_reference rtl/trike_inv_schedule_pkg.sv rtl/ram_bram.sv $(SM3_COMPRESS_RTL) rtl/sm3_hash_stream.sv rtl/sm3_df_stream.sv rtl/trike_sm3_drng_instantiate_stream.sv rtl/trike_sm3_drng_generate_stream.sv rtl/trike_sampler_candidate.sv rtl/trike_fixed_weight_sampler.sv rtl/trike_drng_weight_sampler.sv rtl/trike_weak_key_test.sv rtl/trike_keygen_secret_sampler.sv rtl/trike_parity_map_stream.sv rtl/trike_h123_vectors.sv rtl/trike_poly_mul_core.sv rtl/trike_poly_inv_core.sv rtl/trike_keygen_arith_core.sv rtl/trike_keygen_core.sv tb/tb_trike_keygen_core_reference.sv
+	@$(VERILATOR) $(VERILATOR_FLAGS) -GUSE_SHARED_SM3=1 -GUSE_SHARED_MUL=1 -GUSE_SHARED_H123=1 --top-module tb_trike_keygen_core_reference rtl/trike_inv_schedule_pkg.sv rtl/ram_bram.sv $(SM3_COMPRESS_RTL) rtl/sm3_hash_stream.sv rtl/sm3_df_stream.sv rtl/trike_sm3_drng_instantiate_stream.sv rtl/trike_sm3_drng_generate_stream.sv rtl/trike_sampler_candidate.sv rtl/trike_fixed_weight_sampler.sv rtl/trike_drng_weight_sampler.sv rtl/trike_weak_key_test.sv rtl/trike_keygen_secret_sampler.sv rtl/trike_parity_map_stream.sv rtl/trike_h123_vectors.sv rtl/trike_poly_mul_core.sv rtl/trike_poly_inv_core.sv rtl/trike_keygen_arith_core.sv rtl/trike_keygen_core.sv tb/tb_trike_keygen_core_reference.sv
 	@$(SIM) ./obj_dir/Vtb_trike_keygen_core_reference +verilator+quiet
 
 test-trike-keygen-synth-reference: $(TRIKE_KEYGEN_REFERENCE_FIXTURE)
@@ -422,7 +422,7 @@ test-trike-encaps-core-reference: $(TRIKE_ENCAPS_REFERENCE_FIXTURE)
 	@$(SIM) ./obj_dir/Vtb_trike_encaps_core_reference +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) -GUSE_SHARED_SM3=1 --top-module tb_trike_encaps_core_reference $(TRIKE_ENCAPS_RTL) tb/tb_trike_encaps_core_reference.sv
 	@$(SIM) ./obj_dir/Vtb_trike_encaps_core_reference +verilator+quiet
-	@$(VERILATOR) $(VERILATOR_FLAGS) -GUSE_SHARED_SM3=1 -GUSE_SHARED_MUL=1 --top-module tb_trike_encaps_core_reference $(TRIKE_ENCAPS_RTL) tb/tb_trike_encaps_core_reference.sv
+	@$(VERILATOR) $(VERILATOR_FLAGS) -GUSE_SHARED_SM3=1 -GUSE_SHARED_MUL=1 -GUSE_SHARED_H123=1 --top-module tb_trike_encaps_core_reference $(TRIKE_ENCAPS_RTL) tb/tb_trike_encaps_core_reference.sv
 	@$(SIM) ./obj_dir/Vtb_trike_encaps_core_reference +verilator+quiet
 
 test-trike-encaps-synth-reference: $(TRIKE_ENCAPS_REFERENCE_FIXTURE)

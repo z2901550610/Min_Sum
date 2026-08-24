@@ -92,6 +92,10 @@ Decaps继承decoder H验证状态的一次复位一笔事务约束；同一复�
 求逆内部乘法器。KeyGen、Encaps和Decaps syndrome外置服务reference分别保持53,995,036、2,378,447和
 1,086,187拍并通过golden。
 
+KeyGen与Encaps的H1/H2/H3请求连接同一`trike_h123_vectors`。服务保存一份DRNG
+Instantiate/Generate状态并复用一个`trike_parity_map_stream`，seed与vector握手由公开operation选择。
+两阶段外置H123、SM3和乘法组合reference分别保持53,995,036和2,378,447拍并通过byte golden。
+
 该入口的KeyGen/Encaps采用官方TRIKE-2 `r=15581,w=35,t=263`，Decaps采用四档项目K-sign profile。
 两者是显式分离的参数验证域。采样器和工作RAM位于stage层次，统一入口的Vivado资源、时序与功耗为
 `待测`。
@@ -274,8 +278,8 @@ data pin，避免async recovery路径占满top-N列表。
 
 - 官方TRIKE-2的`r=15581`与项目Min-Sum profile的`r=12589`是两个验证域；官方端到端Decaps KAT需要
   单独建立`r=15581`译码profile及DFR证据。
-- `trike_kem_asic_top`完成公开operation单发射、全局SM3和普通多项式乘法共享；采样服务与跨阶段
-  scratch RAM生命周期分配是独立资源收敛边界。
+- `trike_kem_asic_top`完成公开operation单发射、全局SM3、H1/H2/H3向量和普通多项式乘法共享；秘密/H4
+  采样服务与跨阶段scratch RAM生命周期分配是独立资源收敛边界。
 - `trike_decaps_runtime_synth_top`通过2-bit公开profile连接最大几何输入存储、运行时syndrome、统一decoder、
   decoder后检查和postprocess。四档具备有效与`c2`隐式拒绝完整KEM golden；u/v非收敛RTL深测覆盖TRIKE160，
   其余三档由软件golden和分层运行时RTL测试覆盖。

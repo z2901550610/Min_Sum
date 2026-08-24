@@ -79,8 +79,19 @@ def main() -> None:
             "trike_kem_asic_top: expected one shared streaming multiplier and "
             f"one KeyGen inversion multiplier, found {mul_count}"
         )
+    h123_count = instance_count("trike_h123_vectors")
+    if h123_count != 1:
+        raise SystemExit(
+            f"trike_kem_asic_top: expected one shared H123 vector service, found {h123_count}"
+        )
+    parity_count = instance_count("trike_parity_map_stream")
+    if parity_count != 1:
+        raise SystemExit(
+            f"trike_kem_asic_top: expected one shared H123 parity mapper, found {parity_count}"
+        )
     print("Unified TRIKE KEM structure PASS: one sm3_compress instance")
     print("Unified TRIKE KEM structure PASS: two poly-mul instances")
+    print("Unified TRIKE KEM structure PASS: one H123 vector service and parity mapper")
 
 
 if __name__ == "__main__":
