@@ -145,15 +145,46 @@ def main() -> None:
         for child in module.get("stmtsp", [])
         if isinstance(child, dict) and child.get("type") == "CELL"
     }
+    keygen_core_modules = [
+        item
+        for item in objects
+        if item.get("type") == "MODULE"
+        and str(item.get("name", "")).startswith("trike_keygen_core")
+    ]
+    keygen_core_cells = {
+        child.get("name")
+        for module in keygen_core_modules
+        for child in module.get("stmtsp", [])
+        if isinstance(child, dict) and child.get("type") == "CELL"
+    }
+    keygen_external_result_store_count = sum(
+        item.get("type") == "GENBLOCK"
+        and item.get("name") == "gen_external_result_store"
+        for item in objects
+    )
+    keygen_local_result_store_count = sum(
+        item.get("type") == "GENBLOCK" and item.get("name") == "gen_local_result_store"
+        for item in objects
+    )
     if (
         len(keygen_arith_modules) != 1
-        or "u_numerator_r2_mem" not in keygen_arith_cells
-        or "u_numerator_mem" in keygen_arith_cells
-        or "u_r2_mem" in keygen_arith_cells
+        or len(keygen_core_modules) != 1
+        or keygen_external_result_store_count != 1
+        or keygen_local_result_store_count != 0
+        or "u_numerator_r2_mem" in keygen_arith_cells
+        or "u_t0_mem" in keygen_arith_cells
+        or "u_t0_output_mem" not in keygen_core_cells
+        or "u_r2_output_mem" not in keygen_core_cells
     ):
         raise SystemExit(
-            "trike_kem_asic_top: expected KeyGen numerator/r2 to use one shared RAM, "
-            f"found modules={len(keygen_arith_modules)} cells={sorted(keygen_arith_cells)}"
+            "trike_kem_asic_top: expected KeyGen arithmetic and serialization to "
+            "reuse two persistent result RAMs, found "
+            f"arith_modules={len(keygen_arith_modules)} "
+            f"core_modules={len(keygen_core_modules)} "
+            f"external={keygen_external_result_store_count} "
+            f"local={keygen_local_result_store_count} "
+            f"arith_cells={sorted(keygen_arith_cells)} "
+            f"core_cells={sorted(keygen_core_cells)}"
         )
     print("Unified TRIKE KEM structure PASS: one sm3_compress instance")
     print("Unified TRIKE KEM structure PASS: two poly-mul instances")
@@ -162,7 +193,7 @@ def main() -> None:
     print("Unified TRIKE KEM structure PASS: one H4 support/error store")
     print("Unified TRIKE KEM structure PASS: one H123 vector store")
     print("Unified TRIKE KEM structure PASS: Encaps UV reuses persistent u/v store")
-    print("Unified TRIKE KEM structure PASS: KeyGen numerator/r2 share one RAM")
+    print("Unified TRIKE KEM structure PASS: KeyGen reuses two persistent result RAMs")
 
 
 if __name__ == "__main__":

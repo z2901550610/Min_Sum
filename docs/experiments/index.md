@@ -1,6 +1,6 @@
 # 实验索引
 
-下一个实验ID：`EXP-0108`。
+下一个实验ID：`EXP-0109`。
 
 | ID | 日期 | 主题 | 配置/比较键 | 功能与周期 | Vivado | 结论 | 详情 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -31,6 +31,7 @@
 | EXP-0105 | 2026-08-24 | KeyGen/Encaps共享H123向量存储 | 官方TRIKE-2，三组244x64-bit同步RAM | 两阶段外置store byte golden与固定周期通过；完整层次单H123 store | 待测 | `retained` | [详情](EXP-0105-unified-kem-h123-vector-store.md) |
 | EXP-0106 | 2026-08-24 | Encaps UV累加与持久结果共用RAM | 官方TRIKE-2，两组244x64-bit同步RAM | 内外store UV golden通过；core与窄I/O byte golden/固定周期通过 | 待测 | `retained` | [详情](EXP-0106-encaps-uv-persistent-store.md) |
 | EXP-0107 | 2026-08-24 | KeyGen numerator/r2原位覆盖 | 官方TRIKE-2，一组244x64-bit同步RAM | 算术逐word、core与窄I/O byte golden/固定周期通过 | 待测 | `retained` | [详情](EXP-0107-keygen-numerator-r2-store.md) |
+| EXP-0108 | 2026-08-24 | KeyGen算术与序列化共用结果RAM | 官方TRIKE-2，两组244x64-bit同步RAM | 双store单测、core与窄I/O byte golden/固定周期通过 | 待测 | `retained` | [详情](EXP-0108-keygen-persistent-result-store.md) |
 
 新实验只追加一行。需要详细说明时，详情列链接到`EXP-xxxx-<slug>.md`；Vivado列链接到
 `reports/vivado/manifests/<run-id>.toml`。

@@ -14,6 +14,7 @@ module trike_keygen_arith_core #(
     parameter int DIGIT_W = 16,
     parameter bit USE_EXTERNAL_MUL = 1'b0,
     parameter bit USE_EXTERNAL_H123_STORE = 1'b0,
+    parameter bit USE_EXTERNAL_RESULT_STORE = 1'b0,
     parameter int MUL_INDEX_W = ((R_BITS > 1) ? $clog2(R_BITS) : 1),
     parameter int WORD_ADDR_W = ((((R_BITS + WORD_W - 1) / WORD_W) > 1) ? $clog2(
         (R_BITS + WORD_W - 1) / WORD_W
@@ -72,7 +73,23 @@ module trike_keygen_arith_core #(
     output logic o_h123_r1_re,
     output logic [WORD_ADDR_W-1:0] o_h123_r1_raddr,
     /* verilator lint_off UNUSEDSIGNAL */
-    input  logic [WORD_W-1:0] i_h123_r1_rdata
+    input  logic [WORD_W-1:0] i_h123_r1_rdata,
+    /* verilator lint_on UNUSEDSIGNAL */
+    output logic o_store_t0_we,
+    output logic [WORD_ADDR_W-1:0] o_store_t0_waddr,
+    output logic [WORD_W-1:0] o_store_t0_wdata,
+    output logic o_store_t0_re,
+    output logic [WORD_ADDR_W-1:0] o_store_t0_raddr,
+    /* verilator lint_off UNUSEDSIGNAL */
+    input  logic [WORD_W-1:0] i_store_t0_rdata,
+    /* verilator lint_on UNUSEDSIGNAL */
+    output logic o_store_numerator_r2_we,
+    output logic [WORD_ADDR_W-1:0] o_store_numerator_r2_waddr,
+    output logic [WORD_W-1:0] o_store_numerator_r2_wdata,
+    output logic o_store_numerator_r2_re,
+    output logic [WORD_ADDR_W-1:0] o_store_numerator_r2_raddr,
+    /* verilator lint_off UNUSEDSIGNAL */
+    input  logic [WORD_W-1:0] i_store_numerator_r2_rdata
     /* verilator lint_on UNUSEDSIGNAL */
 );
 
@@ -259,6 +276,16 @@ module trike_keygen_arith_core #(
   assign o_h123_t2_raddr = t2_addr;
   assign o_h123_r1_re = r1_re;
   assign o_h123_r1_raddr = r1_addr;
+  assign o_store_t0_we = t0_we;
+  assign o_store_t0_waddr = t0_addr;
+  assign o_store_t0_wdata = t0_wdata;
+  assign o_store_t0_re = t0_re;
+  assign o_store_t0_raddr = t0_addr;
+  assign o_store_numerator_r2_we = numerator_r2_we;
+  assign o_store_numerator_r2_waddr = numerator_r2_waddr;
+  assign o_store_numerator_r2_wdata = numerator_r2_wdata;
+  assign o_store_numerator_r2_re = numerator_r2_re;
+  assign o_store_numerator_r2_raddr = numerator_r2_raddr;
 
   assign inv_start = state_q == ST_INV_START;
   assign inv_input_valid = read_data_valid_q && (read_operand_q == READ_OPERAND_INV);
@@ -394,18 +421,38 @@ module trike_keygen_arith_core #(
   assign numerator_rdata = numerator_r2_rdata;
   assign r2_rdata = numerator_r2_rdata;
 
-  ram_bram #(
-      .DATA_W(WORD_W),
-      .DEPTH (WORDS)
-  ) u_numerator_r2_mem (
-      .i_clk  (i_clk),
-      .i_we   (numerator_r2_we),
-      .i_waddr(numerator_r2_waddr),
-      .i_wdata(numerator_r2_wdata),
-      .i_re   (numerator_r2_re),
-      .i_raddr(numerator_r2_raddr),
-      .o_rdata(numerator_r2_rdata)
-  );
+  generate
+    if (USE_EXTERNAL_RESULT_STORE) begin : gen_external_result_store
+      assign numerator_r2_rdata = i_store_numerator_r2_rdata;
+      assign t0_rdata = i_store_t0_rdata;
+    end else begin : gen_local_result_store
+      ram_bram #(
+          .DATA_W(WORD_W),
+          .DEPTH (WORDS)
+      ) u_numerator_r2_mem (
+          .i_clk  (i_clk),
+          .i_we   (numerator_r2_we),
+          .i_waddr(numerator_r2_waddr),
+          .i_wdata(numerator_r2_wdata),
+          .i_re   (numerator_r2_re),
+          .i_raddr(numerator_r2_raddr),
+          .o_rdata(numerator_r2_rdata)
+      );
+
+      ram_bram #(
+          .DATA_W(WORD_W),
+          .DEPTH (WORDS)
+      ) u_t0_mem (
+          .i_clk  (i_clk),
+          .i_we   (t0_we),
+          .i_waddr(t0_addr),
+          .i_wdata(t0_wdata),
+          .i_re   (t0_re),
+          .i_raddr(t0_addr),
+          .o_rdata(t0_rdata)
+      );
+    end
+  endgenerate
   ram_bram #(
       .DATA_W(WORD_W),
       .DEPTH (WORDS)
@@ -417,18 +464,6 @@ module trike_keygen_arith_core #(
       .i_re(inverse_re),
       .i_raddr(inverse_addr),
       .o_rdata(inverse_rdata)
-  );
-  ram_bram #(
-      .DATA_W(WORD_W),
-      .DEPTH (WORDS)
-  ) u_t0_mem (
-      .i_clk(i_clk),
-      .i_we(t0_we),
-      .i_waddr(t0_addr),
-      .i_wdata(t0_wdata),
-      .i_re(t0_re),
-      .i_raddr(t0_addr),
-      .o_rdata(t0_rdata)
   );
   always_comb begin
     read_issue_c = 1'b0;

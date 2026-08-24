@@ -181,6 +181,16 @@ module trike_keygen_core #(
   logic [WORD_ADDR_W-1:0] arith_result_word;
   logic [WORD_W-1:0] arith_result_data;
   logic arith_done;
+  logic arith_store_t0_we;
+  logic [WORD_ADDR_W-1:0] arith_store_t0_waddr;
+  logic [WORD_W-1:0] arith_store_t0_wdata;
+  logic arith_store_t0_re;
+  logic [WORD_ADDR_W-1:0] arith_store_t0_raddr;
+  logic arith_store_numerator_r2_we;
+  logic [WORD_ADDR_W-1:0] arith_store_numerator_r2_waddr;
+  logic [WORD_W-1:0] arith_store_numerator_r2_wdata;
+  logic arith_store_numerator_r2_re;
+  logic [WORD_ADDR_W-1:0] arith_store_numerator_r2_raddr;
 
   logic select_h123_compress;
   logic shared_compress_start;
@@ -193,10 +203,12 @@ module trike_keygen_core #(
   logic t0_we;
   logic t0_re;
   logic [WORD_ADDR_W-1:0] t0_addr;
+  logic [WORD_W-1:0] t0_wdata;
   logic [WORD_W-1:0] t0_rdata;
   logic r2_we;
   logic r2_re;
   logic [WORD_ADDR_W-1:0] r2_addr;
+  logic [WORD_W-1:0] r2_wdata;
   logic [WORD_W-1:0] r2_rdata;
   logic support_output_we;
   logic support_output_re;
@@ -351,13 +363,14 @@ module trike_keygen_core #(
   endgenerate
 
   trike_keygen_arith_core #(
-      .R_BITS                 (R_BITS),
-      .SECRET_WEIGHT          (SECRET_WEIGHT),
-      .WORD_W                 (WORD_W),
-      .DIGIT_W                (DIGIT_W),
-      .USE_EXTERNAL_MUL       (USE_EXTERNAL_MUL),
-      .USE_EXTERNAL_H123_STORE(USE_EXTERNAL_H123_STORE),
-      .MUL_INDEX_W            (MUL_INDEX_W)
+      .R_BITS                   (R_BITS),
+      .SECRET_WEIGHT            (SECRET_WEIGHT),
+      .WORD_W                   (WORD_W),
+      .DIGIT_W                  (DIGIT_W),
+      .USE_EXTERNAL_MUL         (USE_EXTERNAL_MUL),
+      .USE_EXTERNAL_H123_STORE  (USE_EXTERNAL_H123_STORE),
+      .USE_EXTERNAL_RESULT_STORE(1'b1),
+      .MUL_INDEX_W              (MUL_INDEX_W)
   ) u_arith (
       .i_clk                      (i_clk),
       .i_rst_n                    (i_rst_n),
@@ -407,7 +420,19 @@ module trike_keygen_core #(
       .i_h123_t2_rdata            (i_h123_t2_rdata),
       .o_h123_r1_re               (o_h123_r1_re),
       .o_h123_r1_raddr            (o_h123_r1_raddr),
-      .i_h123_r1_rdata            (i_h123_r1_rdata)
+      .i_h123_r1_rdata            (i_h123_r1_rdata),
+      .o_store_t0_we              (arith_store_t0_we),
+      .o_store_t0_waddr           (arith_store_t0_waddr),
+      .o_store_t0_wdata           (arith_store_t0_wdata),
+      .o_store_t0_re              (arith_store_t0_re),
+      .o_store_t0_raddr           (arith_store_t0_raddr),
+      .i_store_t0_rdata           (t0_rdata),
+      .o_store_numerator_r2_we    (arith_store_numerator_r2_we),
+      .o_store_numerator_r2_waddr (arith_store_numerator_r2_waddr),
+      .o_store_numerator_r2_wdata (arith_store_numerator_r2_wdata),
+      .o_store_numerator_r2_re    (arith_store_numerator_r2_re),
+      .o_store_numerator_r2_raddr (arith_store_numerator_r2_raddr),
+      .i_store_numerator_r2_rdata (r2_rdata)
   );
   /* verilator lint_on PINCONNECTEMPTY */
 
@@ -437,7 +462,7 @@ module trike_keygen_core #(
       .i_clk  (i_clk),
       .i_we   (t0_we),
       .i_waddr(t0_addr),
-      .i_wdata(arith_result_data),
+      .i_wdata(t0_wdata),
       .i_re   (t0_re),
       .i_raddr(t0_addr),
       .o_rdata(t0_rdata)
@@ -450,7 +475,7 @@ module trike_keygen_core #(
       .i_clk  (i_clk),
       .i_we   (r2_we),
       .i_waddr(r2_addr),
-      .i_wdata(arith_result_data),
+      .i_wdata(r2_wdata),
       .i_re   (r2_re),
       .i_raddr(r2_addr),
       .o_rdata(r2_rdata)
@@ -476,16 +501,40 @@ module trike_keygen_core #(
   );
 
   always_comb begin
-    t0_we = arith_result_valid && !arith_result_select;
-    t0_re = state_q == ST_SK_T0_FETCH;
-    t0_addr = t0_we ? arith_result_word : WORD_ADDR_W'(poly_byte_q / (WORD_W / 8));
-    r2_we = arith_result_valid && arith_result_select;
-    r2_re = (state_q == ST_PK_R2_FETCH) || (state_q == ST_SK_R2_FETCH);
-    r2_addr = r2_we ? arith_result_word : WORD_ADDR_W'(poly_byte_q / (WORD_W / 8));
+    t0_we = arith_store_t0_we;
+    t0_re = arith_store_t0_re;
+    t0_addr = arith_store_t0_we ? arith_store_t0_waddr : arith_store_t0_raddr;
+    t0_wdata = arith_store_t0_wdata;
+    r2_we = arith_store_numerator_r2_we;
+    r2_re = arith_store_numerator_r2_re;
+    r2_addr = arith_store_numerator_r2_we ? arith_store_numerator_r2_waddr :
+        arith_store_numerator_r2_raddr;
+    r2_wdata = arith_store_numerator_r2_wdata;
+
+    if (arith_result_valid) begin
+      if (arith_result_select) begin
+        r2_we = 1'b1;
+        r2_addr = arith_result_word;
+        r2_wdata = arith_result_data;
+      end else begin
+        t0_we = 1'b1;
+        t0_addr = arith_result_word;
+        t0_wdata = arith_result_data;
+      end
+    end
+
+    if (state_q == ST_SK_T0_FETCH) begin
+      t0_re   = 1'b1;
+      t0_addr = WORD_ADDR_W'(poly_byte_q / (WORD_W / 8));
+    end
+    if ((state_q == ST_PK_R2_FETCH) || (state_q == ST_SK_R2_FETCH)) begin
+      r2_re   = 1'b1;
+      r2_addr = WORD_ADDR_W'(poly_byte_q / (WORD_W / 8));
+    end
 
     o_pk_valid = 1'b0;
-    o_pk_data = '0;
-    o_pk_last = 1'b0;
+    o_pk_data  = '0;
+    o_pk_last  = 1'b0;
     if (state_q == ST_PK_R2_DATA) begin
       o_pk_valid = 1'b1;
       o_pk_data  = r2_rdata[8*(poly_byte_q%(WORD_W/8))+:8];
