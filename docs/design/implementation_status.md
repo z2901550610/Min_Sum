@@ -121,6 +121,8 @@ Encaps与Decaps的H4 support和三块padded dense error连接同一最大几何`
 `trike_keygen_core`接收`key_seed || sigma2 || sigma`共96 byte，固定扫描16组秘密support候选，随后执行
 H1/H2/H3和多项式算术。support同时写入稀疏运算视图和SK顺序输出RAM。PK为`r2 || sigma`共1,980
 byte，SK为三组32-bit little-endian support以及`h0 || t0 || r2 || sigma || sigma2`共6,328 byte。
+算术核用一组244x64-bit同步RAM依次保存两阶段numerator与最终`r2`；最终乘法完整接受两路操作数后，
+`r2`按固定输出顺序原位覆盖numerator。结构门禁要求该层次只包含`u_numerator_r2_mem`。
 
 | 边界 | 固定周期 | golden范围 |
 | --- | ---: | --- |

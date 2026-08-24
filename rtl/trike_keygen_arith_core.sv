@@ -178,6 +178,12 @@ module trike_keygen_arith_core #(
   logic          [WORD_ADDR_W-1:0] r2_addr;
   logic          [     WORD_W-1:0] r2_wdata;
   logic          [     WORD_W-1:0] r2_rdata;
+  logic                            numerator_r2_we;
+  logic                            numerator_r2_re;
+  logic          [WORD_ADDR_W-1:0] numerator_r2_waddr;
+  logic          [WORD_ADDR_W-1:0] numerator_r2_raddr;
+  logic          [     WORD_W-1:0] numerator_r2_wdata;
+  logic          [     WORD_W-1:0] numerator_r2_rdata;
 
   logic                            mul_start;
   logic                            mul_sparse_mode;
@@ -380,17 +386,25 @@ module trike_keygen_arith_core #(
       );
     end
   endgenerate
+  assign numerator_r2_we = numerator_we || r2_we;
+  assign numerator_r2_waddr = r2_we ? r2_addr : numerator_addr;
+  assign numerator_r2_wdata = r2_we ? r2_wdata : numerator_wdata;
+  assign numerator_r2_re = numerator_re || r2_re;
+  assign numerator_r2_raddr = r2_re ? r2_addr : numerator_addr;
+  assign numerator_rdata = numerator_r2_rdata;
+  assign r2_rdata = numerator_r2_rdata;
+
   ram_bram #(
       .DATA_W(WORD_W),
       .DEPTH (WORDS)
-  ) u_numerator_mem (
-      .i_clk(i_clk),
-      .i_we(numerator_we),
-      .i_waddr(numerator_addr),
-      .i_wdata(numerator_wdata),
-      .i_re(numerator_re),
-      .i_raddr(numerator_addr),
-      .o_rdata(numerator_rdata)
+  ) u_numerator_r2_mem (
+      .i_clk  (i_clk),
+      .i_we   (numerator_r2_we),
+      .i_waddr(numerator_r2_waddr),
+      .i_wdata(numerator_r2_wdata),
+      .i_re   (numerator_r2_re),
+      .i_raddr(numerator_r2_raddr),
+      .o_rdata(numerator_r2_rdata)
   );
   ram_bram #(
       .DATA_W(WORD_W),
@@ -416,19 +430,6 @@ module trike_keygen_arith_core #(
       .i_raddr(t0_addr),
       .o_rdata(t0_rdata)
   );
-  ram_bram #(
-      .DATA_W(WORD_W),
-      .DEPTH (WORDS)
-  ) u_r2_mem (
-      .i_clk(i_clk),
-      .i_we(r2_we),
-      .i_waddr(r2_addr),
-      .i_wdata(r2_wdata),
-      .i_re(r2_re),
-      .i_raddr(r2_addr),
-      .o_rdata(r2_rdata)
-  );
-
   always_comb begin
     read_issue_c = 1'b0;
     read_issue_source_c = READ_NONE;
@@ -762,6 +763,15 @@ module trike_keygen_arith_core #(
   end
 
 `ifndef SYNTHESIS
+  always_ff @(posedge i_clk) begin
+    if (numerator_we && r2_we) $error("trike_keygen_arith_core numerator/r2 write collision");
+    if (numerator_re && r2_re) $error("trike_keygen_arith_core numerator/r2 read collision");
+    if (r2_we && ((mul_a_request_q < WORDS) || (mul_b_request_q < WORDS) || read_pending_q ||
+                  read_data_valid_q)) begin
+      $error("trike_keygen_arith_core r2 overwrite before final operands were consumed");
+    end
+  end
+
   initial begin
     if (R_BITS < 3) $error("trike_keygen_arith_core R_BITS must be at least 3");
     if (SECRET_WEIGHT < 1) begin

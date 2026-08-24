@@ -87,6 +87,11 @@ flowchart TD
 边界包含两个物理乘法数据通路：外层通用乘法器一条，
 求逆核内部复用的一条；收敛为单一乘法器需要给求逆核增加外部乘法服务接口并重新验证周期与时序。
 
+两阶段numerator与最终`r2`使用一个244x64-bit `u_numerator_r2_mem`。最终`OP_MUL_R2`先把numerator和
+inverse完整装载到乘法器内部operand RAM，固定计算完成后才通过同一bank写入`r2`；输出阶段按同步读口
+重放该bank。读写角色只由公开operation选择，结构门禁排除独立numerator与r2 RAM。算术逐word、KeyGen
+core和窄I/O reference分别保持49,162,174、53,995,036和54,002,607拍。
+
 `trike_keygen_core`的随机输入为96 byte，顺序是`key_seed || sigma2 || sigma`，对应Reference C向外部
 随机源发出的三次32-byte请求。顶层顺序运行固定候选秘密采样、H1/H2/H3、KeyGen算术和密钥输出；秘密
 采样与H123通过公开FSM复用一个`trike_sm3_service`。三组support同时写入稀疏视图、算术核和32-bit顺序
@@ -571,7 +576,7 @@ TRIKE-2求逆数据存储的RTL逻辑容量由七份word数组收敛为三份整
 | 存储类 | 内容 | 复用规则 |
 | --- | --- | --- |
 | 持久key/ct RAM | pk、sk、输入ct、输出ct | 在一次KEM操作期间保持，不能与scratch覆盖 |
-| 多项式scratch RAM | H123共享t1/t2/r1、h1/h2临时值、Encaps累加/持久u/v、s、乘法accumulator | 由固定微程序做静态生命周期分配；前一阶段最后一次读取后才能换名覆盖 |
+| 多项式scratch RAM | H123共享t1/t2/r1、KeyGen numerator/r2、h1/h2临时值、Encaps累加/持久u/v、s、乘法accumulator | 由固定微程序做静态生命周期分配；前一阶段最后一次读取后才能换名覆盖 |
 | 临时采样/index RAM | 当前一组h索引或H4错误索引 | 输出写入持久SK/错误RAM后立即用于下一组采样 |
 | message/hash RAM | m、sigma、sigma2、c2、K/L消息重放 | 统一byte地址控制；XOR合入写口 |
 | decoder内部RAM | C2V/V2C、syndrome、accumulator、K-sign状态 | 由`decoder_top`独占，KEM顶层不改变其bank几何 |

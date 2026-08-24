@@ -133,6 +133,28 @@ def main() -> None:
             f"cores={uv_core_count} external={uv_external_store_count} "
             f"local={uv_local_store_count}"
         )
+    keygen_arith_modules = [
+        item
+        for item in objects
+        if item.get("type") == "MODULE"
+        and str(item.get("name", "")).startswith("trike_keygen_arith_core")
+    ]
+    keygen_arith_cells = {
+        child.get("name")
+        for module in keygen_arith_modules
+        for child in module.get("stmtsp", [])
+        if isinstance(child, dict) and child.get("type") == "CELL"
+    }
+    if (
+        len(keygen_arith_modules) != 1
+        or "u_numerator_r2_mem" not in keygen_arith_cells
+        or "u_numerator_mem" in keygen_arith_cells
+        or "u_r2_mem" in keygen_arith_cells
+    ):
+        raise SystemExit(
+            "trike_kem_asic_top: expected KeyGen numerator/r2 to use one shared RAM, "
+            f"found modules={len(keygen_arith_modules)} cells={sorted(keygen_arith_cells)}"
+        )
     print("Unified TRIKE KEM structure PASS: one sm3_compress instance")
     print("Unified TRIKE KEM structure PASS: two poly-mul instances")
     print("Unified TRIKE KEM structure PASS: one H123 vector service and parity mapper")
@@ -140,6 +162,7 @@ def main() -> None:
     print("Unified TRIKE KEM structure PASS: one H4 support/error store")
     print("Unified TRIKE KEM structure PASS: one H123 vector store")
     print("Unified TRIKE KEM structure PASS: Encaps UV reuses persistent u/v store")
+    print("Unified TRIKE KEM structure PASS: KeyGen numerator/r2 share one RAM")
 
 
 if __name__ == "__main__":
