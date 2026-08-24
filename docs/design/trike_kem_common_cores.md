@@ -87,6 +87,8 @@ flowchart TD
 `WORD_W=64, DIGIT_W=16`；TRIKE-2连续握手固定49,162,174拍，逐word匹配官方`t0/r2`。该功能
 边界包含两个物理乘法数据通路：外层通用乘法器一条，
 求逆核内部复用的一条；收敛为单一乘法器需要给求逆核增加外部乘法服务接口并重新验证周期与时序。
+第一次分母装载完成后，`t1`原多项式生命周期结束，同一bank依次保存第一次与第二次inverse；算术核
+不配置独立inverse RAM。
 
 外层`u_t0_output_mem`与`u_r2_output_mem`通过external result store接口直接服务算术核。前一组保存`t0`；
 后一组保存两阶段numerator，并在最终`OP_MUL_R2`完整装载numerator和inverse后原位写入`r2`。固定结果
@@ -503,6 +505,7 @@ sigma seed客户端和三路vector返回客户端；服务内部只有一组DRNG
 
 共享vector byte流写入一个`trike_h123_vector_store`，按little-endian保存三组244x64-bit RAM。
 三个独立同步读口保持KeyGen同周期读取`t1/r1`的带宽，并覆盖Encaps UV与L阶段的公开读序列。
+KeyGen通过固定写口在`t1`最后一次原值读取后写入两次inverse，下一笔H123事务重新装载完整`t1`。
 存储生命周期从H123首个vector byte延续至活动事务done，operation mux只选择活动stage地址；结构门禁
 要求统一层次恰好一个H123 vector store。Decaps使用四档运行时几何，其H123存储保留在stage层次。
 

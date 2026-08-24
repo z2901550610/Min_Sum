@@ -17,6 +17,9 @@ module tb_trike_h123_vector_store;
   logic                   t1_re;
   logic [WORD_ADDR_W-1:0] t1_raddr;
   logic [     WORD_W-1:0] t1_rdata;
+  logic                   t1_we;
+  logic [WORD_ADDR_W-1:0] t1_waddr;
+  logic [     WORD_W-1:0] t1_wdata;
   logic                   t2_re;
   logic [WORD_ADDR_W-1:0] t2_raddr;
   logic [     WORD_W-1:0] t2_rdata;
@@ -38,6 +41,9 @@ module tb_trike_h123_vector_store;
       .i_t1_re        (t1_re),
       .i_t1_raddr     (t1_raddr),
       .o_t1_rdata     (t1_rdata),
+      .i_t1_we        (t1_we),
+      .i_t1_waddr     (t1_waddr),
+      .i_t1_wdata     (t1_wdata),
       .i_t2_re        (t2_re),
       .i_t2_raddr     (t2_raddr),
       .o_t2_rdata     (t2_rdata),
@@ -61,6 +67,22 @@ module tb_trike_h123_vector_store;
     end
     @(negedge clk);
     vector_valid = 1'b0;
+  endtask
+
+  task automatic overwrite_t1_scratch;
+    @(negedge clk);
+    t1_we = 1'b1;
+    t1_waddr = 1;
+    t1_wdata = 16'hcafe;
+    @(negedge clk);
+    t1_we = 1'b0;
+    t1_re = 1'b1;
+    t1_raddr = 1;
+    @(posedge clk);
+    #1;
+    if (t1_rdata != 16'hcafe) $fatal(1, "t1 scratch overwrite mismatch");
+    @(negedge clk);
+    t1_re = 1'b0;
   endtask
 
   task automatic check_words(input  logic [7:0] base);
@@ -102,6 +124,9 @@ module tb_trike_h123_vector_store;
     vector_data = '0;
     t1_re = 1'b0;
     t1_raddr = '0;
+    t1_we = 1'b0;
+    t1_waddr = '0;
+    t1_wdata = '0;
     t2_re = 1'b0;
     t2_raddr = '0;
     r1_re = 1'b0;
@@ -111,6 +136,7 @@ module tb_trike_h123_vector_store;
     rst_n = 1'b1;
     write_vectors(8'h10);
     check_words(8'h10);
+    overwrite_t1_scratch();
     write_vectors(8'h80);
     check_words(8'h80);
 

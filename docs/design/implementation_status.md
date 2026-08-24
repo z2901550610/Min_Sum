@@ -98,7 +98,8 @@ Instantiate/Generate状态并复用一个`trike_parity_map_stream`，seed与vect
 
 共享H123 byte流同时写入一个`trike_h123_vector_store`。该服务按官方TRIKE-2几何保存三组
 244x64-bit的`t1/t2/r1`，并用三个独立同步读口满足KeyGen的`t1/r1`并行读取及Encaps读序列。
-operation mux只转发活动stage的读地址；完整层次恰好一个H123 vector store。两阶段全外置组合reference
+KeyGen第一次分母完整装载后，通过固定写口把`t1` bank依次重命名为两次inverse scratch；Encaps阶段
+保持三组H123只读角色。operation mux转发活动stage的读写地址；完整层次恰好一个H123 vector store。两阶段全外置组合reference
 分别保持53,995,036和2,378,447拍并通过byte golden；具体RAMB映射及读口复制行为等待Vivado确认。
 
 KeyGen秘密support、Encaps H4和Decaps重加密H4连接同一最大几何`trike_drng_weight_sampler`。命令装载
@@ -124,7 +125,8 @@ SK顺序输出RAM，保持同步读取时序边界。PK为`r2 || sigma`共1,980 
 support以及`h0 || t0 || r2 || sigma || sigma2`共6,328 byte。
 外层两组244x64-bit持久RAM直接连接算术核的external result store接口：一组保存`t0`，另一组依次保存
 两阶段numerator与最终`r2`。最终乘法完整接受两路操作数后，`r2`按固定输出顺序原位覆盖numerator；
-算术结果重放、PK与SK序列化从同一RAM读取。结构门禁要求算术核只展开external support/result store分支。
+算术结果重放、PK与SK序列化从同一RAM读取。共享H123的`t1` bank在原多项式最后一次读取后保存两次
+inverse结果。结构门禁要求算术核只展开external support/result store分支，且层次内没有独立inverse RAM。
 
 | 边界 | 固定周期 | golden范围 |
 | --- | ---: | --- |

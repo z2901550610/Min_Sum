@@ -20,6 +20,9 @@ module trike_h123_vector_store #(
     input  logic                                                                 i_t1_re,
     input  logic [                                              WORD_ADDR_W-1:0] i_t1_raddr,
     output logic [                                                   WORD_W-1:0] o_t1_rdata,
+    input  logic                                                                 i_t1_we,
+    input  logic [                                              WORD_ADDR_W-1:0] i_t1_waddr,
+    input  logic [                                                   WORD_W-1:0] i_t1_wdata,
     input  logic                                                                 i_t2_re,
     input  logic [                                              WORD_ADDR_W-1:0] i_t2_raddr,
     output logic [                                                   WORD_W-1:0] o_t2_rdata,
@@ -35,7 +38,10 @@ module trike_h123_vector_store #(
   logic [     WORD_W-1:0] vector_pack_q;
   logic [     WORD_W-1:0] vector_word_c;
   logic                   vector_word_end_c;
+  logic                   vector_t1_we;
   logic                   t1_we;
+  logic [WORD_ADDR_W-1:0] t1_waddr;
+  logic [     WORD_W-1:0] t1_wdata;
   logic                   t2_we;
   logic                   r1_we;
   logic [WORD_ADDR_W-1:0] vector_waddr;
@@ -48,7 +54,11 @@ module trike_h123_vector_store #(
     vector_word_end_c = ((int'(i_vector_byte) % WORD_BYTES) == (WORD_BYTES - 1)) ||
                         (int'(i_vector_byte) == (R_BYTES - 1));
     vector_waddr = WORD_ADDR_W'(int'(i_vector_byte) / WORD_BYTES);
-    t1_we = i_vector_valid && o_vector_ready && vector_word_end_c && (i_vector_select == 2'd0);
+    vector_t1_we =
+        i_vector_valid && o_vector_ready && vector_word_end_c && (i_vector_select == 2'd0);
+    t1_we = vector_t1_we || i_t1_we;
+    t1_waddr = i_t1_we ? i_t1_waddr : vector_waddr;
+    t1_wdata = i_t1_we ? i_t1_wdata : vector_word_c;
     t2_we = i_vector_valid && o_vector_ready && vector_word_end_c && (i_vector_select == 2'd1);
     r1_we = i_vector_valid && o_vector_ready && vector_word_end_c && (i_vector_select == 2'd2);
   end
@@ -59,8 +69,8 @@ module trike_h123_vector_store #(
   ) u_t1_mem (
       .i_clk  (i_clk),
       .i_we   (t1_we),
-      .i_waddr(vector_waddr),
-      .i_wdata(vector_word_c),
+      .i_waddr(t1_waddr),
+      .i_wdata(t1_wdata),
       .i_re   (i_t1_re),
       .i_raddr(i_t1_raddr),
       .o_rdata(o_t1_rdata)
@@ -113,6 +123,7 @@ module trike_h123_vector_store #(
       if (int'(i_vector_byte) >= R_BYTES)
         $error("trike_h123_vector_store vector byte out of range");
     end
+    if (vector_t1_we && i_t1_we) $error("trike_h123_vector_store t1 write collision");
   end
 `endif
 

@@ -82,6 +82,9 @@ module tb_trike_keygen_core_reference #(
   logic                        h123_t1_re;
   logic [H123_WORD_ADDR_W-1:0] h123_t1_raddr;
   logic [                63:0] h123_t1_rdata;
+  logic                        h123_t1_we;
+  logic [H123_WORD_ADDR_W-1:0] h123_t1_waddr;
+  logic [                63:0] h123_t1_wdata;
   logic                        h123_t2_re;
   logic [H123_WORD_ADDR_W-1:0] h123_t2_raddr;
   logic [                63:0] h123_t2_rdata;
@@ -214,6 +217,9 @@ module tb_trike_keygen_core_reference #(
           .o_h123_t1_re               (h123_t1_re),
           .o_h123_t1_raddr            (h123_t1_raddr),
           .i_h123_t1_rdata            (h123_t1_rdata),
+          .o_h123_t1_we               (h123_t1_we),
+          .o_h123_t1_waddr            (h123_t1_waddr),
+          .o_h123_t1_wdata            (h123_t1_wdata),
           .o_h123_t2_re               (h123_t2_re),
           .o_h123_t2_raddr            (h123_t2_raddr),
           .i_h123_t2_rdata            (h123_t2_rdata),
@@ -327,6 +333,9 @@ module tb_trike_keygen_core_reference #(
             .i_t1_re        (h123_t1_re),
             .i_t1_raddr     (h123_t1_raddr),
             .o_t1_rdata     (h123_t1_rdata),
+            .i_t1_we        (h123_t1_we),
+            .i_t1_waddr     (h123_t1_waddr),
+            .i_t1_wdata     (h123_t1_wdata),
             .i_t2_re        (h123_t2_re),
             .i_t2_raddr     (h123_t2_raddr),
             .o_t2_rdata     (h123_t2_rdata),

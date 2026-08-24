@@ -93,6 +93,9 @@ module trike_kem_asic_top
   logic                                 keygen_h123_vector_ready;
   logic                                 keygen_h123_t1_re;
   logic [         H123_WORD_ADDR_W-1:0] keygen_h123_t1_raddr;
+  logic                                 keygen_h123_t1_we;
+  logic [         H123_WORD_ADDR_W-1:0] keygen_h123_t1_waddr;
+  logic [                         63:0] keygen_h123_t1_wdata;
   logic                                 keygen_h123_t2_re;
   logic [         H123_WORD_ADDR_W-1:0] keygen_h123_t2_raddr;
   logic                                 keygen_h123_r1_re;
@@ -241,6 +244,9 @@ module trike_kem_asic_top
   logic                                 shared_h123_t1_re;
   logic [         H123_WORD_ADDR_W-1:0] shared_h123_t1_raddr;
   logic [                         63:0] shared_h123_t1_rdata;
+  logic                                 shared_h123_t1_we;
+  logic [         H123_WORD_ADDR_W-1:0] shared_h123_t1_waddr;
+  logic [                         63:0] shared_h123_t1_wdata;
   logic                                 shared_h123_t2_re;
   logic [         H123_WORD_ADDR_W-1:0] shared_h123_t2_raddr;
   logic [                         63:0] shared_h123_t2_rdata;
@@ -374,6 +380,9 @@ module trike_kem_asic_top
       .o_h123_t1_re(keygen_h123_t1_re),
       .o_h123_t1_raddr(keygen_h123_t1_raddr),
       .i_h123_t1_rdata(shared_h123_t1_rdata),
+      .o_h123_t1_we(keygen_h123_t1_we),
+      .o_h123_t1_waddr(keygen_h123_t1_waddr),
+      .o_h123_t1_wdata(keygen_h123_t1_wdata),
       .o_h123_t2_re(keygen_h123_t2_re),
       .o_h123_t2_raddr(keygen_h123_t2_raddr),
       .i_h123_t2_rdata(shared_h123_t2_rdata),
@@ -613,6 +622,9 @@ module trike_kem_asic_top
     shared_h123_vector_ready = 1'b0;
     shared_h123_t1_re = 1'b0;
     shared_h123_t1_raddr = '0;
+    shared_h123_t1_we = 1'b0;
+    shared_h123_t1_waddr = '0;
+    shared_h123_t1_wdata = '0;
     shared_h123_t2_re = 1'b0;
     shared_h123_t2_raddr = '0;
     shared_h123_r1_re = 1'b0;
@@ -666,6 +678,9 @@ module trike_kem_asic_top
         shared_h123_vector_ready = keygen_h123_vector_ready;
         shared_h123_t1_re = keygen_h123_t1_re;
         shared_h123_t1_raddr = keygen_h123_t1_raddr;
+        shared_h123_t1_we = keygen_h123_t1_we;
+        shared_h123_t1_waddr = keygen_h123_t1_waddr;
+        shared_h123_t1_wdata = keygen_h123_t1_wdata;
         shared_h123_t2_re = keygen_h123_t2_re;
         shared_h123_t2_raddr = keygen_h123_t2_raddr;
         shared_h123_r1_re = keygen_h123_r1_re;
@@ -832,6 +847,9 @@ module trike_kem_asic_top
       .i_t1_re        (shared_h123_t1_re),
       .i_t1_raddr     (shared_h123_t1_raddr),
       .o_t1_rdata     (shared_h123_t1_rdata),
+      .i_t1_we        (shared_h123_t1_we),
+      .i_t1_waddr     (shared_h123_t1_waddr),
+      .i_t1_wdata     (shared_h123_t1_wdata),
       .i_t2_re        (shared_h123_t2_re),
       .i_t2_raddr     (shared_h123_t2_raddr),
       .o_t2_rdata     (shared_h123_t2_rdata),

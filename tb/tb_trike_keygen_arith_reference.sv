@@ -30,6 +30,11 @@ module tb_trike_keygen_arith_reference;
   logic                   done;
   logic                   h123_t1_re;
   logic [WORD_ADDR_W-1:0] h123_t1_raddr;
+  /* verilator lint_off UNUSEDSIGNAL */
+  logic                   h123_t1_we;
+  logic [WORD_ADDR_W-1:0] h123_t1_waddr;
+  logic [           63:0] h123_t1_wdata;
+  /* verilator lint_on UNUSEDSIGNAL */
   logic                   h123_t2_re;
   logic [WORD_ADDR_W-1:0] h123_t2_raddr;
   logic                   h123_r1_re;
@@ -69,6 +74,9 @@ module tb_trike_keygen_arith_reference;
       .o_h123_t1_re      (h123_t1_re),
       .o_h123_t1_raddr   (h123_t1_raddr),
       .i_h123_t1_rdata   ('0),
+      .o_h123_t1_we      (h123_t1_we),
+      .o_h123_t1_waddr   (h123_t1_waddr),
+      .o_h123_t1_wdata   (h123_t1_wdata),
       .o_h123_t2_re      (h123_t2_re),
       .o_h123_t2_raddr   (h123_t2_raddr),
       .i_h123_t2_rdata   ('0),

@@ -67,6 +67,9 @@ module trike_keygen_arith_core #(
     /* verilator lint_off UNUSEDSIGNAL */
     input  logic [WORD_W-1:0] i_h123_t1_rdata,
     /* verilator lint_on UNUSEDSIGNAL */
+    output logic o_h123_t1_we,
+    output logic [WORD_ADDR_W-1:0] o_h123_t1_waddr,
+    output logic [WORD_W-1:0] o_h123_t1_wdata,
     output logic o_h123_t2_re,
     output logic [WORD_ADDR_W-1:0] o_h123_t2_raddr,
     /* verilator lint_off UNUSEDSIGNAL */
@@ -182,11 +185,6 @@ module trike_keygen_arith_core #(
   logic          [WORD_ADDR_W-1:0] numerator_addr;
   logic          [     WORD_W-1:0] numerator_wdata;
   logic          [     WORD_W-1:0] numerator_rdata;
-  logic                            inverse_we;
-  logic                            inverse_re;
-  logic          [WORD_ADDR_W-1:0] inverse_addr;
-  logic          [     WORD_W-1:0] inverse_wdata;
-  logic          [     WORD_W-1:0] inverse_rdata;
   logic                            t0_we;
   logic                            t0_re;
   logic          [WORD_ADDR_W-1:0] t0_addr;
@@ -274,6 +272,9 @@ module trike_keygen_arith_core #(
   assign o_mul_result_ready = 1'b1;
   assign o_h123_t1_re = t1_re;
   assign o_h123_t1_raddr = t1_addr;
+  assign o_h123_t1_we = USE_EXTERNAL_H123_STORE && inv_result_valid;
+  assign o_h123_t1_waddr = WORD_ADDR_W'(inv_result_word_q);
+  assign o_h123_t1_wdata = inv_result_data;
   assign o_h123_t2_re = t2_re;
   assign o_h123_t2_raddr = t2_addr;
   assign o_h123_r1_re = r1_re;
@@ -486,18 +487,6 @@ module trike_keygen_arith_core #(
       );
     end
   endgenerate
-  ram_bram #(
-      .DATA_W(WORD_W),
-      .DEPTH (WORDS)
-  ) u_inverse_mem (
-      .i_clk(i_clk),
-      .i_we(inverse_we),
-      .i_waddr(inverse_addr),
-      .i_wdata(inverse_wdata),
-      .i_re(inverse_re),
-      .i_raddr(inverse_addr),
-      .o_rdata(inverse_rdata)
-  );
   always_comb begin
     read_issue_c = 1'b0;
     read_issue_source_c = READ_NONE;
@@ -541,7 +530,7 @@ module trike_keygen_arith_core #(
     unique case (read_source_q)
       READ_R1: read_capture_data_c = r1_rdata;
       READ_NUMERATOR: read_capture_data_c = numerator_rdata;
-      READ_INVERSE: read_capture_data_c = inverse_rdata;
+      READ_INVERSE: read_capture_data_c = t1_rdata;
       READ_T0: read_capture_data_c = t0_rdata;
       READ_T2: read_capture_data_c = t2_rdata;
       READ_DENOMINATOR1: read_capture_data_c = t1_rdata ^ r1_rdata;
@@ -567,10 +556,6 @@ module trike_keygen_arith_core #(
     numerator_re = 1'b0;
     numerator_addr = '0;
     numerator_wdata = '0;
-    inverse_we = 1'b0;
-    inverse_re = 1'b0;
-    inverse_addr = '0;
-    inverse_wdata = inv_result_data;
     t0_we = 1'b0;
     t0_re = 1'b0;
     t0_addr = '0;
@@ -608,8 +593,8 @@ module trike_keygen_arith_core #(
           numerator_addr = read_issue_addr_c;
         end
         READ_INVERSE: begin
-          inverse_re   = 1'b1;
-          inverse_addr = read_issue_addr_c;
+          t1_re   = 1'b1;
+          t1_addr = read_issue_addr_c;
         end
         READ_T0: begin
           t0_re   = 1'b1;
@@ -658,8 +643,9 @@ module trike_keygen_arith_core #(
     end
 
     if (inv_result_valid) begin
-      inverse_we   = 1'b1;
-      inverse_addr = WORD_ADDR_W'(inv_result_word_q);
+      t1_we    = 1'b1;
+      t1_addr  = WORD_ADDR_W'(inv_result_word_q);
+      t1_wdata = inv_result_data;
     end
 
     if (state_q == ST_OUTPUT_FETCH) begin
@@ -825,6 +811,7 @@ module trike_keygen_arith_core #(
   always_ff @(posedge i_clk) begin
     if (numerator_we && r2_we) $error("trike_keygen_arith_core numerator/r2 write collision");
     if (numerator_re && r2_re) $error("trike_keygen_arith_core numerator/r2 read collision");
+    if (inv_result_valid && t1_re) $error("trike_keygen_arith_core t1/inverse role collision");
     if (r2_we && ((mul_a_request_q < WORDS) || (mul_b_request_q < WORDS) || read_pending_q ||
                   read_data_valid_q)) begin
       $error("trike_keygen_arith_core r2 overwrite before final operands were consumed");

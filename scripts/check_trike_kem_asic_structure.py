@@ -184,6 +184,7 @@ def main() -> None:
         or keygen_local_support_store_count != 0
         or "u_numerator_r2_mem" in keygen_arith_cells
         or "u_t0_mem" in keygen_arith_cells
+        or "u_inverse_mem" in keygen_arith_cells
         or "u_t0_output_mem" not in keygen_core_cells
         or "u_r2_output_mem" not in keygen_core_cells
     ):
@@ -208,6 +209,7 @@ def main() -> None:
     print("Unified TRIKE KEM structure PASS: Encaps UV reuses persistent u/v store")
     print("Unified TRIKE KEM structure PASS: KeyGen reuses two persistent result RAMs")
     print("Unified TRIKE KEM structure PASS: KeyGen arithmetic reuses the stage support view")
+    print("Unified TRIKE KEM structure PASS: KeyGen inverse reuses the H123 t1 bank")
 
 
 if __name__ == "__main__":
