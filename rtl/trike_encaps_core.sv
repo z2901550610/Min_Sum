@@ -21,6 +21,7 @@ module trike_encaps_core #(
     parameter bit USE_EXTERNAL_H123 = 1'b0,
     parameter bit USE_EXTERNAL_SAMPLER = 1'b0,
     parameter bit USE_EXTERNAL_H4_STORE = 1'b0,
+    parameter bit USE_EXTERNAL_H123_STORE = 1'b0,
     parameter int MUL_INDEX_W = ((R_BITS > 1) ? $clog2(R_BITS) : 1),
     parameter int PADDED_R_BYTES = ((R_BITS + 511) / 512) * 64,
     parameter int WORD_ADDR_W = ((((R_BITS + WORD_W - 1) / WORD_W) > 1) ? $clog2(
@@ -77,6 +78,21 @@ module trike_encaps_core #(
     input  logic [7:0] i_h123_vector_data,
     output logic o_h123_vector_ready,
     input  logic i_h123_done,
+    output logic o_h123_t1_re,
+    output logic [WORD_ADDR_W-1:0] o_h123_t1_raddr,
+    /* verilator lint_off UNUSEDSIGNAL */
+    input  logic [WORD_W-1:0] i_h123_t1_rdata,
+    /* verilator lint_on UNUSEDSIGNAL */
+    output logic o_h123_t2_re,
+    output logic [WORD_ADDR_W-1:0] o_h123_t2_raddr,
+    /* verilator lint_off UNUSEDSIGNAL */
+    input  logic [WORD_W-1:0] i_h123_t2_rdata,
+    /* verilator lint_on UNUSEDSIGNAL */
+    output logic o_h123_r1_re,
+    output logic [WORD_ADDR_W-1:0] o_h123_r1_raddr,
+    /* verilator lint_off UNUSEDSIGNAL */
+    input  logic [WORD_W-1:0] i_h123_r1_rdata,
+    /* verilator lint_on UNUSEDSIGNAL */
     output logic o_sampler_start,
     output logic [31:0] o_sampler_runtime_length,
     output logic [31:0] o_sampler_runtime_weight,
@@ -305,44 +321,59 @@ module trike_encaps_core #(
       .o_rdata(r2_rdata)
   );
 
-  ram_bram #(
-      .DATA_W(WORD_W),
-      .DEPTH (WORDS)
-  ) u_t1_mem (
-      .i_clk  (i_clk),
-      .i_we   (t1_we),
-      .i_waddr(t1_waddr),
-      .i_wdata(t1_wdata),
-      .i_re   (t1_re),
-      .i_raddr(t1_raddr),
-      .o_rdata(t1_rdata)
-  );
+  assign o_h123_t1_re = t1_re;
+  assign o_h123_t1_raddr = t1_raddr;
+  assign o_h123_t2_re = t2_re;
+  assign o_h123_t2_raddr = t2_raddr;
+  assign o_h123_r1_re = r1_re;
+  assign o_h123_r1_raddr = r1_raddr;
 
-  ram_bram #(
-      .DATA_W(WORD_W),
-      .DEPTH (WORDS)
-  ) u_t2_mem (
-      .i_clk  (i_clk),
-      .i_we   (t2_we),
-      .i_waddr(t2_waddr),
-      .i_wdata(t2_wdata),
-      .i_re   (t2_re),
-      .i_raddr(t2_raddr),
-      .o_rdata(t2_rdata)
-  );
+  generate
+    if (USE_EXTERNAL_H123_STORE) begin : gen_external_h123_store
+      assign t1_rdata = i_h123_t1_rdata;
+      assign t2_rdata = i_h123_t2_rdata;
+      assign r1_rdata = i_h123_r1_rdata;
+    end else begin : gen_local_h123_store
+      ram_bram #(
+          .DATA_W(WORD_W),
+          .DEPTH (WORDS)
+      ) u_t1_mem (
+          .i_clk  (i_clk),
+          .i_we   (t1_we),
+          .i_waddr(t1_waddr),
+          .i_wdata(t1_wdata),
+          .i_re   (t1_re),
+          .i_raddr(t1_raddr),
+          .o_rdata(t1_rdata)
+      );
 
-  ram_bram #(
-      .DATA_W(WORD_W),
-      .DEPTH (WORDS)
-  ) u_r1_mem (
-      .i_clk  (i_clk),
-      .i_we   (r1_we),
-      .i_waddr(r1_waddr),
-      .i_wdata(r1_wdata),
-      .i_re   (r1_re),
-      .i_raddr(r1_raddr),
-      .o_rdata(r1_rdata)
-  );
+      ram_bram #(
+          .DATA_W(WORD_W),
+          .DEPTH (WORDS)
+      ) u_t2_mem (
+          .i_clk  (i_clk),
+          .i_we   (t2_we),
+          .i_waddr(t2_waddr),
+          .i_wdata(t2_wdata),
+          .i_re   (t2_re),
+          .i_raddr(t2_raddr),
+          .o_rdata(t2_rdata)
+      );
+
+      ram_bram #(
+          .DATA_W(WORD_W),
+          .DEPTH (WORDS)
+      ) u_r1_mem (
+          .i_clk  (i_clk),
+          .i_we   (r1_we),
+          .i_waddr(r1_waddr),
+          .i_wdata(r1_wdata),
+          .i_re   (r1_re),
+          .i_raddr(r1_raddr),
+          .o_rdata(r1_rdata)
+      );
+    end
+  endgenerate
 
   ram_bram #(
       .DATA_W(WORD_W),

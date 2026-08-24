@@ -443,8 +443,9 @@ flowchart TD
 | 验证服务 | `trike_ct_verify_stream` | 固定word数比较、累计difference并调用`kem_ct_compare_select` |
 
 `trike_kem_asic_top`实例化三个固定阶段控制器，三个阶段只在被选operation下接收start和输入流。SM3
-压缩数据通路、H1/H2/H3向量生成、固定重量采样、H4结果存储和普通多项式乘法数据通路为芯片级共享
-资源；seed Instantiate控制、弱密钥检测和其他stage RAM位于各自层次，作为服务化与生命周期分配边界。
+压缩数据通路、H1/H2/H3向量生成及结果存储、固定重量采样、H4结果存储和普通多项式乘法数据通路为
+芯片级共享资源；seed Instantiate控制、弱密钥检测和其他stage RAM位于各自层次，作为服务化与
+生命周期分配边界。
 
 ## 跨流程复用矩阵
 
@@ -453,6 +454,7 @@ flowchart TD
 | SM3压缩数据通路 | DF、DRNG、H1/H2/H3 | H1/H2/H3、H4、K、L | H1/H2/H3、L、H4、K | 1 | 所有哈希阶段按固定微程序串行 |
 | DRNG状态与Generate | 秘密采样、H1/H2/H3 | H1/H2/H3、H4 | H1/H2/H3、H4检查 | 1 | 每个函数开始装载新context；不交叉执行两个context |
 | parity mapper | t1、t2、r1 | t1、t2、r1 | t1、t2、r1 | 1 | 三个向量依次处理，目标parity为公开命令字段 |
+| H123 vector RAM | 保存t1、t2、r1 | 保存t1、t2、r1 | stage本地运行时几何 | 1组共享+Decaps本地 | KeyGen/Encaps同为TRIKE-2且operation互斥；三个独立同步读口 |
 | fixed-weight sampler | 三次`length=r, weight=d` | 一次`length=3r, weight=t` | H4检查一次 | 1 | 核按最大`t`配置，实际length/weight是公开运行参数 |
 | sampler index RAM | 临时生成h0/h1/h2 | 临时生成e | 临时生成e_calc | 1 | 每组index输出后写入持久SK或错误RAM，临时RAM即可覆盖 |
 | H4 support/error RAM | 不使用 | 保存e的index和dense error | 保存e_calc的index和dense error | 1 | 两个operation单发射，存储保留至各自事务完成 |
@@ -490,6 +492,11 @@ KeyGen与Encaps的H1/H2/H3使用一个固定TRIKE-2 `trike_h123_vectors`服务�
 sigma seed客户端和三路vector返回客户端；服务内部只有一组DRNG Instantiate/Generate状态与一个
 `trike_parity_map_stream`。压缩命令进入全局SM3服务，KeyGen秘密采样与Encaps后续H4阶段均与H123按
 各自公开FSM串行。结构门禁要求统一层次恰好一个H123服务和一个parity mapper。
+
+共享vector byte流写入一个`trike_h123_vector_store`，按little-endian保存三组244x64-bit RAM。
+三个独立同步读口保持KeyGen同周期读取`t1/r1`的带宽，并覆盖Encaps UV与L阶段的公开读序列。
+存储生命周期从H123首个vector byte延续至活动事务done，operation mux只选择活动stage地址；结构门禁
+要求统一层次恰好一个H123 vector store。Decaps使用四档运行时几何，其H123存储保留在stage层次。
 
 秘密多项式采样和H4使用同一`generate_random_idx`算法，只是公开`length/weight`不同。完成态采样器以
 四档最大值`length=3*106781,weight=877`确定物理位宽和RAM深度，并在command中装载当前参数与DRNG
@@ -559,7 +566,7 @@ TRIKE-2求逆数据存储的RTL逻辑容量由七份word数组收敛为三份整
 | 存储类 | 内容 | 复用规则 |
 | --- | --- | --- |
 | 持久key/ct RAM | pk、sk、输入ct、输出ct | 在一次KEM操作期间保持，不能与scratch覆盖 |
-| 多项式scratch RAM | t1、t2、r1、h1/h2临时值、u、v、s、乘法accumulator | 由固定微程序做静态生命周期分配；前一阶段最后一次读取后才能换名覆盖 |
+| 多项式scratch RAM | H123共享t1/t2/r1、h1/h2临时值、u、v、s、乘法accumulator | 由固定微程序做静态生命周期分配；前一阶段最后一次读取后才能换名覆盖 |
 | 临时采样/index RAM | 当前一组h索引或H4错误索引 | 输出写入持久SK/错误RAM后立即用于下一组采样 |
 | message/hash RAM | m、sigma、sigma2、c2、K/L消息重放 | 统一byte地址控制；XOR合入写口 |
 | decoder内部RAM | C2V/V2C、syndrome、accumulator、K-sign状态 | 由`decoder_top`独占，KEM顶层不改变其bank几何 |
@@ -574,15 +581,16 @@ Decaps中`s`写完后，`u/v/t1/t2/r1`不再参与译码，可以将对应scratc
 
 1. 一个物理SM3压缩核；
 2. 一个H1/H2/H3向量服务和parity mapper；
-3. 一个运行时公开参数的固定重量采样核；
-4. 一组Encaps/Decaps H4 support/error结果RAM；
-5. 一个支持两种模式的循环多项式乘法核和一个KeyGen求逆核内乘法器；
-6. 一个`decoder_top`；
-7. 一个公开operation单发射控制器。
+3. 一组KeyGen/Encaps H123向量结果RAM；
+4. 一个运行时公开参数的固定重量采样核；
+5. 一组Encaps/Decaps H4 support/error结果RAM；
+6. 一个支持两种模式的循环多项式乘法核和一个KeyGen求逆核内乘法器；
+7. 一个`decoder_top`；
+8. 一个公开operation单发射控制器。
 
-`trike_kem_asic_top`按以上实例数形成结构门禁。H123、算术、序列化和其他跨阶段scratch RAM保持静态
-stage边界，生命周期合并属于后续资源收敛边界。统一入口资源收益、Fmax和端到端周期为待测；增加SM3或
-乘法lane需要用完整KEM周期、同条件Vivado和`cycles/Fmax`与BRAM/LUT共同判断。
+`trike_kem_asic_top`按以上实例数形成结构门禁。Decaps H123、算术、序列化和其他跨阶段scratch RAM保持
+静态stage边界，生命周期合并属于后续资源收敛边界。统一入口资源收益、Fmax和端到端周期为待测；增加
+SM3或乘法lane需要用完整KEM周期、同条件Vivado和`cycles/Fmax`与BRAM/LUT共同判断。
 
 ## 已有实现与论文
 

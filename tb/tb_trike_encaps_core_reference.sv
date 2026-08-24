@@ -1,12 +1,13 @@
 `timescale 1ns / 1ps
 
 module tb_trike_encaps_core_reference #(
-    parameter bit USE_SYNTH_TOP       = 1'b0,
-    parameter bit USE_SHARED_SM3      = 1'b0,
-    parameter bit USE_SHARED_MUL      = 1'b0,
-    parameter bit USE_SHARED_H123     = 1'b0,
-    parameter bit USE_SHARED_SAMPLER  = 1'b0,
-    parameter bit USE_SHARED_H4_STORE = 1'b0
+    parameter bit USE_SYNTH_TOP         = 1'b0,
+    parameter bit USE_SHARED_SM3        = 1'b0,
+    parameter bit USE_SHARED_MUL        = 1'b0,
+    parameter bit USE_SHARED_H123       = 1'b0,
+    parameter bit USE_SHARED_SAMPLER    = 1'b0,
+    parameter bit USE_SHARED_H4_STORE   = 1'b0,
+    parameter bit USE_SHARED_H123_STORE = 1'b0
 );
 
   /* verilator lint_off UNUSEDPARAM */
@@ -21,104 +22,115 @@ module tb_trike_encaps_core_reference #(
   localparam int MUL_INDEX_W = $clog2(MAX_R_BITS);
   localparam int PADDED_R_BYTES = ((REF_R_BITS + 511) / 512) * 64;
   localparam int ERROR_ADDR_W = $clog2(3 * PADDED_R_BYTES);
+  localparam int H123_WORD_ADDR_W = $clog2((REF_R_BITS + 63) / 64);
 
-  logic                    clk;
-  logic                    rst_n;
-  logic                    start;
-  logic                    input_valid;
-  logic [             7:0] input_data;
-  logic                    input_ready;
-  logic                    ciphertext_valid;
-  logic [             7:0] ciphertext_data;
-  logic                    ciphertext_last;
-  logic                    ciphertext_ready;
-  logic                    shared_secret_valid;
-  logic [             7:0] shared_secret_data;
-  logic                    shared_secret_last;
-  logic                    shared_secret_ready;
-  logic                    busy;
-  logic                    done;
+  logic                        clk;
+  logic                        rst_n;
+  logic                        start;
+  logic                        input_valid;
+  logic [                 7:0] input_data;
+  logic                        input_ready;
+  logic                        ciphertext_valid;
+  logic [                 7:0] ciphertext_data;
+  logic                        ciphertext_last;
+  logic                        ciphertext_ready;
+  logic                        shared_secret_valid;
+  logic [                 7:0] shared_secret_data;
+  logic                        shared_secret_last;
+  logic                        shared_secret_ready;
+  logic                        busy;
+  logic                        done;
   /* verilator lint_off UNUSEDSIGNAL */
-  logic                    compress_start;
-  logic [           511:0] compress_block;
-  logic [           255:0] compress_input_state;
-  logic                    compress_busy;
-  logic                    compress_done;
-  logic [           255:0] compress_output_state;
-  logic                    selected_compress_start;
-  logic [           511:0] selected_compress_block;
-  logic [           255:0] selected_compress_state;
-  logic                    mul_start;
-  logic [            31:0] mul_runtime_r_bits;
-  logic [            31:0] mul_runtime_words;
-  logic [            31:0] mul_runtime_sparse_weight;
-  logic                    mul_sparse_a;
-  logic                    mul_a_valid;
-  logic [            63:0] mul_a_data;
-  logic                    mul_a_ready;
-  logic                    mul_sparse_index_valid;
-  logic [ MUL_INDEX_W-1:0] mul_sparse_index;
-  logic                    mul_sparse_index_ready;
-  logic                    mul_b_valid;
-  logic [            63:0] mul_b_data;
-  logic                    mul_b_ready;
-  logic                    mul_result_valid;
-  logic [            63:0] mul_result_data;
-  logic                    mul_result_last;
-  logic                    mul_result_ready;
-  logic                    h123_start;
-  logic                    h123_seed_valid;
-  logic [             7:0] h123_seed_data;
-  logic                    h123_seed_ready;
-  logic                    h123_vector_valid;
-  logic [             1:0] h123_vector_select;
-  logic [            10:0] h123_vector_byte;
-  logic [             7:0] h123_vector_data;
-  logic                    h123_vector_ready;
-  logic                    h123_done;
-  logic                    h123_busy;
-  logic                    h123_compress_start;
-  logic [           511:0] h123_compress_block;
-  logic [           255:0] h123_compress_state;
-  logic                    sampler_start;
-  logic [            31:0] sampler_length;
-  logic [            31:0] sampler_weight;
-  logic [           439:0] sampler_input_v;
-  logic [           439:0] sampler_input_c;
-  logic [           439:0] sampler_input_reseed_counter;
-  logic                    sampler_index_valid;
-  logic [             8:0] sampler_index_position;
-  logic [            15:0] sampler_index;
-  logic                    sampler_index_ready;
-  logic                    sampler_busy;
-  logic                    sampler_done;
-  logic [           439:0] sampler_output_v;
-  logic [           439:0] sampler_output_c;
-  logic [           439:0] sampler_output_reseed_counter;
-  logic                    sampler_compress_start;
-  logic [           511:0] sampler_compress_block;
-  logic [           255:0] sampler_compress_state;
-  logic                    h4_store_start;
-  logic [            31:0] h4_store_r_bits;
-  logic [            31:0] h4_store_error_weight;
-  logic [            31:0] h4_store_padded_r_bytes;
-  logic                    h4_store_index_valid;
-  logic [             8:0] h4_store_index_position;
-  logic [            15:0] h4_store_index;
-  logic                    h4_store_index_ready;
-  logic                    h4_store_support_re;
-  logic [             8:0] h4_store_support_raddr;
-  logic [            15:0] h4_store_support_rdata;
-  logic                    h4_store_error_re;
-  logic [ERROR_ADDR_W-1:0] h4_store_error_raddr;
-  logic [             7:0] h4_store_error_rdata;
-  logic                    h4_store_busy;
-  logic                    h4_store_done;
+  logic                        compress_start;
+  logic [               511:0] compress_block;
+  logic [               255:0] compress_input_state;
+  logic                        compress_busy;
+  logic                        compress_done;
+  logic [               255:0] compress_output_state;
+  logic                        selected_compress_start;
+  logic [               511:0] selected_compress_block;
+  logic [               255:0] selected_compress_state;
+  logic                        mul_start;
+  logic [                31:0] mul_runtime_r_bits;
+  logic [                31:0] mul_runtime_words;
+  logic [                31:0] mul_runtime_sparse_weight;
+  logic                        mul_sparse_a;
+  logic                        mul_a_valid;
+  logic [                63:0] mul_a_data;
+  logic                        mul_a_ready;
+  logic                        mul_sparse_index_valid;
+  logic [     MUL_INDEX_W-1:0] mul_sparse_index;
+  logic                        mul_sparse_index_ready;
+  logic                        mul_b_valid;
+  logic [                63:0] mul_b_data;
+  logic                        mul_b_ready;
+  logic                        mul_result_valid;
+  logic [                63:0] mul_result_data;
+  logic                        mul_result_last;
+  logic                        mul_result_ready;
+  logic                        h123_start;
+  logic                        h123_seed_valid;
+  logic [                 7:0] h123_seed_data;
+  logic                        h123_seed_ready;
+  logic                        h123_vector_valid;
+  logic [                 1:0] h123_vector_select;
+  logic [                10:0] h123_vector_byte;
+  logic [                 7:0] h123_vector_data;
+  logic                        h123_vector_ready;
+  logic                        h123_done;
+  logic                        h123_busy;
+  logic                        h123_compress_start;
+  logic [               511:0] h123_compress_block;
+  logic [               255:0] h123_compress_state;
+  logic                        h123_store_vector_ready;
+  logic                        h123_t1_re;
+  logic [H123_WORD_ADDR_W-1:0] h123_t1_raddr;
+  logic [                63:0] h123_t1_rdata;
+  logic                        h123_t2_re;
+  logic [H123_WORD_ADDR_W-1:0] h123_t2_raddr;
+  logic [                63:0] h123_t2_rdata;
+  logic                        h123_r1_re;
+  logic [H123_WORD_ADDR_W-1:0] h123_r1_raddr;
+  logic [                63:0] h123_r1_rdata;
+  logic                        sampler_start;
+  logic [                31:0] sampler_length;
+  logic [                31:0] sampler_weight;
+  logic [               439:0] sampler_input_v;
+  logic [               439:0] sampler_input_c;
+  logic [               439:0] sampler_input_reseed_counter;
+  logic                        sampler_index_valid;
+  logic [                 8:0] sampler_index_position;
+  logic [                15:0] sampler_index;
+  logic                        sampler_index_ready;
+  logic                        sampler_busy;
+  logic                        sampler_done;
+  logic [               439:0] sampler_output_v;
+  logic [               439:0] sampler_output_c;
+  logic [               439:0] sampler_output_reseed_counter;
+  logic                        sampler_compress_start;
+  logic [               511:0] sampler_compress_block;
+  logic [               255:0] sampler_compress_state;
+  logic                        h4_store_start;
+  logic [                31:0] h4_store_r_bits;
+  logic [                31:0] h4_store_error_weight;
+  logic [                31:0] h4_store_padded_r_bytes;
+  logic                        h4_store_index_valid;
+  logic [                 8:0] h4_store_index_position;
+  logic [                15:0] h4_store_index;
+  logic                        h4_store_index_ready;
+  logic                        h4_store_support_re;
+  logic [                 8:0] h4_store_support_raddr;
+  logic [                15:0] h4_store_support_rdata;
+  logic                        h4_store_error_re;
+  logic [    ERROR_ADDR_W-1:0] h4_store_error_raddr;
+  logic [                 7:0] h4_store_error_rdata;
+  logic                        h4_store_busy;
+  logic                        h4_store_done;
   /* verilator lint_on UNUSEDSIGNAL */
 
-  int                      busy_cycles;
-  int                      ciphertext_count;
-  int                      shared_secret_count;
+  int                          busy_cycles;
+  int                          ciphertext_count;
+  int                          shared_secret_count;
 
   generate
     if (USE_SYNTH_TOP) begin : g_synth_top
@@ -142,16 +154,17 @@ module tb_trike_encaps_core_reference #(
       );
     end else begin : g_core
       trike_encaps_core #(
-          .M_BYTES              (REF_M_BYTES),
-          .R_BITS               (REF_R_BITS),
-          .ERROR_WEIGHT         (REF_ERROR_WEIGHT),
-          .WORD_W               (64),
-          .USE_EXTERNAL_COMPRESS(USE_SHARED_SM3),
-          .USE_EXTERNAL_MUL     (USE_SHARED_MUL),
-          .USE_EXTERNAL_H123    (USE_SHARED_H123),
-          .USE_EXTERNAL_SAMPLER (USE_SHARED_SAMPLER),
-          .USE_EXTERNAL_H4_STORE(USE_SHARED_H4_STORE),
-          .MUL_INDEX_W          (MUL_INDEX_W)
+          .M_BYTES                (REF_M_BYTES),
+          .R_BITS                 (REF_R_BITS),
+          .ERROR_WEIGHT           (REF_ERROR_WEIGHT),
+          .WORD_W                 (64),
+          .USE_EXTERNAL_COMPRESS  (USE_SHARED_SM3),
+          .USE_EXTERNAL_MUL       (USE_SHARED_MUL),
+          .USE_EXTERNAL_H123      (USE_SHARED_H123),
+          .USE_EXTERNAL_SAMPLER   (USE_SHARED_SAMPLER),
+          .USE_EXTERNAL_H4_STORE  (USE_SHARED_H4_STORE),
+          .USE_EXTERNAL_H123_STORE(USE_SHARED_H123_STORE),
+          .MUL_INDEX_W            (MUL_INDEX_W)
       ) dut (
           .i_clk                            (clk),
           .i_rst_n                          (rst_n),
@@ -203,6 +216,15 @@ module tb_trike_encaps_core_reference #(
           .i_h123_vector_data               (h123_vector_data),
           .o_h123_vector_ready              (h123_vector_ready),
           .i_h123_done                      (h123_done),
+          .o_h123_t1_re                     (h123_t1_re),
+          .o_h123_t1_raddr                  (h123_t1_raddr),
+          .i_h123_t1_rdata                  (h123_t1_rdata),
+          .o_h123_t2_re                     (h123_t2_re),
+          .o_h123_t2_raddr                  (h123_t2_raddr),
+          .i_h123_t2_rdata                  (h123_t2_rdata),
+          .o_h123_r1_re                     (h123_r1_re),
+          .o_h123_r1_raddr                  (h123_r1_raddr),
+          .i_h123_r1_rdata                  (h123_r1_rdata),
           .o_sampler_start                  (sampler_start),
           .o_sampler_runtime_length         (sampler_length),
           .o_sampler_runtime_weight         (sampler_weight),
@@ -284,7 +306,7 @@ module tb_trike_encaps_core_reference #(
             .o_vector_select (h123_vector_select),
             .o_vector_byte   (h123_vector_byte),
             .o_vector_data   (h123_vector_data),
-            .i_vector_ready  (h123_vector_ready),
+            .i_vector_ready  (h123_vector_ready && h123_store_vector_ready),
             .o_busy          (h123_busy),
             .o_done          (h123_done),
             .o_v             (),
@@ -308,6 +330,35 @@ module tb_trike_encaps_core_reference #(
         assign h123_compress_start = 1'b0;
         assign h123_compress_block = '0;
         assign h123_compress_state = '0;
+      end
+
+      if (USE_SHARED_H123_STORE) begin : g_shared_h123_store
+        trike_h123_vector_store #(
+            .R_BITS(REF_R_BITS),
+            .WORD_W(64)
+        ) u_h123_store_service (
+            .i_clk          (clk),
+            .i_rst_n        (rst_n),
+            .i_vector_valid (h123_vector_valid && h123_vector_ready),
+            .i_vector_select(h123_vector_select),
+            .i_vector_byte  (h123_vector_byte),
+            .i_vector_data  (h123_vector_data),
+            .o_vector_ready (h123_store_vector_ready),
+            .i_t1_re        (h123_t1_re),
+            .i_t1_raddr     (h123_t1_raddr),
+            .o_t1_rdata     (h123_t1_rdata),
+            .i_t2_re        (h123_t2_re),
+            .i_t2_raddr     (h123_t2_raddr),
+            .o_t2_rdata     (h123_t2_rdata),
+            .i_r1_re        (h123_r1_re),
+            .i_r1_raddr     (h123_r1_raddr),
+            .o_r1_rdata     (h123_r1_rdata)
+        );
+      end else begin : g_local_h123_store
+        assign h123_store_vector_ready = 1'b1;
+        assign h123_t1_rdata = '0;
+        assign h123_t2_rdata = '0;
+        assign h123_r1_rdata = '0;
       end
 
       if (USE_SHARED_SAMPLER) begin : g_shared_sampler

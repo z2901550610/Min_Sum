@@ -15,6 +15,7 @@ rtl/trike_weak_key_test.sv
 rtl/trike_keygen_secret_sampler.sv
 rtl/trike_parity_map_stream.sv
 rtl/trike_h123_vectors.sv
+rtl/trike_h123_vector_store.sv
 rtl/trike_poly_mul_core.sv
 rtl/trike_poly_inv_core.sv
 rtl/trike_keygen_arith_core.sv

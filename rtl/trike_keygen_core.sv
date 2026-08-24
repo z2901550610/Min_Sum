@@ -16,6 +16,7 @@ module trike_keygen_core #(
     parameter bit USE_EXTERNAL_MUL = 1'b0,
     parameter bit USE_EXTERNAL_H123 = 1'b0,
     parameter bit USE_EXTERNAL_SAMPLER = 1'b0,
+    parameter bit USE_EXTERNAL_H123_STORE = 1'b0,
     parameter int MUL_INDEX_W = ((R_BITS > 1) ? $clog2(R_BITS) : 1),
     parameter int WORD_ADDR_W = ((((R_BITS + WORD_W - 1) / WORD_W) > 1) ? $clog2(
         (R_BITS + WORD_W - 1) / WORD_W
@@ -86,7 +87,16 @@ module trike_keygen_core #(
     input  logic i_sampler_done,
     input  logic [439:0] i_sampler_v,
     input  logic [439:0] i_sampler_c,
-    input  logic [439:0] i_sampler_reseed_counter
+    input  logic [439:0] i_sampler_reseed_counter,
+    output logic o_h123_t1_re,
+    output logic [WORD_ADDR_W-1:0] o_h123_t1_raddr,
+    input  logic [WORD_W-1:0] i_h123_t1_rdata,
+    output logic o_h123_t2_re,
+    output logic [WORD_ADDR_W-1:0] o_h123_t2_raddr,
+    input  logic [WORD_W-1:0] i_h123_t2_rdata,
+    output logic o_h123_r1_re,
+    output logic [WORD_ADDR_W-1:0] o_h123_r1_raddr,
+    input  logic [WORD_W-1:0] i_h123_r1_rdata
 );
 
   localparam int R_BYTES = (R_BITS + 7) / 8;
@@ -341,12 +351,13 @@ module trike_keygen_core #(
   endgenerate
 
   trike_keygen_arith_core #(
-      .R_BITS          (R_BITS),
-      .SECRET_WEIGHT   (SECRET_WEIGHT),
-      .WORD_W          (WORD_W),
-      .DIGIT_W         (DIGIT_W),
-      .USE_EXTERNAL_MUL(USE_EXTERNAL_MUL),
-      .MUL_INDEX_W     (MUL_INDEX_W)
+      .R_BITS                 (R_BITS),
+      .SECRET_WEIGHT          (SECRET_WEIGHT),
+      .WORD_W                 (WORD_W),
+      .DIGIT_W                (DIGIT_W),
+      .USE_EXTERNAL_MUL       (USE_EXTERNAL_MUL),
+      .USE_EXTERNAL_H123_STORE(USE_EXTERNAL_H123_STORE),
+      .MUL_INDEX_W            (MUL_INDEX_W)
   ) u_arith (
       .i_clk                      (i_clk),
       .i_rst_n                    (i_rst_n),
@@ -387,7 +398,16 @@ module trike_keygen_core #(
       .i_mul_result_data          (i_mul_result_data),
       .i_mul_result_last          (i_mul_result_last),
       .o_mul_result_ready         (o_mul_result_ready),
-      .i_mul_done                 (i_mul_done)
+      .i_mul_done                 (i_mul_done),
+      .o_h123_t1_re               (o_h123_t1_re),
+      .o_h123_t1_raddr            (o_h123_t1_raddr),
+      .i_h123_t1_rdata            (i_h123_t1_rdata),
+      .o_h123_t2_re               (o_h123_t2_re),
+      .o_h123_t2_raddr            (o_h123_t2_raddr),
+      .i_h123_t2_rdata            (i_h123_t2_rdata),
+      .o_h123_r1_re               (o_h123_r1_re),
+      .o_h123_r1_raddr            (o_h123_r1_raddr),
+      .i_h123_r1_rdata            (i_h123_r1_rdata)
   );
   /* verilator lint_on PINCONNECTEMPTY */
 

@@ -14,6 +14,7 @@ rtl/trike_drng_weight_sampler.sv
 rtl/trike_h4_error_sampler.sv
 rtl/trike_parity_map_stream.sv
 rtl/trike_h123_vectors.sv
+rtl/trike_h123_vector_store.sv
 rtl/trike_error_support_store.sv
 rtl/trike_h4_error_vector.sv
 rtl/trike_poly_mul_core.sv

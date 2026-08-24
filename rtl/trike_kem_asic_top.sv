@@ -3,10 +3,10 @@
 // Single-issue TRIKE KEM integration boundary. i_operation is public and is
 // latched for the full transaction: 0=KeyGen, 1=Encaps, 2=Decaps. All three
 // modes share one SM3 compression service, one H1/H2/H3 vector service, one
-// runtime-geometry fixed-weight sampler, one H4 support/error store, and one
-// streaming polynomial multiplier; inactive modes receive no start or input
-// traffic. KeyGen/Encaps use the official TRIKE-2 geometry while Decaps retains
-// the validated runtime K-sign profile table.
+// runtime-geometry fixed-weight sampler, one H123 vector store, one H4
+// support/error store, and one streaming polynomial multiplier; inactive modes
+// receive no start or input traffic. KeyGen/Encaps use the official TRIKE-2
+// geometry while Decaps retains the validated runtime K-sign profile table.
 module trike_kem_asic_top
   import bike_pkg::*;
 (
@@ -46,6 +46,7 @@ module trike_kem_asic_top
   localparam logic [1:0] OP_ENCAPS = 2'd1;
   localparam logic [1:0] OP_DECAPS = 2'd2;
   localparam int H123_BYTE_W = $clog2((15581 + 7) / 8);
+  localparam int H123_WORD_ADDR_W = $clog2((15581 + 63) / 64);
   localparam int KEYGEN_SAMPLER_POSITION_W = $clog2(35);
   localparam int KEYGEN_SAMPLER_INDEX_W = $clog2(15581);
   localparam int ENCAPS_SAMPLER_POSITION_W = $clog2(263);
@@ -90,6 +91,12 @@ module trike_kem_asic_top
   logic                                 keygen_h123_seed_valid;
   logic [                          7:0] keygen_h123_seed_data;
   logic                                 keygen_h123_vector_ready;
+  logic                                 keygen_h123_t1_re;
+  logic [         H123_WORD_ADDR_W-1:0] keygen_h123_t1_raddr;
+  logic                                 keygen_h123_t2_re;
+  logic [         H123_WORD_ADDR_W-1:0] keygen_h123_t2_raddr;
+  logic                                 keygen_h123_r1_re;
+  logic [         H123_WORD_ADDR_W-1:0] keygen_h123_r1_raddr;
   logic                                 keygen_sampler_start;
   logic [                         31:0] keygen_sampler_length;
   logic [                         31:0] keygen_sampler_weight;
@@ -126,6 +133,12 @@ module trike_kem_asic_top
   logic                                 encaps_h123_seed_valid;
   logic [                          7:0] encaps_h123_seed_data;
   logic                                 encaps_h123_vector_ready;
+  logic                                 encaps_h123_t1_re;
+  logic [         H123_WORD_ADDR_W-1:0] encaps_h123_t1_raddr;
+  logic                                 encaps_h123_t2_re;
+  logic [         H123_WORD_ADDR_W-1:0] encaps_h123_t2_raddr;
+  logic                                 encaps_h123_r1_re;
+  logic [         H123_WORD_ADDR_W-1:0] encaps_h123_r1_raddr;
   logic                                 encaps_sampler_start;
   logic [                         31:0] encaps_sampler_length;
   logic [                         31:0] encaps_sampler_weight;
@@ -224,6 +237,16 @@ module trike_kem_asic_top
   logic [              H123_BYTE_W-1:0] shared_h123_vector_byte;
   logic [                          7:0] shared_h123_vector_data;
   logic                                 shared_h123_vector_ready;
+  logic                                 shared_h123_store_vector_ready;
+  logic                                 shared_h123_t1_re;
+  logic [         H123_WORD_ADDR_W-1:0] shared_h123_t1_raddr;
+  logic [                         63:0] shared_h123_t1_rdata;
+  logic                                 shared_h123_t2_re;
+  logic [         H123_WORD_ADDR_W-1:0] shared_h123_t2_raddr;
+  logic [                         63:0] shared_h123_t2_rdata;
+  logic                                 shared_h123_r1_re;
+  logic [         H123_WORD_ADDR_W-1:0] shared_h123_r1_raddr;
+  logic [                         63:0] shared_h123_r1_rdata;
   logic                                 shared_h123_busy;
   logic                                 shared_h123_done;
   logic                                 shared_h123_compress_start;
@@ -283,17 +306,18 @@ module trike_kem_asic_top
   );
 
   trike_keygen_core #(
-      .M_BYTES              (32),
-      .R_BITS               (15581),
-      .SECRET_WEIGHT        (35),
-      .CANDIDATE_COUNT      (16),
-      .WORD_W               (64),
-      .DIGIT_W              (16),
-      .USE_EXTERNAL_COMPRESS(1'b1),
-      .USE_EXTERNAL_MUL     (1'b1),
-      .USE_EXTERNAL_H123    (1'b1),
-      .USE_EXTERNAL_SAMPLER (1'b1),
-      .MUL_INDEX_W          (ROW_IDX_W)
+      .M_BYTES                (32),
+      .R_BITS                 (15581),
+      .SECRET_WEIGHT          (35),
+      .CANDIDATE_COUNT        (16),
+      .WORD_W                 (64),
+      .DIGIT_W                (16),
+      .USE_EXTERNAL_COMPRESS  (1'b1),
+      .USE_EXTERNAL_MUL       (1'b1),
+      .USE_EXTERNAL_H123      (1'b1),
+      .USE_EXTERNAL_SAMPLER   (1'b1),
+      .USE_EXTERNAL_H123_STORE(1'b1),
+      .MUL_INDEX_W            (ROW_IDX_W)
   ) u_keygen (
       .i_clk(i_clk),
       .i_rst_n(i_rst_n),
@@ -347,6 +371,15 @@ module trike_kem_asic_top
       .i_h123_vector_data(shared_h123_vector_data),
       .o_h123_vector_ready(keygen_h123_vector_ready),
       .i_h123_done(shared_h123_done && (active_operation == OP_KEYGEN)),
+      .o_h123_t1_re(keygen_h123_t1_re),
+      .o_h123_t1_raddr(keygen_h123_t1_raddr),
+      .i_h123_t1_rdata(shared_h123_t1_rdata),
+      .o_h123_t2_re(keygen_h123_t2_re),
+      .o_h123_t2_raddr(keygen_h123_t2_raddr),
+      .i_h123_t2_rdata(shared_h123_t2_rdata),
+      .o_h123_r1_re(keygen_h123_r1_re),
+      .o_h123_r1_raddr(keygen_h123_r1_raddr),
+      .i_h123_r1_rdata(shared_h123_r1_rdata),
       .o_sampler_start(keygen_sampler_start),
       .o_sampler_runtime_length(keygen_sampler_length),
       .o_sampler_runtime_weight(keygen_sampler_weight),
@@ -364,16 +397,17 @@ module trike_kem_asic_top
   );
 
   trike_encaps_core #(
-      .M_BYTES              (32),
-      .R_BITS               (15581),
-      .ERROR_WEIGHT         (263),
-      .WORD_W               (64),
-      .USE_EXTERNAL_COMPRESS(1'b1),
-      .USE_EXTERNAL_MUL     (1'b1),
-      .USE_EXTERNAL_H123    (1'b1),
-      .USE_EXTERNAL_SAMPLER (1'b1),
-      .USE_EXTERNAL_H4_STORE(1'b1),
-      .MUL_INDEX_W          (ROW_IDX_W)
+      .M_BYTES                (32),
+      .R_BITS                 (15581),
+      .ERROR_WEIGHT           (263),
+      .WORD_W                 (64),
+      .USE_EXTERNAL_COMPRESS  (1'b1),
+      .USE_EXTERNAL_MUL       (1'b1),
+      .USE_EXTERNAL_H123      (1'b1),
+      .USE_EXTERNAL_SAMPLER   (1'b1),
+      .USE_EXTERNAL_H4_STORE  (1'b1),
+      .USE_EXTERNAL_H123_STORE(1'b1),
+      .MUL_INDEX_W            (ROW_IDX_W)
   ) u_encaps (
       .i_clk(i_clk),
       .i_rst_n(i_rst_n),
@@ -425,6 +459,15 @@ module trike_kem_asic_top
       .i_h123_vector_data(shared_h123_vector_data),
       .o_h123_vector_ready(encaps_h123_vector_ready),
       .i_h123_done(shared_h123_done && (active_operation == OP_ENCAPS)),
+      .o_h123_t1_re(encaps_h123_t1_re),
+      .o_h123_t1_raddr(encaps_h123_t1_raddr),
+      .i_h123_t1_rdata(shared_h123_t1_rdata),
+      .o_h123_t2_re(encaps_h123_t2_re),
+      .o_h123_t2_raddr(encaps_h123_t2_raddr),
+      .i_h123_t2_rdata(shared_h123_t2_rdata),
+      .o_h123_r1_re(encaps_h123_r1_re),
+      .o_h123_r1_raddr(encaps_h123_r1_raddr),
+      .i_h123_r1_rdata(shared_h123_r1_rdata),
       .o_sampler_start(encaps_sampler_start),
       .o_sampler_runtime_length(encaps_sampler_length),
       .o_sampler_runtime_weight(encaps_sampler_weight),
@@ -568,6 +611,12 @@ module trike_kem_asic_top
     shared_h123_seed_valid = 1'b0;
     shared_h123_seed_data = '0;
     shared_h123_vector_ready = 1'b0;
+    shared_h123_t1_re = 1'b0;
+    shared_h123_t1_raddr = '0;
+    shared_h123_t2_re = 1'b0;
+    shared_h123_t2_raddr = '0;
+    shared_h123_r1_re = 1'b0;
+    shared_h123_r1_raddr = '0;
     shared_sampler_start = 1'b0;
     shared_sampler_length = '0;
     shared_sampler_weight = '0;
@@ -615,6 +664,12 @@ module trike_kem_asic_top
         shared_h123_seed_valid = keygen_h123_seed_valid;
         shared_h123_seed_data = keygen_h123_seed_data;
         shared_h123_vector_ready = keygen_h123_vector_ready;
+        shared_h123_t1_re = keygen_h123_t1_re;
+        shared_h123_t1_raddr = keygen_h123_t1_raddr;
+        shared_h123_t2_re = keygen_h123_t2_re;
+        shared_h123_t2_raddr = keygen_h123_t2_raddr;
+        shared_h123_r1_re = keygen_h123_r1_re;
+        shared_h123_r1_raddr = keygen_h123_r1_raddr;
         shared_sampler_start = keygen_sampler_start;
         shared_sampler_length = keygen_sampler_length;
         shared_sampler_weight = keygen_sampler_weight;
@@ -650,6 +705,12 @@ module trike_kem_asic_top
         shared_h123_seed_valid = encaps_h123_seed_valid;
         shared_h123_seed_data = encaps_h123_seed_data;
         shared_h123_vector_ready = encaps_h123_vector_ready;
+        shared_h123_t1_re = encaps_h123_t1_re;
+        shared_h123_t1_raddr = encaps_h123_t1_raddr;
+        shared_h123_t2_re = encaps_h123_t2_re;
+        shared_h123_t2_raddr = encaps_h123_t2_raddr;
+        shared_h123_r1_re = encaps_h123_r1_re;
+        shared_h123_r1_raddr = encaps_h123_r1_raddr;
         shared_sampler_start = encaps_sampler_start;
         shared_sampler_length = encaps_sampler_length;
         shared_sampler_weight = encaps_sampler_weight;
@@ -742,7 +803,7 @@ module trike_kem_asic_top
       .o_vector_select (shared_h123_vector_select),
       .o_vector_byte   (shared_h123_vector_byte),
       .o_vector_data   (shared_h123_vector_data),
-      .i_vector_ready  (shared_h123_vector_ready),
+      .i_vector_ready  (shared_h123_vector_ready && shared_h123_store_vector_ready),
       .o_busy          (shared_h123_busy),
       .o_done          (shared_h123_done),
       .o_v             (),
@@ -756,6 +817,28 @@ module trike_kem_asic_top
       .i_compress_state(shared_compress_output_state)
   );
   /* verilator lint_on PINCONNECTEMPTY */
+
+  trike_h123_vector_store #(
+      .R_BITS(15581),
+      .WORD_W(64)
+  ) u_h123_store_service (
+      .i_clk          (i_clk),
+      .i_rst_n        (i_rst_n),
+      .i_vector_valid (shared_h123_vector_valid && shared_h123_vector_ready),
+      .i_vector_select(shared_h123_vector_select),
+      .i_vector_byte  (shared_h123_vector_byte),
+      .i_vector_data  (shared_h123_vector_data),
+      .o_vector_ready (shared_h123_store_vector_ready),
+      .i_t1_re        (shared_h123_t1_re),
+      .i_t1_raddr     (shared_h123_t1_raddr),
+      .o_t1_rdata     (shared_h123_t1_rdata),
+      .i_t2_re        (shared_h123_t2_re),
+      .i_t2_raddr     (shared_h123_t2_raddr),
+      .o_t2_rdata     (shared_h123_t2_rdata),
+      .i_r1_re        (shared_h123_r1_re),
+      .i_r1_raddr     (shared_h123_r1_raddr),
+      .o_r1_rdata     (shared_h123_r1_rdata)
+  );
 
   /* verilator lint_off PINCONNECTEMPTY */
   trike_drng_weight_sampler #(

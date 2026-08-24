@@ -107,11 +107,18 @@ def main() -> None:
             "trike_kem_asic_top: expected one shared H4 support/error store, "
             f"found {h4_store_count}"
         )
+    h123_store_count = instance_count("trike_h123_vector_store")
+    if h123_store_count != 1:
+        raise SystemExit(
+            "trike_kem_asic_top: expected one shared H123 vector store, "
+            f"found {h123_store_count}"
+        )
     print("Unified TRIKE KEM structure PASS: one sm3_compress instance")
     print("Unified TRIKE KEM structure PASS: two poly-mul instances")
     print("Unified TRIKE KEM structure PASS: one H123 vector service and parity mapper")
     print("Unified TRIKE KEM structure PASS: one DRNG and fixed-weight sampler chain")
     print("Unified TRIKE KEM structure PASS: one H4 support/error store")
+    print("Unified TRIKE KEM structure PASS: one H123 vector store")
 
 
 if __name__ == "__main__":

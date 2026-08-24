@@ -96,6 +96,11 @@ KeyGen与Encaps的H1/H2/H3请求连接同一`trike_h123_vectors`。服务保存�
 Instantiate/Generate状态并复用一个`trike_parity_map_stream`，seed与vector握手由公开operation选择。
 两阶段外置H123、SM3和乘法组合reference分别保持53,995,036和2,378,447拍并通过byte golden。
 
+共享H123 byte流同时写入一个`trike_h123_vector_store`。该服务按官方TRIKE-2几何保存三组
+244x64-bit的`t1/t2/r1`，并用三个独立同步读口满足KeyGen的`t1/r1`并行读取及Encaps读序列。
+operation mux只转发活动stage的读地址；完整层次恰好一个H123 vector store。两阶段全外置组合reference
+分别保持53,995,036和2,378,447拍并通过byte golden；具体RAMB映射及读口复制行为等待Vivado确认。
+
 KeyGen秘密support、Encaps H4和Decaps重加密H4连接同一最大几何`trike_drng_weight_sampler`。命令装载
 公开`length/weight`与DRNG state，index和最终state只返回活动stage。完整层次恰好一个
 `trike_drng_weight_sampler`及其`trike_fixed_weight_sampler`；三阶段外置reference分别保持53,995,036、
@@ -108,7 +113,8 @@ Encaps与Decaps的H4 support和三块padded dense error连接同一最大几何`
 有效/拒绝成对固定周期验证。Decaps decoder error RAM属于译码后检查生命周期，不接入该服务。
 
 该入口的KeyGen/Encaps采用官方TRIKE-2 `r=15581,w=35,t=263`，Decaps采用四档项目K-sign profile。
-两者是显式分离的参数验证域。其他工作RAM位于stage层次，统一入口的Vivado资源、时序与功耗为`待测`。
+两者是显式分离的参数验证域。Decaps H123存储及其他工作RAM位于stage层次，统一入口的Vivado资源、
+时序与功耗为`待测`。
 
 ### KeyGen
 

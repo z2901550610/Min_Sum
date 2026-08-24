@@ -19,6 +19,7 @@ rtl/trike_weak_key_test.sv
 rtl/trike_keygen_secret_sampler.sv
 rtl/trike_parity_map_stream.sv
 rtl/trike_h123_vectors.sv
+rtl/trike_h123_vector_store.sv
 rtl/trike_h4_error_sampler.sv
 rtl/trike_error_support_store.sv
 rtl/trike_h4_error_vector.sv

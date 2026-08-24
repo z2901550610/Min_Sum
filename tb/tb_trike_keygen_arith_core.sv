@@ -30,6 +30,12 @@ module tb_trike_keygen_arith_core;
   logic                  result_ready;
   logic                  busy;
   logic                  done;
+  logic                  h123_t1_re;
+  logic [           0:0] h123_t1_raddr;
+  logic                  h123_t2_re;
+  logic [           0:0] h123_t2_raddr;
+  logic                  h123_r1_re;
+  logic [           0:0] h123_r1_raddr;
 
   int                    supports         [0:2][0:SECRET_WEIGHT-1];
   int                    busy_cycles;
@@ -61,7 +67,16 @@ module tb_trike_keygen_arith_core;
       .o_result_last     (result_last),
       .i_result_ready    (result_ready),
       .o_busy            (busy),
-      .o_done            (done)
+      .o_done            (done),
+      .o_h123_t1_re      (h123_t1_re),
+      .o_h123_t1_raddr   (h123_t1_raddr),
+      .i_h123_t1_rdata   ('0),
+      .o_h123_t2_re      (h123_t2_re),
+      .o_h123_t2_raddr   (h123_t2_raddr),
+      .i_h123_t2_rdata   ('0),
+      .o_h123_r1_re      (h123_r1_re),
+      .o_h123_r1_raddr   (h123_r1_raddr),
+      .i_h123_r1_rdata   ('0)
   );
 
   initial clk = 1'b0;
@@ -72,6 +87,14 @@ module tb_trike_keygen_arith_core;
       busy_cycles <= 0;
     end else if (busy) begin
       busy_cycles <= busy_cycles + 1;
+    end
+  end
+
+  always_ff @(posedge clk) begin
+    if (rst_n) begin
+      if (h123_t1_re && (h123_t1_raddr != '0)) $fatal(1, "t1 read out of range");
+      if (h123_t2_re && (h123_t2_raddr != '0)) $fatal(1, "t2 read out of range");
+      if (h123_r1_re && (h123_r1_raddr != '0)) $fatal(1, "r1 read out of range");
     end
   end
 
