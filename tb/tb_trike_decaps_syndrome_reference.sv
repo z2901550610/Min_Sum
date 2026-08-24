@@ -1,6 +1,8 @@
 `timescale 1ns / 1ps
 
-module tb_trike_decaps_syndrome_reference;
+module tb_trike_decaps_syndrome_reference #(
+    parameter bit USE_SHARED_MUL = 1'b0
+);
   `include "generated/trike_decaps_syndrome_reference_case.svh"
 
   logic                     clk;
@@ -24,6 +26,24 @@ module tb_trike_decaps_syndrome_reference;
   logic                     syndrome_ready;
   logic                     busy;
   logic                     done;
+  logic                     mul_start;
+  logic   [           31:0] mul_runtime_r_bits;
+  logic   [           31:0] mul_runtime_words;
+  logic   [           31:0] mul_runtime_sparse_weight;
+  logic                     mul_sparse_a;
+  logic                     mul_a_valid;
+  logic   [ REF_WORD_W-1:0] mul_a_data;
+  logic                     mul_a_ready;
+  logic                     mul_sparse_index_valid;
+  logic   [REF_INDEX_W-1:0] mul_sparse_index;
+  logic                     mul_sparse_index_ready;
+  logic                     mul_b_valid;
+  logic   [ REF_WORD_W-1:0] mul_b_data;
+  logic                     mul_b_ready;
+  logic                     mul_result_valid;
+  logic   [ REF_WORD_W-1:0] mul_result_data;
+  logic                     mul_result_last;
+  logic                     mul_result_ready;
 
   integer                   h0_count;
   integer                   t0_count;
@@ -33,36 +53,106 @@ module tb_trike_decaps_syndrome_reference;
   integer                   busy_cycles;
 
   trike_decaps_syndrome_core #(
-      .R_BITS       (REF_R_BITS),
-      .SECRET_WEIGHT(REF_SECRET_WEIGHT),
-      .WORD_W       (REF_WORD_W),
-      .DIGIT_W      (16)
+      .R_BITS          (REF_R_BITS),
+      .SECRET_WEIGHT   (REF_SECRET_WEIGHT),
+      .WORD_W          (REF_WORD_W),
+      .DIGIT_W         (16),
+      .USE_EXTERNAL_MUL(USE_SHARED_MUL)
   ) dut (
-      .i_clk                  (clk),
-      .i_rst_n                (rst_n),
-      .i_start                (start),
-      .i_runtime_r_bits       ('0),
-      .i_runtime_secret_weight('0),
-      .i_runtime_words        ('0),
-      .i_h0_valid             (h0_valid),
-      .i_h0_index             (h0_index),
-      .o_h0_ready             (h0_ready),
-      .i_t0_valid             (t0_valid),
-      .i_t0_data              (t0_data),
-      .o_t0_ready             (t0_ready),
-      .i_u_valid              (u_valid),
-      .i_u_data               (u_data),
-      .o_u_ready              (u_ready),
-      .i_v_valid              (v_valid),
-      .i_v_data               (v_data),
-      .o_v_ready              (v_ready),
-      .o_syndrome_valid       (syndrome_valid),
-      .o_syndrome_data        (syndrome_data),
-      .o_syndrome_last        (syndrome_last),
-      .i_syndrome_ready       (syndrome_ready),
-      .o_busy                 (busy),
-      .o_done                 (done)
+      .i_clk                      (clk),
+      .i_rst_n                    (rst_n),
+      .i_start                    (start),
+      .i_runtime_r_bits           ('0),
+      .i_runtime_secret_weight    ('0),
+      .i_runtime_words            ('0),
+      .i_h0_valid                 (h0_valid),
+      .i_h0_index                 (h0_index),
+      .o_h0_ready                 (h0_ready),
+      .i_t0_valid                 (t0_valid),
+      .i_t0_data                  (t0_data),
+      .o_t0_ready                 (t0_ready),
+      .i_u_valid                  (u_valid),
+      .i_u_data                   (u_data),
+      .o_u_ready                  (u_ready),
+      .i_v_valid                  (v_valid),
+      .i_v_data                   (v_data),
+      .o_v_ready                  (v_ready),
+      .o_syndrome_valid           (syndrome_valid),
+      .o_syndrome_data            (syndrome_data),
+      .o_syndrome_last            (syndrome_last),
+      .i_syndrome_ready           (syndrome_ready),
+      .o_busy                     (busy),
+      .o_done                     (done),
+      .o_mul_start                (mul_start),
+      .o_mul_runtime_r_bits       (mul_runtime_r_bits),
+      .o_mul_runtime_words        (mul_runtime_words),
+      .o_mul_runtime_sparse_weight(mul_runtime_sparse_weight),
+      .o_mul_sparse_a             (mul_sparse_a),
+      .o_mul_a_valid              (mul_a_valid),
+      .o_mul_a_data               (mul_a_data),
+      .i_mul_a_ready              (mul_a_ready),
+      .o_mul_sparse_index_valid   (mul_sparse_index_valid),
+      .o_mul_sparse_index         (mul_sparse_index),
+      .i_mul_sparse_index_ready   (mul_sparse_index_ready),
+      .o_mul_b_valid              (mul_b_valid),
+      .o_mul_b_data               (mul_b_data),
+      .i_mul_b_ready              (mul_b_ready),
+      .i_mul_result_valid         (mul_result_valid),
+      .i_mul_result_data          (mul_result_data),
+      .i_mul_result_last          (mul_result_last),
+      .o_mul_result_ready         (mul_result_ready)
   );
+
+  generate
+    if (USE_SHARED_MUL) begin : g_shared_mul
+      trike_poly_mul_core #(
+          .R_BITS          (REF_R_BITS),
+          .WORD_W          (REF_WORD_W),
+          .DIGIT_W         (16),
+          .SPARSE_WEIGHT   (REF_SECRET_WEIGHT),
+          .RUNTIME_GEOMETRY(1'b1)
+      ) u_mul_service (
+          .i_clk                  (clk),
+          .i_rst_n                (rst_n),
+          .i_start                (mul_start),
+          .i_runtime_r_bits       (mul_runtime_r_bits),
+          .i_runtime_words        (mul_runtime_words),
+          .i_runtime_sparse_weight(mul_runtime_sparse_weight),
+          .i_sparse_a             (mul_sparse_a),
+          .i_a_valid              (mul_a_valid),
+          .i_a_data               (mul_a_data),
+          .o_a_ready              (mul_a_ready),
+          .i_sparse_index_valid   (mul_sparse_index_valid),
+          .i_sparse_index         (mul_sparse_index),
+          .o_sparse_index_ready   (mul_sparse_index_ready),
+          .i_b_valid              (mul_b_valid),
+          .i_b_data               (mul_b_data),
+          .o_b_ready              (mul_b_ready),
+          .o_result_valid         (mul_result_valid),
+          .o_result_data          (mul_result_data),
+          .o_result_last          (mul_result_last),
+          .i_result_ready         (mul_result_ready),
+          .o_ext_a_re             (),
+          .o_ext_a_raddr          (),
+          .i_ext_a_rdata          ('0),
+          .o_ext_b_re             (),
+          .o_ext_b_raddr          (),
+          .i_ext_b_rdata          ('0),
+          .o_ext_result_we        (),
+          .o_ext_result_waddr     (),
+          .o_ext_result_wdata     (),
+          .o_busy                 (),
+          .o_done                 ()
+      );
+    end else begin : g_local_mul
+      assign mul_a_ready = 1'b0;
+      assign mul_sparse_index_ready = 1'b0;
+      assign mul_b_ready = 1'b0;
+      assign mul_result_valid = 1'b0;
+      assign mul_result_data = '0;
+      assign mul_result_last = 1'b0;
+    end
+  endgenerate
 
   always #1 clk = ~clk;
 

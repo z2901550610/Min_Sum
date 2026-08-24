@@ -16,6 +16,8 @@ module trike_decaps_syndrome_core #(
     parameter int WORD_W = 64,
     parameter int DIGIT_W = 16,
     parameter bit RUNTIME_GEOMETRY = 1'b0,
+    parameter bit USE_EXTERNAL_MUL = 1'b0,
+    parameter int MUL_INDEX_W = ((R_BITS > 1) ? $clog2(R_BITS) : 1),
     parameter int WORD_ADDR_W = ((((R_BITS + WORD_W - 1) / WORD_W) > 1) ? $clog2(
         (R_BITS + WORD_W - 1) / WORD_W
     ) : 1)
@@ -43,7 +45,25 @@ module trike_decaps_syndrome_core #(
     output logic                                           o_syndrome_last,
     input  logic                                           i_syndrome_ready,
     output logic                                           o_busy,
-    output logic                                           o_done
+    output logic                                           o_done,
+    output logic                                           o_mul_start,
+    output logic [                                   31:0] o_mul_runtime_r_bits,
+    output logic [                                   31:0] o_mul_runtime_words,
+    output logic [                                   31:0] o_mul_runtime_sparse_weight,
+    output logic                                           o_mul_sparse_a,
+    output logic                                           o_mul_a_valid,
+    output logic [                             WORD_W-1:0] o_mul_a_data,
+    input  logic                                           i_mul_a_ready,
+    output logic                                           o_mul_sparse_index_valid,
+    output logic [                        MUL_INDEX_W-1:0] o_mul_sparse_index,
+    input  logic                                           i_mul_sparse_index_ready,
+    output logic                                           o_mul_b_valid,
+    output logic [                             WORD_W-1:0] o_mul_b_data,
+    input  logic                                           i_mul_b_ready,
+    input  logic                                           i_mul_result_valid,
+    input  logic [                             WORD_W-1:0] i_mul_result_data,
+    input  logic                                           i_mul_result_last,
+    output logic                                           o_mul_result_ready
 );
 
   localparam int WORDS = (R_BITS + WORD_W - 1) / WORD_W;
@@ -202,45 +222,71 @@ module trike_decaps_syndrome_core #(
       .o_rdata(syndrome_rdata)
   );
 
-  trike_poly_mul_core #(
-      .R_BITS          (R_BITS),
-      .WORD_W          (WORD_W),
-      .DIGIT_W         (DIGIT_W),
-      .SPARSE_WEIGHT   (SECRET_WEIGHT),
-      .RUNTIME_GEOMETRY(RUNTIME_GEOMETRY)
-  ) u_mul (
-      .i_clk                  (i_clk),
-      .i_rst_n                (i_rst_n),
-      .i_start                (mul_start),
-      .i_runtime_r_bits       (32'(active_r_bits_q)),
-      .i_runtime_words        (32'(active_words_q)),
-      .i_runtime_sparse_weight(32'(active_secret_weight_q)),
-      .i_sparse_a             (mul_sparse_a),
-      .i_a_valid              (mul_a_valid),
-      .i_a_data               (mul_a_data),
-      .o_a_ready              (mul_a_ready),
-      .i_sparse_index_valid   (mul_sparse_index_valid),
-      .i_sparse_index         (mul_sparse_index),
-      .o_sparse_index_ready   (mul_sparse_index_ready),
-      .i_b_valid              (mul_b_valid),
-      .i_b_data               (mul_b_data),
-      .o_b_ready              (mul_b_ready),
-      .o_result_valid         (mul_result_valid),
-      .o_result_data          (mul_result_data),
-      .o_result_last          (mul_result_last),
-      .i_result_ready         (mul_result_ready),
-      .o_ext_a_re             (),
-      .o_ext_a_raddr          (),
-      .i_ext_a_rdata          ('0),
-      .o_ext_b_re             (),
-      .o_ext_b_raddr          (),
-      .i_ext_b_rdata          ('0),
-      .o_ext_result_we        (),
-      .o_ext_result_waddr     (),
-      .o_ext_result_wdata     (),
-      .o_busy                 (mul_busy),
-      .o_done                 (mul_done)
-  );
+  assign o_mul_start = mul_start;
+  assign o_mul_runtime_r_bits = 32'(active_r_bits_q);
+  assign o_mul_runtime_words = 32'(active_words_q);
+  assign o_mul_runtime_sparse_weight = 32'(active_secret_weight_q);
+  assign o_mul_sparse_a = mul_sparse_a;
+  assign o_mul_a_valid = mul_a_valid;
+  assign o_mul_a_data = mul_a_data;
+  assign o_mul_sparse_index_valid = mul_sparse_index_valid;
+  assign o_mul_sparse_index = MUL_INDEX_W'(mul_sparse_index);
+  assign o_mul_b_valid = mul_b_valid;
+  assign o_mul_b_data = mul_b_data;
+  assign o_mul_result_ready = mul_result_ready;
+
+  generate
+    if (USE_EXTERNAL_MUL) begin : gen_external_mul
+      assign mul_a_ready = i_mul_a_ready;
+      assign mul_sparse_index_ready = i_mul_sparse_index_ready;
+      assign mul_b_ready = i_mul_b_ready;
+      assign mul_result_valid = i_mul_result_valid;
+      assign mul_result_data = i_mul_result_data;
+      assign mul_result_last = i_mul_result_last;
+      assign mul_busy = 1'b0;
+      assign mul_done = 1'b0;
+    end else begin : gen_local_mul
+      trike_poly_mul_core #(
+          .R_BITS          (R_BITS),
+          .WORD_W          (WORD_W),
+          .DIGIT_W         (DIGIT_W),
+          .SPARSE_WEIGHT   (SECRET_WEIGHT),
+          .RUNTIME_GEOMETRY(RUNTIME_GEOMETRY)
+      ) u_mul (
+          .i_clk                  (i_clk),
+          .i_rst_n                (i_rst_n),
+          .i_start                (mul_start),
+          .i_runtime_r_bits       (32'(active_r_bits_q)),
+          .i_runtime_words        (32'(active_words_q)),
+          .i_runtime_sparse_weight(32'(active_secret_weight_q)),
+          .i_sparse_a             (mul_sparse_a),
+          .i_a_valid              (mul_a_valid),
+          .i_a_data               (mul_a_data),
+          .o_a_ready              (mul_a_ready),
+          .i_sparse_index_valid   (mul_sparse_index_valid),
+          .i_sparse_index         (mul_sparse_index),
+          .o_sparse_index_ready   (mul_sparse_index_ready),
+          .i_b_valid              (mul_b_valid),
+          .i_b_data               (mul_b_data),
+          .o_b_ready              (mul_b_ready),
+          .o_result_valid         (mul_result_valid),
+          .o_result_data          (mul_result_data),
+          .o_result_last          (mul_result_last),
+          .i_result_ready         (mul_result_ready),
+          .o_ext_a_re             (),
+          .o_ext_a_raddr          (),
+          .i_ext_a_rdata          ('0),
+          .o_ext_b_re             (),
+          .o_ext_b_raddr          (),
+          .i_ext_b_rdata          ('0),
+          .o_ext_result_we        (),
+          .o_ext_result_waddr     (),
+          .o_ext_result_wdata     (),
+          .o_busy                 (mul_busy),
+          .o_done                 (mul_done)
+      );
+    end
+  endgenerate
 
   always_comb begin
     active_last_mask_c = {WORD_W{1'b1}} >> (WORD_W - active_last_bits_q);

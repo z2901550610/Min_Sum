@@ -443,8 +443,8 @@ flowchart TD
 | 验证服务 | `trike_ct_verify_stream` | 固定word数比较、累计difference并调用`kem_ct_compare_select` |
 
 `trike_kem_asic_top`实例化三个固定阶段控制器，三个阶段只在被选operation下接收start和输入流。SM3
-压缩数据通路为芯片级共享资源；DRNG、采样、多项式算术和stage RAM保留各自层次，作为后续服务化与
-生命周期分配边界。
+压缩数据通路和普通多项式乘法数据通路为芯片级共享资源；DRNG、采样和stage RAM保留各自层次，作为
+服务化与生命周期分配边界。
 
 ## 跨流程复用矩阵
 
@@ -491,6 +491,11 @@ reference路径分别保持逐byte golden与53,995,036、2,378,447和257,417固�
 覆盖，因此不需要为h0、h1、h2和e分别配置临时RAM。
 
 ### 多项式数据通路收敛
+
+统一ASIC的KeyGen直接乘法、Encaps `u/v`乘法和Decaps syndrome乘法通过公开operation mux连接一个
+最大几何`trike_poly_mul_core`。命令携带公开`r_bits/words/sparse_weight`，服务反馈只送入活动stage。
+KeyGen固定链求逆保留核内乘法器，因此完整统一层次包含两个`trike_poly_mul_core`。结构门禁检查该实例数，
+三阶段外置服务reference分别保持53,995,036、2,378,447和1,086,187固定周期。
 
 `trike_poly_mul_core`输入和结果均为little-endian coefficient word流。A、B、双长度product、result和
 稀疏index分别连接公共`ram_bram`同步读端口；综合分支使用`xpm_memory_sdpram`并请求Block RAM。乘法核

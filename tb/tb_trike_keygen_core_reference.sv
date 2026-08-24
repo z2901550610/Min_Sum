@@ -3,44 +3,66 @@
 module tb_trike_keygen_core_reference #(
     parameter bit ALT_CASE       = 1'b0,
     parameter bit USE_SYNTH_TOP  = 1'b0,
-    parameter bit USE_SHARED_SM3 = 1'b0
+    parameter bit USE_SHARED_SM3 = 1'b0,
+    parameter bit USE_SHARED_MUL = 1'b0
 );
 
   `include "generated/trike_keygen_reference_case.svh"
 
   localparam int EXPECTED_BUSY_CYCLES = 53995036;
   localparam int EXPECTED_SYNTH_BUSY_CYCLES = 54002607;
+  localparam int MAX_R_BITS = 106781;
+  localparam int MUL_INDEX_W = $clog2(MAX_R_BITS);
 
-  logic         clk;
-  logic         rst_n;
-  logic         start;
-  logic         random_valid;
-  logic [  7:0] random_data;
-  logic         random_ready;
-  logic         pk_valid;
-  logic [  7:0] pk_data;
-  logic         pk_last;
-  logic         pk_ready;
-  logic         sk_valid;
-  logic [  7:0] sk_data;
-  logic         sk_last;
-  logic         sk_ready;
-  logic         busy;
-  logic         done;
-  logic         success;
+  logic                   clk;
+  logic                   rst_n;
+  logic                   start;
+  logic                   random_valid;
+  logic [            7:0] random_data;
+  logic                   random_ready;
+  logic                   pk_valid;
+  logic [            7:0] pk_data;
+  logic                   pk_last;
+  logic                   pk_ready;
+  logic                   sk_valid;
+  logic [            7:0] sk_data;
+  logic                   sk_last;
+  logic                   sk_ready;
+  logic                   busy;
+  logic                   done;
+  logic                   success;
   /* verilator lint_off UNUSEDSIGNAL */
-  logic         compress_start;
-  logic [511:0] compress_block;
-  logic [255:0] compress_input_state;
-  logic         compress_busy;
-  logic         compress_done;
-  logic [255:0] compress_output_state;
+  logic                   compress_start;
+  logic [          511:0] compress_block;
+  logic [          255:0] compress_input_state;
+  logic                   compress_busy;
+  logic                   compress_done;
+  logic [          255:0] compress_output_state;
+  logic                   mul_start;
+  logic [           31:0] mul_runtime_r_bits;
+  logic [           31:0] mul_runtime_words;
+  logic [           31:0] mul_runtime_sparse_weight;
+  logic                   mul_sparse_a;
+  logic                   mul_a_valid;
+  logic [           63:0] mul_a_data;
+  logic                   mul_a_ready;
+  logic                   mul_sparse_index_valid;
+  logic [MUL_INDEX_W-1:0] mul_sparse_index;
+  logic                   mul_sparse_index_ready;
+  logic                   mul_b_valid;
+  logic [           63:0] mul_b_data;
+  logic                   mul_b_ready;
+  logic                   mul_result_valid;
+  logic [           63:0] mul_result_data;
+  logic                   mul_result_last;
+  logic                   mul_result_ready;
+  logic                   mul_done;
   /* verilator lint_on UNUSEDSIGNAL */
 
-  int           random_count;
-  int           pk_count;
-  int           sk_count;
-  int           busy_cycles;
+  int                     random_count;
+  int                     pk_count;
+  int                     sk_count;
+  int                     busy_cycles;
 
   always_comb begin
     if (random_count < 32) begin
@@ -81,31 +103,52 @@ module tb_trike_keygen_core_reference #(
           .CANDIDATE_COUNT      (REF_CANDIDATE_COUNT),
           .WORD_W               (64),
           .DIGIT_W              (16),
-          .USE_EXTERNAL_COMPRESS(USE_SHARED_SM3)
+          .USE_EXTERNAL_COMPRESS(USE_SHARED_SM3),
+          .USE_EXTERNAL_MUL     (USE_SHARED_MUL),
+          .MUL_INDEX_W          (MUL_INDEX_W)
       ) dut (
-          .i_clk           (clk),
-          .i_rst_n         (rst_n),
-          .i_start         (start),
-          .i_random_valid  (random_valid),
-          .i_random_data   (random_data),
-          .o_random_ready  (random_ready),
-          .o_pk_valid      (pk_valid),
-          .o_pk_data       (pk_data),
-          .o_pk_last       (pk_last),
-          .i_pk_ready      (pk_ready),
-          .o_sk_valid      (sk_valid),
-          .o_sk_data       (sk_data),
-          .o_sk_last       (sk_last),
-          .i_sk_ready      (sk_ready),
-          .o_busy          (busy),
-          .o_done          (done),
-          .o_success       (success),
-          .o_compress_start(compress_start),
-          .o_compress_block(compress_block),
-          .o_compress_state(compress_input_state),
-          .i_compress_busy (compress_busy),
-          .i_compress_done (compress_done),
-          .i_compress_state(compress_output_state)
+          .i_clk                      (clk),
+          .i_rst_n                    (rst_n),
+          .i_start                    (start),
+          .i_random_valid             (random_valid),
+          .i_random_data              (random_data),
+          .o_random_ready             (random_ready),
+          .o_pk_valid                 (pk_valid),
+          .o_pk_data                  (pk_data),
+          .o_pk_last                  (pk_last),
+          .i_pk_ready                 (pk_ready),
+          .o_sk_valid                 (sk_valid),
+          .o_sk_data                  (sk_data),
+          .o_sk_last                  (sk_last),
+          .i_sk_ready                 (sk_ready),
+          .o_busy                     (busy),
+          .o_done                     (done),
+          .o_success                  (success),
+          .o_compress_start           (compress_start),
+          .o_compress_block           (compress_block),
+          .o_compress_state           (compress_input_state),
+          .i_compress_busy            (compress_busy),
+          .i_compress_done            (compress_done),
+          .i_compress_state           (compress_output_state),
+          .o_mul_start                (mul_start),
+          .o_mul_runtime_r_bits       (mul_runtime_r_bits),
+          .o_mul_runtime_words        (mul_runtime_words),
+          .o_mul_runtime_sparse_weight(mul_runtime_sparse_weight),
+          .o_mul_sparse_a             (mul_sparse_a),
+          .o_mul_a_valid              (mul_a_valid),
+          .o_mul_a_data               (mul_a_data),
+          .i_mul_a_ready              (mul_a_ready),
+          .o_mul_sparse_index_valid   (mul_sparse_index_valid),
+          .o_mul_sparse_index         (mul_sparse_index),
+          .i_mul_sparse_index_ready   (mul_sparse_index_ready),
+          .o_mul_b_valid              (mul_b_valid),
+          .o_mul_b_data               (mul_b_data),
+          .i_mul_b_ready              (mul_b_ready),
+          .i_mul_result_valid         (mul_result_valid),
+          .i_mul_result_data          (mul_result_data),
+          .i_mul_result_last          (mul_result_last),
+          .o_mul_result_ready         (mul_result_ready),
+          .i_mul_done                 (mul_done)
       );
 
       if (USE_SHARED_SM3) begin : g_shared_sm3
@@ -123,6 +166,56 @@ module tb_trike_keygen_core_reference #(
         assign compress_busy = 1'b0;
         assign compress_done = 1'b0;
         assign compress_output_state = '0;
+      end
+
+      if (USE_SHARED_MUL) begin : g_shared_mul
+        trike_poly_mul_core #(
+            .R_BITS          (MAX_R_BITS),
+            .WORD_W          (64),
+            .DIGIT_W         (16),
+            .SPARSE_WEIGHT   (263),
+            .RUNTIME_GEOMETRY(1'b1)
+        ) u_mul_service (
+            .i_clk                  (clk),
+            .i_rst_n                (rst_n),
+            .i_start                (mul_start),
+            .i_runtime_r_bits       (mul_runtime_r_bits),
+            .i_runtime_words        (mul_runtime_words),
+            .i_runtime_sparse_weight(mul_runtime_sparse_weight),
+            .i_sparse_a             (mul_sparse_a),
+            .i_a_valid              (mul_a_valid),
+            .i_a_data               (mul_a_data),
+            .o_a_ready              (mul_a_ready),
+            .i_sparse_index_valid   (mul_sparse_index_valid),
+            .i_sparse_index         (mul_sparse_index),
+            .o_sparse_index_ready   (mul_sparse_index_ready),
+            .i_b_valid              (mul_b_valid),
+            .i_b_data               (mul_b_data),
+            .o_b_ready              (mul_b_ready),
+            .o_result_valid         (mul_result_valid),
+            .o_result_data          (mul_result_data),
+            .o_result_last          (mul_result_last),
+            .i_result_ready         (mul_result_ready),
+            .o_ext_a_re             (),
+            .o_ext_a_raddr          (),
+            .i_ext_a_rdata          ('0),
+            .o_ext_b_re             (),
+            .o_ext_b_raddr          (),
+            .i_ext_b_rdata          ('0),
+            .o_ext_result_we        (),
+            .o_ext_result_waddr     (),
+            .o_ext_result_wdata     (),
+            .o_busy                 (),
+            .o_done                 (mul_done)
+        );
+      end else begin : g_local_mul
+        assign mul_a_ready = 1'b0;
+        assign mul_sparse_index_ready = 1'b0;
+        assign mul_b_ready = 1'b0;
+        assign mul_result_valid = 1'b0;
+        assign mul_result_data = '0;
+        assign mul_result_last = 1'b0;
+        assign mul_done = 1'b0;
       end
     end
   endgenerate

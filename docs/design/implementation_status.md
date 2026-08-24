@@ -87,9 +87,14 @@ operation mux连接唯一`trike_sm3_service`；完整层次结构检查恰好一
 operation稳定性由SymbiYosys/Z3证明，三阶段外置SM3路径分别保持现有byte golden与固定周期。
 Decaps继承decoder H验证状态的一次复位一笔事务约束；同一复位周期内的第二个Decaps命令返回error。
 
+三阶段普通多项式请求经过同一operation mux连接最大几何`trike_poly_mul_core`。服务在命令边界装载公开
+`r_bits/words/sparse_weight`，反馈只送入活动stage。完整层次固定包含一个共享流式乘法器和一个KeyGen
+求逆内部乘法器。KeyGen、Encaps和Decaps syndrome外置服务reference分别保持53,995,036、2,378,447和
+1,086,187拍并通过golden。
+
 该入口的KeyGen/Encaps采用官方TRIKE-2 `r=15581,w=35,t=263`，Decaps采用四档项目K-sign profile。
-两者是显式分离的参数验证域。多项式核、采样器和工作RAM仍位于stage层次，统一入口的Vivado资源、时序
-与功耗为`待测`。
+两者是显式分离的参数验证域。采样器和工作RAM位于stage层次，统一入口的Vivado资源、时序与功耗为
+`待测`。
 
 ### KeyGen
 
@@ -193,7 +198,7 @@ K-sign全局记录RAM在译码完成后提供两个不同bank的decision读数�
 
 ## 验证状态
 
-2026-08-20当前源码通过：
+2026-08-24当前源码通过：
 
 - `make ci-fast`：工具锁、记录/filelist检查、Verible/Slang/Verilator、形式proof/cover、单元测试和toy
   集成；toy结果为`residual=0, exact=1, cycles=154`，四档Decaps输入/最大几何存储及运行时decoder
@@ -269,8 +274,8 @@ data pin，避免async recovery路径占满top-N列表。
 
 - 官方TRIKE-2的`r=15581`与项目Min-Sum profile的`r=12589`是两个验证域；官方端到端Decaps KAT需要
   单独建立`r=15581`译码profile及DFR证据。
-- `trike_kem_asic_top`完成公开operation单发射和全局SM3共享；多项式服务、采样服务与跨阶段scratch RAM
-  生命周期分配仍是独立资源收敛边界。
+- `trike_kem_asic_top`完成公开operation单发射、全局SM3和普通多项式乘法共享；采样服务与跨阶段
+  scratch RAM生命周期分配是独立资源收敛边界。
 - `trike_decaps_runtime_synth_top`通过2-bit公开profile连接最大几何输入存储、运行时syndrome、统一decoder、
   decoder后检查和postprocess。四档具备有效与`c2`隐式拒绝完整KEM golden；u/v非收敛RTL深测覆盖TRIKE160，
   其余三档由软件golden和分层运行时RTL测试覆盖。

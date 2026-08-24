@@ -73,8 +73,14 @@ def main() -> None:
     count = instance_count("sm3_compress")
     if count != 1:
         raise SystemExit(f"trike_kem_asic_top: expected one sm3_compress instance, found {count}")
+    mul_count = instance_count("trike_poly_mul_core")
+    if mul_count != 2:
+        raise SystemExit(
+            "trike_kem_asic_top: expected one shared streaming multiplier and "
+            f"one KeyGen inversion multiplier, found {mul_count}"
+        )
     print("Unified TRIKE KEM structure PASS: one sm3_compress instance")
-    print(f"Unified TRIKE KEM structure INFO: {instance_count('trike_poly_mul_core')} poly-mul instances")
+    print("Unified TRIKE KEM structure PASS: two poly-mul instances")
 
 
 if __name__ == "__main__":

@@ -12,31 +12,52 @@ module trike_keygen_arith_core #(
     parameter int SECRET_WEIGHT = 35,
     parameter int WORD_W = 64,
     parameter int DIGIT_W = 16,
+    parameter bit USE_EXTERNAL_MUL = 1'b0,
+    parameter int MUL_INDEX_W = ((R_BITS > 1) ? $clog2(R_BITS) : 1),
     parameter int WORD_ADDR_W = ((((R_BITS + WORD_W - 1) / WORD_W) > 1) ? $clog2(
         (R_BITS + WORD_W - 1) / WORD_W
     ) : 1)
 ) (
-    input  logic                                                         i_clk,
-    input  logic                                                         i_rst_n,
-    input  logic                                                         i_support_valid,
-    input  logic [                                                  1:0] i_support_block,
+    input  logic i_clk,
+    input  logic i_rst_n,
+    input  logic i_support_valid,
+    input  logic [1:0] i_support_block,
     input  logic [((SECRET_WEIGHT > 1) ? $clog2(SECRET_WEIGHT) : 1)-1:0] i_support_position,
-    input  logic [              ((R_BITS > 1) ? $clog2(R_BITS) : 1)-1:0] i_support_index,
-    output logic                                                         o_support_ready,
-    input  logic                                                         i_vector_valid,
-    input  logic [                                                  1:0] i_vector_select,
-    input  logic [                                      WORD_ADDR_W-1:0] i_vector_word,
-    input  logic [                                           WORD_W-1:0] i_vector_data,
-    output logic                                                         o_vector_ready,
-    input  logic                                                         i_start,
-    output logic                                                         o_result_valid,
-    output logic                                                         o_result_select,
-    output logic [                                      WORD_ADDR_W-1:0] o_result_word,
-    output logic [                                           WORD_W-1:0] o_result_data,
-    output logic                                                         o_result_last,
-    input  logic                                                         i_result_ready,
-    output logic                                                         o_busy,
-    output logic                                                         o_done
+    input  logic [((R_BITS > 1) ? $clog2(R_BITS) : 1)-1:0] i_support_index,
+    output logic o_support_ready,
+    input  logic i_vector_valid,
+    input  logic [1:0] i_vector_select,
+    input  logic [WORD_ADDR_W-1:0] i_vector_word,
+    input  logic [WORD_W-1:0] i_vector_data,
+    output logic o_vector_ready,
+    input  logic i_start,
+    output logic o_result_valid,
+    output logic o_result_select,
+    output logic [WORD_ADDR_W-1:0] o_result_word,
+    output logic [WORD_W-1:0] o_result_data,
+    output logic o_result_last,
+    input  logic i_result_ready,
+    output logic o_busy,
+    output logic o_done,
+    output logic o_mul_start,
+    output logic [31:0] o_mul_runtime_r_bits,
+    output logic [31:0] o_mul_runtime_words,
+    output logic [31:0] o_mul_runtime_sparse_weight,
+    output logic o_mul_sparse_a,
+    output logic o_mul_a_valid,
+    output logic [WORD_W-1:0] o_mul_a_data,
+    input  logic i_mul_a_ready,
+    output logic o_mul_sparse_index_valid,
+    output logic [MUL_INDEX_W-1:0] o_mul_sparse_index,
+    input  logic i_mul_sparse_index_ready,
+    output logic o_mul_b_valid,
+    output logic [WORD_W-1:0] o_mul_b_data,
+    input  logic i_mul_b_ready,
+    input  logic i_mul_result_valid,
+    input  logic [WORD_W-1:0] i_mul_result_data,
+    input  logic i_mul_result_last,
+    output logic o_mul_result_ready,
+    input  logic i_mul_done
 );
 
   localparam int WORDS = (R_BITS + WORD_W - 1) / WORD_W;
@@ -198,6 +219,19 @@ module trike_keygen_arith_core #(
                             (sparse_position_q < SECRET_WEIGHT);
   assign mul_sparse_index = support_q[0][POSITION_W'(sparse_position_q)];
 
+  assign o_mul_start = mul_start;
+  assign o_mul_runtime_r_bits = 32'(R_BITS);
+  assign o_mul_runtime_words = 32'(WORDS);
+  assign o_mul_runtime_sparse_weight = 32'(SECRET_WEIGHT);
+  assign o_mul_sparse_a = mul_sparse_mode;
+  assign o_mul_a_valid = mul_a_valid;
+  assign o_mul_a_data = mul_a_data;
+  assign o_mul_sparse_index_valid = mul_sparse_valid;
+  assign o_mul_sparse_index = MUL_INDEX_W'(mul_sparse_index);
+  assign o_mul_b_valid = mul_b_valid;
+  assign o_mul_b_data = mul_b_data;
+  assign o_mul_result_ready = 1'b1;
+
   assign inv_start = state_q == ST_INV_START;
   assign inv_input_valid = read_data_valid_q && (read_operand_q == READ_OPERAND_INV);
   assign inv_input_data = read_data_q;
@@ -209,44 +243,56 @@ module trike_keygen_arith_core #(
   assign o_result_last = output_word_q == (WORDS - 1);
 
   /* verilator lint_off PINCONNECTEMPTY */
-  trike_poly_mul_core #(
-      .R_BITS       (R_BITS),
-      .WORD_W       (WORD_W),
-      .DIGIT_W      (DIGIT_W),
-      .SPARSE_WEIGHT(SECRET_WEIGHT)
-  ) u_mul (
-      .i_clk                  (i_clk),
-      .i_rst_n                (i_rst_n),
-      .i_start                (mul_start),
-      .i_runtime_r_bits       ('0),
-      .i_runtime_words        ('0),
-      .i_runtime_sparse_weight('0),
-      .i_sparse_a             (mul_sparse_mode),
-      .i_a_valid              (mul_a_valid),
-      .i_a_data               (mul_a_data),
-      .o_a_ready              (mul_a_ready),
-      .i_sparse_index_valid   (mul_sparse_valid),
-      .i_sparse_index         (mul_sparse_index),
-      .o_sparse_index_ready   (mul_sparse_ready),
-      .i_b_valid              (mul_b_valid),
-      .i_b_data               (mul_b_data),
-      .o_b_ready              (mul_b_ready),
-      .o_result_valid         (mul_result_valid),
-      .o_result_data          (mul_result_data),
-      .o_result_last          (mul_result_last),
-      .i_result_ready         (1'b1),
-      .o_ext_a_re             (),
-      .o_ext_a_raddr          (),
-      .i_ext_a_rdata          ('0),
-      .o_ext_b_re             (),
-      .o_ext_b_raddr          (),
-      .i_ext_b_rdata          ('0),
-      .o_ext_result_we        (),
-      .o_ext_result_waddr     (),
-      .o_ext_result_wdata     (),
-      .o_busy                 (),
-      .o_done                 (mul_done)
-  );
+  generate
+    if (USE_EXTERNAL_MUL) begin : gen_external_mul
+      assign mul_a_ready = i_mul_a_ready;
+      assign mul_sparse_ready = i_mul_sparse_index_ready;
+      assign mul_b_ready = i_mul_b_ready;
+      assign mul_result_valid = i_mul_result_valid;
+      assign mul_result_data = i_mul_result_data;
+      assign mul_result_last = i_mul_result_last;
+      assign mul_done = i_mul_done;
+    end else begin : gen_local_mul
+      trike_poly_mul_core #(
+          .R_BITS       (R_BITS),
+          .WORD_W       (WORD_W),
+          .DIGIT_W      (DIGIT_W),
+          .SPARSE_WEIGHT(SECRET_WEIGHT)
+      ) u_mul (
+          .i_clk                  (i_clk),
+          .i_rst_n                (i_rst_n),
+          .i_start                (mul_start),
+          .i_runtime_r_bits       ('0),
+          .i_runtime_words        ('0),
+          .i_runtime_sparse_weight('0),
+          .i_sparse_a             (mul_sparse_mode),
+          .i_a_valid              (mul_a_valid),
+          .i_a_data               (mul_a_data),
+          .o_a_ready              (mul_a_ready),
+          .i_sparse_index_valid   (mul_sparse_valid),
+          .i_sparse_index         (mul_sparse_index),
+          .o_sparse_index_ready   (mul_sparse_ready),
+          .i_b_valid              (mul_b_valid),
+          .i_b_data               (mul_b_data),
+          .o_b_ready              (mul_b_ready),
+          .o_result_valid         (mul_result_valid),
+          .o_result_data          (mul_result_data),
+          .o_result_last          (mul_result_last),
+          .i_result_ready         (1'b1),
+          .o_ext_a_re             (),
+          .o_ext_a_raddr          (),
+          .i_ext_a_rdata          ('0),
+          .o_ext_b_re             (),
+          .o_ext_b_raddr          (),
+          .i_ext_b_rdata          ('0),
+          .o_ext_result_we        (),
+          .o_ext_result_waddr     (),
+          .o_ext_result_wdata     (),
+          .o_busy                 (),
+          .o_done                 (mul_done)
+      );
+    end
+  endgenerate
 
   trike_poly_inv_core #(
       .R_BITS (R_BITS),

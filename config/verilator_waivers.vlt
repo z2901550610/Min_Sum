@@ -16,6 +16,7 @@ lint_off -rule PINCONNECTEMPTY -file "*rtl/trike_sm3_drng_generate_stream.sv"
 lint_off -rule PINCONNECTEMPTY -file "*rtl/trike_sm3_drng_instantiate_stream.sv"
 lint_off -rule PINCONNECTEMPTY -file "*rtl/trike_decaps_pipeline_core.sv"
 lint_off -rule PINCONNECTEMPTY -file "*rtl/trike_decaps_runtime_synth_top.sv"
+lint_off -rule PINCONNECTEMPTY -file "*rtl/trike_decaps_input_syndrome_core.sv"
 lint_off -rule PINCONNECTEMPTY -file "*rtl/trike_encaps_synth_top.sv"
 lint_off -rule PINCONNECTEMPTY -file "*rtl/trike_keygen_synth_top.sv"
 
@@ -28,6 +29,19 @@ lint_off -rule PINMISSING -file "*tb/tb_trike_sm3_drng_generate_stream.sv"
 lint_off -rule PINMISSING -file "*tb/tb_trike_sm3_drng_instantiate_stream.sv"
 lint_off -rule PINCONNECTEMPTY -file "*tb/tb_trike_pseudohash512_runtime.sv"
 lint_off -rule PINCONNECTEMPTY -file "*tb/tb_trike_decaps_postprocess_runtime.sv"
+lint_off -rule PINCONNECTEMPTY -file "*tb/tb_trike_keygen_core_reference.sv"
+lint_off -rule PINCONNECTEMPTY -file "*tb/tb_trike_encaps_core_reference.sv"
+lint_off -rule PINCONNECTEMPTY -file "*tb/tb_trike_decaps_syndrome_reference.sv"
+lint_off -rule UNUSEDSIGNAL -file "*tb/tb_trike_decaps_syndrome_reference.sv"
+
+// Focused local-multiplier testbenches use the default non-shared implementation mode.
+lint_off -rule PINMISSING -file "*tb/tb_trike_encaps_uv_core.sv"
+lint_off -rule PINMISSING -file "*tb/tb_trike_encaps_components_reference.sv"
+lint_off -rule PINMISSING -file "*tb/tb_trike_keygen_arith_core.sv"
+lint_off -rule PINMISSING -file "*tb/tb_trike_keygen_arith_reference.sv"
+lint_off -rule PINMISSING -file "*tb/tb_trike_decaps_syndrome_runtime.sv"
+lint_off -rule PINMISSING -file "*tb/tb_trike_decaps_syndrome_store_core.sv"
+lint_off -rule PINMISSING -file "*tb/tb_trike_decaps_input_decoder_load_core.sv"
 
 // Shared reference fixtures contain more golden fields than each focused test consumes.
 lint_off -rule UNUSEDPARAM -file "*tb/generated/trike_keygen_reference_case.svh"
@@ -42,9 +56,12 @@ lint_off -rule UNUSEDPARAM -file "*tb/generated/trike_poly_mul_reference_case.sv
 lint_off -rule UNUSEDSIGNAL -file "*rtl/decoder_top.sv"
 lint_off -rule UNUSEDSIGNAL -file "*rtl/trike_decaps_pipeline_core.sv"
 lint_off -rule UNUSEDSIGNAL -file "*rtl/trike_decaps_postprocess_core.sv"
+lint_off -rule UNUSEDSIGNAL -file "*rtl/trike_decaps_syndrome_core.sv"
 lint_off -rule UNUSEDSIGNAL -file "*rtl/trike_decaps_runtime_pipeline_core.sv"
 lint_off -rule UNUSEDSIGNAL -file "*rtl/trike_decaps_unified_core.sv"
 lint_off -rule UNUSEDSIGNAL -file "*rtl/trike_encaps_core.sv"
+lint_off -rule UNUSEDSIGNAL -file "*rtl/trike_encaps_uv_core.sv"
+lint_off -rule UNUSEDSIGNAL -file "*rtl/trike_keygen_arith_core.sv"
 lint_off -rule UNUSEDSIGNAL -file "*rtl/trike_keygen_core.sv"
 
 // Async-assert/sync-deassert reset structures are intentional in these files.
