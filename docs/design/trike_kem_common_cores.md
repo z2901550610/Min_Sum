@@ -518,6 +518,11 @@ error读口服务Encaps UV/L与Decaps重加密比较。两阶段的store生命�
 KeyGen固定链求逆保留核内乘法器，因此完整统一层次包含两个`trike_poly_mul_core`。结构门禁检查该实例数，
 三阶段外置服务reference分别保持53,995,036、2,378,447和1,086,187固定周期。
 
+Encaps的`trike_encaps_uv_core`通过external store端口直接使用外层两组244x64-bit `u/v` RAM。
+四次稀疏乘法依次把中间值和最终值写入这两组RAM，固定结果重放从同一同步读口取数；UV完成后，K与
+密文状态接管读口。端口所有权只由公开FSM状态选择，UV单测的内部与外部store配置均固定424拍，官方
+组件reference固定2,062,238拍。统一层次结构门禁要求UV核只展开external store分支。
+
 `trike_poly_mul_core`输入和结果均为little-endian coefficient word流。A、B、双长度product、result和
 稀疏index分别连接公共`ram_bram`同步读端口；综合分支使用`xpm_memory_sdpram`并请求Block RAM。乘法核
 支持两种公开模式：
@@ -566,7 +571,7 @@ TRIKE-2求逆数据存储的RTL逻辑容量由七份word数组收敛为三份整
 | 存储类 | 内容 | 复用规则 |
 | --- | --- | --- |
 | 持久key/ct RAM | pk、sk、输入ct、输出ct | 在一次KEM操作期间保持，不能与scratch覆盖 |
-| 多项式scratch RAM | H123共享t1/t2/r1、h1/h2临时值、u、v、s、乘法accumulator | 由固定微程序做静态生命周期分配；前一阶段最后一次读取后才能换名覆盖 |
+| 多项式scratch RAM | H123共享t1/t2/r1、h1/h2临时值、Encaps累加/持久u/v、s、乘法accumulator | 由固定微程序做静态生命周期分配；前一阶段最后一次读取后才能换名覆盖 |
 | 临时采样/index RAM | 当前一组h索引或H4错误索引 | 输出写入持久SK/错误RAM后立即用于下一组采样 |
 | message/hash RAM | m、sigma、sigma2、c2、K/L消息重放 | 统一byte地址控制；XOR合入写口 |
 | decoder内部RAM | C2V/V2C、syndrome、accumulator、K-sign状态 | 由`decoder_top`独占，KEM顶层不改变其bank几何 |

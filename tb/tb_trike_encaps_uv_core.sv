@@ -1,6 +1,8 @@
 `timescale 1ns / 1ps
 
-module tb_trike_encaps_uv_core;
+module tb_trike_encaps_uv_core #(
+    parameter bit USE_EXTERNAL_UV_STORE = 1'b0
+);
 
   localparam int R_BITS = 13;
   localparam int WORD_W = 8;
@@ -29,6 +31,18 @@ module tb_trike_encaps_uv_core;
   logic                    result_ready;
   logic                    busy;
   logic                    done;
+  logic                    store_u_we;
+  logic [ WORD_ADDR_W-1:0] store_u_waddr;
+  logic [      WORD_W-1:0] store_u_wdata;
+  logic                    store_u_re;
+  logic [ WORD_ADDR_W-1:0] store_u_raddr;
+  logic [      WORD_W-1:0] store_u_rdata;
+  logic                    store_v_we;
+  logic [ WORD_ADDR_W-1:0] store_v_waddr;
+  logic [      WORD_W-1:0] store_v_wdata;
+  logic                    store_v_re;
+  logic [ WORD_ADDR_W-1:0] store_v_raddr;
+  logic [      WORD_W-1:0] store_v_rdata;
 
   logic [     INDEX_W-1:0] error_sets[0:1][0:ERROR_WEIGHT-1];
   logic [      WORD_W-1:0] operands[0:3][       0:WORDS-1];
@@ -36,9 +50,10 @@ module tb_trike_encaps_uv_core;
   logic [      R_BITS-1:0] expected_v[0:1];
 
   trike_encaps_uv_core #(
-      .R_BITS      (R_BITS),
-      .WORD_W      (WORD_W),
-      .ERROR_WEIGHT(ERROR_WEIGHT)
+      .R_BITS               (R_BITS),
+      .WORD_W               (WORD_W),
+      .ERROR_WEIGHT         (ERROR_WEIGHT),
+      .USE_EXTERNAL_UV_STORE(USE_EXTERNAL_UV_STORE)
   ) dut (
       .i_clk           (clk),
       .i_rst_n         (rst_n),
@@ -58,7 +73,45 @@ module tb_trike_encaps_uv_core;
       .o_result_last   (result_last),
       .i_result_ready  (result_ready),
       .o_busy          (busy),
-      .o_done          (done)
+      .o_done          (done),
+      .o_store_u_we    (store_u_we),
+      .o_store_u_waddr (store_u_waddr),
+      .o_store_u_wdata (store_u_wdata),
+      .o_store_u_re    (store_u_re),
+      .o_store_u_raddr (store_u_raddr),
+      .i_store_u_rdata (store_u_rdata),
+      .o_store_v_we    (store_v_we),
+      .o_store_v_waddr (store_v_waddr),
+      .o_store_v_wdata (store_v_wdata),
+      .o_store_v_re    (store_v_re),
+      .o_store_v_raddr (store_v_raddr),
+      .i_store_v_rdata (store_v_rdata)
+  );
+
+  ram_bram #(
+      .DATA_W(WORD_W),
+      .DEPTH (WORDS)
+  ) u_store_u (
+      .i_clk  (clk),
+      .i_we   (store_u_we),
+      .i_waddr(store_u_waddr),
+      .i_wdata(store_u_wdata),
+      .i_re   (store_u_re),
+      .i_raddr(store_u_raddr),
+      .o_rdata(store_u_rdata)
+  );
+
+  ram_bram #(
+      .DATA_W(WORD_W),
+      .DEPTH (WORDS)
+  ) u_store_v (
+      .i_clk  (clk),
+      .i_we   (store_v_we),
+      .i_waddr(store_v_waddr),
+      .i_wdata(store_v_wdata),
+      .i_re   (store_v_re),
+      .i_raddr(store_v_raddr),
+      .o_rdata(store_v_rdata)
   );
 
   always #5 clk = ~clk;
@@ -244,7 +297,8 @@ module tb_trike_encaps_uv_core;
       $fatal(1, "output stall mismatch got=%0d expected=%0d", cycles_stalled, cycles_a + 3);
     end
 
-    $display("tb_trike_encaps_uv_core PASS cycles=%0d", cycles_a);
+    $display("tb_trike_encaps_uv_core PASS external_store=%0d cycles=%0d", USE_EXTERNAL_UV_STORE,
+             cycles_a);
     $finish;
   end
 

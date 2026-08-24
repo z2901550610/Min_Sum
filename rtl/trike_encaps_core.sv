@@ -260,6 +260,16 @@ module trike_encaps_core #(
   logic   [        WORD_W-1:0] uv_result_data;
   logic                        uv_result_ready;
   logic                        uv_done;
+  logic                        uv_store_u_we;
+  logic   [   WORD_ADDR_W-1:0] uv_store_u_waddr;
+  logic   [        WORD_W-1:0] uv_store_u_wdata;
+  logic                        uv_store_u_re;
+  logic   [   WORD_ADDR_W-1:0] uv_store_u_raddr;
+  logic                        uv_store_v_we;
+  logic   [   WORD_ADDR_W-1:0] uv_store_v_waddr;
+  logic   [        WORD_W-1:0] uv_store_v_wdata;
+  logic                        uv_store_v_re;
+  logic   [   WORD_ADDR_W-1:0] uv_store_v_raddr;
 
   logic                        l_start;
   logic                        l_input_valid;
@@ -521,12 +531,13 @@ module trike_encaps_core #(
   /* verilator lint_on PINCONNECTEMPTY */
 
   trike_encaps_uv_core #(
-      .R_BITS          (R_BITS),
-      .WORD_W          (WORD_W),
-      .ERROR_WEIGHT    (ERROR_WEIGHT),
-      .USE_EXTERNAL_MUL(USE_EXTERNAL_MUL),
-      .MUL_INDEX_W     (MUL_INDEX_W),
-      .WORD_ADDR_W     (WORD_ADDR_W)
+      .R_BITS               (R_BITS),
+      .WORD_W               (WORD_W),
+      .ERROR_WEIGHT         (ERROR_WEIGHT),
+      .USE_EXTERNAL_MUL     (USE_EXTERNAL_MUL),
+      .USE_EXTERNAL_UV_STORE(1'b1),
+      .MUL_INDEX_W          (MUL_INDEX_W),
+      .WORD_ADDR_W          (WORD_ADDR_W)
   ) u_uv (
       .i_clk                      (i_clk),
       .i_rst_n                    (i_rst_n),
@@ -564,7 +575,19 @@ module trike_encaps_core #(
       .i_mul_result_valid         (i_mul_result_valid),
       .i_mul_result_data          (i_mul_result_data),
       .i_mul_result_last          (i_mul_result_last),
-      .o_mul_result_ready         (o_mul_result_ready)
+      .o_mul_result_ready         (o_mul_result_ready),
+      .o_store_u_we               (uv_store_u_we),
+      .o_store_u_waddr            (uv_store_u_waddr),
+      .o_store_u_wdata            (uv_store_u_wdata),
+      .o_store_u_re               (uv_store_u_re),
+      .o_store_u_raddr            (uv_store_u_raddr),
+      .i_store_u_rdata            (u_rdata),
+      .o_store_v_we               (uv_store_v_we),
+      .o_store_v_waddr            (uv_store_v_waddr),
+      .o_store_v_wdata            (uv_store_v_wdata),
+      .o_store_v_re               (uv_store_v_re),
+      .o_store_v_raddr            (uv_store_v_raddr),
+      .i_store_v_rdata            (v_rdata)
   );
 
   /* verilator lint_off PINCONNECTEMPTY */
@@ -694,6 +717,19 @@ module trike_encaps_core #(
     v_wdata = uv_result_data;
     v_re = 1'b0;
     v_raddr = '0;
+
+    if (state_q == ST_UV_RUN) begin
+      u_we = uv_store_u_we;
+      u_waddr = uv_store_u_waddr;
+      u_wdata = uv_store_u_wdata;
+      u_re = uv_store_u_re;
+      u_raddr = uv_store_u_raddr;
+      v_we = uv_store_v_we;
+      v_waddr = uv_store_v_waddr;
+      v_wdata = uv_store_v_wdata;
+      v_re = uv_store_v_re;
+      v_raddr = uv_store_v_raddr;
+    end
 
     h123_start = state_q == ST_H123_START;
     h123_seed_valid = state_q == ST_H123_RUN;
@@ -836,9 +872,11 @@ module trike_encaps_core #(
       if (uv_result_select) begin
         v_we = 1'b1;
         v_waddr = WORD_ADDR_W'(uv_v_word_count_q);
+        v_wdata = uv_result_data;
       end else begin
         u_we = 1'b1;
         u_waddr = WORD_ADDR_W'(uv_u_word_count_q);
+        u_wdata = uv_result_data;
       end
     end
 

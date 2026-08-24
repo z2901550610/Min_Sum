@@ -134,6 +134,8 @@ byte，SK为三组32-bit little-endian support以及`h0 || t0 || r2 || sigma || 
 ### Encaps
 
 `trike_encaps_core`顺序装载`r2 || sigma || m`，用H123/H4和共享稀疏乘法器产生`u/v/c2/SS`。
+UV核通过外部store接口直接读写外层两组244x64-bit持久`u/v` RAM；同一RAM依次承担四次乘法累加、
+结果重放、K输入和密文输出。结构门禁要求统一层次的UV核选择external store分支。
 `trike_encaps_synth_top`只暴露8-bit输入、8-bit CT和8-bit SS流。
 
 | 边界 | 固定周期 | golden范围 |
@@ -295,7 +297,7 @@ data pin，避免async recovery路径占满top-N列表。
 - 官方TRIKE-2的`r=15581`与项目Min-Sum profile的`r=12589`是两个验证域；官方端到端Decaps KAT需要
   单独建立`r=15581`译码profile及DFR证据。
 - `trike_kem_asic_top`包含公开operation单发射、全局SM3、H1/H2/H3向量、固定重量采样、H4结果存储和
-  普通多项式乘法共享；H123、算术、序列化及其他跨阶段scratch RAM生命周期分配是独立资源收敛边界。
+  普通多项式乘法共享；KeyGen算术、序列化及其他跨阶段scratch RAM生命周期分配是独立资源收敛边界。
 - `trike_decaps_runtime_synth_top`通过2-bit公开profile连接最大几何输入存储、运行时syndrome、统一decoder、
   decoder后检查和postprocess。四档具备有效与`c2`隐式拒绝完整KEM golden；u/v非收敛RTL深测覆盖TRIKE160，
   其余三档由软件golden和分层运行时RTL测试覆盖。

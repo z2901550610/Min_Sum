@@ -13,6 +13,7 @@ module trike_encaps_uv_core #(
     parameter int WORD_W = 64,
     parameter int ERROR_WEIGHT = 263,
     parameter bit USE_EXTERNAL_MUL = 1'b0,
+    parameter bit USE_EXTERNAL_UV_STORE = 1'b0,
     parameter int MUL_INDEX_W = ((R_BITS > 1) ? $clog2(R_BITS) : 1),
     parameter int WORD_ADDR_W = ((((R_BITS + WORD_W - 1) / WORD_W) > 1) ? $clog2(
         (R_BITS + WORD_W - 1) / WORD_W
@@ -54,7 +55,23 @@ module trike_encaps_uv_core #(
     input  logic                                                       i_mul_result_valid,
     input  logic [                                         WORD_W-1:0] i_mul_result_data,
     input  logic                                                       i_mul_result_last,
-    output logic                                                       o_mul_result_ready
+    output logic                                                       o_mul_result_ready,
+    output logic                                                       o_store_u_we,
+    output logic [                                    WORD_ADDR_W-1:0] o_store_u_waddr,
+    output logic [                                         WORD_W-1:0] o_store_u_wdata,
+    output logic                                                       o_store_u_re,
+    output logic [                                    WORD_ADDR_W-1:0] o_store_u_raddr,
+    /* verilator lint_off UNUSEDSIGNAL */
+    input  logic [                                         WORD_W-1:0] i_store_u_rdata,
+    /* verilator lint_on UNUSEDSIGNAL */
+    output logic                                                       o_store_v_we,
+    output logic [                                    WORD_ADDR_W-1:0] o_store_v_waddr,
+    output logic [                                         WORD_W-1:0] o_store_v_wdata,
+    output logic                                                       o_store_v_re,
+    output logic [                                    WORD_ADDR_W-1:0] o_store_v_raddr,
+    /* verilator lint_off UNUSEDSIGNAL */
+    input  logic [                                         WORD_W-1:0] i_store_v_rdata
+    /* verilator lint_on UNUSEDSIGNAL */
 );
 
   localparam int WORDS = (R_BITS + WORD_W - 1) / WORD_W;
@@ -160,31 +177,49 @@ module trike_encaps_uv_core #(
       .o_rdata(e0_rdata)
   );
 
-  ram_bram #(
-      .DATA_W(WORD_W),
-      .DEPTH (WORDS)
-  ) u_u_mem (
-      .i_clk  (i_clk),
-      .i_we   (u_we),
-      .i_waddr(u_waddr),
-      .i_wdata(u_wdata),
-      .i_re   (u_re),
-      .i_raddr(u_raddr),
-      .o_rdata(u_rdata)
-  );
+  assign o_store_u_we = u_we;
+  assign o_store_u_waddr = u_waddr;
+  assign o_store_u_wdata = u_wdata;
+  assign o_store_u_re = u_re;
+  assign o_store_u_raddr = u_raddr;
+  assign o_store_v_we = v_we;
+  assign o_store_v_waddr = v_waddr;
+  assign o_store_v_wdata = v_wdata;
+  assign o_store_v_re = v_re;
+  assign o_store_v_raddr = v_raddr;
 
-  ram_bram #(
-      .DATA_W(WORD_W),
-      .DEPTH (WORDS)
-  ) u_v_mem (
-      .i_clk  (i_clk),
-      .i_we   (v_we),
-      .i_waddr(v_waddr),
-      .i_wdata(v_wdata),
-      .i_re   (v_re),
-      .i_raddr(v_raddr),
-      .o_rdata(v_rdata)
-  );
+  generate
+    if (USE_EXTERNAL_UV_STORE) begin : gen_external_uv_store
+      assign u_rdata = i_store_u_rdata;
+      assign v_rdata = i_store_v_rdata;
+    end else begin : gen_local_uv_store
+      ram_bram #(
+          .DATA_W(WORD_W),
+          .DEPTH (WORDS)
+      ) u_u_mem (
+          .i_clk  (i_clk),
+          .i_we   (u_we),
+          .i_waddr(u_waddr),
+          .i_wdata(u_wdata),
+          .i_re   (u_re),
+          .i_raddr(u_raddr),
+          .o_rdata(u_rdata)
+      );
+
+      ram_bram #(
+          .DATA_W(WORD_W),
+          .DEPTH (WORDS)
+      ) u_v_mem (
+          .i_clk  (i_clk),
+          .i_we   (v_we),
+          .i_waddr(v_waddr),
+          .i_wdata(v_wdata),
+          .i_re   (v_re),
+          .i_raddr(v_raddr),
+          .o_rdata(v_rdata)
+      );
+    end
+  endgenerate
 
   assign o_mul_start = mul_start;
   assign o_mul_runtime_r_bits = 32'(R_BITS);

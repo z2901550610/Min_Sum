@@ -113,12 +113,33 @@ def main() -> None:
             "trike_kem_asic_top: expected one shared H123 vector store, "
             f"found {h123_store_count}"
         )
+    uv_core_count = instance_count("trike_encaps_uv_core")
+    uv_external_store_count = sum(
+        item.get("type") == "GENBLOCK" and item.get("name") == "gen_external_uv_store"
+        for item in objects
+    )
+    uv_local_store_count = sum(
+        item.get("type") == "GENBLOCK" and item.get("name") == "gen_local_uv_store"
+        for item in objects
+    )
+    if (
+        uv_core_count != 1
+        or uv_external_store_count != 1
+        or uv_local_store_count != 0
+    ):
+        raise SystemExit(
+            "trike_kem_asic_top: expected one Encaps UV core using the persistent "
+            "external u/v store, found "
+            f"cores={uv_core_count} external={uv_external_store_count} "
+            f"local={uv_local_store_count}"
+        )
     print("Unified TRIKE KEM structure PASS: one sm3_compress instance")
     print("Unified TRIKE KEM structure PASS: two poly-mul instances")
     print("Unified TRIKE KEM structure PASS: one H123 vector service and parity mapper")
     print("Unified TRIKE KEM structure PASS: one DRNG and fixed-weight sampler chain")
     print("Unified TRIKE KEM structure PASS: one H4 support/error store")
     print("Unified TRIKE KEM structure PASS: one H123 vector store")
+    print("Unified TRIKE KEM structure PASS: Encaps UV reuses persistent u/v store")
 
 
 if __name__ == "__main__":
