@@ -4,19 +4,20 @@
 //   L(e') -> m' -> H4(m'||r2) -> full error compare -> select -> K(selected||ct).
 // L, H4, and K execute sequentially and share one SM3 compression service.
 module trike_decaps_postprocess_core #(
-    parameter int M_BYTES          = 32,
-    parameter int R_BITS           = 12589,
-    parameter int ERROR_WEIGHT     = 263,
-    parameter int PADDED_R_BYTES   = ((R_BITS + 511) / 512) * 64,
-    parameter int CIPHERTEXT_BYTES = (2 * ((R_BITS + 7) / 8)) + M_BYTES,
-    parameter bit RUNTIME_GEOMETRY = 1'b0,
-    parameter int DATA_W           = 8 * M_BYTES,
-    parameter int ERROR_BYTES      = 3 * PADDED_R_BYTES,
-    parameter int R_BYTES          = (R_BITS + 7) / 8,
-    parameter int ERROR_ADDR_W     = ((ERROR_BYTES > 1) ? $clog2(ERROR_BYTES) : 1),
-    parameter int R_ADDR_W         = ((R_BYTES > 1) ? $clog2(R_BYTES) : 1),
-    parameter int CT_ADDR_W        = ((CIPHERTEXT_BYTES > 1) ? $clog2(CIPHERTEXT_BYTES) : 1),
-    parameter int SS_IDX_W         = ((M_BYTES > 1) ? $clog2(M_BYTES) : 1)
+    parameter int M_BYTES               = 32,
+    parameter int R_BITS                = 12589,
+    parameter int ERROR_WEIGHT          = 263,
+    parameter int PADDED_R_BYTES        = ((R_BITS + 511) / 512) * 64,
+    parameter int CIPHERTEXT_BYTES      = (2 * ((R_BITS + 7) / 8)) + M_BYTES,
+    parameter bit RUNTIME_GEOMETRY      = 1'b0,
+    parameter int DATA_W                = 8 * M_BYTES,
+    parameter int ERROR_BYTES           = 3 * PADDED_R_BYTES,
+    parameter int R_BYTES               = (R_BITS + 7) / 8,
+    parameter int ERROR_ADDR_W          = ((ERROR_BYTES > 1) ? $clog2(ERROR_BYTES) : 1),
+    parameter int R_ADDR_W              = ((R_BYTES > 1) ? $clog2(R_BYTES) : 1),
+    parameter int CT_ADDR_W             = ((CIPHERTEXT_BYTES > 1) ? $clog2(CIPHERTEXT_BYTES) : 1),
+    parameter int SS_IDX_W              = ((M_BYTES > 1) ? $clog2(M_BYTES) : 1),
+    parameter bit USE_EXTERNAL_COMPRESS = 1'b0
 ) (
     input  logic                    i_clk,
     input  logic                    i_rst_n,
@@ -48,7 +49,13 @@ module trike_decaps_postprocess_core #(
     output logic                    o_shared_secret_last,
     input  logic                    i_shared_secret_ready,
     output logic                    o_busy,
-    output logic                    o_done
+    output logic                    o_done,
+    output logic                    o_compress_start,
+    output logic [           511:0] o_compress_block,
+    output logic [           255:0] o_compress_state,
+    input  logic                    i_compress_busy,
+    input  logic                    i_compress_done,
+    input  logic [           255:0] i_compress_state
 );
 
   localparam int SEED_BYTES = M_BYTES + R_BYTES;
@@ -226,16 +233,28 @@ module trike_decaps_postprocess_core #(
       .i_compress_state          (shared_compress_output_state)
   );
 
-  trike_sm3_service u_sm3_service (
-      .i_clk  (i_clk),
-      .i_rst_n(i_rst_n),
-      .i_start(shared_compress_start),
-      .i_block(shared_compress_block),
-      .i_state(shared_compress_input_state),
-      .o_busy (shared_compress_busy),
-      .o_done (shared_compress_done),
-      .o_state(shared_compress_output_state)
-  );
+  assign o_compress_start = shared_compress_start;
+  assign o_compress_block = shared_compress_block;
+  assign o_compress_state = shared_compress_input_state;
+
+  generate
+    if (USE_EXTERNAL_COMPRESS) begin : gen_external_compress
+      assign shared_compress_busy = i_compress_busy;
+      assign shared_compress_done = i_compress_done;
+      assign shared_compress_output_state = i_compress_state;
+    end else begin : gen_local_compress
+      trike_sm3_service u_sm3_service (
+          .i_clk  (i_clk),
+          .i_rst_n(i_rst_n),
+          .i_start(shared_compress_start),
+          .i_block(shared_compress_block),
+          .i_state(shared_compress_input_state),
+          .o_busy (shared_compress_busy),
+          .o_done (shared_compress_done),
+          .o_state(shared_compress_output_state)
+      );
+    end
+  endgenerate
 
   always_comb begin
     o_reference_re = 1'b0;

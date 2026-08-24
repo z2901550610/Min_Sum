@@ -1,8 +1,9 @@
 `timescale 1ns / 1ps
 
 module tb_trike_keygen_core_reference #(
-    parameter bit ALT_CASE      = 1'b0,
-    parameter bit USE_SYNTH_TOP = 1'b0
+    parameter bit ALT_CASE       = 1'b0,
+    parameter bit USE_SYNTH_TOP  = 1'b0,
+    parameter bit USE_SHARED_SM3 = 1'b0
 );
 
   `include "generated/trike_keygen_reference_case.svh"
@@ -10,28 +11,36 @@ module tb_trike_keygen_core_reference #(
   localparam int EXPECTED_BUSY_CYCLES = 53995036;
   localparam int EXPECTED_SYNTH_BUSY_CYCLES = 54002607;
 
-  logic       clk;
-  logic       rst_n;
-  logic       start;
-  logic       random_valid;
-  logic [7:0] random_data;
-  logic       random_ready;
-  logic       pk_valid;
-  logic [7:0] pk_data;
-  logic       pk_last;
-  logic       pk_ready;
-  logic       sk_valid;
-  logic [7:0] sk_data;
-  logic       sk_last;
-  logic       sk_ready;
-  logic       busy;
-  logic       done;
-  logic       success;
+  logic         clk;
+  logic         rst_n;
+  logic         start;
+  logic         random_valid;
+  logic [  7:0] random_data;
+  logic         random_ready;
+  logic         pk_valid;
+  logic [  7:0] pk_data;
+  logic         pk_last;
+  logic         pk_ready;
+  logic         sk_valid;
+  logic [  7:0] sk_data;
+  logic         sk_last;
+  logic         sk_ready;
+  logic         busy;
+  logic         done;
+  logic         success;
+  /* verilator lint_off UNUSEDSIGNAL */
+  logic         compress_start;
+  logic [511:0] compress_block;
+  logic [255:0] compress_input_state;
+  logic         compress_busy;
+  logic         compress_done;
+  logic [255:0] compress_output_state;
+  /* verilator lint_on UNUSEDSIGNAL */
 
-  int         random_count;
-  int         pk_count;
-  int         sk_count;
-  int         busy_cycles;
+  int           random_count;
+  int           pk_count;
+  int           sk_count;
+  int           busy_cycles;
 
   always_comb begin
     if (random_count < 32) begin
@@ -66,31 +75,55 @@ module tb_trike_keygen_core_reference #(
       );
     end else begin : g_core
       trike_keygen_core #(
-          .M_BYTES        (32),
-          .R_BITS         (REF_R_BITS),
-          .SECRET_WEIGHT  (REF_SECRET_WEIGHT),
-          .CANDIDATE_COUNT(REF_CANDIDATE_COUNT),
-          .WORD_W         (64),
-          .DIGIT_W        (16)
+          .M_BYTES              (32),
+          .R_BITS               (REF_R_BITS),
+          .SECRET_WEIGHT        (REF_SECRET_WEIGHT),
+          .CANDIDATE_COUNT      (REF_CANDIDATE_COUNT),
+          .WORD_W               (64),
+          .DIGIT_W              (16),
+          .USE_EXTERNAL_COMPRESS(USE_SHARED_SM3)
       ) dut (
-          .i_clk         (clk),
-          .i_rst_n       (rst_n),
-          .i_start       (start),
-          .i_random_valid(random_valid),
-          .i_random_data (random_data),
-          .o_random_ready(random_ready),
-          .o_pk_valid    (pk_valid),
-          .o_pk_data     (pk_data),
-          .o_pk_last     (pk_last),
-          .i_pk_ready    (pk_ready),
-          .o_sk_valid    (sk_valid),
-          .o_sk_data     (sk_data),
-          .o_sk_last     (sk_last),
-          .i_sk_ready    (sk_ready),
-          .o_busy        (busy),
-          .o_done        (done),
-          .o_success     (success)
+          .i_clk           (clk),
+          .i_rst_n         (rst_n),
+          .i_start         (start),
+          .i_random_valid  (random_valid),
+          .i_random_data   (random_data),
+          .o_random_ready  (random_ready),
+          .o_pk_valid      (pk_valid),
+          .o_pk_data       (pk_data),
+          .o_pk_last       (pk_last),
+          .i_pk_ready      (pk_ready),
+          .o_sk_valid      (sk_valid),
+          .o_sk_data       (sk_data),
+          .o_sk_last       (sk_last),
+          .i_sk_ready      (sk_ready),
+          .o_busy          (busy),
+          .o_done          (done),
+          .o_success       (success),
+          .o_compress_start(compress_start),
+          .o_compress_block(compress_block),
+          .o_compress_state(compress_input_state),
+          .i_compress_busy (compress_busy),
+          .i_compress_done (compress_done),
+          .i_compress_state(compress_output_state)
       );
+
+      if (USE_SHARED_SM3) begin : g_shared_sm3
+        trike_sm3_service u_sm3_service (
+            .i_clk  (clk),
+            .i_rst_n(rst_n),
+            .i_start(compress_start),
+            .i_block(compress_block),
+            .i_state(compress_input_state),
+            .o_busy (compress_busy),
+            .o_done (compress_done),
+            .o_state(compress_output_state)
+        );
+      end else begin : g_local_sm3
+        assign compress_busy = 1'b0;
+        assign compress_done = 1'b0;
+        assign compress_output_state = '0;
+      end
     end
   endgenerate
 

@@ -5,26 +5,27 @@
 // public profiles; active geometry is latched by the input loader at i_start.
 // Decoder H validation state makes this a one-transaction-per-reset boundary.
 module trike_decaps_runtime_pipeline_core #(
-    parameter int WORD_W             = 64,
-    parameter int DIGIT_W            = 16,
-    parameter int BLOCKS             = 3,
-    parameter int M_BYTES            = 32,
-    parameter int MAX_R_BITS         = bike_pkg::P_R_VALS             [3],
-    parameter int MAX_SECRET_WEIGHT  = bike_pkg::P_W_VALS             [3],
-    parameter int MAX_ERROR_WEIGHT   = bike_pkg::P_T_VALS             [3],
-    parameter int MAX_R_BYTES        = (MAX_R_BITS + 7) / 8,
-    parameter int MAX_PADDED_R_BYTES = ((MAX_R_BITS + 511) / 512) * 64,
-    parameter int MAX_ERROR_BYTES    = BLOCKS * MAX_PADDED_R_BYTES,
-    parameter int MAX_CT_BYTES       = (2 * MAX_R_BYTES) + M_BYTES,
-    parameter int ROW_W              = $clog2(MAX_R_BITS),
-    parameter int COL_W              = $clog2(BLOCKS * MAX_R_BITS),
-    parameter int BLOCK_W            = $clog2(BLOCKS),
-    parameter int DIAG_W             = $clog2(MAX_SECRET_WEIGHT),
-    parameter int ERROR_ADDR_W       = $clog2(MAX_ERROR_BYTES),
-    parameter int R_ADDR_W           = $clog2(MAX_R_BYTES),
-    parameter int CT_ADDR_W          = $clog2(MAX_CT_BYTES),
-    parameter int SS_IDX_W           = $clog2(M_BYTES),
-    parameter int RESIDUAL_WEIGHT_W  = $clog2(MAX_R_BITS + 1)
+    parameter int WORD_W                = 64,
+    parameter int DIGIT_W               = 16,
+    parameter int BLOCKS                = 3,
+    parameter int M_BYTES               = 32,
+    parameter int MAX_R_BITS            = bike_pkg::P_R_VALS             [3],
+    parameter int MAX_SECRET_WEIGHT     = bike_pkg::P_W_VALS             [3],
+    parameter int MAX_ERROR_WEIGHT      = bike_pkg::P_T_VALS             [3],
+    parameter int MAX_R_BYTES           = (MAX_R_BITS + 7) / 8,
+    parameter int MAX_PADDED_R_BYTES    = ((MAX_R_BITS + 511) / 512) * 64,
+    parameter int MAX_ERROR_BYTES       = BLOCKS * MAX_PADDED_R_BYTES,
+    parameter int MAX_CT_BYTES          = (2 * MAX_R_BYTES) + M_BYTES,
+    parameter int ROW_W                 = $clog2(MAX_R_BITS),
+    parameter int COL_W                 = $clog2(BLOCKS * MAX_R_BITS),
+    parameter int BLOCK_W               = $clog2(BLOCKS),
+    parameter int DIAG_W                = $clog2(MAX_SECRET_WEIGHT),
+    parameter int ERROR_ADDR_W          = $clog2(MAX_ERROR_BYTES),
+    parameter int R_ADDR_W              = $clog2(MAX_R_BYTES),
+    parameter int CT_ADDR_W             = $clog2(MAX_CT_BYTES),
+    parameter int SS_IDX_W              = $clog2(M_BYTES),
+    parameter int RESIDUAL_WEIGHT_W     = $clog2(MAX_R_BITS + 1),
+    parameter bit USE_EXTERNAL_COMPRESS = 1'b0
 ) (
     input  logic                              i_clk,
     input  logic                              i_rst_n,
@@ -67,7 +68,13 @@ module trike_decaps_runtime_pipeline_core #(
     input  logic                              i_shared_secret_ready,
     output logic                              o_error,
     output logic                              o_busy,
-    output logic                              o_done
+    output logic                              o_done,
+    output logic                              o_compress_start,
+    output logic [                     511:0] o_compress_block,
+    output logic [                     255:0] o_compress_state,
+    input  logic                              i_compress_busy,
+    input  logic                              i_compress_done,
+    input  logic [                     255:0] i_compress_state
 );
 
   typedef enum logic [2:0] {
@@ -209,12 +216,13 @@ module trike_decaps_runtime_pipeline_core #(
   );
 
   trike_decaps_postprocess_core #(
-      .M_BYTES         (M_BYTES),
-      .R_BITS          (MAX_R_BITS),
-      .ERROR_WEIGHT    (MAX_ERROR_WEIGHT),
-      .PADDED_R_BYTES  (MAX_PADDED_R_BYTES),
-      .CIPHERTEXT_BYTES(MAX_CT_BYTES),
-      .RUNTIME_GEOMETRY(1'b1)
+      .M_BYTES              (M_BYTES),
+      .R_BITS               (MAX_R_BITS),
+      .ERROR_WEIGHT         (MAX_ERROR_WEIGHT),
+      .PADDED_R_BYTES       (MAX_PADDED_R_BYTES),
+      .CIPHERTEXT_BYTES     (MAX_CT_BYTES),
+      .RUNTIME_GEOMETRY     (1'b1),
+      .USE_EXTERNAL_COMPRESS(USE_EXTERNAL_COMPRESS)
   ) u_postprocess (
       .i_clk                     (i_clk),
       .i_rst_n                   (i_rst_n),
@@ -246,7 +254,13 @@ module trike_decaps_runtime_pipeline_core #(
       .o_shared_secret_last      (o_shared_secret_last),
       .i_shared_secret_ready     (i_shared_secret_ready),
       .o_busy                    (postprocess_busy),
-      .o_done                    (postprocess_done)
+      .o_done                    (postprocess_done),
+      .o_compress_start          (o_compress_start),
+      .o_compress_block          (o_compress_block),
+      .o_compress_state          (o_compress_state),
+      .i_compress_busy           (i_compress_busy),
+      .i_compress_done           (i_compress_done),
+      .i_compress_state          (i_compress_state)
   );
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin

@@ -79,6 +79,18 @@ syndrome必须完整装载，H必须完成固定合法性检查，之后才接�
 [TRIKE KEM公共核设计](trike_kem_common_cores.md)。所有复合顶层按公开FSM复用SM3服务；Yosys层次检查
 要求每个完整KeyGen、Encaps和Decaps层次恰好包含一个`sm3_compress`。
 
+### 统一KEM ASIC入口
+
+`trike_kem_asic_top`使用公开`i_operation=KeyGen/Encaps/Decaps`形成单发射事务边界。operation在start
+接受时锁存，busy期间三个stage start保持全零，完成只采纳已锁存stage的done。三阶段SM3请求经过公开
+operation mux连接唯一`trike_sm3_service`；完整层次结构检查恰好一个`sm3_compress`。控制器one-hot和
+operation稳定性由SymbiYosys/Z3证明，三阶段外置SM3路径分别保持现有byte golden与固定周期。
+Decaps继承decoder H验证状态的一次复位一笔事务约束；同一复位周期内的第二个Decaps命令返回error。
+
+该入口的KeyGen/Encaps采用官方TRIKE-2 `r=15581,w=35,t=263`，Decaps采用四档项目K-sign profile。
+两者是显式分离的参数验证域。多项式核、采样器和工作RAM仍位于stage层次，统一入口的Vivado资源、时序
+与功耗为`待测`。
+
 ### KeyGen
 
 `trike_keygen_core`接收`key_seed || sigma2 || sigma`共96 byte，固定扫描16组秘密support候选，随后执行
@@ -257,6 +269,8 @@ data pin，避免async recovery路径占满top-N列表。
 
 - 官方TRIKE-2的`r=15581`与项目Min-Sum profile的`r=12589`是两个验证域；官方端到端Decaps KAT需要
   单独建立`r=15581`译码profile及DFR证据。
+- `trike_kem_asic_top`完成公开operation单发射和全局SM3共享；多项式服务、采样服务与跨阶段scratch RAM
+  生命周期分配仍是独立资源收敛边界。
 - `trike_decaps_runtime_synth_top`通过2-bit公开profile连接最大几何输入存储、运行时syndrome、统一decoder、
   decoder后检查和postprocess。四档具备有效与`c2`隐式拒绝完整KEM golden；u/v非收敛RTL深测覆盖TRIKE160，
   其余三档由软件golden和分层运行时RTL测试覆盖。

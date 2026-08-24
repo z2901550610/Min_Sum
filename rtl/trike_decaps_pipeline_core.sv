@@ -311,7 +311,13 @@ module trike_decaps_pipeline_core #(
       .o_shared_secret_last      (o_shared_secret_last),
       .i_shared_secret_ready     (i_shared_secret_ready),
       .o_busy                    (post_busy),
-      .o_done                    (post_done)
+      .o_done                    (post_done),
+      .o_compress_start          (),
+      .o_compress_block          (),
+      .o_compress_state          (),
+      .i_compress_busy           (1'b0),
+      .i_compress_done           (1'b0),
+      .i_compress_state          ('0)
   );
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin

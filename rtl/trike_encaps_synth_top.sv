@@ -171,7 +171,13 @@ module trike_encaps_synth_top (
       .o_shared_secret_last (core_shared_secret_last),
       .i_shared_secret_ready(core_shared_secret_ready),
       .o_busy               (core_busy),
-      .o_done               (core_done)
+      .o_done               (core_done),
+      .o_compress_start     (),
+      .o_compress_block     (),
+      .o_compress_state     (),
+      .i_compress_busy      (1'b0),
+      .i_compress_done      (1'b0),
+      .i_compress_state     ('0)
   );
 
 endmodule

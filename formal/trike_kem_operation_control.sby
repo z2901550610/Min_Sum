@@ -1,0 +1,19 @@
+[tasks]
+prove prove
+cover cover
+
+[options]
+prove: mode prove
+cover: mode cover
+depth 12
+
+[engines]
+smtbmc z3
+
+[script]
+read -formal -sv trike_kem_operation_control.sv trike_kem_operation_control_formal.sv
+prep -top trike_kem_operation_control_formal
+
+[files]
+rtl/trike_kem_operation_control.sv
+formal/trike_kem_operation_control_formal.sv

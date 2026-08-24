@@ -413,7 +413,7 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    TOP["待实现：trike_kem_top<br/>KeyGen/Encaps/Decaps固定微程序"]
+    TOP["已有：trike_kem_asic_top<br/>KeyGen/Encaps/Decaps公开单发射"]
     TOP --> IO["统一IO与RAM地址控制<br/>pk/sk/ct/message/scratch"]
     TOP --> SM3["共享SM3服务<br/>一个物理sm3_compress"]
     TOP --> DRNG["共享DRNG服务<br/>一组V/C/reseed_counter"]
@@ -432,7 +432,7 @@ flowchart TD
 
 | 层次 | 完成态模块 | 职责 |
 | --- | --- | --- |
-| 顶层调度 | `trike_kem_top` | 选择KeyGen/Encaps/Decaps固定微程序，发出共享引擎command并管理公开周期预算 |
+| 顶层调度 | `trike_kem_asic_top` | 锁存KeyGen/Encaps/Decaps公开operation，发出one-hot start并管理事务边界 |
 | IO与存储 | `trike_kem_io_ctrl` | little-endian序列化、RAM地址、消息重放和生命周期分配 |
 | 哈希服务 | `trike_sm3_service` | block构造、chaining context和唯一物理`sm3_compress`仲裁 |
 | DRNG服务 | `trike_drng_service` | Instantiate、Generate和55-byte状态算术；H1/H2/H3/H4/秘密采样调用 |
@@ -442,8 +442,9 @@ flowchart TD
 | 译码服务 | `decoder_top` | Decaps固定7轮Min-Sum，不与KEM多项式运算并发 |
 | 验证服务 | `trike_ct_verify_stream` | 固定word数比较、累计difference并调用`kem_ct_compare_select` |
 
-H1/H2/H3控制器、H4控制器、KeyGen控制器和Encaps/Decaps控制器不分别拥有算术实例。它们作为
-`trike_kem_top`内部微程序段或小型sequencer存在，只保存公开计数器、源/目的RAM描述符和完成状态。
+`trike_kem_asic_top`实例化三个固定阶段控制器，三个阶段只在被选operation下接收start和输入流。SM3
+压缩数据通路为芯片级共享资源；DRNG、采样、多项式算术和stage RAM保留各自层次，作为后续服务化与
+生命周期分配边界。
 
 ## 跨流程复用矩阵
 
@@ -477,9 +478,9 @@ H1/H2/H3控制器、H4控制器、KeyGen控制器和Encaps/Decaps控制器不分
 选择逻辑只依赖公开微程序状态，不使用消息、摘要或秘密状态进行动态仲裁。各hash context在收到返回前
 保持block和chaining state，复合模块不并发发起两个命令。面积优先基线为单lane，DF、DRNG
 Instantiate、DRNG Generate和pseudohash的固定busy周期分别为314、916、708和1,128拍。
-`make check-trike-sm3-sharing`使用Yosys层次统计检查
-HMAC、DRNG Instantiate、DRNG Generate、pseudohash、H4和H1/H2/H3每个复合顶层恰好包含一个
-`sm3_compress`。
+`make check-trike-sm3-sharing`使用Yosys检查各独立复合顶层，并使用Verilator完整层次JSON检查
+`trike_kem_asic_top`恰好包含一个`sm3_compress`。KeyGen、Encaps和Decaps postprocess的外置SM3
+reference路径分别保持逐byte golden与53,995,036、2,378,447和257,417固定周期。
 是否增加第二个SM3 lane需要根据完整KEM周期与同条件Vivado的资源、Fmax和`cycles/Fmax`决定。
 
 ### 采样器物理实例收敛
@@ -550,7 +551,7 @@ Decaps中`s`写完后，`u/v/t1/t2/r1`不再参与译码，可以将对应scratc
 
 ## 复用策略结论
 
-面积优先基线采用：
+面积优先完成态采用：
 
 1. 一个物理SM3压缩核；
 2. 一组DRNG状态寄存器；
@@ -560,9 +561,10 @@ Decaps中`s`写完后，`u/v/t1/t2/r1`不再参与译码，可以将对应scratc
 6. 一个`decoder_top`；
 7. 一个统一KEM微程序控制器、IO控制器和静态scratch RAM分配表。
 
-该划分优先去除不会并发工作的数据通路副本，同时保留SM3、采样、多项式、译码四个清晰验证边界。资源收益、
-Fmax和端到端周期均为待测。完整KAT通过前不复制第二个SM3或乘法lane；若端到端结果表明某共享核成为主要
-固定延时瓶颈，再保持接口不变增加公开参数控制的lane数，并用`cycles/Fmax`与BRAM/LUT共同判断。
+`trike_kem_asic_top`落实第1项和第7项的单发射控制部分。第2至第5项以及统一scratch RAM分配仍为待实现
+服务边界。统一入口资源收益、Fmax和端到端周期为待测。完整KAT通过前不复制第二个SM3或乘法lane；若
+端到端结果表明某共享核成为主要固定延时瓶颈，再保持接口不变增加公开参数控制的lane数，并用
+`cycles/Fmax`与BRAM/LUT共同判断。
 
 ## 已有实现与论文
 

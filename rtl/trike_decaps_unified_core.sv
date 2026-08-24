@@ -4,7 +4,9 @@
 // the fixed decoder schedule and the active ranges in maximum-size KEM RAMs.
 module trike_decaps_unified_core
   import bike_pkg::*;
-(
+#(
+    parameter bit USE_EXTERNAL_COMPRESS = 1'b0
+) (
     input  logic                    i_clk,
     input  logic                    i_rst_n,
     input  logic                    i_start,
@@ -22,7 +24,13 @@ module trike_decaps_unified_core
     input  logic                    i_shared_secret_ready,
     output logic                    o_error,
     output logic                    o_busy,
-    output logic                    o_done
+    output logic                    o_done,
+    output logic                    o_compress_start,
+    output logic [           511:0] o_compress_block,
+    output logic [           255:0] o_compress_state,
+    input  logic                    i_compress_busy,
+    input  logic                    i_compress_done,
+    input  logic [           255:0] i_compress_state
 );
 
   logic                    decoder_h_we;
@@ -52,7 +60,8 @@ module trike_decaps_unified_core
   logic [      ITER_W-1:0] decoder_iter_count;
 
   trike_decaps_runtime_pipeline_core #(
-      .DIGIT_W(16)
+      .DIGIT_W(16),
+      .USE_EXTERNAL_COMPRESS(USE_EXTERNAL_COMPRESS)
   ) u_runtime_pipeline (
       .i_clk                     (i_clk),
       .i_rst_n                   (i_rst_n),
@@ -95,7 +104,13 @@ module trike_decaps_unified_core
       .i_shared_secret_ready     (i_shared_secret_ready),
       .o_error                   (o_error),
       .o_busy                    (o_busy),
-      .o_done                    (o_done)
+      .o_done                    (o_done),
+      .o_compress_start          (o_compress_start),
+      .o_compress_block          (o_compress_block),
+      .o_compress_state          (o_compress_state),
+      .i_compress_busy           (i_compress_busy),
+      .i_compress_done           (i_compress_done),
+      .i_compress_state          (i_compress_state)
   );
 
   decoder_top u_decoder (

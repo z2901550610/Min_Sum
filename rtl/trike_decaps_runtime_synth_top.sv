@@ -44,7 +44,13 @@ module trike_decaps_runtime_synth_top
       .i_shared_secret_ready(i_shared_secret_ready),
       .o_error              (o_error),
       .o_busy               (o_busy),
-      .o_done               (o_done)
+      .o_done               (o_done),
+      .o_compress_start     (),
+      .o_compress_block     (),
+      .o_compress_state     (),
+      .i_compress_busy      (1'b0),
+      .i_compress_done      (1'b0),
+      .i_compress_state     ('0)
   );
 
   /* verilator lint_off UNUSEDSIGNAL */

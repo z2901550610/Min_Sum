@@ -1,7 +1,8 @@
 `timescale 1ns / 1ps
 
 module tb_trike_encaps_core_reference #(
-    parameter bit USE_SYNTH_TOP = 1'b0
+    parameter bit USE_SYNTH_TOP  = 1'b0,
+    parameter bit USE_SHARED_SM3 = 1'b0
 );
 
   /* verilator lint_off UNUSEDPARAM */
@@ -13,26 +14,34 @@ module tb_trike_encaps_core_reference #(
   localparam int REF_BUSY_CYCLES = 2378447;
   localparam int REF_SYNTH_BUSY_CYCLES = 2384421;
 
-  logic       clk;
-  logic       rst_n;
-  logic       start;
-  logic       input_valid;
-  logic [7:0] input_data;
-  logic       input_ready;
-  logic       ciphertext_valid;
-  logic [7:0] ciphertext_data;
-  logic       ciphertext_last;
-  logic       ciphertext_ready;
-  logic       shared_secret_valid;
-  logic [7:0] shared_secret_data;
-  logic       shared_secret_last;
-  logic       shared_secret_ready;
-  logic       busy;
-  logic       done;
+  logic         clk;
+  logic         rst_n;
+  logic         start;
+  logic         input_valid;
+  logic [  7:0] input_data;
+  logic         input_ready;
+  logic         ciphertext_valid;
+  logic [  7:0] ciphertext_data;
+  logic         ciphertext_last;
+  logic         ciphertext_ready;
+  logic         shared_secret_valid;
+  logic [  7:0] shared_secret_data;
+  logic         shared_secret_last;
+  logic         shared_secret_ready;
+  logic         busy;
+  logic         done;
+  /* verilator lint_off UNUSEDSIGNAL */
+  logic         compress_start;
+  logic [511:0] compress_block;
+  logic [255:0] compress_input_state;
+  logic         compress_busy;
+  logic         compress_done;
+  logic [255:0] compress_output_state;
+  /* verilator lint_on UNUSEDSIGNAL */
 
-  int         busy_cycles;
-  int         ciphertext_count;
-  int         shared_secret_count;
+  int           busy_cycles;
+  int           ciphertext_count;
+  int           shared_secret_count;
 
   generate
     if (USE_SYNTH_TOP) begin : g_synth_top
@@ -56,10 +65,11 @@ module tb_trike_encaps_core_reference #(
       );
     end else begin : g_core
       trike_encaps_core #(
-          .M_BYTES     (REF_M_BYTES),
-          .R_BITS      (REF_R_BITS),
-          .ERROR_WEIGHT(REF_ERROR_WEIGHT),
-          .WORD_W      (64)
+          .M_BYTES              (REF_M_BYTES),
+          .R_BITS               (REF_R_BITS),
+          .ERROR_WEIGHT         (REF_ERROR_WEIGHT),
+          .WORD_W               (64),
+          .USE_EXTERNAL_COMPRESS(USE_SHARED_SM3)
       ) dut (
           .i_clk                (clk),
           .i_rst_n              (rst_n),
@@ -76,8 +86,31 @@ module tb_trike_encaps_core_reference #(
           .o_shared_secret_last (shared_secret_last),
           .i_shared_secret_ready(shared_secret_ready),
           .o_busy               (busy),
-          .o_done               (done)
+          .o_done               (done),
+          .o_compress_start     (compress_start),
+          .o_compress_block     (compress_block),
+          .o_compress_state     (compress_input_state),
+          .i_compress_busy      (compress_busy),
+          .i_compress_done      (compress_done),
+          .i_compress_state     (compress_output_state)
       );
+
+      if (USE_SHARED_SM3) begin : g_shared_sm3
+        trike_sm3_service u_sm3_service (
+            .i_clk  (clk),
+            .i_rst_n(rst_n),
+            .i_start(compress_start),
+            .i_block(compress_block),
+            .i_state(compress_input_state),
+            .o_busy (compress_busy),
+            .o_done (compress_done),
+            .o_state(compress_output_state)
+        );
+      end else begin : g_local_sm3
+        assign compress_busy = 1'b0;
+        assign compress_done = 1'b0;
+        assign compress_output_state = '0;
+      end
     end
   endgenerate
 

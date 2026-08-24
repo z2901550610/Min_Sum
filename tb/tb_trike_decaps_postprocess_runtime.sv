@@ -88,7 +88,13 @@ module tb_trike_decaps_postprocess_runtime;
       .o_shared_secret_last      (shared_secret_last),
       .i_shared_secret_ready     (1'b1),
       .o_busy                    (busy),
-      .o_done                    (done)
+      .o_done                    (done),
+      .o_compress_start          (),
+      .o_compress_block          (),
+      .o_compress_state          (),
+      .i_compress_busy           (1'b0),
+      .i_compress_done           (1'b0),
+      .i_compress_state          ('0)
   );
 
   function automatic integer expected_index(input integer r_bits, input integer position);

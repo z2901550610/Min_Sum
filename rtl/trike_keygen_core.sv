@@ -12,27 +12,34 @@ module trike_keygen_core #(
     parameter int CANDIDATE_COUNT = 16,
     parameter int WORD_W = 64,
     parameter int DIGIT_W = 16,
+    parameter bit USE_EXTERNAL_COMPRESS = 1'b0,
     parameter int WORD_ADDR_W = ((((R_BITS + WORD_W - 1) / WORD_W) > 1) ? $clog2(
         (R_BITS + WORD_W - 1) / WORD_W
     ) : 1)
 ) (
-    input  logic       i_clk,
-    input  logic       i_rst_n,
-    input  logic       i_start,
-    input  logic       i_random_valid,
-    input  logic [7:0] i_random_data,
-    output logic       o_random_ready,
-    output logic       o_pk_valid,
-    output logic [7:0] o_pk_data,
-    output logic       o_pk_last,
-    input  logic       i_pk_ready,
-    output logic       o_sk_valid,
-    output logic [7:0] o_sk_data,
-    output logic       o_sk_last,
-    input  logic       i_sk_ready,
-    output logic       o_busy,
-    output logic       o_done,
-    output logic       o_success
+    input  logic         i_clk,
+    input  logic         i_rst_n,
+    input  logic         i_start,
+    input  logic         i_random_valid,
+    input  logic [  7:0] i_random_data,
+    output logic         o_random_ready,
+    output logic         o_pk_valid,
+    output logic [  7:0] o_pk_data,
+    output logic         o_pk_last,
+    input  logic         i_pk_ready,
+    output logic         o_sk_valid,
+    output logic [  7:0] o_sk_data,
+    output logic         o_sk_last,
+    input  logic         i_sk_ready,
+    output logic         o_busy,
+    output logic         o_done,
+    output logic         o_success,
+    output logic         o_compress_start,
+    output logic [511:0] o_compress_block,
+    output logic [255:0] o_compress_state,
+    input  logic         i_compress_busy,
+    input  logic         i_compress_done,
+    input  logic [255:0] i_compress_state
 );
 
   localparam int R_BYTES = (R_BITS + 7) / 8;
@@ -178,6 +185,9 @@ module trike_keygen_core #(
   assign shared_compress_start = select_h123_compress ? h123_compress_start : secret_compress_start;
   assign shared_compress_block = select_h123_compress ? h123_compress_block : secret_compress_block;
   assign shared_compress_state = select_h123_compress ? h123_compress_state : secret_compress_state;
+  assign o_compress_start = shared_compress_start;
+  assign o_compress_block = shared_compress_block;
+  assign o_compress_state = shared_compress_state;
 
   /* verilator lint_off PINCONNECTEMPTY */
   trike_keygen_secret_sampler #(
@@ -275,16 +285,24 @@ module trike_keygen_core #(
   );
   /* verilator lint_on PINCONNECTEMPTY */
 
-  trike_sm3_service u_sm3_service (
-      .i_clk  (i_clk),
-      .i_rst_n(i_rst_n),
-      .i_start(shared_compress_start),
-      .i_block(shared_compress_block),
-      .i_state(shared_compress_state),
-      .o_busy (shared_compress_busy),
-      .o_done (shared_compress_done),
-      .o_state(shared_compress_result)
-  );
+  generate
+    if (USE_EXTERNAL_COMPRESS) begin : gen_external_compress
+      assign shared_compress_busy   = i_compress_busy;
+      assign shared_compress_done   = i_compress_done;
+      assign shared_compress_result = i_compress_state;
+    end else begin : gen_local_compress
+      trike_sm3_service u_sm3_service (
+          .i_clk  (i_clk),
+          .i_rst_n(i_rst_n),
+          .i_start(shared_compress_start),
+          .i_block(shared_compress_block),
+          .i_state(shared_compress_state),
+          .o_busy (shared_compress_busy),
+          .o_done (shared_compress_done),
+          .o_state(shared_compress_result)
+      );
+    end
+  endgenerate
 
   ram_bram #(
       .DATA_W(WORD_W),

@@ -16,27 +16,34 @@ module trike_encaps_core #(
     parameter int R_BITS = 15581,
     parameter int ERROR_WEIGHT = 263,
     parameter int WORD_W = 64,
+    parameter bit USE_EXTERNAL_COMPRESS = 1'b0,
     parameter int PADDED_R_BYTES = ((R_BITS + 511) / 512) * 64,
     parameter int WORD_ADDR_W = ((((R_BITS + WORD_W - 1) / WORD_W) > 1) ? $clog2(
         (R_BITS + WORD_W - 1) / WORD_W
     ) : 1)
 ) (
-    input  logic       i_clk,
-    input  logic       i_rst_n,
-    input  logic       i_start,
-    input  logic       i_input_valid,
-    input  logic [7:0] i_input_data,
-    output logic       o_input_ready,
-    output logic       o_ciphertext_valid,
-    output logic [7:0] o_ciphertext_data,
-    output logic       o_ciphertext_last,
-    input  logic       i_ciphertext_ready,
-    output logic       o_shared_secret_valid,
-    output logic [7:0] o_shared_secret_data,
-    output logic       o_shared_secret_last,
-    input  logic       i_shared_secret_ready,
-    output logic       o_busy,
-    output logic       o_done
+    input  logic         i_clk,
+    input  logic         i_rst_n,
+    input  logic         i_start,
+    input  logic         i_input_valid,
+    input  logic [  7:0] i_input_data,
+    output logic         o_input_ready,
+    output logic         o_ciphertext_valid,
+    output logic [  7:0] o_ciphertext_data,
+    output logic         o_ciphertext_last,
+    input  logic         i_ciphertext_ready,
+    output logic         o_shared_secret_valid,
+    output logic [  7:0] o_shared_secret_data,
+    output logic         o_shared_secret_last,
+    input  logic         i_shared_secret_ready,
+    output logic         o_busy,
+    output logic         o_done,
+    output logic         o_compress_start,
+    output logic [511:0] o_compress_block,
+    output logic [255:0] o_compress_state,
+    input  logic         i_compress_busy,
+    input  logic         i_compress_done,
+    input  logic [255:0] i_compress_state
 );
 
   localparam int R_BYTES = (R_BITS + 7) / 8;
@@ -441,16 +448,28 @@ module trike_encaps_core #(
   );
   /* verilator lint_on PINCONNECTEMPTY */
 
-  trike_sm3_service u_sm3_service (
-      .i_clk  (i_clk),
-      .i_rst_n(i_rst_n),
-      .i_start(shared_compress_start),
-      .i_block(shared_compress_block),
-      .i_state(shared_compress_input_state),
-      .o_busy (shared_compress_busy),
-      .o_done (shared_compress_done),
-      .o_state(shared_compress_output_state)
-  );
+  assign o_compress_start = shared_compress_start;
+  assign o_compress_block = shared_compress_block;
+  assign o_compress_state = shared_compress_input_state;
+
+  generate
+    if (USE_EXTERNAL_COMPRESS) begin : gen_external_compress
+      assign shared_compress_busy = i_compress_busy;
+      assign shared_compress_done = i_compress_done;
+      assign shared_compress_output_state = i_compress_state;
+    end else begin : gen_local_compress
+      trike_sm3_service u_sm3_service (
+          .i_clk  (i_clk),
+          .i_rst_n(i_rst_n),
+          .i_start(shared_compress_start),
+          .i_block(shared_compress_block),
+          .i_state(shared_compress_input_state),
+          .o_busy (shared_compress_busy),
+          .o_done (shared_compress_done),
+          .o_state(shared_compress_output_state)
+      );
+    end
+  endgenerate
 
   always_comb begin
     r2_write_word_c = r2_pack_q;

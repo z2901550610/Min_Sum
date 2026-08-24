@@ -14,6 +14,7 @@ EXPECTED_TOPS = {
     "trike_encaps.f": "rtl/trike_encaps_synth_top.sv",
     "trike_keygen.f": "rtl/trike_keygen_synth_top.sv",
     "trike_decaps.f": "rtl/trike_decaps_synth_top.sv",
+    "trike_kem_asic.f": "rtl/trike_kem_asic_top.sv",
 }
 
 

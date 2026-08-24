@@ -1,6 +1,6 @@
 # 实验索引
 
-下一个实验ID：`EXP-0100`。
+下一个实验ID：`EXP-0101`。
 
 | ID | 日期 | 主题 | 配置/比较键 | 功能与周期 | Vivado | 结论 | 详情 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -23,6 +23,7 @@
 | EXP-0097 | 2026-08-18 | 四档运行时Decaps端到端golden | 四档项目Min-Sum参数，L32/K4/C256 | 全档有效/c2拒绝byte golden与固定周期通过 | 待测 | `retained` | [详情](EXP-0097-four-profile-runtime-decaps-golden.md) |
 | EXP-0098 | 2026-08-19 | 双行并行residual扫描 | 两个decision读bank，相邻row固定配对 | 四档byte golden，residual与固定周期通过 | 待测 | `retained` | [详情](EXP-0098-dual-row-residual-scan.md) |
 | EXP-0099 | 2026-08-20 | KEM稠密乘法16-bit digit并行化 | 64-bit word，16-bit digit，KeyGen与四档Decaps | KeyGen及四档Decaps golden/固定周期通过 | [poly-inv](../../reports/vivado/manifests/RUN-20260820-01-trike-poly-inv.toml) / [KeyGen 100 MHz通过](../../reports/vivado/manifests/RUN-20260820-02-trike-keygen.toml) | `retained` | [详情](EXP-0099-kem-dense-mul-digit16.md) |
+| EXP-0100 | 2026-08-24 | 单发射统一KEM ASIC与全局SM3 | 公开2-bit operation，三阶段单SM3 | one-hot形式化；三阶段外置SM3 byte golden/固定周期通过 | 待测 | `retained` | [详情](EXP-0100-unified-kem-asic-sm3.md) |
 
 新实验只追加一行。需要详细说明时，详情列链接到`EXP-xxxx-<slug>.md`；Vivado列链接到
 `reports/vivado/manifests/<run-id>.toml`。

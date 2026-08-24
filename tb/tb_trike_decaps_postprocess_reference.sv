@@ -1,6 +1,8 @@
 `timescale 1ns / 1ps
 
-module tb_trike_decaps_postprocess_reference;
+module tb_trike_decaps_postprocess_reference #(
+    parameter bit USE_SHARED_SM3 = 1'b0
+);
   `include "generated/trike_decaps_message_minsum_case.svh"
 
   localparam int R_BYTES = (REF_R_BITS + 7) / 8;
@@ -32,18 +34,27 @@ module tb_trike_decaps_postprocess_reference;
   logic                      shared_secret_last;
   logic                      busy;
   logic                      done;
+  /* verilator lint_off UNUSEDSIGNAL */
+  logic                      compress_start;
+  logic   [           511:0] compress_block;
+  logic   [           255:0] compress_input_state;
+  logic                      compress_busy;
+  logic                      compress_done;
+  logic   [           255:0] compress_output_state;
+  /* verilator lint_on UNUSEDSIGNAL */
   logic                      tampered_case;
   integer                    c2_count;
   integer                    shared_secret_count;
   integer                    cycle_count;
 
   trike_decaps_postprocess_core #(
-      .M_BYTES         (REF_M_BYTES),
-      .R_BITS          (REF_R_BITS),
-      .ERROR_WEIGHT    (263),
-      .PADDED_R_BYTES  (PADDED_R_BYTES),
-      .CIPHERTEXT_BYTES(REF_CIPHERTEXT_BYTES),
-      .RUNTIME_GEOMETRY(1'b1)
+      .M_BYTES              (REF_M_BYTES),
+      .R_BITS               (REF_R_BITS),
+      .ERROR_WEIGHT         (263),
+      .PADDED_R_BYTES       (PADDED_R_BYTES),
+      .CIPHERTEXT_BYTES     (REF_CIPHERTEXT_BYTES),
+      .RUNTIME_GEOMETRY     (1'b1),
+      .USE_EXTERNAL_COMPRESS(USE_SHARED_SM3)
   ) dut (
       .i_clk                     (clk),
       .i_rst_n                   (rst_n),
@@ -75,8 +86,33 @@ module tb_trike_decaps_postprocess_reference;
       .o_shared_secret_last      (shared_secret_last),
       .i_shared_secret_ready     (1'b1),
       .o_busy                    (busy),
-      .o_done                    (done)
+      .o_done                    (done),
+      .o_compress_start          (compress_start),
+      .o_compress_block          (compress_block),
+      .o_compress_state          (compress_input_state),
+      .i_compress_busy           (compress_busy),
+      .i_compress_done           (compress_done),
+      .i_compress_state          (compress_output_state)
   );
+
+  generate
+    if (USE_SHARED_SM3) begin : g_shared_sm3
+      trike_sm3_service u_sm3_service (
+          .i_clk  (clk),
+          .i_rst_n(rst_n),
+          .i_start(compress_start),
+          .i_block(compress_block),
+          .i_state(compress_input_state),
+          .o_busy (compress_busy),
+          .o_done (compress_done),
+          .o_state(compress_output_state)
+      );
+    end else begin : g_local_sm3
+      assign compress_busy = 1'b0;
+      assign compress_done = 1'b0;
+      assign compress_output_state = '0;
+    end
+  endgenerate
 
   always #1 clk = ~clk;
 
