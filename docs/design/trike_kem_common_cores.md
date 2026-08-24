@@ -443,8 +443,8 @@ flowchart TD
 | 验证服务 | `trike_ct_verify_stream` | 固定word数比较、累计difference并调用`kem_ct_compare_select` |
 
 `trike_kem_asic_top`实例化三个固定阶段控制器，三个阶段只在被选operation下接收start和输入流。SM3
-压缩数据通路、H1/H2/H3向量生成和普通多项式乘法数据通路为芯片级共享资源；秘密/H4采样和stage RAM
-保留各自层次，作为服务化与生命周期分配边界。
+压缩数据通路、H1/H2/H3向量生成、固定重量采样和普通多项式乘法数据通路为芯片级共享资源；seed
+Instantiate控制、弱密钥检测和stage RAM保留各自层次，作为服务化与生命周期分配边界。
 
 ## 跨流程复用矩阵
 
@@ -491,9 +491,11 @@ sigma seed客户端和三路vector返回客户端；服务内部只有一组DRNG
 各自公开FSM串行。结构门禁要求统一层次恰好一个H123服务和一个parity mapper。
 
 秘密多项式采样和H4使用同一`generate_random_idx`算法，只是公开`length/weight`不同。完成态采样器以
-四档最大值确定物理位宽和RAM深度，并在command中装载当前参数。每次采样固定执行`weight`个候选和
-`weight^2`次index读取。三组秘密索引写入持久SK RAM后覆盖临时index RAM；H4索引写入错误RAM后同样
-覆盖，因此不需要为h0、h1、h2和e分别配置临时RAM。
+四档最大值`length=3*106781,weight=877`确定物理位宽和RAM深度，并在command中装载当前参数与DRNG
+state。KeyGen、Encaps和Decaps通过锁存operation选择一个`trike_drng_weight_sampler`客户端；服务的
+Generate压缩请求进入全局SM3。每次采样固定执行`weight`个候选和`weight^2`次index读取。三组秘密
+索引写入持久SK RAM，H4索引写入错误RAM；结构门禁要求完整层次恰好一个DRNG sampler与一个fixed
+weight sampler。三阶段外置reference保持53,995,036、2,378,447和257,417拍。
 
 ### 多项式数据通路收敛
 

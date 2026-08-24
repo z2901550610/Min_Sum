@@ -94,7 +94,21 @@ module tb_trike_decaps_postprocess_runtime;
       .o_compress_state          (),
       .i_compress_busy           (1'b0),
       .i_compress_done           (1'b0),
-      .i_compress_state          ('0)
+      .i_compress_state          ('0),
+      .o_sampler_start           (),
+      .o_sampler_runtime_length  (),
+      .o_sampler_runtime_weight  (),
+      .o_sampler_v               (),
+      .o_sampler_c               (),
+      .o_sampler_reseed_counter  (),
+      .i_sampler_index_valid     (1'b0),
+      .i_sampler_index_position  ('0),
+      .i_sampler_index           ('0),
+      .o_sampler_index_ready     (),
+      .i_sampler_done            (1'b0),
+      .i_sampler_v               ('0),
+      .i_sampler_c               ('0),
+      .i_sampler_reseed_counter  ('0)
   );
 
   function automatic integer expected_index(input integer r_bits, input integer position);

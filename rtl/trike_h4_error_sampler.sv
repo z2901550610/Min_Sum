@@ -10,7 +10,8 @@ module trike_h4_error_sampler #(
     parameter int R_BITS                = 15581,
     parameter int ERROR_WEIGHT          = 263,
     parameter bit RUNTIME_GEOMETRY      = 1'b0,
-    parameter bit USE_EXTERNAL_COMPRESS = 1'b0
+    parameter bit USE_EXTERNAL_COMPRESS = 1'b0,
+    parameter bit USE_EXTERNAL_SAMPLER  = 1'b0
 ) (
     input  logic                                                       i_clk,
     input  logic                                                       i_rst_n,
@@ -35,7 +36,23 @@ module trike_h4_error_sampler #(
     output logic [                                              255:0] o_compress_state,
     input  logic                                                       i_compress_busy,
     input  logic                                                       i_compress_done,
-    input  logic [                                              255:0] i_compress_state
+    input  logic [                                              255:0] i_compress_state,
+    output logic                                                       o_sampler_start,
+    output logic [                                               31:0] o_sampler_runtime_length,
+    output logic [                                               31:0] o_sampler_runtime_weight,
+    output logic [                                              439:0] o_sampler_v,
+    output logic [                                              439:0] o_sampler_c,
+    output logic [                                              439:0] o_sampler_reseed_counter,
+    /* verilator lint_off UNUSEDSIGNAL */
+    input  logic                                                       i_sampler_index_valid,
+    input  logic [((ERROR_WEIGHT > 1) ? $clog2(ERROR_WEIGHT) : 1)-1:0] i_sampler_index_position,
+    input  logic [  (((3 * R_BITS) > 1) ? $clog2(3 * R_BITS) : 1)-1:0] i_sampler_index,
+    output logic                                                       o_sampler_index_ready,
+    input  logic                                                       i_sampler_done,
+    input  logic [                                              439:0] i_sampler_v,
+    input  logic [                                              439:0] i_sampler_c,
+    input  logic [                                              439:0] i_sampler_reseed_counter
+    /* verilator lint_on UNUSEDSIGNAL */
 );
 
   localparam int R_BYTES = (R_BITS + 7) / 8;
@@ -97,6 +114,13 @@ module trike_h4_error_sampler #(
   assign o_seed_pass = instantiate_seed_pass;
 
   assign sample_index_ready = (state_q == ST_WAIT_SAMPLE) && i_index_ready;
+  assign o_sampler_start = sample_start;
+  assign o_sampler_runtime_length = active_error_length_q;
+  assign o_sampler_runtime_weight = active_error_weight_q;
+  assign o_sampler_v = instantiate_v;
+  assign o_sampler_c = instantiate_c;
+  assign o_sampler_reseed_counter = instantiate_reseed_counter;
+  assign o_sampler_index_ready = sample_index_ready;
   assign o_index_valid = (state_q == ST_WAIT_SAMPLE) && sample_index_valid;
   assign o_index_position = sample_index_position;
   assign o_index = sample_index;
@@ -143,36 +167,51 @@ module trike_h4_error_sampler #(
       .i_compress_state    (shared_compress_result)
   );
 
-  trike_drng_weight_sampler #(
-      .LENGTH               (ERROR_LENGTH),
-      .WEIGHT               (ERROR_WEIGHT),
-      .RUNTIME_GEOMETRY     (RUNTIME_GEOMETRY),
-      .USE_EXTERNAL_COMPRESS(1'b1)
-  ) u_sampler (
-      .i_clk           (i_clk),
-      .i_rst_n         (i_rst_n),
-      .i_start         (sample_start),
-      .i_runtime_length(active_error_length_q),
-      .i_runtime_weight(active_error_weight_q),
-      .i_v             (instantiate_v),
-      .i_c             (instantiate_c),
-      .i_reseed_counter(instantiate_reseed_counter),
-      .o_index_valid   (sample_index_valid),
-      .o_index_position(sample_index_position),
-      .o_index         (sample_index),
-      .i_index_ready   (sample_index_ready),
-      .o_busy          (),
-      .o_done          (sample_done),
-      .o_v             (sample_v),
-      .o_c             (sample_c),
-      .o_reseed_counter(sample_reseed_counter),
-      .o_compress_start(sample_compress_start),
-      .o_compress_block(sample_compress_block),
-      .o_compress_state(sample_compress_state),
-      .i_compress_busy (shared_compress_busy),
-      .i_compress_done (shared_compress_done),
-      .i_compress_state(shared_compress_result)
-  );
+  generate
+    if (USE_EXTERNAL_SAMPLER) begin : gen_external_sampler
+      assign sample_index_valid = i_sampler_index_valid;
+      assign sample_index_position = i_sampler_index_position;
+      assign sample_index = i_sampler_index;
+      assign sample_done = i_sampler_done;
+      assign sample_v = i_sampler_v;
+      assign sample_c = i_sampler_c;
+      assign sample_reseed_counter = i_sampler_reseed_counter;
+      assign sample_compress_start = 1'b0;
+      assign sample_compress_block = '0;
+      assign sample_compress_state = '0;
+    end else begin : gen_local_sampler
+      trike_drng_weight_sampler #(
+          .LENGTH               (ERROR_LENGTH),
+          .WEIGHT               (ERROR_WEIGHT),
+          .RUNTIME_GEOMETRY     (RUNTIME_GEOMETRY),
+          .USE_EXTERNAL_COMPRESS(1'b1)
+      ) u_sampler (
+          .i_clk           (i_clk),
+          .i_rst_n         (i_rst_n),
+          .i_start         (sample_start),
+          .i_runtime_length(active_error_length_q),
+          .i_runtime_weight(active_error_weight_q),
+          .i_v             (instantiate_v),
+          .i_c             (instantiate_c),
+          .i_reseed_counter(instantiate_reseed_counter),
+          .o_index_valid   (sample_index_valid),
+          .o_index_position(sample_index_position),
+          .o_index         (sample_index),
+          .i_index_ready   (sample_index_ready),
+          .o_busy          (),
+          .o_done          (sample_done),
+          .o_v             (sample_v),
+          .o_c             (sample_c),
+          .o_reseed_counter(sample_reseed_counter),
+          .o_compress_start(sample_compress_start),
+          .o_compress_block(sample_compress_block),
+          .o_compress_state(sample_compress_state),
+          .i_compress_busy (shared_compress_busy),
+          .i_compress_done (shared_compress_done),
+          .i_compress_state(shared_compress_result)
+      );
+    end
+  endgenerate
 
   generate
     if (!USE_EXTERNAL_COMPRESS) begin : g_internal_compress

@@ -61,6 +61,7 @@ def main() -> None:
                 visit(value)
 
     visit(tree)
+
     def instance_count(module_prefix: str) -> int:
         addresses = {
             item.get("addr")
@@ -89,9 +90,21 @@ def main() -> None:
         raise SystemExit(
             f"trike_kem_asic_top: expected one shared H123 parity mapper, found {parity_count}"
         )
+    sampler_count = instance_count("trike_drng_weight_sampler")
+    if sampler_count != 1:
+        raise SystemExit(
+            f"trike_kem_asic_top: expected one shared DRNG weight sampler, found {sampler_count}"
+        )
+    fixed_sampler_count = instance_count("trike_fixed_weight_sampler")
+    if fixed_sampler_count != 1:
+        raise SystemExit(
+            "trike_kem_asic_top: expected one shared fixed-weight index sampler, "
+            f"found {fixed_sampler_count}"
+        )
     print("Unified TRIKE KEM structure PASS: one sm3_compress instance")
     print("Unified TRIKE KEM structure PASS: two poly-mul instances")
     print("Unified TRIKE KEM structure PASS: one H123 vector service and parity mapper")
+    print("Unified TRIKE KEM structure PASS: one DRNG and fixed-weight sampler chain")
 
 
 if __name__ == "__main__":

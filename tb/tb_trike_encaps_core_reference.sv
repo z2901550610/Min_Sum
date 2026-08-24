@@ -1,10 +1,11 @@
 `timescale 1ns / 1ps
 
 module tb_trike_encaps_core_reference #(
-    parameter bit USE_SYNTH_TOP   = 1'b0,
-    parameter bit USE_SHARED_SM3  = 1'b0,
-    parameter bit USE_SHARED_MUL  = 1'b0,
-    parameter bit USE_SHARED_H123 = 1'b0
+    parameter bit USE_SYNTH_TOP      = 1'b0,
+    parameter bit USE_SHARED_SM3     = 1'b0,
+    parameter bit USE_SHARED_MUL     = 1'b0,
+    parameter bit USE_SHARED_H123    = 1'b0,
+    parameter bit USE_SHARED_SAMPLER = 1'b0
 );
 
   /* verilator lint_off UNUSEDPARAM */
@@ -76,6 +77,24 @@ module tb_trike_encaps_core_reference #(
   logic                   h123_compress_start;
   logic [          511:0] h123_compress_block;
   logic [          255:0] h123_compress_state;
+  logic                   sampler_start;
+  logic [           31:0] sampler_length;
+  logic [           31:0] sampler_weight;
+  logic [          439:0] sampler_input_v;
+  logic [          439:0] sampler_input_c;
+  logic [          439:0] sampler_input_reseed_counter;
+  logic                   sampler_index_valid;
+  logic [            8:0] sampler_index_position;
+  logic [           15:0] sampler_index;
+  logic                   sampler_index_ready;
+  logic                   sampler_busy;
+  logic                   sampler_done;
+  logic [          439:0] sampler_output_v;
+  logic [          439:0] sampler_output_c;
+  logic [          439:0] sampler_output_reseed_counter;
+  logic                   sampler_compress_start;
+  logic [          511:0] sampler_compress_block;
+  logic [          255:0] sampler_compress_state;
   /* verilator lint_on UNUSEDSIGNAL */
 
   int                     busy_cycles;
@@ -111,6 +130,7 @@ module tb_trike_encaps_core_reference #(
           .USE_EXTERNAL_COMPRESS(USE_SHARED_SM3),
           .USE_EXTERNAL_MUL     (USE_SHARED_MUL),
           .USE_EXTERNAL_H123    (USE_SHARED_H123),
+          .USE_EXTERNAL_SAMPLER (USE_SHARED_SAMPLER),
           .MUL_INDEX_W          (MUL_INDEX_W)
       ) dut (
           .i_clk                      (clk),
@@ -162,7 +182,21 @@ module tb_trike_encaps_core_reference #(
           .i_h123_vector_byte         (h123_vector_byte),
           .i_h123_vector_data         (h123_vector_data),
           .o_h123_vector_ready        (h123_vector_ready),
-          .i_h123_done                (h123_done)
+          .i_h123_done                (h123_done),
+          .o_sampler_start            (sampler_start),
+          .o_sampler_runtime_length   (sampler_length),
+          .o_sampler_runtime_weight   (sampler_weight),
+          .o_sampler_v                (sampler_input_v),
+          .o_sampler_c                (sampler_input_c),
+          .o_sampler_reseed_counter   (sampler_input_reseed_counter),
+          .i_sampler_index_valid      (sampler_index_valid),
+          .i_sampler_index_position   (sampler_index_position),
+          .i_sampler_index            (sampler_index),
+          .o_sampler_index_ready      (sampler_index_ready),
+          .i_sampler_done             (sampler_done),
+          .i_sampler_v                (sampler_output_v),
+          .i_sampler_c                (sampler_output_c),
+          .i_sampler_reseed_counter   (sampler_output_reseed_counter)
       );
 
       always_comb begin
@@ -173,6 +207,11 @@ module tb_trike_encaps_core_reference #(
           selected_compress_start = h123_compress_start;
           selected_compress_block = h123_compress_block;
           selected_compress_state = h123_compress_state;
+        end
+        if (sampler_busy || sampler_start) begin
+          selected_compress_start = sampler_compress_start;
+          selected_compress_block = sampler_compress_block;
+          selected_compress_state = sampler_compress_state;
         end
       end
 
@@ -234,6 +273,51 @@ module tb_trike_encaps_core_reference #(
         assign h123_compress_start = 1'b0;
         assign h123_compress_block = '0;
         assign h123_compress_state = '0;
+      end
+
+      if (USE_SHARED_SAMPLER) begin : g_shared_sampler
+        trike_drng_weight_sampler #(
+            .LENGTH               (3 * REF_R_BITS),
+            .WEIGHT               (REF_ERROR_WEIGHT),
+            .RUNTIME_GEOMETRY     (1'b1),
+            .USE_EXTERNAL_COMPRESS(1'b1)
+        ) u_sampler_service (
+            .i_clk           (clk),
+            .i_rst_n         (rst_n),
+            .i_start         (sampler_start),
+            .i_runtime_length(sampler_length),
+            .i_runtime_weight(sampler_weight),
+            .i_v             (sampler_input_v),
+            .i_c             (sampler_input_c),
+            .i_reseed_counter(sampler_input_reseed_counter),
+            .o_index_valid   (sampler_index_valid),
+            .o_index_position(sampler_index_position),
+            .o_index         (sampler_index),
+            .i_index_ready   (sampler_index_ready),
+            .o_busy          (sampler_busy),
+            .o_done          (sampler_done),
+            .o_v             (sampler_output_v),
+            .o_c             (sampler_output_c),
+            .o_reseed_counter(sampler_output_reseed_counter),
+            .o_compress_start(sampler_compress_start),
+            .o_compress_block(sampler_compress_block),
+            .o_compress_state(sampler_compress_state),
+            .i_compress_busy (compress_busy),
+            .i_compress_done (compress_done),
+            .i_compress_state(compress_output_state)
+        );
+      end else begin : g_local_sampler
+        assign sampler_index_valid = 1'b0;
+        assign sampler_index_position = '0;
+        assign sampler_index = '0;
+        assign sampler_busy = 1'b0;
+        assign sampler_done = 1'b0;
+        assign sampler_output_v = '0;
+        assign sampler_output_c = '0;
+        assign sampler_output_reseed_counter = '0;
+        assign sampler_compress_start = 1'b0;
+        assign sampler_compress_block = '0;
+        assign sampler_compress_state = '0;
       end
 
       if (USE_SHARED_MUL) begin : g_shared_mul

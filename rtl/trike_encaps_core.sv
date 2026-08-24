@@ -19,6 +19,7 @@ module trike_encaps_core #(
     parameter bit USE_EXTERNAL_COMPRESS = 1'b0,
     parameter bit USE_EXTERNAL_MUL = 1'b0,
     parameter bit USE_EXTERNAL_H123 = 1'b0,
+    parameter bit USE_EXTERNAL_SAMPLER = 1'b0,
     parameter int MUL_INDEX_W = ((R_BITS > 1) ? $clog2(R_BITS) : 1),
     parameter int PADDED_R_BYTES = ((R_BITS + 511) / 512) * 64,
     parameter int WORD_ADDR_W = ((((R_BITS + WORD_W - 1) / WORD_W) > 1) ? $clog2(
@@ -74,7 +75,21 @@ module trike_encaps_core #(
     input  logic [((((R_BITS + 7) / 8) > 1) ? $clog2((R_BITS + 7) / 8) : 1)-1:0] i_h123_vector_byte,
     input  logic [7:0] i_h123_vector_data,
     output logic o_h123_vector_ready,
-    input  logic i_h123_done
+    input  logic i_h123_done,
+    output logic o_sampler_start,
+    output logic [31:0] o_sampler_runtime_length,
+    output logic [31:0] o_sampler_runtime_weight,
+    output logic [439:0] o_sampler_v,
+    output logic [439:0] o_sampler_c,
+    output logic [439:0] o_sampler_reseed_counter,
+    input  logic i_sampler_index_valid,
+    input  logic [((ERROR_WEIGHT > 1) ? $clog2(ERROR_WEIGHT) : 1)-1:0] i_sampler_index_position,
+    input  logic [(((3 * R_BITS) > 1) ? $clog2(3 * R_BITS) : 1)-1:0] i_sampler_index,
+    output logic o_sampler_index_ready,
+    input  logic i_sampler_done,
+    input  logic [439:0] i_sampler_v,
+    input  logic [439:0] i_sampler_c,
+    input  logic [439:0] i_sampler_reseed_counter
 );
 
   localparam int R_BYTES = (R_BITS + 7) / 8;
@@ -393,7 +408,8 @@ module trike_encaps_core #(
       .R_BITS               (R_BITS),
       .ERROR_WEIGHT         (ERROR_WEIGHT),
       .PADDED_R_BYTES       (PADDED_R_BYTES),
-      .USE_EXTERNAL_COMPRESS(1'b1)
+      .USE_EXTERNAL_COMPRESS(1'b1),
+      .USE_EXTERNAL_SAMPLER (USE_EXTERNAL_SAMPLER)
   ) u_h4 (
       .i_clk                   (i_clk),
       .i_rst_n                 (i_rst_n),
@@ -421,7 +437,21 @@ module trike_encaps_core #(
       .o_compress_state        (h4_compress_state),
       .i_compress_busy         (shared_compress_busy),
       .i_compress_done         (shared_compress_done),
-      .i_compress_state        (shared_compress_output_state)
+      .i_compress_state        (shared_compress_output_state),
+      .o_sampler_start         (o_sampler_start),
+      .o_sampler_runtime_length(o_sampler_runtime_length),
+      .o_sampler_runtime_weight(o_sampler_runtime_weight),
+      .o_sampler_v             (o_sampler_v),
+      .o_sampler_c             (o_sampler_c),
+      .o_sampler_reseed_counter(o_sampler_reseed_counter),
+      .i_sampler_index_valid   (i_sampler_index_valid),
+      .i_sampler_index_position(i_sampler_index_position),
+      .i_sampler_index         (i_sampler_index),
+      .o_sampler_index_ready   (o_sampler_index_ready),
+      .i_sampler_done          (i_sampler_done),
+      .i_sampler_v             (i_sampler_v),
+      .i_sampler_c             (i_sampler_c),
+      .i_sampler_reseed_counter(i_sampler_reseed_counter)
   );
   /* verilator lint_on PINCONNECTEMPTY */
 

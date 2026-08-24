@@ -14,34 +14,51 @@ module trike_keygen_secret_sampler #(
     parameter int CANDIDATE_COUNT       = 16,
     parameter int SELF_THRESHOLD        = 46,
     parameter int CROSS_THRESHOLD       = 83,
-    parameter bit USE_EXTERNAL_COMPRESS = 1'b0
+    parameter bit USE_EXTERNAL_COMPRESS = 1'b0,
+    parameter bit USE_EXTERNAL_SAMPLER  = 1'b0
 ) (
-    input  logic                                                             i_clk,
-    input  logic                                                             i_rst_n,
-    input  logic                                                             i_start,
-    input  logic                                                             i_seed_valid,
-    input  logic [                                                      7:0] i_seed_data,
-    output logic                                                             o_seed_ready,
-    output logic                                                             o_seed_pass,
-    output logic                                                             o_support_valid,
-    output logic [                                                      1:0] o_support_block,
-    output logic [    ((SECRET_WEIGHT > 1) ? $clog2(SECRET_WEIGHT) : 1)-1:0] o_support_position,
-    output logic [                  ((R_BITS > 1) ? $clog2(R_BITS) : 1)-1:0] o_support_index,
-    input  logic                                                             i_support_ready,
-    output logic                                                             o_busy,
-    output logic                                                             o_done,
-    output logic                                                             o_success,
+    input  logic i_clk,
+    input  logic i_rst_n,
+    input  logic i_start,
+    input  logic i_seed_valid,
+    input  logic [7:0] i_seed_data,
+    output logic o_seed_ready,
+    output logic o_seed_pass,
+    output logic o_support_valid,
+    output logic [1:0] o_support_block,
+    output logic [((SECRET_WEIGHT > 1) ? $clog2(SECRET_WEIGHT) : 1)-1:0] o_support_position,
+    output logic [((R_BITS > 1) ? $clog2(R_BITS) : 1)-1:0] o_support_index,
+    input  logic i_support_ready,
+    output logic o_busy,
+    output logic o_done,
+    output logic o_success,
     output logic [((CANDIDATE_COUNT > 1) ? $clog2(CANDIDATE_COUNT) : 1)-1:0] o_selected_candidate,
-    output logic [                                                    191:0] o_selected_scores,
-    output logic [                                                    439:0] o_v,
-    output logic [                                                    439:0] o_c,
-    output logic [                                                    439:0] o_reseed_counter,
-    output logic                                                             o_compress_start,
-    output logic [                                                    511:0] o_compress_block,
-    output logic [                                                    255:0] o_compress_state,
-    input  logic                                                             i_compress_busy,
-    input  logic                                                             i_compress_done,
-    input  logic [                                                    255:0] i_compress_state
+    output logic [191:0] o_selected_scores,
+    output logic [439:0] o_v,
+    output logic [439:0] o_c,
+    output logic [439:0] o_reseed_counter,
+    output logic o_compress_start,
+    output logic [511:0] o_compress_block,
+    output logic [255:0] o_compress_state,
+    input  logic i_compress_busy,
+    input  logic i_compress_done,
+    input  logic [255:0] i_compress_state,
+    output logic o_sampler_start,
+    output logic [31:0] o_sampler_runtime_length,
+    output logic [31:0] o_sampler_runtime_weight,
+    output logic [439:0] o_sampler_v,
+    output logic [439:0] o_sampler_c,
+    output logic [439:0] o_sampler_reseed_counter,
+    /* verilator lint_off UNUSEDSIGNAL */
+    input  logic i_sampler_index_valid,
+    input  logic [((SECRET_WEIGHT > 1) ? $clog2(SECRET_WEIGHT) : 1)-1:0] i_sampler_index_position,
+    input  logic [((R_BITS > 1) ? $clog2(R_BITS) : 1)-1:0] i_sampler_index,
+    output logic o_sampler_index_ready,
+    input  logic i_sampler_done,
+    input  logic [439:0] i_sampler_v,
+    input  logic [439:0] i_sampler_c,
+    input  logic [439:0] i_sampler_reseed_counter
+    /* verilator lint_on UNUSEDSIGNAL */
 );
 
   localparam int INDEX_W = (R_BITS > 1) ? $clog2(R_BITS) : 1;
@@ -125,6 +142,13 @@ module trike_keygen_secret_sampler #(
   assign o_seed_pass = instantiate_seed_pass;
 
   assign sample_index_ready = (state_q == ST_WAIT_SAMPLE) && weak_support_ready;
+  assign o_sampler_start = sample_start;
+  assign o_sampler_runtime_length = 32'(R_BITS);
+  assign o_sampler_runtime_weight = 32'(SECRET_WEIGHT);
+  assign o_sampler_v = v_q;
+  assign o_sampler_c = c_q;
+  assign o_sampler_reseed_counter = reseed_counter_q;
+  assign o_sampler_index_ready = sample_index_ready;
   assign o_support_valid = state_q == ST_OUTPUT;
   assign o_support_block = output_block_q;
   assign o_support_position = output_position_q;
@@ -175,35 +199,50 @@ module trike_keygen_secret_sampler #(
       .i_compress_state    (shared_compress_result)
   );
 
-  trike_drng_weight_sampler #(
-      .LENGTH               (R_BITS),
-      .WEIGHT               (SECRET_WEIGHT),
-      .USE_EXTERNAL_COMPRESS(1'b1)
-  ) u_sampler (
-      .i_clk           (i_clk),
-      .i_rst_n         (i_rst_n),
-      .i_start         (sample_start),
-      .i_runtime_length('0),
-      .i_runtime_weight('0),
-      .i_v             (v_q),
-      .i_c             (c_q),
-      .i_reseed_counter(reseed_counter_q),
-      .o_index_valid   (sample_index_valid),
-      .o_index_position(sample_index_position),
-      .o_index         (sample_index),
-      .i_index_ready   (sample_index_ready),
-      .o_busy          (),
-      .o_done          (sample_done),
-      .o_v             (sample_v),
-      .o_c             (sample_c),
-      .o_reseed_counter(sample_reseed_counter),
-      .o_compress_start(sample_compress_start),
-      .o_compress_block(sample_compress_block),
-      .o_compress_state(sample_compress_state),
-      .i_compress_busy (shared_compress_busy),
-      .i_compress_done (shared_compress_done),
-      .i_compress_state(shared_compress_result)
-  );
+  generate
+    if (USE_EXTERNAL_SAMPLER) begin : gen_external_sampler
+      assign sample_index_valid = i_sampler_index_valid;
+      assign sample_index_position = i_sampler_index_position;
+      assign sample_index = i_sampler_index;
+      assign sample_done = i_sampler_done;
+      assign sample_v = i_sampler_v;
+      assign sample_c = i_sampler_c;
+      assign sample_reseed_counter = i_sampler_reseed_counter;
+      assign sample_compress_start = 1'b0;
+      assign sample_compress_block = '0;
+      assign sample_compress_state = '0;
+    end else begin : gen_local_sampler
+      trike_drng_weight_sampler #(
+          .LENGTH               (R_BITS),
+          .WEIGHT               (SECRET_WEIGHT),
+          .USE_EXTERNAL_COMPRESS(1'b1)
+      ) u_sampler (
+          .i_clk           (i_clk),
+          .i_rst_n         (i_rst_n),
+          .i_start         (sample_start),
+          .i_runtime_length('0),
+          .i_runtime_weight('0),
+          .i_v             (v_q),
+          .i_c             (c_q),
+          .i_reseed_counter(reseed_counter_q),
+          .o_index_valid   (sample_index_valid),
+          .o_index_position(sample_index_position),
+          .o_index         (sample_index),
+          .i_index_ready   (sample_index_ready),
+          .o_busy          (),
+          .o_done          (sample_done),
+          .o_v             (sample_v),
+          .o_c             (sample_c),
+          .o_reseed_counter(sample_reseed_counter),
+          .o_compress_start(sample_compress_start),
+          .o_compress_block(sample_compress_block),
+          .o_compress_state(sample_compress_state),
+          .i_compress_busy (shared_compress_busy),
+          .i_compress_done (shared_compress_done),
+          .i_compress_state(shared_compress_result)
+      );
+    end
+  endgenerate
 
   trike_weak_key_test #(
       .R_BITS         (R_BITS),
