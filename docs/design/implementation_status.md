@@ -84,7 +84,8 @@ syndrome必须完整装载，H必须完成固定合法性检查，之后才接�
 `trike_kem_asic_top`使用公开`i_operation=KeyGen/Encaps/Decaps`形成单发射事务边界。operation在start
 接受时锁存，busy期间三个stage start保持全零，完成只采纳已锁存stage的done。三阶段SM3请求经过公开
 operation mux连接唯一`trike_sm3_service`；完整层次结构检查恰好一个`sm3_compress`。控制器one-hot和
-operation稳定性由SymbiYosys/Z3证明，三阶段外置SM3路径分别保持现有byte golden与固定周期。
+operation稳定性由SymbiYosys/Z3证明，三阶段外置SM3路径分别保持现有byte golden与固定周期。SM3的
+256-bit寄存结果声明`max_fanout=8`综合意图，允许实现工具按客户端物理区域复制寄存器，不增加响应流水级。
 Decaps继承decoder H验证状态的一次复位一笔事务约束；同一复位周期内的第二个Decaps命令返回error。
 
 三阶段普通多项式请求经过同一operation mux连接最大几何`trike_poly_mul_core`。服务在命令边界装载公开

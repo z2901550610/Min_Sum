@@ -1,6 +1,6 @@
 # 实验索引
 
-下一个实验ID：`EXP-0114`。
+下一个实验ID：`EXP-0115`。
 
 | ID | 日期 | 主题 | 配置/比较键 | 功能与周期 | Vivado | 结论 | 详情 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -37,6 +37,7 @@
 | EXP-0111 | 2026-08-25 | 统一KEM ASIC首轮物理实现 | 单发射三功能，L32/K4/C256，100 MHz | 沿用统一顶层分层功能门禁；Windows源码版本未记录 | [RUN-20260825-01](../../reports/vivado/manifests/RUN-20260825-01-trike-kem-asic.toml) | `rejected` | [详情](EXP-0111-unified-kem-asic-route.md) |
 | EXP-0112 | 2026-08-25 | H4运行时索引无除法映射 | 三块公开运行时`r/padded_r_bytes`几何 | store、Encaps、Decaps golden及固定周期通过；目标层次无`$div/$mod` | [RUN-20260825-02](../../reports/vivado/manifests/RUN-20260825-02-trike-kem-asic.toml)；internal WNS -3.529 ns | `retained` | [详情](EXP-0112-h4-index-map.md) |
 | EXP-0113 | 2026-08-25 | 固定重量采样索引存储BRAM化 | 最大`877 x 19-bit`索引阵列 | 三阶段共享reference/golden通过；固定周期不变 | [RUN-20260825-04](../../reports/vivado/manifests/RUN-20260825-04-trike-kem-asic-gui.toml)确认1个RAMB36；internal WNS -3.914 ns | `retained` | [详情](EXP-0113-fixed-weight-index-bram.md) |
+| EXP-0114 | 2026-08-25 | SM3结果寄存器局部扇出 | 单SM3，256-bit结果，`max_fanout=8` | SM3 digest/116拍、RTL与单SM3结构门禁通过 | 待GUI Fully Routed复测 | `pending` | [详情](EXP-0114-sm3-result-local-fanout.md) |
 
 新实验只追加一行。需要详细说明时，详情列链接到`EXP-xxxx-<slug>.md`；Vivado列链接到
 `reports/vivado/manifests/<run-id>.toml`。

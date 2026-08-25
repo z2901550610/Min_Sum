@@ -43,6 +43,10 @@ module sm3_compress (
   logic   [ 31:0] g_q;
   logic   [ 31:0] h_q;
 
+  // The unified ASIC service spans several physical client regions. Registered
+  // result replication forms local routing trees without changing the protocol.
+  (* max_fanout = 8 *) logic   [255:0] output_state_q;
+
   logic   [ 31:0] schedule_next;
   logic   [ 31:0] round_constant;
   logic   [ 31:0] a_rot12;
@@ -63,6 +67,8 @@ module sm3_compress (
   logic   [ 31:0] h_next;
 
   integer         word_idx;
+
+  assign o_state = output_state_q;
 
   function automatic logic [31:0] rotate_left32(input  logic [31:0] value, input  logic [4:0] shift);
     begin
@@ -137,7 +143,7 @@ module sm3_compress (
       h_q             <= '0;
       o_busy          <= 1'b0;
       o_done          <= 1'b0;
-      o_state         <= '0;
+      output_state_q  <= '0;
     end else begin
       o_done <= 1'b0;
 
@@ -183,7 +189,7 @@ module sm3_compress (
           h_q <= h_next;
 
           if (round_idx_q == ROUND_LAST) begin
-            o_state <= {
+            output_state_q <= {
               initial_state_q[255:224] ^ a_next,
               initial_state_q[223:192] ^ b_next,
               initial_state_q[191:160] ^ c_next,
