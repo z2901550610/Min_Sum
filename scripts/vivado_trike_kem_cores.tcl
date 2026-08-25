@@ -47,6 +47,9 @@ puts "Vivado part: $part"
 puts "Vivado threads: $threads"
 
 create_project -in_memory -part $part trike_kem_core_vivado
+# Physical baselines use Vivado's default message severities. User or GUI
+# overrides can otherwise make project setup fail before RTL diagnostics run.
+reset_msg_config -default_severity
 auto_detect_xpm
 
 proc run_step {name command} {
