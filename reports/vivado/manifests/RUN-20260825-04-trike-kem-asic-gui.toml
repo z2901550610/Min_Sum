@@ -1,0 +1,71 @@
+schema_version = 1
+run_id = "RUN-20260825-04-trike-kem-asic-gui"
+experiment_id = "EXP-0113"
+date = "2026-08-25"
+status = "fail"
+verdict = "pending"
+source_revision = "unrecorded-windows-copy"
+dirty_tree = true
+report_root = "D:/trike_reports/RUN-20260825-04-trike-kem-asic-gui"
+notes = "User supplied five Fully Routed reports generated manually from the Vivado GUI project and written to flat D:/trike_reports paths. The headers identify tool, top, part and clock, but do not embed source revision, compile defines or XDC filename. Hierarchical utilization directly confirms the EXP-0113 sampler index RAM mapping. Aggregate deltas against RUN-20260825-02 are not treated as strict comparisons because neither Windows source association is provenanced."
+
+[artifacts]
+files = [
+  "post_route_utilization.rpt",
+  "post_route_utilization_hier.rpt",
+  "post_route_timing_summary.rpt",
+  "post_route_internal_data_setup_paths.rpt",
+  "post_route_high_fanout.rpt",
+]
+sha256_manifest = ""
+routed_utilization_sha256 = "97b3c22290924ed0d8616bf4cdb1df620697333fa4b44dcd9da90625ee126d01"
+routed_hierarchical_utilization_sha256 = "1e051660fceb64ef18cb0342b44221e988683ef19019fb3b40a609207230b403"
+routed_timing_summary_sha256 = "f50540933bcf247dba993ff7560b5897acdd055763d25edc9e61a036c4e63e4c"
+internal_data_setup_sha256 = "401874bd86878516ef0eb6b66274737e8d3d44d496f2774451587ca04305ff1e"
+high_fanout_sha256 = "a7ae0b630ffbf81ad4ccfa83a0e2a7d73d6ecf692f8d000b77b09026aa2e3b3f"
+
+[design]
+top = "trike_kem_asic_top"
+profile = "single-issue KeyGen/Encaps/Decaps; expected TRIKE_UNIFIED, L=32, K=4, C=256, but compile defines are unreported"
+parallel_l = 32
+k_sign_k = 4
+cols_per_tile = 256
+memory_geometry = "Observed 594 RAMB36 plus 122 RAMB18; 655 Block RAM Tile. u_sampler_service/u_sampler/u_index_mem maps to one RAMB36."
+
+[tool]
+vivado = "2023.2 build 4029153"
+part = "xc7k355tffg901-2L"
+xdc = "unreported; timing constraints are consistent with a 10 ns core_clk, 0.100 ns uncertainty and constrained narrow I/O"
+report_stage = "fully_routed"
+clock_period_ns = 10.0
+clock_uncertainty_ns = 0.100
+
+[functional]
+fixed_cycles = 0
+tests = ["repository EXP-0113 functional, fixed-cycle and structural gates passed separately"]
+result = "Physical reports do not embed source identity; no functional simulation was reported for the supplied Windows source copy"
+
+[results]
+lut = "113484"
+ff = "106282"
+slice = "40061"
+block_ram_tile = "655"
+ramb36 = "594"
+ramb18 = "122"
+dsp = "5"
+bonded_iob = "67"
+setup_wns_ns = "-4.794"
+setup_tns_ns = "-8241.439"
+setup_failing_endpoints = "14611"
+hold_whs_ns = "0.048"
+hold_ths_ns = "0.000"
+pulse_width_wps_ns = "4.232"
+async_recovery_wns_ns = "-0.212"
+async_recovery_tns_ns = "-1.511"
+async_recovery_failing_endpoints = "26"
+internal_data_setup_wns_ns = "-3.914"
+overall_setup_path = "u_keygen t0 output RAMB36 to o_sk_data[4] output boundary; 7.707 ns data path plus 2.000 ns output delay and clock insertion/skew"
+internal_setup_path = "u_sm3_service/u_sm3_compress/o_state_reg[196] to u_encaps/u_l/u_h1/o_digest_reg[196]; zero logic levels, fanout 54, 13.328 ns data path with 13.124 ns routing"
+secondary_internal_path = "Shared SM3 output register bits to Encaps, Decaps and H123 digest/HMAC state registers; zero logic levels and approximately 98 percent routing delay"
+high_fanout_path = "Decaps decoder reset distribution has fanout 9206 and -0.212 ns recovery slack; K-sign clear has fanout 2224 and -0.512 ns setup slack"
+comparison_run = "RUN-20260825-02-trike-kem-asic; hierarchical sampler BRAM mapping is confirmed locally, but aggregate deltas are qualitative because source revision and compile defines are unreported"

@@ -18,6 +18,10 @@ Block RAM，降低FF数量和共享采样区域的布线拥塞，同时保持Ref
 - 定向sampler/DRNG/H4单测通过，周期分别保持40/1,448/2,313拍（测试几何）。
 - KeyGen四种服务组合保持53,995,036拍；Encaps三种组合保持2,378,447拍；Decaps postprocess
   三种组合保持257,417拍，全部通过byte golden或reference检查。
-- RUN-20260825-02中共享固定重量采样器使用16,995 FF且0 BRAM；本实验的最大索引阵列目标为
-  `877 x 19-bit` XPM Block RAM。实际FF、RAMB、Slice与WNS等待同条件Fully Routed复测，不用RTL位数估算物理结果。
-- 方案保留；下一个Vivado运行检查`u_sampler_service/u_sampler/u_index_mem`映射及KeyGen高扇出路径。
+- [RUN-20260825-04](../../reports/vivado/manifests/RUN-20260825-04-trike-kem-asic-gui.toml)的层次报告确认
+  `u_sampler_service/u_sampler/u_index_mem`映射为1个RAMB36，`u_sampler`为338 LUT、143 FF和1个RAMB36。
+- 该GUI运行整体为113,484 LUT、106,282 FF、40,061 Slice和655 Block RAM Tile；内部setup WNS为
+  `-3.914 ns`，最差路径转移到共享SM3结果寄存器到Encaps摘要寄存器的全局布线。
+- Windows源码revision、compile defines和XDC文件名未嵌入报告，因而只确认目标层次的BRAM映射，
+  不把整体资源变化作为相对RUN-20260825-02的严格增减量。
+- 方案保留；下一物理优化边界是保持SM3握手周期不变的结果寄存器复制与局部扇出。
