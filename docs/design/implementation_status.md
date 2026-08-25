@@ -109,7 +109,8 @@ KeyGen秘密support、Encaps H4和Decaps重加密H4连接同一最大几何`trik
 层次。
 
 Encaps与Decaps的H4 support和三块padded dense error连接同一最大几何`trike_error_support_store`。
-命令锁存公开`r/t/padded_r_bytes`，index写入及后续support/error同步读取只选择活动operation。完整层次
+命令锁存公开`r/t/padded_r_bytes`，两个边界比较和减法把全局index映射到三块dense error，index写入及
+后续support/error同步读取只选择活动operation。完整层次
 恰好一个H4 store；两阶段外置store reference分别保持2,378,447和257,417拍，并通过CT/SS byte golden及
 有效/拒绝成对固定周期验证。Decaps decoder error RAM属于译码后检查生命周期，不接入该服务。
 

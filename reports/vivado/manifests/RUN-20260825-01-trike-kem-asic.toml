@@ -1,0 +1,60 @@
+schema_version = 1
+run_id = "RUN-20260825-01-trike-kem-asic"
+experiment_id = "EXP-0111"
+date = "2026-08-25"
+status = "fail"
+verdict = "rejected"
+source_revision = "unrecorded-windows-copy"
+dirty_tree = true
+report_root = "D:/trike_reports/RUN-20260825-01-trike-kem-asic"
+notes = "User supplied one Fully Placed utilization report and one Routed timing summary. Report headers identify Vivado, top, part and clock, but not source revision, compile defines or XDC filename. No hierarchical utilization, current methodology, DRC, messages, provenance or routed utilization report was supplied. The timing summary contains a methodology snapshot."
+
+[artifacts]
+files = [
+  "trike_kem_asic_top_utilization_placed.rpt",
+  "trike_kem_asic_top_timing_summary_routed.rpt",
+]
+sha256_manifest = ""
+placed_utilization_sha256 = "a23c7d61d073c287145728b6de98371a5beda8eb96cd98543d9b6c3dc3a4e137"
+routed_timing_summary_sha256 = "21cfa12531ad549137013b98869f4bb0a826308494ff0f7592c149e1e4a9f903"
+
+[design]
+top = "trike_kem_asic_top"
+profile = "single-issue KeyGen/Encaps/Decaps; expected TRIKE_UNIFIED, L=32, K=4, C=256, but compile defines are unreported"
+parallel_l = 32
+k_sign_k = 4
+cols_per_tile = 256
+memory_geometry = "Observed 593 RAMB36 plus 122 RAMB18; 654 Block RAM Tile"
+
+[tool]
+vivado = "2023.2 build 4029153"
+part = "xc7k355tffg901-2L"
+xdc = "unreported; timing constraints are consistent with a 10 ns core_clk, 0.100 ns uncertainty and constrained narrow I/O"
+report_stage = "Fully Placed utilization plus Routed timing summary"
+clock_period_ns = 10.0
+clock_uncertainty_ns = 0.100
+
+[functional]
+fixed_cycles = 0
+tests = ["unreported for the supplied Windows source copy"]
+result = "The repository unified-stage reference gates passed separately before this run; source identity for the supplied physical reports is unrecorded"
+
+[results]
+lut = "119969"
+ff = "122997"
+slice = "45900"
+block_ram_tile = "654"
+ramb36 = "593"
+ramb18 = "122"
+dsp = "6"
+bonded_iob = "67"
+setup_wns_ns = "-23.964"
+setup_tns_ns = "-154517.797"
+setup_failing_endpoints = "63128"
+hold_whs_ns = "0.049"
+hold_ths_ns = "0.000"
+pulse_width_wps_ns = "4.232"
+async_recovery_wns_ns = "-9.274"
+internal_data_setup_wns_ns = "-23.964"
+overall_setup_path = "u_operation_control/active_operation_q_reg[0] to u_h4_store_service/u_error_mem RAMB36 address; 33.157 ns data path, 189 logic levels including 165 CARRY4 and one DSP48E1"
+comparison_run = "none; first unified KEM ASIC physical diagnostic"

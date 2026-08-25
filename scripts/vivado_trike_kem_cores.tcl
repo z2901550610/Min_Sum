@@ -1,24 +1,44 @@
-set build_dir [lindex $argv 0]
-if {$build_dir eq ""} {
-  set build_dir "build/vivado/trike_kem_core"
+# Windows Vivado Tcl Console example:
+#   set TRIKE_KEM_BUILD_DIR D:/trike_reports/RUN-YYYYMMDD-NN-trike-kem-asic
+#   set TRIKE_KEM_SYNTH_TOP trike_kem_asic_top
+#   set VIVADO_RUN_ID RUN-YYYYMMDD-NN-trike-kem-asic
+#   source D:/path/to/Min_Sum/scripts/vivado_trike_kem_cores.tcl
+# VIVADO_PART, VIVADO_XDC and implementation directives are optional globals.
+
+proc config_value {name default_value} {
+  if {[uplevel #0 [list info exists $name]]} {
+    return [uplevel #0 [list set $name]]
+  }
+  if {[info exists ::env($name)]} {
+    return $::env($name)
+  }
+  return $default_value
 }
 
-set part [expr {[info exists ::env(VIVADO_PART)] ? $::env(VIVADO_PART) : "xc7k355tffg901-2L"}]
-set top [expr {[info exists ::env(TRIKE_KEM_SYNTH_TOP)] ?
-              $::env(TRIKE_KEM_SYNTH_TOP) : "trike_poly_inv_synth_top"}]
-set threads [expr {[info exists ::env(VIVADO_THREADS)] ? $::env(VIVADO_THREADS) : "8"}]
-set synth_directive [expr {[info exists ::env(VIVADO_SYNTH_DIRECTIVE)] ?
-                          $::env(VIVADO_SYNTH_DIRECTIVE) : "Default"}]
-set place_directive [expr {[info exists ::env(VIVADO_PLACE_DIRECTIVE)] ?
-                          $::env(VIVADO_PLACE_DIRECTIVE) : "Explore"}]
-set phys_opt_directive [expr {[info exists ::env(VIVADO_PHYS_OPT_DIRECTIVE)] ?
-                             $::env(VIVADO_PHYS_OPT_DIRECTIVE) : "Explore"}]
-set route_directive [expr {[info exists ::env(VIVADO_ROUTE_DIRECTIVE)] ?
-                          $::env(VIVADO_ROUTE_DIRECTIVE) : "Explore"}]
-set xdc_file [expr {[info exists ::env(VIVADO_XDC)] ?
-                    $::env(VIVADO_XDC) : "constraints/trike_kem_core.xdc"}]
-set run_id [expr {[info exists ::env(VIVADO_RUN_ID)] ?
-                  $::env(VIVADO_RUN_ID) : [file tail [file normalize $build_dir]]}]
+set repo_root [file normalize [file join [file dirname [info script]] ..]]
+set build_dir [config_value TRIKE_KEM_BUILD_DIR ""]
+if {($build_dir eq "") && [info exists argv] && ([llength $argv] > 0)} {
+  set build_dir [lindex $argv 0]
+}
+if {$build_dir eq ""} {
+  set build_dir [config_value TRIKE_KEM_BUILD_DIR "build/vivado/trike_kem_core"]
+}
+if {[file pathtype $build_dir] eq "relative"} {
+  set build_dir [file join $repo_root $build_dir]
+}
+
+set part [config_value VIVADO_PART "xc7k355tffg901-2L"]
+set top [config_value TRIKE_KEM_SYNTH_TOP "trike_poly_inv_synth_top"]
+set threads [config_value VIVADO_THREADS "8"]
+set synth_directive [config_value VIVADO_SYNTH_DIRECTIVE "Default"]
+set place_directive [config_value VIVADO_PLACE_DIRECTIVE "Explore"]
+set phys_opt_directive [config_value VIVADO_PHYS_OPT_DIRECTIVE "Explore"]
+set route_directive [config_value VIVADO_ROUTE_DIRECTIVE "Explore"]
+set xdc_file [config_value VIVADO_XDC "constraints/trike_kem_core.xdc"]
+if {[file pathtype $xdc_file] eq "relative"} {
+  set xdc_file [file join $repo_root $xdc_file]
+}
+set run_id [config_value VIVADO_RUN_ID [file tail [file normalize $build_dir]]]
 
 file mkdir $build_dir
 set_param general.maxThreads $threads
@@ -67,7 +87,6 @@ proc read_rtl_filelist {path repo_root} {
   return $rtl_files
 }
 
-set repo_root [file normalize [file join [file dirname [info script]] ..]]
 set filelist_by_top [dict create \
   trike_poly_inv_synth_top filelists/trike_poly_inv.f \
   trike_pseudohash_synth_top filelists/trike_pseudohash.f \
@@ -75,6 +94,7 @@ set filelist_by_top [dict create \
   trike_keygen_synth_top filelists/trike_keygen.f \
   trike_decaps_synth_top filelists/trike_decaps.f \
   trike_decaps_runtime_synth_top filelists/trike_decaps.f \
+  trike_kem_asic_top filelists/trike_kem_asic.f \
 ]
 
 if {![dict exists $filelist_by_top $top]} {
@@ -85,7 +105,8 @@ set rtl_files [read_rtl_filelist $rtl_filelist $repo_root]
 puts "RTL filelist: $rtl_filelist"
 
 if {($top eq "trike_decaps_synth_top") ||
-    ($top eq "trike_decaps_runtime_synth_top")} {
+    ($top eq "trike_decaps_runtime_synth_top") ||
+    ($top eq "trike_kem_asic_top")} {
   set verilog_defines [list \
     TRIKE_UNIFIED_PARAMS \
     BIKE_PARALLEL_L=32 \

@@ -60,6 +60,7 @@ module trike_kem_asic_top
   logic                                 keygen_start;
   logic                                 encaps_start;
   logic                                 decaps_start;
+  logic                                 rst_n_sync;
   logic [                          1:0] active_operation;
   logic                                 control_error;
 
@@ -294,9 +295,15 @@ module trike_kem_asic_top
   logic [                          7:0] shared_h4_store_error_rdata;
   logic                                 shared_h4_store_done;
 
+  reset_sync u_reset_sync (
+      .i_clk  (i_clk),
+      .i_rst_n(i_rst_n),
+      .o_rst_n(rst_n_sync)
+  );
+
   trike_kem_operation_control u_operation_control (
       .i_clk             (i_clk),
-      .i_rst_n           (i_rst_n),
+      .i_rst_n           (rst_n_sync),
       .i_start           (i_start),
       .i_operation       (i_operation),
       .i_keygen_done     (keygen_done),
@@ -326,7 +333,7 @@ module trike_kem_asic_top
       .MUL_INDEX_W            (ROW_IDX_W)
   ) u_keygen (
       .i_clk(i_clk),
-      .i_rst_n(i_rst_n),
+      .i_rst_n(rst_n_sync),
       .i_start(keygen_start),
       .i_random_valid(i_input_valid && (active_operation == OP_KEYGEN)),
       .i_random_data(i_input_data),
@@ -419,7 +426,7 @@ module trike_kem_asic_top
       .MUL_INDEX_W            (ROW_IDX_W)
   ) u_encaps (
       .i_clk(i_clk),
-      .i_rst_n(i_rst_n),
+      .i_rst_n(rst_n_sync),
       .i_start(encaps_start),
       .i_input_valid(i_input_valid && (active_operation == OP_ENCAPS)),
       .i_input_data(i_input_data),
@@ -515,7 +522,7 @@ module trike_kem_asic_top
       .USE_EXTERNAL_H4_STORE(1'b1)
   ) u_decaps (
       .i_clk(i_clk),
-      .i_rst_n(i_rst_n),
+      .i_rst_n(rst_n_sync),
       .i_start(decaps_start),
       .i_param_level(i_param_level),
       .i_input_valid(i_input_valid && (active_operation == OP_DECAPS)),
@@ -808,7 +815,7 @@ module trike_kem_asic_top
       .USE_EXTERNAL_COMPRESS(1'b1)
   ) u_h123_service (
       .i_clk           (i_clk),
-      .i_rst_n         (i_rst_n),
+      .i_rst_n         (rst_n_sync),
       .i_start         (shared_h123_start),
       .i_seed_valid    (shared_h123_seed_valid),
       .i_seed_data     (shared_h123_seed_data),
@@ -838,7 +845,7 @@ module trike_kem_asic_top
       .WORD_W(64)
   ) u_h123_store_service (
       .i_clk          (i_clk),
-      .i_rst_n        (i_rst_n),
+      .i_rst_n        (rst_n_sync),
       .i_vector_valid (shared_h123_vector_valid && shared_h123_vector_ready),
       .i_vector_select(shared_h123_vector_select),
       .i_vector_byte  (shared_h123_vector_byte),
@@ -866,7 +873,7 @@ module trike_kem_asic_top
       .USE_EXTERNAL_COMPRESS(1'b1)
   ) u_sampler_service (
       .i_clk           (i_clk),
-      .i_rst_n         (i_rst_n),
+      .i_rst_n         (rst_n_sync),
       .i_start         (shared_sampler_start),
       .i_runtime_length(shared_sampler_length),
       .i_runtime_weight(shared_sampler_weight),
@@ -899,7 +906,7 @@ module trike_kem_asic_top
       .RUNTIME_GEOMETRY(1'b1)
   ) u_h4_store_service (
       .i_clk                   (i_clk),
-      .i_rst_n                 (i_rst_n),
+      .i_rst_n                 (rst_n_sync),
       .i_start                 (shared_h4_store_start),
       .i_runtime_r_bits        (shared_h4_store_r_bits),
       .i_runtime_error_weight  (shared_h4_store_error_weight),
@@ -921,7 +928,7 @@ module trike_kem_asic_top
 
   trike_sm3_service u_sm3_service (
       .i_clk  (i_clk),
-      .i_rst_n(i_rst_n),
+      .i_rst_n(rst_n_sync),
       .i_start(shared_compress_start),
       .i_block(shared_compress_block),
       .i_state(shared_compress_input_state),
@@ -939,7 +946,7 @@ module trike_kem_asic_top
       .RUNTIME_GEOMETRY(1'b1)
   ) u_poly_mul_service (
       .i_clk                  (i_clk),
-      .i_rst_n                (i_rst_n),
+      .i_rst_n                (rst_n_sync),
       .i_start                (shared_mul_start),
       .i_runtime_r_bits       (shared_mul_r_bits),
       .i_runtime_words        (shared_mul_words),

@@ -64,9 +64,12 @@ module trike_error_support_store #(
   logic   [  ERROR_ADDR_W-1:0] error_raddr;
   logic   [               7:0] error_rdata;
 
-  integer                      input_block_c;
-  integer                      input_local_c;
+  logic   [  GLOBAL_INDEX_W:0] input_index_ext_c;
+  logic   [  GLOBAL_INDEX_W:0] active_r_ext_c;
+  logic   [  GLOBAL_INDEX_W:0] input_local_c;
+  logic   [  ERROR_ADDR_W-1:0] input_block_base_c;
   logic   [  ERROR_ADDR_W-1:0] input_error_addr_c;
+  logic   [               2:0] input_error_bit_c;
   integer                      active_r_bits_q;
   integer                      active_error_weight_q;
   integer                      active_padded_r_bytes_q;
@@ -103,10 +106,19 @@ module trike_error_support_store #(
   assign o_busy = state_q != ST_IDLE;
 
   always_comb begin
-    input_block_c = int'(i_index) / active_r_bits_q;
-    input_local_c = int'(i_index) % active_r_bits_q;
-    input_error_addr_c =
-        ERROR_ADDR_W'((input_block_c * active_padded_r_bytes_q) + (input_local_c / 8));
+    input_index_ext_c = (GLOBAL_INDEX_W + 1)'(i_index);
+    active_r_ext_c = (GLOBAL_INDEX_W + 1)'(active_r_bits_q);
+    input_local_c = input_index_ext_c;
+    input_block_base_c = '0;
+    if (input_index_ext_c >= (active_r_ext_c << 1)) begin
+      input_local_c = input_index_ext_c - (active_r_ext_c << 1);
+      input_block_base_c = ERROR_ADDR_W'(active_padded_r_bytes_q << 1);
+    end else if (input_index_ext_c >= active_r_ext_c) begin
+      input_local_c = input_index_ext_c - active_r_ext_c;
+      input_block_base_c = ERROR_ADDR_W'(active_padded_r_bytes_q);
+    end
+    input_error_addr_c = input_block_base_c + ERROR_ADDR_W'(input_local_c >> 3);
+    input_error_bit_c = input_local_c[2:0];
 
     support_we = 1'b0;
     support_waddr = i_index_position;
@@ -190,7 +202,7 @@ module trike_error_support_store #(
         ST_LOAD_READ: begin
           if (i_index_valid) begin
             error_addr_q <= ERROR_ADDR_W'(input_error_addr_c);
-            error_bit_q <= 3'(input_local_c % 8);
+            error_bit_q <= input_error_bit_c;
             state_q <= ST_LOAD_WRITE;
           end
         end

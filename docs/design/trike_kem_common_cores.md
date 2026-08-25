@@ -768,7 +768,8 @@ Generate(4 byte)，四个输出byte依次写入`random[7:0]`至`random[31:24]`�
 最终DRNG状态，连续输入输出固定2,313拍；该数字用于模块回归，不代表真实参数H4周期。
 
 `trike_error_support_store`先固定清零三个独立padding块，再为每个H4位置执行一次support RAM写入和一次
-dense byte RAM读改写。dense地址为`block*PADDED_R_BYTES + local_index/8`，因此同一RAM可按5,952-byte
+dense byte RAM读改写。两个公开边界比较把全局index映射到三个block，dense地址为
+`{0,padded,2*padded} + (local_index >> 3)`，bit位置为`local_index[2:0]`，因此同一RAM可按5,952-byte
 顺序流直接重放TRIKE-2的`L(e)`输入。`trike_h4_error_vector`并行启动H4与RAM清零，随后用ready/valid
 把263个位置全部写入两种表示；TRIKE-2连续输入时固定207,018拍，仅比H4本体增加1拍完成汇合。
 
