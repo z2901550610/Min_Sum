@@ -282,6 +282,15 @@ hold WHS/THS为`+0.001 ns/0`。同步数据路径WNS为`+0.600 ns`，最差路�
 `+0.014 ns/0`。同步数据路径WNS为`+0.441 ns`，最差路径位于共享SM3状态到L摘要寄存器；该结果见
 [EXP-0086](../experiments/EXP-0086-current-encaps-route.md)。
 
+单发射统一KEM ASIC的2026-08-25 Fully Routed诊断报告为136,358 LUT、132,627 FF、47,130 Slice、
+646 Block RAM Tile、561 RAMB36、170 RAMB18和5 DSP。整体setup WNS/TNS为`-3.936 ns/-10583.756 ns`，
+同步内部register-to-register WNS为`-3.529 ns`。内部最差路径位于KeyGen秘密采样FSM到
+fanout约1322的状态控制网，仅1级LUT，98.0%数据路径延迟来自布线；Decaps support sorter存在
+同类次级路径。整体最差路径位于输入边界到Decaps BRAM DI，与内部核时序分开评估。
+async recovery WNS为`+0.148 ns`，hold WHS为`+0.049 ns`。该运行未记录source revision、compile defines和
+XDC文件名，因此只作当前routed诊断，不与其他运行计算严格增减。详见
+[EXP-0112](../experiments/EXP-0112-h4-index-map.md)。
+
 每次新运行使用`RUN-YYYYMMDD-NN-<top>`标识，在
 `reports/vivado/manifests/`提交运行manifest，原始`.rpt/.dcp`保存在
 `D:/trike_reports/<run-id>/`。只有器件、Vivado、XDC、参数、`L/K`、存储几何、时钟和报告阶段一致的

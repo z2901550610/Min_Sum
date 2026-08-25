@@ -18,4 +18,11 @@ block与local index，无需综合变量除法器。
 - 官方TRIKE-2 store byte golden保持6,478拍；运行时`r=7/13/521`成对case功能与固定周期通过。
 - Encaps三种服务组合保持2,378,447拍，Decaps postprocess三种组合保持257,417拍并通过byte golden。
 - 统一层次门禁保持一个H4 store、一个SM3、一个采样链和一个H123 store。
-- Vivado资源和时序待同器件、同XDC、同directive复测；在物理复测前不估计WNS改善量。
+- [RUN-20260825-02](../../reports/vivado/manifests/RUN-20260825-02-trike-kem-asic.toml)为Fully Routed诊断：
+  136,358 LUT、132,627 FF、47,130 Slice、646 Block RAM Tile和5 DSP。
+- 整体setup WNS为`-3.936 ns`，由输入边界到Decaps BRAM DI的布线路径决定；同步内部
+  register-to-register WNS为`-3.529 ns`，最差路径是KeyGen秘密采样FSM到fanout约1322的状态控制网，
+  仅1级LUT且98.0%数据路径延迟来自布线。
+- H4变量除法关键路径未出现，async recovery WNS为`+0.148 ns`。该运行未提供source revision、
+  compile defines和`run_provenance.txt`，因此不对RUN-20260825-01计算严格的资源或WNS增减。
+- 无除法映射方案保留；统一KEM顶层100 MHz时序未收敛，下一个物理实验针对控制网高扇出布线。

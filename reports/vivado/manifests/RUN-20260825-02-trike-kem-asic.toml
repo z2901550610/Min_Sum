@@ -1,0 +1,66 @@
+schema_version = 1
+run_id = "RUN-20260825-02-trike-kem-asic"
+experiment_id = "EXP-0112"
+date = "2026-08-25"
+status = "fail"
+verdict = "pending"
+source_revision = "unrecorded-windows-copy"
+dirty_tree = true
+report_root = "D:/trike_reports/RUN-20260825-02-trike-kem-asic"
+notes = "User supplied four Routed reports written to flat D:/trike_reports paths. Report headers identify Vivado, top, part and clock, but not source revision, compile defines or XDC filename. The H4 divider path from RUN-20260825-01 is absent and the expected replacement bottleneck is physical control fanout, but the source association is not a strict same-condition comparison without run_provenance.txt. No methodology, DRC, high-fanout, messages or provenance report was supplied."
+
+[artifacts]
+files = [
+  "post_route_utilization.rpt",
+  "post_route_utilization_hier.rpt",
+  "post_route_timing_summary.rpt",
+  "post_route_internal_data_setup_paths.rpt",
+]
+sha256_manifest = ""
+routed_utilization_sha256 = "826cd0ce1524c59b60d911932aee15f2b19fd786117731fddbb0f4970fed5bfa"
+routed_hierarchical_utilization_sha256 = "45afb7d811fd50e61a944a9981e93e7e8db0fb03014d8275b9d9cfac3deb1836"
+routed_timing_summary_sha256 = "55d88707515e31b6b09adddb482a34956b2fd896730df8ee6d1ba418f33fb239"
+internal_data_setup_sha256 = "62fb501ccc32a45d75e9831d12e63f98623f021ce6364ec53cdb7431339d8fff"
+
+[design]
+top = "trike_kem_asic_top"
+profile = "single-issue KeyGen/Encaps/Decaps; expected TRIKE_UNIFIED, L=32, K=4, C=256, but compile defines are unreported"
+parallel_l = 32
+k_sign_k = 4
+cols_per_tile = 256
+memory_geometry = "Observed 561 RAMB36 plus 170 RAMB18; 646 Block RAM Tile"
+
+[tool]
+vivado = "2023.2 build 4029153"
+part = "xc7k355tffg901-2L"
+xdc = "unreported; timing constraints are consistent with a 10 ns core_clk, 0.100 ns uncertainty and constrained narrow I/O"
+report_stage = "fully_routed"
+clock_period_ns = 10.0
+clock_uncertainty_ns = 0.100
+
+[functional]
+fixed_cycles = 0
+tests = ["repository EXP-0112 functional, fixed-cycle and structural gates passed separately"]
+result = "Physical reports do not embed source identity; no functional simulation was reported for the supplied Windows source copy"
+
+[results]
+lut = "136358"
+ff = "132627"
+slice = "47130"
+block_ram_tile = "646"
+ramb36 = "561"
+ramb18 = "170"
+dsp = "5"
+bonded_iob = "67"
+setup_wns_ns = "-3.936"
+setup_tns_ns = "-10583.756"
+setup_failing_endpoints = "15716"
+hold_whs_ns = "0.049"
+hold_ths_ns = "0.000"
+pulse_width_wps_ns = "4.232"
+async_recovery_wns_ns = "0.148"
+internal_data_setup_wns_ns = "-3.529"
+overall_setup_path = "i_input_data[2] input boundary to u_decaps/u_input_store/u_sk_mem/u_mem RAMB36 DI; 15.887 ns data path, 94.7 percent route"
+internal_setup_path = "u_keygen/u_secret_sampler/FSM_onehot_state_q_reg[1] to c_q_reg[338]; fanout about 1322, one LUT level, 13.357 ns data path with 98.0 percent route"
+secondary_internal_path = "u_decaps/u_runtime_pipeline/u_input_decoder_load/u_support_sorter/FSM_onehot_state_q_reg[2] to support_q_reg[26][15]; one LUT level, routing-dominated"
+comparison_run = "RUN-20260825-01-trike-kem-asic; qualitative path-class comparison only because source revision and compile defines are unreported"

@@ -35,7 +35,7 @@
 | EXP-0109 | 2026-08-24 | KeyGen算术复用stage support视图 | 官方TRIKE-2，3x35x14-bit support | 本地/外部视图单测及完整KeyGen byte golden/固定周期通过 | 待测 | `retained` | [详情](EXP-0109-keygen-shared-support-view.md) |
 | EXP-0110 | 2026-08-24 | KeyGen inverse复用H123 t1 bank | 官方TRIKE-2，244x64-bit同步RAM | store覆盖/重装、算术及完整KeyGen golden/固定周期通过 | 待测 | `retained` | [详情](EXP-0110-keygen-inverse-t1-bank.md) |
 | EXP-0111 | 2026-08-25 | 统一KEM ASIC首轮物理实现 | 单发射三功能，L32/K4/C256，100 MHz | 沿用统一顶层分层功能门禁；Windows源码版本未记录 | [RUN-20260825-01](../../reports/vivado/manifests/RUN-20260825-01-trike-kem-asic.toml) | `rejected` | [详情](EXP-0111-unified-kem-asic-route.md) |
-| EXP-0112 | 2026-08-25 | H4运行时索引无除法映射 | 三块公开运行时`r/padded_r_bytes`几何 | store、Encaps、Decaps golden及固定周期通过；目标层次无`$div/$mod` | 待复测 | `retained` | [详情](EXP-0112-h4-index-map.md) |
+| EXP-0112 | 2026-08-25 | H4运行时索引无除法映射 | 三块公开运行时`r/padded_r_bytes`几何 | store、Encaps、Decaps golden及固定周期通过；目标层次无`$div/$mod` | [RUN-20260825-02](../../reports/vivado/manifests/RUN-20260825-02-trike-kem-asic.toml)；internal WNS -3.529 ns | `retained` | [详情](EXP-0112-h4-index-map.md) |
 
 新实验只追加一行。需要详细说明时，详情列链接到`EXP-xxxx-<slug>.md`；Vivado列链接到
 `reports/vivado/manifests/<run-id>.toml`。

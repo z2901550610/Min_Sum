@@ -14,7 +14,7 @@ Vivado manifest；没有对应manifest的条目是待迁移的历史参考，不
 | KeyGen | TRIKE-2窄I/O，`DIGIT_W=16` | 待测 | 无 | [8-bit routed参考](../../reports/vivado/manifests/RUN-20260811-02-trike-keygen.toml)不作为当前配置证据 |
 | 固定profile Decaps最大物理包络 | `trike_decaps_synth_top`，统一最大几何，L=32，K=4，C=256，`DIGIT_W=16` | 待测 | 无 | [8-bit routed参考](../../reports/vivado/manifests/RUN-20260811-01-trike-decaps.toml)不作为当前配置证据 |
 | 运行时统一Decaps | `trike_decaps_runtime_synth_top`，四档，L=32，K=4，C=256，`DIGIT_W=16` | 待测 | 无 | 资源、布局布线与时序均待测 |
-| 单发射统一KEM ASIC | `trike_kem_asic_top`，L=32，K=4，C=256 | 首轮routed诊断，当前RTL待复测 | [RUN-20260825-01](../../reports/vivado/manifests/RUN-20260825-01-trike-kem-asic.toml) | 654 BRAM Tile，WNS -23.964 ns；变量除法地址路径版本被拒绝 |
+| 单发射统一KEM ASIC | `trike_kem_asic_top`，L=32，K=4，C=256 | routed诊断，100 MHz未收敛 | [RUN-20260825-02](../../reports/vivado/manifests/RUN-20260825-02-trike-kem-asic.toml) | 646 BRAM Tile；internal WNS -3.529 ns；源码revision与defines未记录 |
 | 统一Decaps五档参考 | 五档统一最大几何，L=32，K=4，C=256 | superseded routed参考 | [RUN-20260810-01](../../reports/vivado/manifests/RUN-20260810-01-trike-decaps.toml) | 63,228 LUT，635 BRAM Tile，WNS +0.033 ns |
 
 下一次任一顶层的Vivado运行都使用新manifest；不要继续把整组数字复制到本表。
