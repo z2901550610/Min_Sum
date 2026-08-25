@@ -39,8 +39,6 @@ module trike_fixed_weight_sampler #(
 
   state_t                  state_q;
 
-  (* ram_style = "block" *) logic   [   INDEX_W-1:0] index_mem[0:WEIGHT-1];
-
   logic   [POSITION_W-1:0] position_q;
   logic   [POSITION_W-1:0] scan_issue_idx_q;
   logic   [POSITION_W-1:0] scan_read_idx_q;
@@ -56,6 +54,9 @@ module trike_fixed_weight_sampler #(
   logic   [          31:0] position_32;
   logic                    duplicate_match;
   logic                    duplicate_with_match;
+  logic                    index_mem_re;
+  logic                    index_mem_we;
+  logic   [   INDEX_W-1:0] index_mem_wdata;
 
   assign position_32 = {{(32 - POSITION_W) {1'b0}}, position_q};
 
@@ -71,12 +72,30 @@ module trike_fixed_weight_sampler #(
   assign duplicate_match = scan_read_valid_q && (scan_read_idx_q > position_q) &&
                            (scan_read_data_q == candidate_q);
   assign duplicate_with_match = duplicate_q | duplicate_match;
+  assign index_mem_we = (state_q == ST_SCAN) && scan_read_valid_q &&
+                        (scan_read_idx_q == active_last_position_q);
+  assign index_mem_re = (state_q == ST_SCAN) && !index_mem_we;
+  assign index_mem_wdata = duplicate_with_match ? INDEX_W'(position_q) : candidate_q;
 
   assign o_random_ready = (state_q == ST_WAIT_RANDOM);
   assign o_index_valid = (state_q == ST_OUTPUT);
   assign o_index_position = position_q;
   assign o_index = output_index_q;
   assign o_busy = (state_q != ST_IDLE);
+
+  ram_bram #(
+      .DATA_W(INDEX_W),
+      .DEPTH (WEIGHT),
+      .ADDR_W(POSITION_W)
+  ) u_index_mem (
+      .i_clk  (i_clk),
+      .i_we   (index_mem_we),
+      .i_waddr(position_q),
+      .i_wdata(index_mem_wdata),
+      .i_re   (index_mem_re),
+      .i_raddr(scan_issue_idx_q),
+      .o_rdata(scan_read_data_q)
+  );
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin
@@ -85,7 +104,6 @@ module trike_fixed_weight_sampler #(
       scan_issue_idx_q       <= '0;
       scan_read_idx_q        <= '0;
       scan_read_valid_q      <= 1'b0;
-      scan_read_data_q       <= '0;
       candidate_q            <= '0;
       duplicate_q            <= 1'b0;
       output_index_q         <= '0;
@@ -127,17 +145,10 @@ module trike_fixed_weight_sampler #(
           end
 
           if (scan_read_valid_q && (scan_read_idx_q == active_last_position_q)) begin
-            if (duplicate_with_match) begin
-              index_mem[position_q] <= INDEX_W'(position_q);
-              output_index_q        <= INDEX_W'(position_q);
-            end else begin
-              index_mem[position_q] <= candidate_q;
-              output_index_q        <= candidate_q;
-            end
+            output_index_q    <= index_mem_wdata;
             scan_read_valid_q <= 1'b0;
             state_q           <= ST_OUTPUT;
           end else begin
-            scan_read_data_q  <= index_mem[scan_issue_idx_q];
             scan_read_idx_q   <= scan_issue_idx_q;
             scan_read_valid_q <= 1'b1;
             if (scan_issue_idx_q != active_last_position_q) begin

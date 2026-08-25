@@ -104,7 +104,9 @@ KeyGen第一次分母完整装载后，通过固定写口把`t1` bank依次重�
 
 KeyGen秘密support、Encaps H4和Decaps重加密H4连接同一最大几何`trike_drng_weight_sampler`。命令装载
 公开`length/weight`与DRNG state，index和最终state只返回活动stage。完整层次恰好一个
-`trike_drng_weight_sampler`及其`trike_fixed_weight_sampler`；三阶段外置reference分别保持53,995,036、
+`trike_drng_weight_sampler`及其`trike_fixed_weight_sampler`。固定重量采样的已选索引由一个无复位数据阵列的
+同步`ram_bram`保存；每个position的随机字数、公开weight全扫描和输出握手调度固定。三阶段外置
+reference分别保持53,995,036、
 2,378,447和257,417拍并通过golden。seed Instantiate控制、KeyGen弱密钥检测和秘密support RAM位于stage
 层次。
 
