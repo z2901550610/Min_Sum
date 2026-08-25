@@ -149,10 +149,9 @@ puts "Run provenance: $provenance_file"
 
 run_step "read_verilog" {
   if {[llength $verilog_defines] > 0} {
-    read_verilog -sv -define $verilog_defines $rtl_files
-  } else {
-    read_verilog -sv $rtl_files
+    set_property verilog_define $verilog_defines [current_fileset]
   }
+  read_verilog -sv $rtl_files
 }
 set_property include_dirs [list [file join $repo_root rtl]] [current_fileset]
 
