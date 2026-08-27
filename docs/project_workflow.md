@@ -9,6 +9,7 @@
 | 一次Vivado运行的精确条件和数字 | `reports/vivado/manifests/*.toml` |
 | 当前哪个物理结果是基线 | `docs/design/vivado_baseline_registry.md` |
 | 当前成品架构和验证状态 | `docs/design/implementation_status.md` |
+| TRIKE KEM优化推进到哪里、下一门禁是什么 | `docs/design/trike_kem_optimization_roadmap.md` |
 | Vivado原始`.rpt`/`.dcp` | `D:/trike_reports/<run-id>/` |
 
 Git负责普通修改，不为格式化、拼写、局部bugfix或等价重构建立实验项。只有形成
@@ -19,6 +20,8 @@ Git负责普通修改，不为格式化、拼写、局部bugfix或等价重构�
 1. 在索引分配下一个`EXP-xxxx`，用一句话写清假设和比较对象。
 2. 提交可复现的起点，一次实验只改一个主要结构变量。
 3. 记录功能、固定周期、K=3/K=4和公开参数覆盖；未运行的层明确写`pending`。
+   多项式运算和SM3探索迭代优先运行受影响单元、独立reference、固定周期/访问计数和静态检查；完整KEM
+   只在候选准备保留、接口边界变化或发布/里程碑时运行。
 4. 每次Vivado运行分配唯一`RUN-YYYYMMDD-NN-<top>`，原始报告放在同名外部目录，
    仓库仅提交TOML manifest。KEM实现脚本同时生成`run_provenance.txt`，记录run ID、Git revision、
    dirty状态、filelist、defines、XDC、器件和实现directive。

@@ -1,7 +1,10 @@
 `timescale 1ns / 1ps
 
 // TRIKE-2 polynomial-inversion implementation wrapper for Vivado measurement.
-module trike_poly_inv_synth_top (
+module trike_poly_inv_synth_top #(
+    parameter int DIGIT_W               = 16,
+    parameter int DENSE_KARATSUBA_DEPTH = 0
+) (
     input  logic        i_clk,
     input  logic        i_rst_n,
     input  logic        i_start,
@@ -25,9 +28,10 @@ module trike_poly_inv_synth_top (
   );
 
   trike_poly_inv_core #(
-      .R_BITS (15581),
-      .WORD_W (64),
-      .DIGIT_W(16)
+      .R_BITS(15581),
+      .WORD_W(64),
+      .DIGIT_W(DIGIT_W),
+      .DENSE_KARATSUBA_DEPTH(DENSE_KARATSUBA_DEPTH)
   ) u_inv (
       .i_clk         (i_clk),
       .i_rst_n       (rst_n_sync),

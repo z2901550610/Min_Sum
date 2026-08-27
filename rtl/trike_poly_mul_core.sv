@@ -1,22 +1,111 @@
 `timescale 1ns / 1ps
 
+// Recursive carry-less Karatsuba base multiplier. LEVELS=0 is the classical
+// bit-parallel base case. Each higher level uses three half-size products and
+// reconstructs the full polynomial product with XORs.
+/* verilator lint_off DECLFILENAME */
+module trike_clmul_karatsuba #(
+    parameter int WIDTH  = 64,
+    parameter int LEVELS = 1
+) (
+    input  logic [    WIDTH-1:0] i_a,
+    input  logic [    WIDTH-1:0] i_b,
+    output logic [(2*WIDTH)-1:0] o_product
+);
+
+  generate
+    if (LEVELS == 0) begin : g_base
+      always_comb begin
+        o_product = '0;
+        for (int bit_idx = 0; bit_idx < WIDTH; bit_idx++) begin
+          if (i_a[bit_idx]) begin
+            o_product = o_product ^ ({{WIDTH{1'b0}}, i_b} << bit_idx);
+          end
+        end
+      end
+    end else begin : g_recursive
+      localparam int HALF_W = WIDTH / 2;
+
+      logic [   HALF_W-1:0] a_cross;
+      logic [   HALF_W-1:0] b_cross;
+      logic [    WIDTH-1:0] product_low;
+      logic [    WIDTH-1:0] product_high;
+      logic [    WIDTH-1:0] product_cross;
+      logic [(2*WIDTH)-1:0] product_low_wide;
+      logic [(2*WIDTH)-1:0] product_high_wide;
+      logic [(2*WIDTH)-1:0] product_middle_wide;
+
+      assign a_cross = i_a[HALF_W-1:0] ^ i_a[WIDTH-1:HALF_W];
+      assign b_cross = i_b[HALF_W-1:0] ^ i_b[WIDTH-1:HALF_W];
+
+      trike_clmul_karatsuba #(
+          .WIDTH (HALF_W),
+          .LEVELS(LEVELS - 1)
+      ) u_low (
+          .i_a      (i_a[HALF_W-1:0]),
+          .i_b      (i_b[HALF_W-1:0]),
+          .o_product(product_low)
+      );
+
+      trike_clmul_karatsuba #(
+          .WIDTH (HALF_W),
+          .LEVELS(LEVELS - 1)
+      ) u_high (
+          .i_a      (i_a[WIDTH-1:HALF_W]),
+          .i_b      (i_b[WIDTH-1:HALF_W]),
+          .o_product(product_high)
+      );
+
+      trike_clmul_karatsuba #(
+          .WIDTH (HALF_W),
+          .LEVELS(LEVELS - 1)
+      ) u_cross (
+          .i_a      (a_cross),
+          .i_b      (b_cross),
+          .o_product(product_cross)
+      );
+
+      assign product_low_wide = {{WIDTH{1'b0}}, product_low};
+      assign product_high_wide = {{WIDTH{1'b0}}, product_high} << WIDTH;
+      assign product_middle_wide =
+          {{WIDTH{1'b0}}, (product_low ^ product_high ^ product_cross)} << HALF_W;
+      assign o_product = product_low_wide ^ product_middle_wide ^ product_high_wide;
+    end
+  endgenerate
+
+`ifndef SYNTHESIS
+  initial begin
+    if (WIDTH < 1) $error("trike_clmul_karatsuba WIDTH must be positive");
+    if (LEVELS < 0) $error("trike_clmul_karatsuba LEVELS must be nonnegative");
+    if ((WIDTH % (1 << LEVELS)) != 0) begin
+      $error("trike_clmul_karatsuba WIDTH must be divisible by 2^LEVELS");
+    end
+  end
+`endif
+
+endmodule
+/* verilator lint_on DECLFILENAME */
+
 // Fixed-schedule multiplication in GF(2)[x]/(x^R_BITS - 1).
 //
 // Operands are little-endian by coefficient: bit zero is x^0. Dense mode
 // accepts WORDS words for operand A. Sparse mode accepts SPARSE_WEIGHT
 // coefficient indices and directly XOR-accumulates cyclic shifts of B. Dense
-// mode uses one digit-serial carryless multiplier, a double-length product
-// RAM, and a fixed reduction schedule.
+// mode uses one digit-serial carryless multiplier, diagonal accumulation, a
+// double-length product RAM, and a fixed reduction schedule.  Dense operand
+// reads are prefetched so one WORD_W/DIGIT_W-cycle window processes each word
+// pair after the initial read.
 //
 // With continuous input and output, busy cycles are:
-//   dense:  11*WORDS + WORDS*WORDS*(1 + 4*WORD_W/DIGIT_W)
+//   dense:  10*WORDS + WORDS*WORDS*(WORD_W/DIGIT_W) + 1
 //   sparse: 4*WORDS + 2*SPARSE_WEIGHT + 8*SPARSE_WEIGHT*WORDS
 // External dense RAM mode bypasses operand loading and result streaming:
-//   external dense: 7*WORDS + WORDS*WORDS*(1 + 4*WORD_W/DIGIT_W)
+//   external dense: 6*WORDS + WORDS*WORDS*(WORD_W/DIGIT_W) + 1
 module trike_poly_mul_core #(
     parameter int R_BITS = 15581,
     parameter int WORD_W = 64,
     parameter int DIGIT_W = 16,
+    parameter int DENSE_KARATSUBA_DEPTH = 0,
     parameter int SPARSE_WEIGHT = 263,
     parameter bit USE_EXTERNAL_DENSE_RAM = 1'b0,
     parameter bit RUNTIME_GEOMETRY = 1'b0,
@@ -72,14 +161,11 @@ module trike_poly_mul_core #(
     ST_LOAD_A,
     ST_LOAD_SPARSE,
     ST_LOAD_B,
-    ST_CLEAR_PRODUCT,
     ST_CLEAR_RESULT,
-    ST_MUL_FETCH_A,
-    ST_MUL_FETCH_B,
-    ST_MUL_READ_LOW,
-    ST_MUL_WRITE_LOW,
-    ST_MUL_READ_HIGH,
-    ST_MUL_WRITE_HIGH,
+    ST_MUL_PREFETCH,
+    ST_MUL_ACCUM,
+    ST_MUL_WRITE_DIAGONAL,
+    ST_MUL_WRITE_CARRY,
     ST_REDUCE_READ_LOW,
     ST_REDUCE_READ_HIGH0,
     ST_REDUCE_READ_HIGH1,
@@ -114,7 +200,8 @@ module trike_poly_mul_core #(
   logic   [                             WORD_W-1:0] active_last_mask_c;
 
   logic   [((R_BITS > 1) ? $clog2(R_BITS) : 1)-1:0] sparse_index_q;
-  logic   [                             WORD_W-1:0] a_word_q;
+  logic   [                             WORD_W-1:0] diagonal_low_q;
+  logic   [                             WORD_W-1:0] diagonal_high_q;
   logic   [                             WORD_W-1:0] reduce_low_q;
   logic   [                             WORD_W-1:0] reduce_high0_q;
 
@@ -160,10 +247,12 @@ module trike_poly_mul_core #(
   logic   [                             WORD_W-1:0] result_rdata;
   logic   [                             WORD_W-1:0] result_mem_rdata;
 
+  logic   [                             WORD_W-1:0] a_word_c;
   logic   [                             WORD_W-1:0] b_word_c;
   logic   [                            DIGIT_W-1:0] a_digit_c;
   logic   [                         (2*WORD_W)-1:0] partial_base_c;
   logic   [                         (2*WORD_W)-1:0] partial_shifted_c;
+  logic   [                         (2*WORD_W)-1:0] karatsuba_product_c;
   logic   [                             WORD_W-1:0] reduced_word_c;
   logic   [                             WORD_W-1:0] sparse_source_word_c;
   logic   [                             WORD_W-1:0] sparse_source_word_q;
@@ -270,16 +359,37 @@ module trike_poly_mul_core #(
   assign o_ext_result_waddr = result_waddr;
   assign o_ext_result_wdata = result_wdata;
 
+  generate
+    if ((DENSE_KARATSUBA_DEPTH > 0) && (DIGIT_W == WORD_W)) begin : g_dense_karatsuba
+      trike_clmul_karatsuba #(
+          .WIDTH (WORD_W),
+          .LEVELS(DENSE_KARATSUBA_DEPTH)
+      ) u_karatsuba (
+          .i_a      (a_word_c),
+          .i_b      (b_word_c),
+          .o_product(karatsuba_product_c)
+      );
+    end else begin : g_no_dense_karatsuba
+      assign karatsuba_product_c = '0;
+    end
+  endgenerate
+
   always_comb begin
     active_last_mask_c = {WORD_W{1'b1}} >> (WORD_W - active_last_bits_q);
+    a_word_c = a_rdata;
+    if (a_word_idx_q == (active_words_q - 1)) a_word_c = a_word_c & active_last_mask_c;
     b_word_c = b_rdata;
     if (b_word_idx_q == (active_words_q - 1)) b_word_c = b_word_c & active_last_mask_c;
 
-    a_digit_c = a_word_q[(digit_idx_q*DIGIT_W)+:DIGIT_W];
+    a_digit_c = a_word_c[(digit_idx_q*DIGIT_W)+:DIGIT_W];
     partial_base_c = '0;
-    for (int bit_idx = 0; bit_idx < DIGIT_W; bit_idx++) begin
-      if (a_digit_c[bit_idx]) begin
-        partial_base_c = partial_base_c ^ ({{WORD_W{1'b0}}, b_word_c} << bit_idx);
+    if (DENSE_KARATSUBA_DEPTH > 0) begin
+      partial_base_c = karatsuba_product_c;
+    end else begin
+      for (int bit_idx = 0; bit_idx < DIGIT_W; bit_idx++) begin
+        if (a_digit_c[bit_idx]) begin
+          partial_base_c = partial_base_c ^ ({{WORD_W{1'b0}}, b_word_c} << bit_idx);
+        end
       end
     end
     partial_shifted_c = partial_base_c << (digit_idx_q * DIGIT_W);
@@ -400,46 +510,49 @@ module trike_poly_mul_core #(
         end
       end
 
-      ST_CLEAR_PRODUCT: begin
-        product_we = 1'b1;
-        product_waddr = PRODUCT_ADDR_W'(word_idx_q);
-      end
-
       ST_CLEAR_RESULT: begin
         result_we = 1'b1;
         result_waddr = WORD_ADDR_W'(word_idx_q);
       end
 
-      ST_MUL_FETCH_A: begin
+      ST_MUL_PREFETCH: begin
         a_re = 1'b1;
         a_raddr = WORD_ADDR_W'(a_word_idx_q);
-      end
-
-      ST_MUL_FETCH_B: begin
         b_re = 1'b1;
         b_raddr = WORD_ADDR_W'(b_word_idx_q);
       end
 
-      ST_MUL_READ_LOW: begin
-        product_re = 1'b1;
-        product_raddr = PRODUCT_ADDR_W'(a_word_idx_q + b_word_idx_q);
+      ST_MUL_ACCUM: begin
+        if ((digit_idx_q == (DIGITS_PER_WORD - 1)) && (b_word_idx_q > 0) &&
+            (a_word_idx_q < (active_words_q - 1))) begin
+          a_re = 1'b1;
+          a_raddr = WORD_ADDR_W'(a_word_idx_q + 1);
+          b_re = 1'b1;
+          b_raddr = WORD_ADDR_W'(b_word_idx_q - 1);
+        end
       end
 
-      ST_MUL_WRITE_LOW: begin
+      ST_MUL_WRITE_DIAGONAL: begin
         product_we = 1'b1;
-        product_waddr = PRODUCT_ADDR_W'(a_word_idx_q + b_word_idx_q);
-        product_wdata = product_rdata ^ partial_shifted_c[WORD_W-1:0];
+        product_waddr = PRODUCT_ADDR_W'(product_idx_q);
+        product_wdata = diagonal_low_q;
+        if (product_idx_q < ((2 * active_words_q) - 2)) begin
+          a_re = 1'b1;
+          b_re = 1'b1;
+          if ((product_idx_q + 1) < active_words_q) begin
+            a_raddr = '0;
+            b_raddr = WORD_ADDR_W'(product_idx_q + 1);
+          end else begin
+            a_raddr = WORD_ADDR_W'((product_idx_q + 1) - (active_words_q - 1));
+            b_raddr = WORD_ADDR_W'(active_words_q - 1);
+          end
+        end
       end
 
-      ST_MUL_READ_HIGH: begin
-        product_re = 1'b1;
-        product_raddr = PRODUCT_ADDR_W'(a_word_idx_q + b_word_idx_q + 1);
-      end
-
-      ST_MUL_WRITE_HIGH: begin
+      ST_MUL_WRITE_CARRY: begin
         product_we = 1'b1;
-        product_waddr = PRODUCT_ADDR_W'(a_word_idx_q + b_word_idx_q + 1);
-        product_wdata = product_rdata ^ partial_shifted_c[(2*WORD_W)-1:WORD_W];
+        product_waddr = PRODUCT_ADDR_W'(product_idx_q + 1);
+        product_wdata = diagonal_high_q;
       end
 
       ST_REDUCE_READ_LOW: begin
@@ -539,7 +652,8 @@ module trike_poly_mul_core #(
       product_idx_q          <= 0;
       output_idx_q           <= 0;
       sparse_index_q         <= '0;
-      a_word_q               <= '0;
+      diagonal_low_q         <= '0;
+      diagonal_high_q        <= '0;
       reduce_low_q           <= '0;
       reduce_high0_q         <= '0;
       active_r_bits_q        <= R_BITS;
@@ -567,7 +681,13 @@ module trike_poly_mul_core #(
               active_last_bits_q <= LAST_BITS;
             end
             if (USE_EXTERNAL_DENSE_RAM) begin
-              state_q <= ST_CLEAR_PRODUCT;
+              a_word_idx_q    <= 0;
+              b_word_idx_q    <= 0;
+              digit_idx_q     <= 0;
+              product_idx_q   <= 0;
+              diagonal_low_q  <= '0;
+              diagonal_high_q <= '0;
+              state_q         <= ST_MUL_PREFETCH;
             end else if (i_sparse_a) begin
               sparse_idx_q <= 0;
               state_q      <= ST_LOAD_SPARSE;
@@ -606,7 +726,13 @@ module trike_poly_mul_core #(
               if (sparse_mode_q) begin
                 state_q <= ST_CLEAR_RESULT;
               end else begin
-                state_q <= ST_CLEAR_PRODUCT;
+                a_word_idx_q    <= 0;
+                b_word_idx_q    <= 0;
+                digit_idx_q     <= 0;
+                product_idx_q   <= 0;
+                diagonal_low_q  <= '0;
+                diagonal_high_q <= '0;
+                state_q         <= ST_MUL_PREFETCH;
               end
             end else begin
               word_idx_q <= word_idx_q + 1;
@@ -624,59 +750,47 @@ module trike_poly_mul_core #(
           end
         end
 
-        ST_CLEAR_PRODUCT: begin
-          if (word_idx_q == ((2 * active_words_q) - 1)) begin
-            a_word_idx_q <= 0;
-            b_word_idx_q <= 0;
-            digit_idx_q  <= 0;
-            state_q      <= ST_MUL_FETCH_A;
-          end else begin
-            word_idx_q <= word_idx_q + 1;
-          end
+        ST_MUL_PREFETCH: begin
+          state_q <= ST_MUL_ACCUM;
         end
 
-        ST_MUL_FETCH_A: begin
-          state_q <= ST_MUL_FETCH_B;
-        end
-
-        ST_MUL_FETCH_B: begin
-          a_word_q <= a_rdata;
-          if (a_word_idx_q == (active_words_q - 1)) a_word_q <= a_rdata & active_last_mask_c;
-          state_q <= ST_MUL_READ_LOW;
-        end
-
-        ST_MUL_READ_LOW: begin
-          state_q <= ST_MUL_WRITE_LOW;
-        end
-
-        ST_MUL_WRITE_LOW: begin
-          state_q <= ST_MUL_READ_HIGH;
-        end
-
-        ST_MUL_READ_HIGH: begin
-          state_q <= ST_MUL_WRITE_HIGH;
-        end
-
-        ST_MUL_WRITE_HIGH: begin
+        ST_MUL_ACCUM: begin
+          diagonal_low_q  <= diagonal_low_q ^ partial_shifted_c[WORD_W-1:0];
+          diagonal_high_q <= diagonal_high_q ^ partial_shifted_c[(2*WORD_W)-1:WORD_W];
           if (digit_idx_q == (DIGITS_PER_WORD - 1)) begin
             digit_idx_q <= 0;
-            if (b_word_idx_q == (active_words_q - 1)) begin
-              b_word_idx_q <= 0;
-              if (a_word_idx_q == (active_words_q - 1)) begin
-                product_idx_q <= 0;
-                state_q       <= ST_REDUCE_READ_LOW;
-              end else begin
-                a_word_idx_q <= a_word_idx_q + 1;
-                state_q      <= ST_MUL_FETCH_A;
-              end
+            if ((b_word_idx_q == 0) || (a_word_idx_q == (active_words_q - 1))) begin
+              state_q <= ST_MUL_WRITE_DIAGONAL;
             end else begin
-              b_word_idx_q <= b_word_idx_q + 1;
-              state_q      <= ST_MUL_FETCH_B;
+              a_word_idx_q <= a_word_idx_q + 1;
+              b_word_idx_q <= b_word_idx_q - 1;
             end
           end else begin
             digit_idx_q <= digit_idx_q + 1;
-            state_q     <= ST_MUL_READ_LOW;
           end
+        end
+
+        ST_MUL_WRITE_DIAGONAL: begin
+          if (product_idx_q == ((2 * active_words_q) - 2)) begin
+            state_q <= ST_MUL_WRITE_CARRY;
+          end else begin
+            product_idx_q   <= product_idx_q + 1;
+            diagonal_low_q  <= diagonal_high_q;
+            diagonal_high_q <= '0;
+            if ((product_idx_q + 1) < active_words_q) begin
+              a_word_idx_q <= 0;
+              b_word_idx_q <= product_idx_q + 1;
+            end else begin
+              a_word_idx_q <= (product_idx_q + 1) - (active_words_q - 1);
+              b_word_idx_q <= active_words_q - 1;
+            end
+            state_q <= ST_MUL_ACCUM;
+          end
+        end
+
+        ST_MUL_WRITE_CARRY: begin
+          product_idx_q <= 0;
+          state_q       <= ST_REDUCE_READ_LOW;
         end
 
         ST_REDUCE_READ_LOW: begin
@@ -810,6 +924,9 @@ module trike_poly_mul_core #(
     if (DIGIT_W < 1) $error("trike_poly_mul_core DIGIT_W must be at least 1");
     if ((WORD_W % DIGIT_W) != 0) begin
       $error("trike_poly_mul_core WORD_W must be divisible by DIGIT_W");
+    end
+    if ((DENSE_KARATSUBA_DEPTH > 0) && (DIGIT_W != WORD_W)) begin
+      $error("trike_poly_mul_core Karatsuba base requires DIGIT_W equal to WORD_W");
     end
     if (SPARSE_WEIGHT < 1) begin
       $error("trike_poly_mul_core SPARSE_WEIGHT must be at least 1");

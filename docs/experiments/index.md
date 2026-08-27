@@ -1,6 +1,9 @@
 # 实验索引
 
-下一个实验ID：`EXP-0115`。
+下一个实验ID：`EXP-0120`。
+
+TRIKE KEM实验的主题归类、依赖和当前推进点见
+[TRIKE KEM优化路线图](../design/trike_kem_optimization_roadmap.md)；本表继续作为按实施时间追加的实验台账。
 
 | ID | 日期 | 主题 | 配置/比较键 | 功能与周期 | Vivado | 结论 | 详情 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -37,7 +40,12 @@
 | EXP-0111 | 2026-08-25 | 统一KEM ASIC首轮物理实现 | 单发射三功能，L32/K4/C256，100 MHz | 沿用统一顶层分层功能门禁；Windows源码版本未记录 | [RUN-20260825-01](../../reports/vivado/manifests/RUN-20260825-01-trike-kem-asic.toml) | `rejected` | [详情](EXP-0111-unified-kem-asic-route.md) |
 | EXP-0112 | 2026-08-25 | H4运行时索引无除法映射 | 三块公开运行时`r/padded_r_bytes`几何 | store、Encaps、Decaps golden及固定周期通过；目标层次无`$div/$mod` | [RUN-20260825-02](../../reports/vivado/manifests/RUN-20260825-02-trike-kem-asic.toml)；internal WNS -3.529 ns | `retained` | [详情](EXP-0112-h4-index-map.md) |
 | EXP-0113 | 2026-08-25 | 固定重量采样索引存储BRAM化 | 最大`877 x 19-bit`索引阵列 | 三阶段共享reference/golden通过；固定周期不变 | [RUN-20260825-04](../../reports/vivado/manifests/RUN-20260825-04-trike-kem-asic-gui.toml)确认1个RAMB36；internal WNS -3.914 ns | `retained` | [详情](EXP-0113-fixed-weight-index-bram.md) |
-| EXP-0114 | 2026-08-25 | SM3结果寄存器局部扇出 | 单SM3，256-bit结果，`max_fanout=8` | SM3 digest/116拍、RTL与单SM3结构门禁通过 | 待GUI Fully Routed复测 | `pending` | [详情](EXP-0114-sm3-result-local-fanout.md) |
+| EXP-0114 | 2026-08-25 | SM3结果寄存器局部扇出 | 单SM3，256-bit结果，`max_fanout=8` | SM3 digest/116拍、RTL与单SM3结构门禁通过 | [RUN-20260826-01](../../reports/vivado/manifests/RUN-20260826-01-trike-kem-asic-sm3-fanout.toml)：SM3退出内部top-20，internal WNS -4.017 ns；fanout/provenance待补 | `pending` | [详情](EXP-0114-sm3-result-local-fanout.md) |
+| EXP-0115 | 2026-08-26 | 64-bit稠密乘法diagonal/Comba调度 | `WORD_W=64,DIGIT_W=16`，保留`2W` product与独立result | TRIKE-2 dense 240,585拍；求逆5,988,878拍；KeyGen byte golden通过 | 待测 | `pending` | [详情](EXP-0115-dense-mul-diagonal-comba.md) |
+| EXP-0116 | 2026-08-27 | diagonal/Comba base-width矩阵 | `WORD_W=64,DIGIT_W=16/32/64`，其余结构相同 | 三档TRIKE-2乘法/求逆golden通过；求逆5,988,878/3,369,294/2,059,502拍 | Yosys LC诊断2,379/3,147/4,252；Vivado待测 | `pending` | [详情](EXP-0116-dense-mul-base-width-matrix.md) |
+| EXP-0117 | 2026-08-27 | 64x64 base Karatsuba深度 | `DIGIT_W=64`，depth 0/1/2/3，外层Comba不变 | 260组base及三档整多项式/求逆golden通过；周期不变 | depth-1 Yosys base LC -19.54%；Vivado待测 | `pending` | [详情](EXP-0117-dense-base-karatsuba.md) |
+| EXP-0118 | 2026-08-27 | 整多项式Karatsuba depth 1 | TRIKE-2，`W=244,H=122`，四个half operand bank | 小参数及官方golden通过；61,977降至50,993拍（-17.72%） | Yosys 2,363 LC/6 RAMB36；Vivado待测 | `pending` | [详情](EXP-0118-dense-poly-karatsuba-depth1.md) |
+| EXP-0119 | 2026-08-27 | 整多项式Karatsuba depth 2 | TRIKE-2，`W=244,Q=61`，八个quarter operand bank | 小参数及官方golden通过；61,977降至44,216拍（-28.66%） | block诊断3,104 LC/10 RAMB36；Vivado待测 | `pending` | [详情](EXP-0119-dense-poly-karatsuba-depth2.md) |
 
 新实验只追加一行。需要详细说明时，详情列链接到`EXP-xxxx-<slug>.md`；Vivado列链接到
 `reports/vivado/manifests/<run-id>.toml`。

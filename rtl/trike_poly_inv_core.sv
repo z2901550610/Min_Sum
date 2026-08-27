@@ -7,9 +7,10 @@
 // products use one dense trike_poly_mul_core instance connected directly to
 // the f/g/t scratch RAMs.
 module trike_poly_inv_core #(
-    parameter int R_BITS  = 15581,
-    parameter int WORD_W  = 64,
-    parameter int DIGIT_W = 16
+    parameter int R_BITS                = 15581,
+    parameter int WORD_W                = 64,
+    parameter int DIGIT_W               = 16,
+    parameter int DENSE_KARATSUBA_DEPTH = 0
 ) (
     input  logic              i_clk,
     input  logic              i_rst_n,
@@ -142,6 +143,7 @@ module trike_poly_inv_core #(
       .R_BITS                (R_BITS),
       .WORD_W                (WORD_W),
       .DIGIT_W               (DIGIT_W),
+      .DENSE_KARATSUBA_DEPTH (DENSE_KARATSUBA_DEPTH),
       .SPARSE_WEIGHT         (1),
       .USE_EXTERNAL_DENSE_RAM(1'b1)
   ) u_mul (

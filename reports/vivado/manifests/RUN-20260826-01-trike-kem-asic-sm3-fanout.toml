@@ -1,0 +1,77 @@
+schema_version = 1
+run_id = "RUN-20260826-01-trike-kem-asic-sm3-fanout"
+experiment_id = "EXP-0114"
+date = "2026-08-26"
+status = "fail"
+verdict = "pending"
+source_revision = "expected-e2fbb8df068c-unconfirmed"
+dirty_tree = true
+report_root = "D:/trike_reports/RUN-20260826-01-trike-kem-asic-sm3-fanout"
+notes = "User supplied Routed utilization, hierarchical utilization, setup-path, synchronous internal-data setup, timing-summary and methodology reports generated from one Vivado GUI implemented design. The two methodology attachments are byte-identical. No run_provenance.txt, high-fanout report or DRC report was supplied, so source revision, compile defines, XDC identity and actual SM3 register replication remain unconfirmed. The shared SM3 output path is absent from the reported worst 20 synchronous internal paths; the new reported internal bottleneck is the Decaps support-sorter FSM state broadcast. Overall and aggregate deltas against RUN-20260825-04 remain qualitative."
+
+[artifacts]
+files = [
+  "post_route_utilization.rpt",
+  "post_route_utilization_hier.rpt",
+  "post_route_timing_summary.rpt",
+  "post_route_setup_paths.rpt",
+  "post_route_internal_data_setup_paths.rpt",
+  "post_route_methodology.rpt",
+]
+sha256_manifest = ""
+routed_utilization_sha256 = "1dbbdbca7f7cd6b3eca5d63165c9a3df82169175ac017d04330ddf593cb54f79"
+routed_hierarchical_utilization_sha256 = "ae41e945cdb0660afdb9e0562502e87e412f732518fbb21cbcf4c0f8af921367"
+routed_timing_summary_sha256 = "9eff86f526acca7ba2ba5257fef656a9b98b6f602263caf03e8ee248ebbfbb40"
+routed_setup_paths_sha256 = "c386f63530d575dda758cb5dc547d12704fdd104d13391cfe3bc43767d8b62f6"
+internal_data_setup_sha256 = "6fff96207312317a200bd659e4421f117a658831df9d5fcc2adda24a476ada79"
+methodology_sha256 = "13b2abfec1db98d1299f5749addd225c3454fbedf9d71571f81b342a656e8adf"
+
+[design]
+top = "trike_kem_asic_top"
+profile = "single-issue KeyGen/Encaps/Decaps; expected TRIKE_UNIFIED, L=32, K=4, C=256, but compile defines are unreported"
+parallel_l = 32
+k_sign_k = 4
+cols_per_tile = 256
+memory_geometry = "Observed 594 RAMB36 plus 122 RAMB18; 655 Block RAM Tile. u_sampler_service/u_sampler remains 338 LUT, 143 FF and one RAMB36. u_sm3_service/u_sm3_compress is 6033 LUT and 4523 FF."
+
+[tool]
+vivado = "2023.2 build 4029153"
+part = "xc7k355tffg901-2L"
+xdc = "unreported; timing constraints show a 10 ns core_clk, 0.100 ns user uncertainty and 2.000 ns output delay"
+report_stage = "fully_routed"
+clock_period_ns = 10.0
+clock_uncertainty_ns = 0.100
+
+[functional]
+fixed_cycles = 0
+tests = ["repository EXP-0114 SM3 digest/116-cycle, check-rtl and single-SM3 structure gates passed separately"]
+result = "Physical reports do not embed source identity; no functional simulation was reported for the supplied Windows source copy"
+
+[results]
+lut = "113478"
+logic_lut = "109159"
+lutram = "4160"
+srl = "159"
+ff = "107758"
+slice = "41224"
+block_ram_tile = "655"
+ramb36 = "594"
+ramb18 = "122"
+dsp = "5"
+bonded_iob = "67"
+setup_wns_ns = "-4.733"
+setup_tns_ns = "-17427.521"
+setup_failing_endpoints = "75498"
+hold_whs_ns = "0.049"
+hold_ths_ns = "0.000"
+pulse_width_wps_ns = "4.232"
+async_recovery_wns_ns = "-3.550"
+async_recovery_tns_ns = "-3309.590"
+async_recovery_failing_endpoints = "57311"
+internal_data_setup_wns_ns = "-4.017"
+overall_setup_path = "u_keygen/poly_byte_q_reg[14]_replica_1 to o_sk_data[0] output boundary; 7.677 ns data path plus 2.000 ns output delay and clock insertion/skew"
+internal_setup_path = "Decaps runtime support_sorter FSM_onehot_state_q_reg[2] to support_q_reg[4][11]; fanout 2033, one LUT level, 14.043 ns data path with 13.741 ns routing"
+secondary_internal_path = "All reported worst 20 synchronous internal paths share the support-sorter FSM state source and support_q destinations; shared SM3 output paths are absent from this top-20 report"
+async_recovery_path = "Decaps decoder reset synchronization to v2c_row_addr_q clear; fanout 9206, 13.297 ns data path with 12.938 ns routing"
+methodology_summary = "1052 warnings: DPIR-1 47, SYNTH-10 4, TIMING-16 1000, ULMTCS-1 1"
+comparison_run = "RUN-20260825-04-trike-kem-asic-gui; qualitative path-class/resource-shape comparison only because both runs lack complete source provenance and the new high-fanout report is missing"

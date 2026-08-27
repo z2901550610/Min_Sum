@@ -9,6 +9,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_TOPS = {
     "decoder.f": "rtl/decoder_top.sv",
+    "trike_poly_mul_karatsuba.f": "rtl/trike_poly_mul_karatsuba_core.sv",
+    "trike_poly_mul_karatsuba2.f": "rtl/trike_poly_mul_karatsuba2_core.sv",
     "trike_poly_inv.f": "rtl/trike_poly_inv_synth_top.sv",
     "trike_pseudohash.f": "rtl/trike_pseudohash_synth_top.sv",
     "trike_encaps.f": "rtl/trike_encaps_synth_top.sv",

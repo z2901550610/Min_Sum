@@ -1,11 +1,14 @@
 `timescale 1ns / 1ps
 
-module tb_trike_poly_mul_reference;
+module tb_trike_poly_mul_reference #(
+    parameter int DUT_DIGIT_W               = 16,
+    parameter int DUT_DENSE_KARATSUBA_DEPTH = 0
+);
   `include "generated/trike_poly_mul_reference_case.svh"
 
   localparam int REF_DENSE_CYCLES =
-      (11 * REF_WORDS) +
-      (REF_WORDS * REF_WORDS * (1 + (4 * REF_WORD_W / REF_DIGIT_W)));
+      (10 * REF_WORDS) +
+      (REF_WORDS * REF_WORDS * (REF_WORD_W / DUT_DIGIT_W)) + 1;
   localparam int REF_SPARSE_CYCLES =
       (4 * REF_WORDS) + (2 * REF_SPARSE_WEIGHT) +
       (8 * REF_SPARSE_WEIGHT * REF_WORDS);
@@ -38,10 +41,11 @@ module tb_trike_poly_mul_reference;
   logic [       REF_WORD_W-1:0] ext_result_wdata;
 
   trike_poly_mul_core #(
-      .R_BITS       (REF_R_BITS),
-      .WORD_W       (REF_WORD_W),
-      .DIGIT_W      (REF_DIGIT_W),
-      .SPARSE_WEIGHT(REF_SPARSE_WEIGHT)
+      .R_BITS               (REF_R_BITS),
+      .WORD_W               (REF_WORD_W),
+      .DIGIT_W              (DUT_DIGIT_W),
+      .DENSE_KARATSUBA_DEPTH(DUT_DENSE_KARATSUBA_DEPTH),
+      .SPARSE_WEIGHT        (REF_SPARSE_WEIGHT)
   ) dut (
       .i_clk                  (clk),
       .i_rst_n                (rst_n),

@@ -12,8 +12,8 @@ module tb_trike_keygen_core_reference #(
 
   `include "generated/trike_keygen_reference_case.svh"
 
-  localparam int EXPECTED_BUSY_CYCLES = 53995036;
-  localparam int EXPECTED_SYNTH_BUSY_CYCLES = 54002607;
+  localparam int EXPECTED_BUSY_CYCLES = 17607119;
+  localparam int EXPECTED_SYNTH_BUSY_CYCLES = 17614690;
   localparam int MAX_R_BITS = 106781;
   localparam int MUL_INDEX_W = $clog2(MAX_R_BITS);
   localparam int H123_WORD_ADDR_W = $clog2((REF_R_BITS + 63) / 64);

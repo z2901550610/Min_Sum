@@ -1,6 +1,9 @@
 `timescale 1ns / 1ps
 
-module tb_trike_poly_inv_reference;
+module tb_trike_poly_inv_reference #(
+    parameter int DUT_DIGIT_W               = 16,
+    parameter int DUT_DENSE_KARATSUBA_DEPTH = 0
+);
 `ifdef TRIKE_MINSUM_INV_FIXTURE
   `include "generated/trike_poly_inv_minsum_case.svh"
 `else
@@ -8,9 +11,8 @@ module tb_trike_poly_inv_reference;
 `endif
 
   localparam int REF_INV_DENSE_MUL_CYCLES =
-      (7 * REF_INV_WORDS) +
-      (REF_INV_WORDS * REF_INV_WORDS *
-       (1 + (4 * REF_INV_WORD_W / REF_INV_DIGIT_W)));
+      (6 * REF_INV_WORDS) +
+      (REF_INV_WORDS * REF_INV_WORDS * (REF_INV_WORD_W / DUT_DIGIT_W)) + 1;
   localparam int REF_INV_CYCLES =
       REF_INV_WORDS +
       (2 * REF_INV_R_BITS * REF_INV_PERMUTATIONS) +
@@ -31,9 +33,10 @@ module tb_trike_poly_inv_reference;
   logic                      done;
 
   trike_poly_inv_core #(
-      .R_BITS (REF_INV_R_BITS),
-      .WORD_W (REF_INV_WORD_W),
-      .DIGIT_W(REF_INV_DIGIT_W)
+      .R_BITS(REF_INV_R_BITS),
+      .WORD_W(REF_INV_WORD_W),
+      .DIGIT_W(DUT_DIGIT_W),
+      .DENSE_KARATSUBA_DEPTH(DUT_DENSE_KARATSUBA_DEPTH)
   ) dut (
       .i_clk         (clk),
       .i_rst_n       (rst_n),

@@ -7,7 +7,7 @@ module tb_trike_poly_mul_core;
   localparam int SPARSE_WEIGHT = 3;
   localparam int WORDS = (R_BITS + WORD_W - 1) / WORD_W;
   localparam int INDEX_W = $clog2(R_BITS);
-  localparam int DENSE_CYCLES = (11 * WORDS) + (WORDS * WORDS * (1 + (4 * WORD_W / DIGIT_W)));
+  localparam int DENSE_CYCLES = (10 * WORDS) + (WORDS * WORDS * (WORD_W / DIGIT_W)) + 1;
   localparam int SPARSE_CYCLES = (4 * WORDS) + (2 * SPARSE_WEIGHT) + (8 * SPARSE_WEIGHT * WORDS);
 
   logic                     clk;
@@ -115,6 +115,10 @@ module tb_trike_poly_mul_core;
     int                support_idx;
     int                result_idx;
     int                stall_count;
+    int                dense_a_read_count;
+    int                dense_b_read_count;
+    int                dense_product_read_count;
+    int                dense_product_write_count;
     logic              a_transfer;
     logic              b_transfer;
     logic              support_transfer;
@@ -137,6 +141,10 @@ module tb_trike_poly_mul_core;
       support_idx = 0;
       result_idx = 0;
       stall_count = 0;
+      dense_a_read_count = 0;
+      dense_b_read_count = 0;
+      dense_product_read_count = 0;
+      dense_product_write_count = 0;
       busy_cycles = 0;
       a_valid = !use_sparse;
       a_data = a_words[0];
@@ -151,6 +159,16 @@ module tb_trike_poly_mul_core;
       while (!done) begin
         @(negedge clk);
         cycle_busy = busy;
+        if (!use_sparse && dut.a_re) dense_a_read_count++;
+        if (!use_sparse && dut.b_re) dense_b_read_count++;
+        if (!use_sparse && dut.product_re) dense_product_read_count++;
+        if (!use_sparse && dut.product_we) begin
+          if (int'(dut.product_waddr) != dense_product_write_count) begin
+            $fatal(1, "dense product write address got=%0d expected=%0d", dut.product_waddr,
+                   dense_product_write_count);
+          end
+          dense_product_write_count++;
+        end
         a_transfer = a_valid && a_ready;
         b_transfer = b_valid && b_ready;
         support_transfer = sparse_index_valid && sparse_index_ready;
@@ -220,6 +238,20 @@ module tb_trike_poly_mul_core;
       end
       if (b_idx != WORDS) $fatal(1, "not all B words transferred");
       if (result_idx != WORDS) $fatal(1, "not all result words transferred");
+      if (!use_sparse) begin
+        if ((dense_a_read_count != (WORDS * WORDS)) ||
+            (dense_b_read_count != (WORDS * WORDS))) begin
+          $fatal(1, "dense operand reads a=%0d b=%0d expected=%0d", dense_a_read_count,
+                 dense_b_read_count, WORDS * WORDS);
+        end
+        if (dense_product_write_count != (2 * WORDS)) begin
+          $fatal(1, "dense product writes=%0d expected=%0d", dense_product_write_count, 2 * WORDS);
+        end
+        if (dense_product_read_count != (3 * WORDS)) begin
+          $fatal(1, "dense product reduction reads=%0d expected=%0d", dense_product_read_count,
+                 3 * WORDS);
+        end
+      end
 
       a_valid = 1'b0;
       sparse_index_valid = 1'b0;

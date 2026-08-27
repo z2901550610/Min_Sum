@@ -5,7 +5,7 @@ module tb_trike_poly_inv_core;
   localparam int WORD_W = 8;
   localparam int DIGIT_W = 4;
   localparam int WORDS = (R_BITS + WORD_W - 1) / WORD_W;
-  localparam int DENSE_MUL_CYCLES = (7 * WORDS) + (WORDS * WORDS * (1 + (4 * WORD_W / DIGIT_W)));
+  localparam int DENSE_MUL_CYCLES = (6 * WORDS) + (WORDS * WORDS * (WORD_W / DIGIT_W)) + 1;
   localparam int PERMUTATIONS = 6;
   localparam int MULTIPLICATIONS = 5;
   localparam int INV_CYCLES =

@@ -41,6 +41,8 @@ TRIKE_POLY_REFERENCE_KAT ?= $(TRIKE_REFERENCE_SOURCE_ROOT)/Test_Vectors/KAT_KEM_
 TRIKE_POLY_REFERENCE_FIXTURE ?= tb/generated/trike_poly_mul_reference_case.svh
 TRIKE_POLY_INV_REFERENCE_FIXTURE ?= tb/generated/trike_poly_inv_reference_case.svh
 TRIKE_MINSUM_POLY_INV_FIXTURE ?= tb/generated/trike_poly_inv_minsum_case.svh
+TRIKE_POLY_DIGIT_W ?= 16
+TRIKE_POLY_KARATSUBA_DEPTH ?= 0
 TRIKE_MINSUM_PROFILE ?= trike160
 TRIKE_MINSUM_PROFILES ?= trike160 trike256 trike384 trike512
 TRIKE_RUNTIME_REFERENCE_DEFINES ?=
@@ -93,6 +95,8 @@ RTL_PKG := rtl/bike_pkg.sv
 RTL_CORE := $(filter-out $(RTL_PKG),$(RTL))
 SM3_COMPRESS_RTL := rtl/sm3_compress.sv rtl/trike_sm3_service.sv
 TRIKE_POLY_INV_RTL := $(call read_filelist,filelists/trike_poly_inv.f)
+TRIKE_POLY_KARATSUBA_RTL := $(call read_filelist,filelists/trike_poly_mul_karatsuba.f)
+TRIKE_POLY_KARATSUBA2_RTL := $(call read_filelist,filelists/trike_poly_mul_karatsuba2.f)
 TRIKE_PSEUDOHASH_RTL := $(call read_filelist,filelists/trike_pseudohash.f)
 TRIKE_ENCAPS_RTL := $(call read_filelist,filelists/trike_encaps.f)
 TRIKE_KEYGEN_RTL := $(call read_filelist,filelists/trike_keygen.f)
@@ -119,7 +123,7 @@ TRIKE_UNIFIED_KSIGN_TIMEOUT_CYCLES ?= 40000000
 CI_SMOKE_SEED ?= 1
 CI_NIGHTLY_TRIALS ?= 4
 
-.PHONY: all sim test test-unit test-kem-unit test-trike-weak-key-reference test-trike-keygen-secret-reference test-trike-keygen-arith-reference test-trike-keygen-core-reference test-trike-keygen-synth-reference test-trike-poly-reference test-trike-poly-inv-reference test-trike-encaps-components-reference test-trike-encaps-hash-reference test-trike-encaps-core-reference test-trike-decaps-syndrome-reference test-trike-error-store-reference test-trike-h4-vector-reference check-trike-sm3-sharing test-integration test-bike-random test-bike-unified-random test-trike-unified-ksign-random model-min-sum run-model-min-sum sweep-min-sum optimum-min-sum campaign-min-sum confirm-min-sum check-model-rtl check-model-rtl-bike128 software-trike-kem test-software-trike-kem test-trike-reference-kat check-local-tools format-rtl check-format-rtl lint-rtl lint-slang check-rtl formal formal-ct-select formal-ct-control verify-rtl vivado-synth vivado-synth-trike-unified-ksign vivado-impl-trike-kem-core vivado-impl-trike-poly-inv vivado-impl-trike-pseudohash vivado-impl-trike-encaps vivado-impl-trike-keygen vivado-impl-trike-decaps vivado-impl-trike-decaps-runtime vivado-impl-trike-kem-cores FORCE
+.PHONY: all sim test test-unit test-kem-unit test-trike-clmul-karatsuba test-trike-poly-base-karatsuba-matrix test-trike-poly-karatsuba-matrix test-trike-poly-karatsuba-core test-trike-poly-karatsuba-reference test-trike-poly-karatsuba2-core test-trike-poly-karatsuba2-reference test-trike-weak-key-reference test-trike-keygen-secret-reference test-trike-keygen-arith-reference test-trike-keygen-core-reference test-trike-keygen-synth-reference test-trike-poly-reference test-trike-poly-inv-reference test-trike-poly-kernel-matrix test-trike-encaps-components-reference test-trike-encaps-hash-reference test-trike-encaps-core-reference test-trike-decaps-syndrome-reference test-trike-error-store-reference test-trike-h4-vector-reference check-trike-sm3-sharing test-integration test-bike-random test-bike-unified-random test-trike-unified-ksign-random model-min-sum run-model-min-sum sweep-min-sum optimum-min-sum campaign-min-sum confirm-min-sum check-model-rtl check-model-rtl-bike128 software-trike-kem test-software-trike-kem test-trike-reference-kat check-local-tools format-rtl check-format-rtl lint-rtl lint-slang check-rtl formal formal-ct-select formal-ct-control verify-rtl vivado-synth vivado-synth-trike-unified-ksign vivado-impl-trike-kem-core vivado-impl-trike-poly-inv vivado-impl-trike-pseudohash vivado-impl-trike-encaps vivado-impl-trike-keygen vivado-impl-trike-decaps vivado-impl-trike-decaps-runtime vivado-impl-trike-kem-cores FORCE
 .PHONY: test-trike-poly-inv-minsum-reference gen-trike-minsum-kem-case test-trike-pseudohash-runtime test-trike-h4-runtime test-trike-ct-verify-runtime test-trike-decaps-postprocess-runtime test-trike-decaps-input-loader test-trike-decaps-input-store test-trike-decaps-syndrome-runtime test-trike-decaps-syndrome-store-core test-trike-decaps-input-syndrome-core test-trike-decaps-support-prefetch test-trike-decaps-input-decoder-load-core test-trike-decaps-decoder-postcheck-core test-trike-fixed-support-sorter-runtime test-trike-decoder-load-adapter-runtime test-trike-decaps-message-reference test-trike-decaps-verify-reference test-trike-decaps-kdf-reference test-trike-decoder-residual-reference test-trike-decaps-pipeline-reference test-trike-decaps-synth-reference test-trike-decaps-runtime-synth-reference test-trike-decaps-runtime-four-profile-reference test-trike-kem-operation-control test-trike-h123-vector-store formal-trike-kem-operation-control
 .PHONY: tool-versions check-tool-versions check-filelists check-records check-trike-reference-data lint-verilator formal-fast formal-nightly formal-ct-control-extended ci-fast ci-smoke ci-nightly ci-kem-reference
 
@@ -161,6 +165,9 @@ test-unit: test-kem-unit
 	@$(SIM) ./obj_dir/Vtb_cnu_b +verilator+quiet
 
 test-kem-unit:
+	@$(MAKE) test-trike-clmul-karatsuba
+	@$(MAKE) test-trike-poly-karatsuba-core
+	@$(MAKE) test-trike-poly-karatsuba2-core
 	@$(MAKE) test-trike-pseudohash-runtime
 	@$(MAKE) test-trike-h4-runtime
 	@$(MAKE) test-trike-ct-verify-runtime
@@ -261,6 +268,37 @@ test-trike-h123-vector-store:
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_h123_vector_store rtl/ram_bram.sv rtl/trike_h123_vector_store.sv tb/tb_trike_h123_vector_store.sv
 	@$(SIM) ./obj_dir/Vtb_trike_h123_vector_store +verilator+quiet
 
+test-trike-clmul-karatsuba:
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_clmul_karatsuba rtl/trike_poly_mul_core.sv tb/tb_trike_clmul_karatsuba.sv
+	@$(SIM) ./obj_dir/Vtb_trike_clmul_karatsuba +verilator+quiet
+
+test-trike-poly-base-karatsuba-matrix:
+	@$(MAKE) test-trike-clmul-karatsuba
+	@$(MAKE) test-trike-poly-reference test-trike-poly-inv-reference TRIKE_POLY_DIGIT_W=64 TRIKE_POLY_KARATSUBA_DEPTH=1
+	@$(MAKE) test-trike-poly-reference test-trike-poly-inv-reference TRIKE_POLY_DIGIT_W=64 TRIKE_POLY_KARATSUBA_DEPTH=2
+	@$(MAKE) test-trike-poly-reference test-trike-poly-inv-reference TRIKE_POLY_DIGIT_W=64 TRIKE_POLY_KARATSUBA_DEPTH=3
+
+test-trike-poly-karatsuba-core:
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_poly_mul_karatsuba_core $(TRIKE_POLY_KARATSUBA_RTL) tb/tb_trike_poly_mul_karatsuba_core.sv
+	@$(SIM) ./obj_dir/Vtb_trike_poly_mul_karatsuba_core +verilator+quiet
+
+test-trike-poly-karatsuba-reference: $(TRIKE_POLY_REFERENCE_FIXTURE)
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_poly_mul_karatsuba_reference $(TRIKE_POLY_KARATSUBA_RTL) tb/tb_trike_poly_mul_karatsuba_reference.sv
+	@$(SIM) ./obj_dir/Vtb_trike_poly_mul_karatsuba_reference +verilator+quiet
+
+test-trike-poly-karatsuba2-core:
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_poly_mul_karatsuba2_core $(TRIKE_POLY_KARATSUBA2_RTL) tb/tb_trike_poly_mul_karatsuba2_core.sv
+	@$(SIM) ./obj_dir/Vtb_trike_poly_mul_karatsuba2_core +verilator+quiet
+
+test-trike-poly-karatsuba2-reference: $(TRIKE_POLY_REFERENCE_FIXTURE)
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_poly_mul_karatsuba2_reference $(TRIKE_POLY_KARATSUBA2_RTL) tb/tb_trike_poly_mul_karatsuba2_reference.sv
+	@$(SIM) ./obj_dir/Vtb_trike_poly_mul_karatsuba2_reference +verilator+quiet
+
+test-trike-poly-karatsuba-matrix:
+	@$(MAKE) test-trike-clmul-karatsuba
+	@$(MAKE) test-trike-poly-karatsuba-core test-trike-poly-karatsuba-reference
+	@$(MAKE) test-trike-poly-karatsuba2-core test-trike-poly-karatsuba2-reference
+
 test-trike-keygen-core-reference: $(TRIKE_KEYGEN_REFERENCE_FIXTURE)
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_keygen_core_reference rtl/trike_inv_schedule_pkg.sv rtl/ram_bram.sv $(SM3_COMPRESS_RTL) rtl/sm3_hash_stream.sv rtl/sm3_df_stream.sv rtl/trike_sm3_drng_instantiate_stream.sv rtl/trike_sm3_drng_generate_stream.sv rtl/trike_sampler_candidate.sv rtl/trike_fixed_weight_sampler.sv rtl/trike_drng_weight_sampler.sv rtl/trike_weak_key_test.sv rtl/trike_keygen_secret_sampler.sv rtl/trike_parity_map_stream.sv rtl/trike_h123_vectors.sv rtl/trike_h123_vector_store.sv rtl/trike_poly_mul_core.sv rtl/trike_poly_inv_core.sv rtl/trike_keygen_arith_core.sv rtl/trike_keygen_core.sv tb/tb_trike_keygen_core_reference.sv
 	@$(SIM) ./obj_dir/Vtb_trike_keygen_core_reference +verilator+quiet
@@ -281,7 +319,7 @@ $(TRIKE_POLY_REFERENCE_FIXTURE): scripts/gen_trike_poly_mul_fixture.py $(TRIKE_P
 		--output "$@"
 
 test-trike-poly-reference: $(TRIKE_POLY_REFERENCE_FIXTURE)
-	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_poly_mul_reference rtl/ram_bram.sv rtl/trike_poly_mul_core.sv tb/tb_trike_poly_mul_reference.sv
+	@$(VERILATOR) $(VERILATOR_FLAGS) -GDUT_DIGIT_W=$(TRIKE_POLY_DIGIT_W) -GDUT_DENSE_KARATSUBA_DEPTH=$(TRIKE_POLY_KARATSUBA_DEPTH) --top-module tb_trike_poly_mul_reference rtl/ram_bram.sv rtl/trike_poly_mul_core.sv tb/tb_trike_poly_mul_reference.sv
 	@$(SIM) ./obj_dir/Vtb_trike_poly_mul_reference +verilator+quiet
 
 $(TRIKE_POLY_INV_REFERENCE_FIXTURE): scripts/gen_trike_poly_inv_fixture.py $(TRIKE_POLY_REFERENCE_KAT)
@@ -296,11 +334,16 @@ $(TRIKE_MINSUM_POLY_INV_FIXTURE): scripts/gen_trike_poly_inv_fixture.py scripts/
 		--output "$@"
 
 test-trike-poly-inv-reference: $(TRIKE_POLY_INV_REFERENCE_FIXTURE)
-	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_poly_inv_reference rtl/trike_inv_schedule_pkg.sv rtl/ram_bram.sv rtl/trike_poly_mul_core.sv rtl/trike_poly_inv_core.sv tb/tb_trike_poly_inv_reference.sv
+	@$(VERILATOR) $(VERILATOR_FLAGS) -GDUT_DIGIT_W=$(TRIKE_POLY_DIGIT_W) -GDUT_DENSE_KARATSUBA_DEPTH=$(TRIKE_POLY_KARATSUBA_DEPTH) --top-module tb_trike_poly_inv_reference rtl/trike_inv_schedule_pkg.sv rtl/ram_bram.sv rtl/trike_poly_mul_core.sv rtl/trike_poly_inv_core.sv tb/tb_trike_poly_inv_reference.sv
 	@$(SIM) ./obj_dir/Vtb_trike_poly_inv_reference +verilator+quiet
 
+test-trike-poly-kernel-matrix:
+	@$(MAKE) test-trike-poly-reference test-trike-poly-inv-reference TRIKE_POLY_DIGIT_W=16
+	@$(MAKE) test-trike-poly-reference test-trike-poly-inv-reference TRIKE_POLY_DIGIT_W=32
+	@$(MAKE) test-trike-poly-reference test-trike-poly-inv-reference TRIKE_POLY_DIGIT_W=64
+
 test-trike-poly-inv-minsum-reference: $(TRIKE_MINSUM_POLY_INV_FIXTURE)
-	@$(VERILATOR) $(VERILATOR_FLAGS) -DTRIKE_MINSUM_INV_FIXTURE --top-module tb_trike_poly_inv_reference rtl/trike_inv_schedule_pkg.sv rtl/ram_bram.sv rtl/trike_poly_mul_core.sv rtl/trike_poly_inv_core.sv tb/tb_trike_poly_inv_reference.sv
+	@$(VERILATOR) $(VERILATOR_FLAGS) -DTRIKE_MINSUM_INV_FIXTURE -GDUT_DIGIT_W=$(TRIKE_POLY_DIGIT_W) -GDUT_DENSE_KARATSUBA_DEPTH=$(TRIKE_POLY_KARATSUBA_DEPTH) --top-module tb_trike_poly_inv_reference rtl/trike_inv_schedule_pkg.sv rtl/ram_bram.sv rtl/trike_poly_mul_core.sv rtl/trike_poly_inv_core.sv tb/tb_trike_poly_inv_reference.sv
 	@$(SIM) ./obj_dir/Vtb_trike_poly_inv_reference +verilator+quiet
 
 gen-trike-minsum-kem-case: $(MIN_SUM_MODEL)
