@@ -1,8 +1,6 @@
 # BIKE Syndrome 输入 Min-Sum 解码器
 
-## 概述
-
-本项目实现一个 BIKE/MDPC 风格的 syndrome 输入 min-sum 解码器。校验矩阵由 `N0` 个 circulant block 横向拼接：
+本项目实现一个 BIKE/TRIKE 风格的 syndrome 输入 min-sum 解码器。校验矩阵由 `N0` 个 circulant block 横向拼接：
 
 ```text
 H = [H0 | H1 | ... | H(N0-1)]
@@ -18,14 +16,7 @@ diag_idx_global = b * W + k
 
 顶层接口包含 syndrome 写入、H 第一列写入、启动、错误估计读出和完成状态。译码主循环固定执行 `I_MAX` 轮，不使用收敛提前停止。
 
-## 文档导航
-
-- [decoder_hardware_design_guide.md](decoder_hardware_design_guide.md)：面向硬件设计初学者、按完整译码数据流组织的架构与实现说明
-- [decoder_architecture.md](decoder_architecture.md)：模块划分、数据通路、存储职责和控制边界
-- [tile_decoder_design.md](tile_decoder_design.md)：tile 几何、guard 规则、状态组织和 C2V/V2C 公式
-- [decoder_schedule.md](decoder_schedule.md)：固定窗口调度、状态、计数器和周期预算
-- [decoder_verification.md](../verification/decoder_verification.md)：回归入口、随机用例和残差检查
-- [naming_conventions.md](naming_conventions.md)：RTL 命名规则
+完整数据通路、存储组织和固定调度说明见 [decoder_hardware_design_guide.md](decoder_hardware_design_guide.md)；回归入口见 [decoder_verification.md](../verification/decoder_verification.md)；命名规则见 [naming_conventions.md](naming_conventions.md)。
 
 ## 参数
 

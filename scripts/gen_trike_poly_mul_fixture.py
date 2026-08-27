@@ -7,49 +7,13 @@ import argparse
 from pathlib import Path
 import struct
 
-
-WORD_W = 64
-
-
-def first_hex_field(kat_text: str, name: str) -> bytes:
-    prefix = f"{name} = "
-    for line in kat_text.splitlines():
-        if line.startswith(prefix):
-            return bytes.fromhex(line[len(prefix) :])
-    raise ValueError(f"missing {name} field in KAT")
-
-
-def cyclic_multiply(a_data: bytes, b_data: bytes, r_bits: int) -> bytes:
-    a_value = int.from_bytes(a_data, "little")
-    b_value = int.from_bytes(b_data, "little")
-    product = 0
-    while a_value:
-        low_bit = a_value & -a_value
-        product ^= b_value << (low_bit.bit_length() - 1)
-        a_value ^= low_bit
-
-    mask = (1 << r_bits) - 1
-    reduced = (product & mask) ^ (product >> r_bits)
-    return (reduced & mask).to_bytes((r_bits + 7) // 8, "little")
-
-
-def words_from_bytes(data: bytes, word_count: int) -> list[int]:
-    padded = data + bytes((word_count * (WORD_W // 8)) - len(data))
-    return [
-        int.from_bytes(padded[offset : offset + (WORD_W // 8)], "little")
-        for offset in range(0, len(padded), WORD_W // 8)
-    ]
-
-
-def format_word_array(name: str, words: list[int]) -> list[str]:
-    lines = [
-        f"localparam logic [REF_WORD_W-1:0] {name} [0:REF_WORDS-1] = '{{"
-    ]
-    for index, word in enumerate(words):
-        suffix = "," if index != (len(words) - 1) else ""
-        lines.append(f"    64'h{word:016x}{suffix}")
-    lines.append("};")
-    return lines
+from trike_fixture_utils import (
+    WORD_W,
+    cyclic_multiply_bytes,
+    first_hex_field,
+    format_word_array,
+    words_from_bytes,
+)
 
 
 def generate_fixture(kat_path: Path, output_path: Path, r_bits: int, weight: int) -> None:
@@ -81,8 +45,8 @@ def generate_fixture(kat_path: Path, output_path: Path, r_bits: int, weight: int
     if secret_r2 != public_r2:
         raise ValueError("public and secret r2 encodings differ")
 
-    dense_result = cyclic_multiply(t0, public_r2, r_bits)
-    sparse_result = cyclic_multiply(h0, public_r2, r_bits)
+    dense_result = cyclic_multiply_bytes(t0, public_r2, r_bits)
+    sparse_result = cyclic_multiply_bytes(h0, public_r2, r_bits)
     word_count = (r_bits + WORD_W - 1) // WORD_W
 
     lines = [
@@ -95,24 +59,18 @@ def generate_fixture(kat_path: Path, output_path: Path, r_bits: int, weight: int
         "localparam int REF_INDEX_W = $clog2(REF_R_BITS);",
         "",
     ]
-    lines.extend(format_word_array("REF_DENSE_A", words_from_bytes(t0, word_count)))
-    lines.append("")
-    lines.extend(
-        format_word_array("REF_DENSE_B", words_from_bytes(public_r2, word_count))
-    )
-    lines.append("")
-    lines.extend(
-        format_word_array(
-            "REF_DENSE_RESULT", words_from_bytes(dense_result, word_count)
+    for name, data in (
+        ("REF_DENSE_A", t0),
+        ("REF_DENSE_B", public_r2),
+        ("REF_DENSE_RESULT", dense_result),
+        ("REF_SPARSE_RESULT", sparse_result),
+    ):
+        lines.extend(
+            format_word_array(
+                name, words_from_bytes(data, word_count), width="REF_WORD_W-1:0"
+            )
         )
-    )
-    lines.append("")
-    lines.extend(
-        format_word_array(
-            "REF_SPARSE_RESULT", words_from_bytes(sparse_result, word_count)
-        )
-    )
-    lines.append("")
+        lines.append("")
     lines.append(
         "localparam logic [REF_INDEX_W-1:0] "
         "REF_SPARSE_INDICES [0:REF_SPARSE_WEIGHT-1] = '{"

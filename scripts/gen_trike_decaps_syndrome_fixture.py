@@ -6,8 +6,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from gen_trike_encaps_fixture import (
-    R_BITS,
+from trike_fixture_utils import (
     WORD_W,
     cyclic_multiply,
     first_hex_field,
@@ -16,6 +15,7 @@ from gen_trike_encaps_fixture import (
 )
 
 
+R_BITS = 15581
 SECRET_WEIGHT = 35
 
 
@@ -43,8 +43,8 @@ def generate_fixture(kat_path: Path, output_path: Path) -> None:
     t0_value = int.from_bytes(t0, "little")
     u_value = int.from_bytes(u, "little")
     v_value = int.from_bytes(v, "little")
-    syndrome_value = cyclic_multiply(h0_value, u_value) ^ cyclic_multiply(
-        t0_value, u_value ^ v_value
+    syndrome_value = cyclic_multiply(h0_value, u_value, R_BITS) ^ cyclic_multiply(
+        t0_value, u_value ^ v_value, R_BITS
     )
     syndrome = syndrome_value.to_bytes(r_bytes, "little")
 
@@ -69,7 +69,7 @@ def generate_fixture(kat_path: Path, output_path: Path) -> None:
         ("REF_V_WORDS", v),
         ("REF_SYNDROME_WORDS", syndrome),
     ):
-        lines.extend(format_word_array(name, words_from_bytes(data)))
+        lines.extend(format_word_array(name, words_from_bytes(data, words)))
         lines.append("")
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

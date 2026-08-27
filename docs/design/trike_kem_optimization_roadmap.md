@@ -1,8 +1,8 @@
 # TRIKE KEM优化路线图
 
 > 更新日期：2026-08-27<br>
-> 起点源码：`e2fbb8df068c`；EXP-0115至0119工作树待提交。
-> 当前推进点：EXP-0119整多项式Karatsuba depth 2已通过局部与TRIKE-2 reference，等待同条件Vivado物理门。
+> 起点源码：`e2fbb8df068c`；EXP-0115至0120工作树待提交。
+> 当前推进点：EXP-0120短求逆链通过局部功能与固定周期门，下一门是KeyGen集成回归和求逆同源物理复测。
 
 本文是TRIKE KEM优化工作的长期推进入口，回答三个问题：已经完成哪些架构收敛、当前门禁是什么、
 下一个实验应验证什么。当前成品架构仍以[实现状态](implementation_status.md)为准，实验细节以
@@ -45,6 +45,7 @@
 | Encaps tagged pass | `planned` | 算法和constant-access方案已评估 | RTL、访问轨迹和route | G5 |
 | Frobenius单元 | `planned` | 当前固定`2r`拍基线 | direct/repeated交叉点 | G6 |
 | Divstep inverter | `research` | Racing BIKE公开设计空间 | TRIKE同条件系统AT | G7 |
+| Addition-chain inverter | `in_progress` | EXP-0120官方inverse/KeyGen算术golden及D16/32/64周期矩阵 | 完整KeyGen与Vivado结果 | G7 |
 | Karatsuba + Comba | `in_progress` | EXP-0117 base及EXP-0118/0119 word-array depth 1/2 | TRIKE-9 golden与Vivado实测 | G8 |
 
 ## 已有EXP证据地图
@@ -191,6 +192,11 @@ syndrome集成周期。不能以Racing BIKE的不同器件结果替代本工程r
 选择指标是KeyGen系统的增量面积、routed latency和AT。TRIKE仍需要D×D，因此不把BIKE中“ExtGCD移除
 dense multiplier”的面积收益带入模型。
 
+EXP-0120实现TRIKE-2低寄存器短链：保持`f/g/t`三份整环scratch，以公开bank角色执行18次置换和17次
+乘法。D16/32/64局部reference固定周期为4,635,018/2,610,794/1,598,682拍，官方inverse golden、
+`r=13` toy与`r=12589`旧链均通过；KeyGen算术逐word golden固定10,066,537拍。完整KeyGen和Vivado门禁
+完成前保持`pending`；Bernstein-Yang/divstep继续作为独立架构点，不与短链或乘法核接口改动合并。
+
 ### G8：Karatsuba + Comba
 
 前置条件：Comba base已经稳定。按depth 0、1、2推进；只有depth 2仍改善系统`cycles/Fmax`与AT时才运行
@@ -200,10 +206,10 @@ EXP-0117先隔离64x64 base递归：depth 1在Yosys独立base中较schoolbook Es
 depth 2/3因重组XOR反而增加，所有点周期不变。base层只保留depth 1进入Vivado；整多项式层另设公开
 Karatsuba depth，使用banked halves保证cross product不增加秘密相关访问或双倍读拍。EXP-0118的depth 1
 在TRIKE-2由61,977降至50,993拍（-17.72%），Yosys诊断为6个RAMB36；先以depth 2确认更深递归能否
-补偿bank和重组代价。EXP-0119的depth 2进一步降至44,216拍，但TRIKE-2 block诊断增至10个RAMB36；
-TRIKE-9公式为1,646,057拍且depth 1/2静态block容量同为19个RAMB36。depth 2进入同条件Vivado门，
-depth 3暂停。Toom-3至少等到word-array depth-2 Karatsuba完成物理门后再比较，避免同时引入评价/插值
-scratch和新RAM带宽。
+补偿bank和重组代价。两点Fully Routed诊断的内部WNS为`+2.032/+1.483 ns`；depth 2的内部诊断延时
+下降7.32%，代价是LUT/Slice/RAMB36增加35.47%/40.12%/66.67%。depth 1保留为平衡点，depth 2保留为
+最低延时点；缺失provenance使其不能成为正式基线。TRIKE-9公式为1,646,057拍且两档静态block容量同为
+19个RAMB36。depth 3暂停，Toom-3等待求逆系统门后再比较。
 
 ### G9：统一KEM收敛
 
@@ -254,5 +260,6 @@ Frobenius结果，G8依赖稳定Comba base，因此不能提前。
 4. **统一时序方向**：support sorter和reset分别立项，不与算术结构混改。
 5. **后置决策**：tagged Encaps、divstep与Karatsuba。
 
-研究依据、周期模型和文献比较见
-[TRIKE KEM硬件优化分析](TRIKE_HARDWARE_OPTIMIZATION_ANALYSIS.md)。
+研究依据、周期模型和文献比较见已归档的调研快照
+[TRIKE KEM硬件优化分析](../archive/TRIKE_HARDWARE_OPTIMIZATION_ANALYSIS.md)；
+其活跃结论已由本路线图和实验索引接管。

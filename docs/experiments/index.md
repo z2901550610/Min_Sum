@@ -1,6 +1,6 @@
 # 实验索引
 
-下一个实验ID：`EXP-0120`。
+下一个实验ID：`EXP-0121`。
 
 TRIKE KEM实验的主题归类、依赖和当前推进点见
 [TRIKE KEM优化路线图](../design/trike_kem_optimization_roadmap.md)；本表继续作为按实施时间追加的实验台账。
@@ -44,8 +44,9 @@ TRIKE KEM实验的主题归类、依赖和当前推进点见
 | EXP-0115 | 2026-08-26 | 64-bit稠密乘法diagonal/Comba调度 | `WORD_W=64,DIGIT_W=16`，保留`2W` product与独立result | TRIKE-2 dense 240,585拍；求逆5,988,878拍；KeyGen byte golden通过 | 待测 | `pending` | [详情](EXP-0115-dense-mul-diagonal-comba.md) |
 | EXP-0116 | 2026-08-27 | diagonal/Comba base-width矩阵 | `WORD_W=64,DIGIT_W=16/32/64`，其余结构相同 | 三档TRIKE-2乘法/求逆golden通过；求逆5,988,878/3,369,294/2,059,502拍 | Yosys LC诊断2,379/3,147/4,252；Vivado待测 | `pending` | [详情](EXP-0116-dense-mul-base-width-matrix.md) |
 | EXP-0117 | 2026-08-27 | 64x64 base Karatsuba深度 | `DIGIT_W=64`，depth 0/1/2/3，外层Comba不变 | 260组base及三档整多项式/求逆golden通过；周期不变 | depth-1 Yosys base LC -19.54%；Vivado待测 | `pending` | [详情](EXP-0117-dense-base-karatsuba.md) |
-| EXP-0118 | 2026-08-27 | 整多项式Karatsuba depth 1 | TRIKE-2，`W=244,H=122`，四个half operand bank | 小参数及官方golden通过；61,977降至50,993拍（-17.72%） | Yosys 2,363 LC/6 RAMB36；Vivado待测 | `pending` | [详情](EXP-0118-dense-poly-karatsuba-depth1.md) |
-| EXP-0119 | 2026-08-27 | 整多项式Karatsuba depth 2 | TRIKE-2，`W=244,Q=61`，八个quarter operand bank | 小参数及官方golden通过；61,977降至44,216拍（-28.66%） | block诊断3,104 LC/10 RAMB36；Vivado待测 | `pending` | [详情](EXP-0119-dense-poly-karatsuba-depth2.md) |
+| EXP-0118 | 2026-08-27 | 整多项式Karatsuba depth 1 | TRIKE-2，`W=244,H=122`，四个half operand bank | 小参数及官方golden通过；61,977降至50,993拍（-17.72%） | [RUN-20260827-01](../../reports/vivado/manifests/RUN-20260827-01-trike-poly-mul-k1.toml)：2,740 LUT/6 RAMB36；internal WNS +2.032 ns | `pending` | [详情](EXP-0118-dense-poly-karatsuba-depth1.md) |
+| EXP-0119 | 2026-08-27 | 整多项式Karatsuba depth 2 | TRIKE-2，`W=244,Q=61`，八个quarter operand bank | 小参数及官方golden通过；61,977降至44,216拍（-28.66%） | [RUN-20260827-02](../../reports/vivado/manifests/RUN-20260827-02-trike-poly-mul-k2.toml)：3,712 LUT/10 RAMB36；internal WNS +1.483 ns | `pending` | [详情](EXP-0119-dense-poly-karatsuba-depth2.md) |
+| EXP-0120 | 2026-08-27 | TRIKE-2低寄存器短求逆链 | `r=15581`，三份整环scratch，D16/32/64 | 18次置换/17次乘法；官方golden固定4,635,018/2,610,794/1,598,682拍 | 待测 | `pending` | [详情](EXP-0120-trike2-short-inversion-chain.md) |
 
 新实验只追加一行。需要详细说明时，详情列链接到`EXP-xxxx-<slug>.md`；Vivado列链接到
 `reports/vivado/manifests/<run-id>.toml`。

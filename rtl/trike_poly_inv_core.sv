@@ -2,7 +2,8 @@
 
 // Fixed-schedule inversion in GF(2)[x]/(x^R_BITS - 1).
 //
-// The public R-dependent addition chain matches the TRIKE Reference C. Each
+// The public R-dependent addition chain uses a low-register short chain for
+// TRIKE-2 and the reference binary chains for the remaining profiles. Each
 // Frobenius map is a fixed 2*R_BITS-cycle bit permutation. All polynomial
 // products use one dense trike_poly_mul_core instance connected directly to
 // the f/g/t scratch RAMs.
@@ -30,6 +31,10 @@ module trike_poly_inv_core #(
   localparam int LAST_BITS = R_BITS - ((WORDS - 1) * WORD_W);
   localparam int WORD_ADDR_W = (WORDS > 1) ? $clog2(WORDS) : 1;
   localparam int STAGE_COUNT = trike_inv_schedule_pkg::trike_inv_stage_count(R_BITS);
+  localparam bit USE_SHORT_CHAIN = trike_inv_schedule_pkg::trike_inv_uses_short_chain(R_BITS);
+  localparam int SHORT_OPERATION_COUNT = trike_inv_schedule_pkg::trike_inv_short_operation_count(
+      R_BITS
+  );
   localparam logic [WORD_W-1:0] LAST_MASK = {WORD_W{1'b1}} >> (WORD_W - LAST_BITS);
 
   typedef enum logic [3:0] {
@@ -53,7 +58,9 @@ module trike_poly_inv_core #(
 
   logic                     perm_source_t_q;
   logic                     perm_final_q;
+  logic                     perm_mul_source_t_q;
   logic                     perm_mul_dest_t_q;
+  logic                     mul_source_t_q;
   logic                     mul_dest_t_q;
   logic   [     WORD_W-1:0] perm_word_accum_q;
 
@@ -169,7 +176,7 @@ module trike_poly_inv_core #(
       .i_result_ready         (1'b0),
       .o_ext_a_re             (mul_ext_a_re),
       .o_ext_a_raddr          (mul_ext_a_raddr),
-      .i_ext_a_rdata          (mul_dest_t_q ? t_rdata : f_rdata),
+      .i_ext_a_rdata          (mul_source_t_q ? t_rdata : f_rdata),
       .o_ext_b_re             (mul_ext_b_re),
       .o_ext_b_raddr          (mul_ext_b_raddr),
       .i_ext_b_rdata          (g_rdata),
@@ -248,7 +255,7 @@ module trike_poly_inv_core #(
 
       ST_MUL_WAIT: begin
         if (mul_ext_a_re) begin
-          if (mul_dest_t_q) begin
+          if (mul_source_t_q) begin
             t_re = 1'b1;
             t_raddr = mul_ext_a_raddr;
           end else begin
@@ -291,18 +298,20 @@ module trike_poly_inv_core #(
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin
-      state_q           <= ST_IDLE;
-      word_idx_q        <= 0;
-      stage_q           <= 1;
-      perm_bit_idx_q    <= 0;
-      perm_pos_q        <= 0;
-      perm_l_q          <= 0;
-      perm_source_t_q   <= 1'b0;
-      perm_final_q      <= 1'b0;
-      perm_mul_dest_t_q <= 1'b0;
-      mul_dest_t_q      <= 1'b0;
-      perm_word_accum_q <= '0;
-      o_done            <= 1'b0;
+      state_q             <= ST_IDLE;
+      word_idx_q          <= 0;
+      stage_q             <= 1;
+      perm_bit_idx_q      <= 0;
+      perm_pos_q          <= 0;
+      perm_l_q            <= 0;
+      perm_source_t_q     <= 1'b0;
+      perm_final_q        <= 1'b0;
+      perm_mul_source_t_q <= 1'b0;
+      perm_mul_dest_t_q   <= 1'b0;
+      mul_source_t_q      <= 1'b0;
+      mul_dest_t_q        <= 1'b0;
+      perm_word_accum_q   <= '0;
+      o_done              <= 1'b0;
     end else begin
       o_done <= 1'b0;
 
@@ -317,15 +326,28 @@ module trike_poly_inv_core #(
         ST_LOAD: begin
           if (i_input_valid) begin
             if (word_idx_q == (WORDS - 1)) begin
-              stage_q           <= 1;
-              perm_bit_idx_q    <= 0;
-              perm_pos_q        <= 0;
-              perm_l_q          <= trike_inv_schedule_pkg::trike_inv_l0(R_BITS, 1);
-              perm_source_t_q   <= 1'b0;
-              perm_final_q      <= 1'b0;
-              perm_mul_dest_t_q <= 1'b0;
+              stage_q <= USE_SHORT_CHAIN ? 0 : 1;
+              perm_bit_idx_q <= 0;
+              perm_pos_q <= 0;
+              perm_l_q <= USE_SHORT_CHAIN ? trike_inv_schedule_pkg::trike_inv_short_perm_l(
+                  R_BITS, 0
+              ) : trike_inv_schedule_pkg::trike_inv_l0(
+                  R_BITS, 1
+              );
+              perm_source_t_q   <= USE_SHORT_CHAIN ?
+                  trike_inv_schedule_pkg::trike_inv_short_b_source_t(
+                  R_BITS, 0
+              ) : 1'b0;
+              perm_final_q <= 1'b0;
+              perm_mul_source_t_q <= USE_SHORT_CHAIN ?
+                  trike_inv_schedule_pkg::trike_inv_short_a_source_t(
+                  R_BITS, 0
+              ) : 1'b0;
+              perm_mul_dest_t_q <= USE_SHORT_CHAIN ? trike_inv_schedule_pkg::trike_inv_short_dest_t(
+                  R_BITS, 0
+              ) : 1'b0;
               perm_word_accum_q <= '0;
-              state_q           <= ST_PERM_READ;
+              state_q <= ST_PERM_READ;
             end else begin
               word_idx_q <= word_idx_q + 1;
             end
@@ -348,8 +370,9 @@ module trike_poly_inv_core #(
               word_idx_q <= 0;
               state_q    <= ST_OUTPUT_FETCH;
             end else begin
-              mul_dest_t_q <= perm_mul_dest_t_q;
-              state_q      <= ST_MUL_START;
+              mul_source_t_q <= perm_mul_source_t_q;
+              mul_dest_t_q   <= perm_mul_dest_t_q;
+              state_q        <= ST_MUL_START;
             end
           end else begin
             perm_bit_idx_q <= perm_bit_idx_q + 1;
@@ -368,34 +391,66 @@ module trike_poly_inv_core #(
 
         ST_MUL_WAIT: begin
           if (mul_ext_result_we && (mul_ext_result_waddr == WORD_ADDR_W'(WORDS - 1))) begin
-            if (!mul_dest_t_q && (trike_inv_schedule_pkg::trike_inv_l1(R_BITS, stage_q) != 0)) begin
-              perm_bit_idx_q    <= 0;
-              perm_pos_q        <= 0;
-              perm_l_q          <= trike_inv_schedule_pkg::trike_inv_l1(R_BITS, stage_q);
-              perm_source_t_q   <= 1'b0;
-              perm_final_q      <= 1'b0;
-              perm_mul_dest_t_q <= 1'b1;
+            if (USE_SHORT_CHAIN && (stage_q == (SHORT_OPERATION_COUNT - 1))) begin
+              perm_bit_idx_q      <= 0;
+              perm_pos_q          <= 0;
+              perm_l_q            <= trike_inv_schedule_pkg::trike_inv_l0(R_BITS, 1);
+              perm_source_t_q     <= 1'b0;
+              perm_final_q        <= 1'b1;
+              perm_mul_source_t_q <= 1'b0;
+              perm_mul_dest_t_q   <= 1'b0;
+              perm_word_accum_q   <= '0;
+              state_q             <= ST_PERM_READ;
+            end else if (USE_SHORT_CHAIN) begin
+              stage_q <= stage_q + 1;
+              perm_bit_idx_q <= 0;
+              perm_pos_q <= 0;
+              perm_l_q <= trike_inv_schedule_pkg::trike_inv_short_perm_l(R_BITS, stage_q + 1);
+              perm_source_t_q <= trike_inv_schedule_pkg::trike_inv_short_b_source_t(
+                  R_BITS, stage_q + 1
+              );
+              perm_final_q <= 1'b0;
+              perm_mul_source_t_q <= trike_inv_schedule_pkg::trike_inv_short_a_source_t(
+                  R_BITS, stage_q + 1
+              );
+              perm_mul_dest_t_q <= trike_inv_schedule_pkg::trike_inv_short_dest_t(
+                  R_BITS, stage_q + 1
+              );
               perm_word_accum_q <= '0;
-              state_q           <= ST_PERM_READ;
+              state_q <= ST_PERM_READ;
+            end else if (!mul_dest_t_q && (trike_inv_schedule_pkg::trike_inv_l1(
+                    R_BITS, stage_q
+                ) != 0)) begin
+              perm_bit_idx_q      <= 0;
+              perm_pos_q          <= 0;
+              perm_l_q            <= trike_inv_schedule_pkg::trike_inv_l1(R_BITS, stage_q);
+              perm_source_t_q     <= 1'b0;
+              perm_final_q        <= 1'b0;
+              perm_mul_source_t_q <= 1'b1;
+              perm_mul_dest_t_q   <= 1'b1;
+              perm_word_accum_q   <= '0;
+              state_q             <= ST_PERM_READ;
             end else if (stage_q == (STAGE_COUNT - 1)) begin
-              perm_bit_idx_q    <= 0;
-              perm_pos_q        <= 0;
-              perm_l_q          <= trike_inv_schedule_pkg::trike_inv_l0(R_BITS, 1);
-              perm_source_t_q   <= 1'b1;
-              perm_final_q      <= 1'b1;
-              perm_mul_dest_t_q <= 1'b0;
-              perm_word_accum_q <= '0;
-              state_q           <= ST_PERM_READ;
+              perm_bit_idx_q      <= 0;
+              perm_pos_q          <= 0;
+              perm_l_q            <= trike_inv_schedule_pkg::trike_inv_l0(R_BITS, 1);
+              perm_source_t_q     <= 1'b1;
+              perm_final_q        <= 1'b1;
+              perm_mul_source_t_q <= 1'b0;
+              perm_mul_dest_t_q   <= 1'b0;
+              perm_word_accum_q   <= '0;
+              state_q             <= ST_PERM_READ;
             end else begin
-              stage_q           <= stage_q + 1;
-              perm_bit_idx_q    <= 0;
-              perm_pos_q        <= 0;
-              perm_l_q          <= trike_inv_schedule_pkg::trike_inv_l0(R_BITS, stage_q + 1);
-              perm_source_t_q   <= 1'b0;
-              perm_final_q      <= 1'b0;
-              perm_mul_dest_t_q <= 1'b0;
-              perm_word_accum_q <= '0;
-              state_q           <= ST_PERM_READ;
+              stage_q             <= stage_q + 1;
+              perm_bit_idx_q      <= 0;
+              perm_pos_q          <= 0;
+              perm_l_q            <= trike_inv_schedule_pkg::trike_inv_l0(R_BITS, stage_q + 1);
+              perm_source_t_q     <= 1'b0;
+              perm_final_q        <= 1'b0;
+              perm_mul_source_t_q <= 1'b0;
+              perm_mul_dest_t_q   <= 1'b0;
+              perm_word_accum_q   <= '0;
+              state_q             <= ST_PERM_READ;
             end
           end
         end
@@ -442,6 +497,9 @@ module trike_poly_inv_core #(
   initial begin
     if (STAGE_COUNT == 0) begin
       $error("trike_poly_inv_core unsupported R_BITS");
+    end
+    if (USE_SHORT_CHAIN && (SHORT_OPERATION_COUNT == 0)) begin
+      $error("trike_poly_inv_core short chain has no operations");
     end
     if (WORD_W < 2) $error("trike_poly_inv_core WORD_W must be at least 2");
     if ((WORD_W % DIGIT_W) != 0) begin

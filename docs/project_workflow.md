@@ -1,39 +1,42 @@
-# 项目记录与基线工作流
+# Project Record and Baseline Workflow
 
-## 信息边界
+## Information Boundaries
 
-| 问题 | 唯一主要记录 |
+| Question | Primary Record |
 | --- | --- |
-| RTL具体改了什么 | Git commit/diff |
-| 为什么做架构、RAM、周期、资源或时序实验 | `docs/experiments/index.md`及必要的`EXP-xxxx-*.md` |
-| 一次Vivado运行的精确条件和数字 | `reports/vivado/manifests/*.toml` |
-| 当前哪个物理结果是基线 | `docs/design/vivado_baseline_registry.md` |
-| 当前成品架构和验证状态 | `docs/design/implementation_status.md` |
-| TRIKE KEM优化推进到哪里、下一门禁是什么 | `docs/design/trike_kem_optimization_roadmap.md` |
-| Vivado原始`.rpt`/`.dcp` | `D:/trike_reports/<run-id>/` |
+| What exactly changed in the RTL | Git commit/diff |
+| Why an architecture, RAM, cycle, resource, or timing experiment was done | `docs/experiments/index.md` plus any necessary `EXP-xxxx-*.md` |
+| Exact conditions and numbers of one Vivado run | `reports/vivado/manifests/*.toml` |
+| Which physical result is currently the baseline | `docs/design/vivado_baseline_registry.md` |
+| Current production architecture and verification state | `docs/design/implementation_status.md` |
+| How far TRIKE KEM optimization has progressed and what the next gate is | `docs/design/trike_kem_optimization_roadmap.md` |
+| Raw Vivado `.rpt`/`.dcp` files | `D:/trike_reports/<run-id>/` |
 
-Git负责普通修改，不为格式化、拼写、局部bugfix或等价重构建立实验项。只有形成
-可验证假设、需要避免重复探索或会改变物理/周期判断时，才增加实验记录。
+Git records ordinary changes. Do not create experiment entries for formatting, spelling fixes, local bugfixes, or equivalent refactors. Add an experiment record only when it forms a verifiable hypothesis, avoids duplicate exploration, or changes a physical/cycle judgment.
 
-## 实验流程
+## Experiment Flow
 
-1. 在索引分配下一个`EXP-xxxx`，用一句话写清假设和比较对象。
-2. 提交可复现的起点，一次实验只改一个主要结构变量。
-3. 记录功能、固定周期、K=3/K=4和公开参数覆盖；未运行的层明确写`pending`。
-   多项式运算和SM3探索迭代优先运行受影响单元、独立reference、固定周期/访问计数和静态检查；完整KEM
-   只在候选准备保留、接口边界变化或发布/里程碑时运行。
-4. 每次Vivado运行分配唯一`RUN-YYYYMMDD-NN-<top>`，原始报告放在同名外部目录，
-   仓库仅提交TOML manifest。KEM实现脚本同时生成`run_provenance.txt`，记录run ID、Git revision、
-   dirty状态、filelist、defines、XDC、器件和实现directive。
-5. 将器件、Vivado、XDC、参数、`L/K`、存储几何、时钟和报告阶段完全一致的运行
-   标记为`comparable`；否则只能单列。
-6. 结论只使用`retained`、`rejected`、`pending`、`incomparable`或`superseded`。
-7. 只有`retained`且完整placed/routed的运行才能更新基线注册表；形成当前架构时再更新
-   `implementation_status.md`。
+1. Assign the next `EXP-xxxx` in the index and state the hypothesis and comparison target in one sentence.
+2. Commit a reproducible starting point; change only one main structural variable per experiment.
+3. Record functional, fixed-cycle, K=3/K=4, and public parameter coverage; write `pending` explicitly for layers that were not run.
+   For polynomial arithmetic and SM3 exploration iterations, prefer running the affected units, independent reference, fixed-cycle/access-count, and static checks; run the full KEM only when a candidate is ready to be retained, an interface boundary changed, or at a release/milestone.
+4. Assign each Vivado run a unique `RUN-YYYYMMDD-NN-<top>`, keep raw reports in an external directory of the same name, and commit only the TOML manifest into the repository. The KEM implementation scripts also generate `run_provenance.txt` recording run ID, Git revision, dirty state, filelist, defines, XDC, device, and implementation directives.
+5. Mark runs with identical device, Vivado version, XDC, parameters, `L/K`, storage geometry, clock, and report stage as `comparable`; otherwise list them separately.
+6. Conclusions use only `retained`, `rejected`, `pending`, `incomparable`, or `superseded`.
+7. Only `retained`, complete placed/routed runs may update the baseline registry; update `implementation_status.md` when they form the current architecture.
 
-## 生成物
+## Generated Products
 
-- 可重建仿真数据、Verilator产物、波形、日志和Vivado运行目录不进入Git。
-- 对于必须依赖外部KAT的fixture，Make目标和`config/local.mk.example`共同记录重建入口。
-- 报告、演示文稿和临时导出物使用与`build/`分离的明确交付目录，不依赖未说明的
-  `output`/`outputs`名称差异。
+- Rebuildable simulation data, Verilator products, waveforms, logs, and Vivado run directories do not enter Git.
+- For fixtures that must rely on external KATs, the Make targets and `config/local.mk.example` together record the rebuild entrypoints.
+- Reports, presentations, and temporary exports use explicit delivery directories separate from `build/`, and do not rely on unstated `output`/`outputs` naming differences.
+
+## Toolchain Update Workflow
+
+1. Audit actual executables and installation sources before upgrading; do not infer freshness from a tool name alone.
+2. Compare stable package-manager metadata and official upstream tags. Keep a newer validated development snapshot when replacing it with a stable tag would be a downgrade.
+3. Upgrade only the selected RTL tools, not the whole host package set. Keep recoverable versioned installs for manually managed binaries.
+4. Update `config/rtl_toolchain.lock` after the selected versions are installed.
+5. Run `make check-tool-versions`, `make check-rtl`, `make formal-fast`, and the smallest relevant simulations before accepting the lock update. Run `make ci-fast` for the complete local gate.
+6. A tool upgrade that changes formatting or diagnostics requires an audited mechanical update or a narrowly documented exception; do not restore global non-fatal warning flags.
+7. Vivado versions are project baselines and are not upgraded as part of the open-source local tool refresh. Re-run comparable Vivado implementation before using a new Vivado version for resource or timing claims.

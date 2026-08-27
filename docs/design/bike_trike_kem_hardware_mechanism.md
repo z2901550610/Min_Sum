@@ -274,12 +274,12 @@ flowchart TB
 
 提交材料提供 TRIKE-2/5/7/9 四档 KAT。
 
-| 参数集 | $r$ | 每块秘密重量 $d=w/3$ | 总重量 $w$ | 错误总重量 $t$ | $\ell$ | 公钥 byte | 密文 byte |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| TRIKE-2 | 15,581 | 35 | 105 | 263 | 256 | 1,980 | 3,928 |
-| TRIKE-5 | 35,363 | 55 | 165 | 429 | 256 | 4,453 | 8,874 |
-| TRIKE-7 | 69,691 | 83 | 249 | 659 | 512 | 8,776 | 17,488 |
-| TRIKE-9 | 114,043 | 111 | 333 | 877 | 512 | 14,320 | 28,576 |
+| 参数集 | $r$ | 每块秘密重量 $d=w/3$ | 总重量 $w$ | 错误总重量 $t$ | $\ell$ | 公钥 byte | 密文 byte | 共享密钥 byte |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| TRIKE-2 | 15,581 | 35 | 105 | 263 | 256 | 1,980 | 3,928 | 32 |
+| TRIKE-5 | 35,363 | 55 | 165 | 429 | 256 | 4,453 | 8,874 | 32 |
+| TRIKE-7 | 69,691 | 83 | 249 | 659 | 512 | 8,776 | 17,488 | 64 |
+| TRIKE-9 | 114,043 | 111 | 333 | 877 | 512 | 14,320 | 28,576 | 64 |
 
 TRIKE 使用三个秘密块和三个错误块：
 
@@ -385,7 +385,7 @@ flowchart TB
 - $r_1h_0$ 可由 $h_0$ support 驱动固定 $d$ 槽稀疏乘法；$h_1/h_2$ 通过固定长度 XOR 注入；
 - 其余公钥派生乘法按稠密模式执行。
 
-本仓库 [trike_poly_inv_core.sv](../../rtl/trike_poly_inv_core.sv) 使用公开 $r$ 决定的 Frobenius/addition-chain 调度，链长、乘法次数和 RAM 地址数不依赖输入系数。`WORD_W=64, DIGIT_W=16`时，TRIKE-2 官方 KAT 的求逆 reference 对拍周期为 5,988,878 拍；该数字是 RTL 固定周期，不是端到端 KeyGen 周期。
+本仓库 [trike_poly_inv_core.sv](../../rtl/trike_poly_inv_core.sv) 使用公开 $r$ 决定的 Frobenius/addition-chain 调度，链长、乘法次数和 RAM 地址数不依赖输入系数。TRIKE-2使用18次置换和17次乘法；`WORD_W=64, DIGIT_W=16`时，官方 KAT 的求逆 reference 对拍周期为4,635,018拍。该数字是 RTL 固定周期，不是端到端 KeyGen 周期。
 
 ### 10.2 weak-key test 与固定周期
 
@@ -495,36 +495,12 @@ Encaps 需要四次稀疏错误块乘稠密环元素：
 
 TRIKE 使用 55-byte，即 440-bit 的 DRNG 状态 $V$、常量 $C$ 和 reseed counter。
 
-```mermaid
-flowchart TB
-    subgraph FUNC["TRIKE 逻辑函数"]
-        SECRET["秘密 support 采样"]
-        H123["H1/H2/H3"]
-        H4["H4"]
-    end
+Instantiate(seed) 依次执行：
 
-    SECRET --> INST["DRNG Instantiate"]
-    H123 --> INST
-    H4 --> INST
-
-    subgraph INSTANTIATE["Instantiate(seed)"]
-        INST --> DF1["V = SM3_df(seed)"]
-        DF1 --> DF2["C = SM3_df(0x00 || V)"]
-        DF2 --> RC["reseed_counter = 1"]
-    end
-
-    subgraph GENERATE["Generate(N byte)"]
-        RC --> GH["SM3(V), SM3(V+1), ...<br/>产生公开长度输出"]
-        GH --> UH["H = 0^184 || SM3(0x03 || V)"]
-        UH --> ADD["V = V + H + C + counter mod 2^440"]
-        ADD --> INC["counter = counter + 1"]
-    end
-
-    DF1 -. "哈希命令" .-> SVC["trike_sm3_service"]
-    DF2 -. "哈希命令" .-> SVC
-    GH -. "哈希命令" .-> SVC
-    UH -. "哈希命令" .-> SVC
-    SVC --> COMP["唯一物理 sm3_compress"]
+```text
+V = SM3_df(seed)
+C = SM3_df(0x00 || V)
+reseed_counter = 1
 ```
 
 ### 12.1 SM3_df
@@ -537,7 +513,7 @@ digest2 = SM3(0x02 || 0x000001b8 || input)
 output  = digest1 || first_184_bits(digest2)
 ```
 
-`0x000001b8` 是大端的 440。Instantiate 中 seed DF 和 `0x00 || V` DF 可以共享一个物理压缩核，但需要分别维护 block 构造和 chaining context。
+`0x000001b8` 是大端的 440。
 
 ### 12.2 DRNG Generate
 
@@ -549,6 +525,8 @@ output  = digest1 || first_184_bits(digest2)
 4. 更新 440-bit $V$、$C$ 和 reseed counter。
 
 `Generate(4 byte)` 仍执行输出哈希和状态更新哈希，只截取首 4 byte。输出长度短不等于省略状态更新。
+
+DF、Instantiate、Generate 的哈希命令都汇入同一个物理 SM3 压缩服务；RTL 服务结构、两遍可重放输入接口和固定周期数（DF 314、Instantiate 916、64-byte Generate 708 拍）见 [trike_kem_common_cores.md](trike_kem_common_cores.md) 的 SM3_df 与 SM3-DRNG 小节。
 
 ## 13. TRIKE K/L 的 pseudohash512
 
@@ -568,32 +546,7 @@ inner = SM3((key xor 0x36) || message)
 outer = SM3((key xor 0x5c) || inner)
 ```
 
-因此一次 pseudohash512 包含四个逻辑 SM3 hash context：HMAC inner、HMAC outer、$h_1$ 和 $h_2$。它们按固定顺序共享一个物理 SM3 压缩核；消息 RAM需要支持两遍重放。
-
-```mermaid
-flowchart TB
-    MSG["message RAM，两遍重放"]
-
-    subgraph PH["pseudohash512"]
-        MSG --> HM["HMAC-SM3(key, 0x0200 || message)"]
-        MSG --> H1["SM3(message || 0x0200)"]
-        HM --> H2["SM3(k1 || h1)"]
-        H1 --> H2
-        H1 --> OUT["h1 || h2"]
-        H2 --> OUT
-    end
-
-    subgraph HMAC["HMAC-SM3"]
-        IN["SM3((key xor ipad) || input)"] --> OU["SM3((key xor opad) || inner_digest)"]
-    end
-
-    HM -. "展开" .-> IN
-    IN -. "压缩命令" .-> SVC["共享 trike_sm3_service"]
-    OU -. "压缩命令" .-> SVC
-    H1 -. "压缩命令" .-> SVC
-    H2 -. "压缩命令" .-> SVC
-    SVC --> COMP["一个 sm3_compress"]
-```
+因此一次 pseudohash512 包含四个逻辑 SM3 hash context：HMAC inner、HMAC outer、$h_1$ 和 $h_2$。它们按固定顺序共享一个物理 SM3 压缩核；消息 RAM 需要支持两遍重放。RTL 流式接口、两遍重放命令和 32-byte 消息固定 1,128 拍见 [trike_kem_common_cores.md](trike_kem_common_cores.md) 的 pseudohash512 小节。
 
 ## 14. SM3 压缩核最底层
 
@@ -623,7 +576,7 @@ flowchart TB
     FFWD --> DIG["256-bit新 chaining state"]
 ```
 
-本仓库 [sm3_compress.sv](../../rtl/sm3_compress.sv) 的接口约定为 network byte order：第一个消息 word 位于 `i_block[511:480]`，第一个 chaining word 位于 `i_state[255:224]`。实现用 52 拍生成 $W_{16}\ldots W_{67}$，再用 64 拍执行压缩轮，每个 block 固定 busy 116 拍。
+本仓库 [sm3_compress.sv](../../rtl/sm3_compress.sv) 实现这一数据通路，接口字节序、启动/完成握手和每 block 固定 116 拍的约定见 [trike_kem_common_cores.md](trike_kem_common_cores.md) 的 SM3 压缩核小节。
 
 “一个 SM3 压缩核”不等于只有一个逻辑 hash context。HMAC inner/outer、DF 两个 pass、DRNG 输出/更新和 pseudohash 的 $h_1/h_2$ 都需要各自的小型状态机和 chaining context，但它们不并发占用压缩轮数据通路。
 
@@ -704,7 +657,7 @@ flowchart TB
 | parity mapper | [trike_parity_map_stream.sv](../../rtl/trike_parity_map_stream.sv) | 偶/奇映射、padding清零和固定周期toy测试 |
 | fixed-weight采样 | [trike_fixed_weight_sampler.sv](../../rtl/trike_fixed_weight_sampler.sv) | 碰撞/无碰撞结果与相同周期测试 |
 | 环乘法 | [trike_poly_mul_core.sv](../../rtl/trike_poly_mul_core.sv) | toy与TRIKE-2 KAT派生fixture对拍 |
-| 环求逆 | [trike_poly_inv_core.sv](../../rtl/trike_poly_inv_core.sv) | toy 272拍；TRIKE-2 KAT 5,988,878拍 |
+| 环求逆 | [trike_poly_inv_core.sv](../../rtl/trike_poly_inv_core.sv) | toy 272拍；TRIKE-2 KAT 4,635,018拍 |
 
 这些结果证明 RTL 功能、固定控制边界和层次实例收敛。LUT、FF、Slice、Block RAM Tile、DSP、setup WNS/TNS、hold WHS、Fmax 和 `cycles/Fmax` 需要目标 Vivado 在同一器件、XDC、参数和报告阶段给出，不能由逻辑 bit 数或 Yosys 实例数推断。
 

@@ -6,14 +6,8 @@
 
 ## KEM依赖
 
-四个随包参数集为：
-
-| 参数集 | $r$ | $d$ | $t$ | $M$ | 公钥byte | 密文byte | 共享密钥byte |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| TRIKE-2 | 15,581 | 35 | 263 | 256 | 1,980 | 3,928 | 32 |
-| TRIKE-5 | 35,363 | 55 | 429 | 256 | 4,453 | 8,874 | 32 |
-| TRIKE-7 | 69,691 | 83 | 659 | 512 | 8,776 | 17,488 | 64 |
-| TRIKE-9 | 114,043 | 111 | 877 | 512 | 14,320 | 28,576 | 64 |
+四个随包参数集（TRIKE-2/5/7/9 的 $r$、$d$、$t$、$\ell$、公钥/密文/共享密钥长度）见
+[BIKE 与 TRIKE KEM 机制及硬件核分层指南](bike_trike_kem_hardware_mechanism.md)第8节的参数表。
 
 KEM数据通路需要以下模块：
 
@@ -27,15 +21,10 @@ KEM数据通路需要以下模块：
 8. 公钥、私钥和密文的little-endian byte序列化控制器。
 
 H1/H2/H3由同一个SM3-DRNG上下文连续输出`t1`、`t2`、`r1`。H4使用`m || r2`初始化SM3-DRNG，
-每个候选消耗32 bit随机数，并计算
-
-$$
-\text{candidate}=\text{pos}+
-\operatorname{high}_{32}\left(\text{random}\cdot(\text{len}-\text{pos})\right).
-$$
-
-检测到candidate与已选位置重复时选择`pos`。循环边界由公开的$t$确定，硬件实现需要每次都执行固定次数的
-查重读取或采用固定深度的确定性bank调度。
+每个候选消耗32 bit随机数并按multiply-high映射候选位置；碰撞时选择`pos`，循环边界由公开的
+$t$确定。候选映射公式和固定调用粒度的完整说明见
+[BIKE 与 TRIKE KEM 机制及硬件核分层指南](bike_trike_kem_hardware_mechanism.md)第11.1节。
+硬件实现需要每次都执行固定次数的查重读取或采用固定深度的确定性bank调度。
 
 Reference C对每个candidate分别调用一次4-byte DRNG Generate。每次Generate都会更新`V`和
 `reseed_counter`，因此H4控制器需要执行恰好$t$次Generate(4 byte)，不能把它等价为一次
@@ -84,7 +73,7 @@ flowchart TD
 `trike_poly_mul_core`顺序完成
 `h0*r1`、`t0`、`t0*t2`和`r2`四次乘法，用一个`trike_poly_inv_core`顺序完成两个分母的固定链求逆。
 分子加`h1/h2`与第二个分母加`h0`在RAM写入或读取边界直接XOR稀疏word mask。生产稠密路径使用
-`WORD_W=64, DIGIT_W=16`；TRIKE-2连续握手固定12,774,257拍，逐word匹配官方`t0/r2`。该功能
+`WORD_W=64, DIGIT_W=16`；TRIKE-2连续握手固定10,066,537拍，逐word匹配官方`t0/r2`。该功能
 边界包含两个物理乘法数据通路：外层通用乘法器一条，
 求逆核内部复用的一条；收敛为单一乘法器需要给求逆核增加外部乘法服务接口并重新验证周期与时序。
 第一次分母装载完成后，`t1`原多项式生命周期结束，同一bank依次保存第一次与第二次inverse；算术核
@@ -93,8 +82,8 @@ flowchart TD
 外层`u_t0_output_mem`与`u_r2_output_mem`通过external result store接口直接服务算术核。前一组保存`t0`；
 后一组保存两阶段numerator，并在最终`OP_MUL_R2`完整装载numerator和inverse后原位写入`r2`。固定结果
 重放与后续PK/SK序列化继续读取这两组同步RAM。读写角色只由公开FSM选择，统一层次的算术核不展开本地
-result store。算术逐word、KeyGen core和窄I/O reference分别固定12,774,257、17,607,119和
-17,614,690拍。
+result store。算术逐word reference固定10,066,537拍；KeyGen core和窄I/O reference的完整固定周期
+待短链集成门禁刷新。
 
 `trike_keygen_core`的随机输入为96 byte，顺序是`key_seed || sigma2 || sigma`，对应Reference C向外部
 随机源发出的三次32-byte请求。顶层顺序运行固定候选秘密采样、H1/H2/H3、KeyGen算术和密钥输出；秘密
@@ -559,10 +548,11 @@ $$
 从而使用一次稀疏×稠密和一次稠密×稠密操作。乘法核的accumulator、循环地址生成和scratch RAM在两种
 模式间共享。
 
-`trike_poly_inv_core`实现最新四档Reference C的固定加法链求逆。`trike_inv_schedule_pkg`保存每档公开
-$r$对应的Frobenius置换步长；控制器在三份同步scratch RAM中维护`f/g/t`，对每个置换固定执行
-`2r`拍读取/捕获，再调用同一个稠密`trike_poly_mul_core`。链长、置换步长、乘法次数和RAM地址数量只由
-公开$r$确定，不根据输入多项式次数、系数或中间值分支。
+`trike_poly_inv_core`实现公开参数固定的加法链求逆。TRIKE-2使用17步低寄存器短链，其余支持档使用
+Reference C二进制链；`trike_inv_schedule_pkg`保存对应的Frobenius置换步长和公开bank角色。控制器在三份
+同步scratch RAM中维护`f/g/t`，对每个置换固定执行`2r`拍读取/捕获，再调用同一个稠密
+`trike_poly_mul_core`。链长、置换步长、乘法次数和RAM地址数量只由公开$r$确定，不根据输入多项式次数、
+系数或中间值分支。
 
 求逆实例将`trike_poly_mul_core`配置为外部稠密RAM模式。乘法状态机通过同步读地址直接访问`f/t`和`g`，
 所有word乘积完成后才进入归约，因此可以安全地将结果直接覆盖源`f/t`。该elaboration不生成乘法器内部
@@ -856,9 +846,9 @@ KeyGen秘密support阶段采用16组公开固定候选预算。官方Count=0在�
 | `tb_trike_keygen_secret_sampler_reference` | 官方TRIKE-2 Count=0的105个秘密索引、六项分数、最终DRNG状态和固定4,778,975拍 |
 | `tb_trike_keygen_secret_sampler_schedule` | 候选0为弱、候选1合格时的首合格选择、完整support和相同4,778,975拍 |
 | `tb_trike_keygen_arith_core` | 13-bit环的两组完整`t0/r2`计算、结果padding与相同603拍 |
-| `tb_trike_keygen_arith_reference` | 官方TRIKE-2的`t1/t2/r1`和三组support输入，逐word检查`t0/r2`及固定12,774,257拍 |
-| `tb_trike_keygen_core_reference` | 官方与弱首候选两组完整KeyGen，逐byte检查1,980-byte PK、6,328-byte SK及相同17,607,119拍 |
-| `tb_trike_keygen_core_reference`，`USE_SYNTH_TOP=1` | 官方向量经输入/PK/SK寄存窄流wrapper，逐byte检查完整密钥及固定17,614,690拍 |
+| `tb_trike_keygen_arith_reference` | 官方TRIKE-2的`t1/t2/r1`和三组support输入，逐word检查`t0/r2`及固定10,066,537拍 |
+| `tb_trike_keygen_core_reference` | 官方与弱首候选两组完整KeyGen，逐byte检查1,980-byte PK、6,328-byte SK；短链周期待复测 |
+| `tb_trike_keygen_core_reference`，`USE_SYNTH_TOP=1` | 官方向量经输入/PK/SK寄存窄流wrapper，逐byte检查完整密钥；短链周期待复测 |
 | `tb_trike_error_support_store_reference` | 官方TRIKE-2的263个support位置、5,952-byte padded error RAM和固定6,478拍 |
 | `tb_trike_h4_error_vector_reference` | 官方TRIKE-2 H4至两种错误表示的组合服务，完整RAM逐byte/逐index对拍和固定207,018拍 |
 | `tb_trike_poly_mul_core` | 13-bit非word对齐环的稠密/稀疏乘法、越界index dummy写回、数据无关周期和backpressure稳定性 |
@@ -906,9 +896,10 @@ $h_0r_2$输出固定69,366拍，两组15581-bit结果均逐word匹配。13-bit t
 $3W$次归约读。
 
 `make test-trike-poly-inv-reference`使用同一官方TRIKE-2 KAT中的稠密$h_0$。fixture生成器使用独立
-Python多项式Euclid计算golden并额外验证$h_0h_0^{-1}=1$；RTL使用Reference C固定Frobenius加法链，
-15581-bit结果逐word匹配，连续流busy周期固定为5,988,878拍。toy回归对两组不同可逆输入均为272拍，
-并检查结果输出停顿期间payload保持稳定、busy只增加公开停顿拍数。
+Python多项式Euclid计算golden并额外验证$h_0h_0^{-1}=1$；RTL使用18次固定Frobenius置换和17次稠密
+乘法，15581-bit结果逐word匹配。`DIGIT_W=16/32/64`的连续流busy周期固定为
+4,635,018/2,610,794/1,598,682拍，其中64-bit点使用base Karatsuba depth 1。toy回归对两组不同可逆
+输入均为272拍，并检查结果输出停顿期间payload保持稳定、busy只增加公开停顿拍数。
 
 `make test-trike-encaps-components-reference`使用`gen_trike_encaps_fixture.py`恢复的官方Count=0中间量。
 生成器首先独立重算并验证完整CT/SS，然后RTL逐byte/逐word检查H1/H2/H3、H4和u/v；连续流固定周期分别

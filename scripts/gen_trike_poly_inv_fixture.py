@@ -7,71 +7,14 @@ import argparse
 import hashlib
 from pathlib import Path
 
-
-WORD_W = 64
-
-
-def first_hex_field(kat_text: str, name: str) -> bytes:
-    prefix = f"{name} = "
-    for line in kat_text.splitlines():
-        if line.startswith(prefix):
-            return bytes.fromhex(line[len(prefix) :])
-    raise ValueError(f"missing {name} field in KAT")
-
-
-def cyclic_reduce(value: int, r_bits: int) -> int:
-    mask = (1 << r_bits) - 1
-    while value.bit_length() > r_bits:
-        value = (value & mask) ^ (value >> r_bits)
-    return value & mask
-
-
-def cyclic_multiply(a_value: int, b_value: int, r_bits: int) -> int:
-    product = 0
-    while a_value:
-        low_bit = a_value & -a_value
-        product ^= b_value << (low_bit.bit_length() - 1)
-        a_value ^= low_bit
-    return cyclic_reduce(product, r_bits)
-
-
-def polynomial_inverse(value: int, r_bits: int) -> int:
-    modulus = (1 << r_bits) | 1
-    u = value
-    v = modulus
-    g1 = 1
-    g2 = 0
-    while u != 1:
-        if u == 0:
-            raise ValueError("fixture polynomial is not invertible")
-        shift = u.bit_length() - v.bit_length()
-        if shift < 0:
-            u, v = v, u
-            g1, g2 = g2, g1
-            shift = -shift
-        u ^= v << shift
-        g1 ^= g2 << shift
-    inverse = cyclic_reduce(g1, r_bits)
-    if cyclic_multiply(value, inverse, r_bits) != 1:
-        raise ValueError("generated inverse does not multiply to one")
-    return inverse
-
-
-def words_from_value(value: int, word_count: int) -> list[int]:
-    mask = (1 << WORD_W) - 1
-    return [(value >> (word * WORD_W)) & mask for word in range(word_count)]
-
-
-def format_word_array(name: str, words: list[int]) -> list[str]:
-    lines = [
-        f"localparam logic [REF_INV_WORD_W-1:0] {name} "
-        "[0:REF_INV_WORDS-1] = '{"
-    ]
-    for index, word in enumerate(words):
-        suffix = "," if index != (len(words) - 1) else ""
-        lines.append(f"    64'h{word:016x}{suffix}")
-    lines.append("};")
-    return lines
+from trike_fixture_utils import (
+    WORD_W,
+    first_hex_field,
+    format_word_array,
+    polynomial_inverse,
+    words_from_value,
+)
+from gen_trike_inv_schedule import inversion_counts
 
 
 def deterministic_invertible_input(r_bits: int, seed: int) -> int:
@@ -91,11 +34,7 @@ def deterministic_invertible_input(r_bits: int, seed: int) -> int:
 
 
 def schedule_counts(r_bits: int) -> tuple[int, int]:
-    target = r_bits - 2
-    main_multiplications = target.bit_length() - 1
-    accumulation_multiplications = target.bit_count() - 1
-    multiplications = main_multiplications + accumulation_multiplications
-    return multiplications + 1, multiplications
+    return inversion_counts(r_bits)
 
 
 def generate_fixture(
@@ -135,18 +74,19 @@ def generate_fixture(
         f"localparam int REF_INV_MULTIPLICATIONS = {multiplications};",
         "",
     ]
-    lines.extend(
-        format_word_array(
-            "REF_INV_INPUT", words_from_value(input_value, word_count)
+    for name, value in (
+        ("REF_INV_INPUT", input_value),
+        ("REF_INV_RESULT", inverse_value),
+    ):
+        lines.extend(
+            format_word_array(
+                name,
+                words_from_value(value, word_count),
+                width="REF_INV_WORD_W-1:0",
+                size_expr="REF_INV_WORDS",
+            )
         )
-    )
-    lines.append("")
-    lines.extend(
-        format_word_array(
-            "REF_INV_RESULT", words_from_value(inverse_value, word_count)
-        )
-    )
-    lines.append("")
+        lines.append("")
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text("\n".join(lines), encoding="ascii")

@@ -75,6 +75,62 @@ syndrome 提前结束。
 “固定周期”与“每拍功耗完全相同”不是同一个概念。本设计保证调度深度和访问次数不随 syndrome、
 错误模式或校验矩阵内容变化；数据翻转活动仍可能随数值变化。
 
+### 2.4 K-sign Min-Sum 算法形式
+
+译码算法可以写成论文风格的伪代码。`TopK_K` 表示从符号偏离边中选择幅值最大的 $K$ 个边位置；
+`approx_sign` 用基准符号和保存的偏离位置重建近似符号：
+
+```text
+Algorithm: K-sign Scaled Min-Sum Decoding
+
+1:  Input: syndrome s, initial value C, maximum iteration Imax, retained number K
+2:  Initialization: S_j = {base_j = 0, P_j = empty}, for all variable nodes j
+3:  Initialization: M_i = {min1_i = C, min2_i = C, idx_i = 0, sxor_i = 0}, for all check nodes i
+4:  for iter = 1 to Imax do
+5:      Check node processing:
+6:      for each edge (i, j) do
+7:          hit_j,i = 1 if edge index of (i, j) is in P_j, otherwise 0
+8:          sign(u_i,j) = base_j XOR hit_j,i
+9:          |v_i,j| = min2_i if idx_i = diag_idx_global(i,j), otherwise min1_i
+10:         sign(v_i,j) = sxor_i XOR sign(u_i,j) XOR s_i
+11:     end for
+12:
+13:     Variable node processing:
+14:     for each variable node j do
+15:         L_j = C + alpha * sum_{i in N(j)} v_i,j
+16:         base'_j = sign(L_j)
+17:         for each i in N(j) do
+18:             u'_i,j = C + alpha * sum_{i' in N(j), i' != i} v_i',j
+19:         end for
+20:         P'_j = TopK_K { edge index of (i,j) : sign(u'_i,j) XOR base'_j = 1 },
+21:                ordered by |u'_i,j|
+22:     end for
+23:
+24:     Check-state update:
+25:     for each check node i do
+26:         sxor'_i = XOR_{j in M(i)} approx_sign(u'_i,j, base'_j, P'_j)
+27:         min1'_i = min_{j in M(i)} |u'_i,j|
+28:         idx'_i  = arg min_{j in M(i)} |u'_i,j|
+29:         min2'_i = min_{j in M(i), diag_idx_global(i,j) != idx'_i} |u'_i,j|
+30:     end for
+31:
+32:     S_j = {base'_j, P'_j}, for all j
+33:     M_i = {min1'_i, min2'_i, idx'_i, sxor'_i}, for all i
+34:     x_j = sign(L_j), for all j
+35: end for
+```
+
+其中：
+
+```text
+approx_sign(u'_i,j, base'_j, P'_j)
+    = base'_j XOR 1{edge index of (i,j) is in P'_j}
+```
+
+`base_j` 是变量节点的基准符号，`P_j` 是保存的 $K$ 个偏离边位置。C2V 阶段用 `base_j`
+和 `P_j` 重建上一轮 V2C 符号；VNU 阶段重新计算 `base'_j` 和 `P'_j`。后续章节说明这一算法
+怎样映射到固定调度的硬件。
+
 ---
 
 ## 3. 顶层接口：数据怎样进入和离开译码器
@@ -203,6 +259,18 @@ VNU 也以 $L$ 路向量形式工作。大容量状态按 $L$ 个 bank 分散，
 译码器每拍并行处理 $L$ 条边。为了让 $L$ 条边能够同时访问存储器，校验行状态、变量列状态和
 tile 工作数据都拆成 $L$ 个 bank。地址生成的任务不仅是算出行号和列号，还要保证本拍送往每个
 bank 的请求至多一条。
+
+主要派生常量为：
+
+```text
+N            = N0 * R
+COLS_PER_TILE = min(R, BIKE_COLS_PER_TILE)   （要求为 L 的整数倍）
+Q_BASE       = ceil(COLS_PER_TILE / L)
+Q_TILE       = Q_BASE + 3
+TILE_COUNT   = ceil(R / COLS_PER_TILE)
+TILES_TOTAL  = N0 * TILE_COUNT
+ROW_SEG_SIZE = ceil(R / L)
+```
 
 理解这一结构时，需要区分两种编号：
 
@@ -843,6 +911,10 @@ tile 复用工作 RAM。同步存储采用 read-first 语义：同地址在同�
 | correction 尾部 | 完成固定扫描和读改写流水排空 |
 | 完成 | 拉高 `o_done`，开放全局 K-sign 读口给结果接口 |
 
+`tile_scheduler` 的可见状态编码依次为 `DEC_WAIT_START`、`DEC_ITER_CLEAR`、
+`DEC_ITER_C2V_PRIME`、`DEC_ITER_OVERLAP`、`DEC_ITER_V2C_DRAIN`、
+`DEC_ITER_KSIGN_CORR` 和 `DEC_DONE`。
+
 ### 14.2 计数器嵌套关系
 
 最内层到最外层依次是：
@@ -1014,16 +1086,22 @@ valid、装载完成标志或覆盖顺序定义数据何时有效。这样可以
 | 内容 | RTL 文件 |
 | --- | --- |
 | 公共参数、消息位域和状态位域 | [bike_pkg.sv](../../rtl/bike_pkg.sv) |
+| 公开等级配置输出 | [decoder_profile_config.sv](../../rtl/decoder_profile_config.sv) |
 | 顶层连接、流水寄存和旁路 | [decoder_top.sv](../../rtl/decoder_top.sv) |
 | 固定窗口和迭代控制 | [tile_scheduler.sv](../../rtl/tile_scheduler.sv) |
+| H 第一列行号存储 | [ram_i.sv](../../rtl/ram_i.sv) |
 | 边的行列地址和 bank 拆分 | [edge_addr_gen.sv](../../rtl/edge_addr_gen.sv) |
 | 校验节点消息重建与状态更新 | [cnu_b.sv](../../rtl/cnu_b.sv)、[cnu_a.sv](../../rtl/cnu_a.sv) |
+| 压缩校验状态、V2C 符号和 syndrome 存储 | [ram_m.sv](../../rtl/ram_m.sv)、[ram_s.sv](../../rtl/ram_s.sv)、[ram_syndrome.sv](../../rtl/ram_syndrome.sv) |
 | 变量节点缩放、后验和外信息 | [vnu.sv](../../rtl/vnu.sv) |
+| 符号-幅度与补码转换 | [msg_signmag_to_tc.sv](../../rtl/msg_signmag_to_tc.sv)、[msg_tc_to_signmag_sat.sv](../../rtl/msg_tc_to_signmag_sat.sv) |
 | Tile 总和与单边缓存 | [ram_accum.sv](../../rtl/ram_accum.sv)、[ram_t.sv](../../rtl/ram_t.sv) |
-| K-sign 候选、快照和全局记录 | [k_sign_selector.sv](../../rtl/k_sign_selector.sv)、[ram_k_tile.sv](../../rtl/ram_k_tile.sv)、[ram_k_global.sv](../../rtl/ram_k_global.sv) |
+| K-sign 候选、快照和全局记录 | [k_sign_selector.sv](../../rtl/k_sign_selector.sv)、[k_sign_update.sv](../../rtl/k_sign_update.sv)、[ram_k_tile.sv](../../rtl/ram_k_tile.sv)、[ram_k_global.sv](../../rtl/ram_k_global.sv) |
+| K-sign 近似符号重建和重叠调度 | [k_sign_reconstruct.sv](../../rtl/k_sign_reconstruct.sv)、[k_sign_overlap_scheduler.sv](../../rtl/k_sign_overlap_scheduler.sv) |
 | K-sign 偏离奇偶 | [ram_sign_delta.sv](../../rtl/ram_sign_delta.sv) |
+| 最终错误估计存储 | [ram_decision.sv](../../rtl/ram_decision.sv) |
 | 通用同步 RAM 与 bank 路由 | [ram_bram.sv](../../rtl/ram_bram.sv)、[barrel_rotate.sv](../../rtl/barrel_rotate.sv) |
 
 实现参数、验证状态、资源和时序基线见
-[implementation_status.md](implementation_status.md)。固定周期的独立定义见
-[decoder_schedule.md](decoder_schedule.md)。
+[implementation_status.md](implementation_status.md)。固定周期公式见本文 §14。
+参数宏、构建配置和顶层端口速查见 [bike_decoder.md](bike_decoder.md)。

@@ -38,7 +38,17 @@ def main() -> None:
     expected_versions = load_lock()
     failed = False
     for name, expected in expected_versions.items():
-        result = subprocess.run(COMMANDS[name], text=True, capture_output=True, check=False)
+        command = COMMANDS.get(name)
+        if command is None:
+            print(f"{name:10} UNKNOWN  no version command registered")
+            failed = True
+            continue
+        try:
+            result = subprocess.run(command, text=True, capture_output=True, check=False)
+        except FileNotFoundError:
+            print(f"{name:10} MISSING  executable not found")
+            failed = True
+            continue
         output = (result.stdout + result.stderr).strip()
         first_line = output.splitlines()[0] if output else "<no output>"
         status = "PASS" if result.returncode == 0 and expected in output else "MISMATCH"

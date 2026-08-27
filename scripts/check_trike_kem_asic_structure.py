@@ -22,6 +22,10 @@ def read_filelist(path: Path) -> list[str]:
     return sources
 
 
+def define(name: str, default: str) -> str:
+    return f"-D{name}={os.environ.get(name, default)}"
+
+
 def main() -> None:
     verilator = os.environ.get("REAL_VERILATOR", "verilator")
     sources = read_filelist(REPO_ROOT / "filelists" / "trike_kem_asic.f")
@@ -34,10 +38,10 @@ def main() -> None:
             str(json_path),
             "--sv",
             "-DTRIKE_UNIFIED_PARAMS",
-            "-DBIKE_PARALLEL_L=32",
-            "-DBIKE_K_SIGN_K=4",
-            "-DBIKE_MSG_BITS=5",
-            "-DBIKE_COLS_PER_TILE=256",
+            define("BIKE_PARALLEL_L", "32"),
+            define("BIKE_K_SIGN_K", "4"),
+            define("BIKE_MSG_BITS", "5"),
+            define("BIKE_COLS_PER_TILE", "256"),
             "-Wall",
             "-I./tb",
             "-I./rtl",

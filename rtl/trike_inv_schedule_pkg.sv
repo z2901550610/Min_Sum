@@ -2,6 +2,78 @@
 
 package trike_inv_schedule_pkg;
 
+  function automatic bit trike_inv_uses_short_chain(input int r_bits);
+    trike_inv_uses_short_chain = (r_bits == 15581);
+  endfunction
+
+  function automatic int trike_inv_short_operation_count(input int r_bits);
+    case (r_bits)
+      15581:   trike_inv_short_operation_count = 17;
+      default: trike_inv_short_operation_count = 0;
+    endcase
+  endfunction
+
+  // TRIKE-2 uses the low-register addition chain
+  // 1,2,4,8,9,18,36,72,144,288,576,577,1154,2308,4616,5193,10386,15579.
+  // Each operation computes A_(i+j) = A_i * Frobenius_i(A_j), where
+  // A_k = input^(2^k-1). The table stores the coefficient-permutation stride
+  // inverse(2^i) modulo R_BITS together with the f/t operand roles.
+  function automatic int trike_inv_short_perm_l(input int r_bits, input int operation);
+    trike_inv_short_perm_l = 0;
+    if (r_bits == 15581) begin
+      case (operation)
+        0: trike_inv_short_perm_l = 7791;
+        1: trike_inv_short_perm_l = 11686;
+        2: trike_inv_short_perm_l = 10712;
+        3: trike_inv_short_perm_l = 8460;
+        4: trike_inv_short_perm_l = 4230;
+        5: trike_inv_short_perm_l = 5912;
+        6: trike_inv_short_perm_l = 3561;
+        7: trike_inv_short_perm_l = 13368;
+        8: trike_inv_short_perm_l = 4935;
+        9: trike_inv_short_perm_l = 1122;
+        10: trike_inv_short_perm_l = 7791;
+        11: trike_inv_short_perm_l = 6202;
+        12: trike_inv_short_perm_l = 10896;
+        13: trike_inv_short_perm_l = 11177;
+        14: trike_inv_short_perm_l = 6202;
+        15: trike_inv_short_perm_l = 7868;
+        16: trike_inv_short_perm_l = 2111;
+        default: trike_inv_short_perm_l = 0;
+      endcase
+    end
+  endfunction
+
+  function automatic bit trike_inv_short_a_source_t(input int r_bits, input int operation);
+    trike_inv_short_a_source_t = 1'b0;
+    if (r_bits == 15581) begin
+      case (operation)
+        10, 11, 14, 15: trike_inv_short_a_source_t = 1'b1;
+        default: trike_inv_short_a_source_t = 1'b0;
+      endcase
+    end
+  endfunction
+
+  function automatic bit trike_inv_short_b_source_t(input int r_bits, input int operation);
+    trike_inv_short_b_source_t = 1'b0;
+    if (r_bits == 15581) begin
+      case (operation)
+        3, 11, 15, 16: trike_inv_short_b_source_t = 1'b1;
+        default: trike_inv_short_b_source_t = 1'b0;
+      endcase
+    end
+  endfunction
+
+  function automatic bit trike_inv_short_dest_t(input int r_bits, input int operation);
+    trike_inv_short_dest_t = 1'b0;
+    if (r_bits == 15581) begin
+      case (operation)
+        10, 14:  trike_inv_short_dest_t = 1'b1;
+        default: trike_inv_short_dest_t = 1'b0;
+      endcase
+    end
+  endfunction
+
   function automatic int trike_inv_stage_count(input int r_bits);
     case (r_bits)
       13: trike_inv_stage_count = 4;

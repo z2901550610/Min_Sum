@@ -21,8 +21,9 @@ low/high bank；同拍读取`A0/A1/B0/B1`，依次计算`Z0=A0B0`、`Z2=A1B1`和
 
 ## 结构诊断与结论
 
-Yosys 0.68 `synth_xilinx -family xc7`诊断为2,363 Estimated LC、6 RAMB36。四个half operand bank、
-一个product和一个result RAM构成该计数；Vivado XPM映射、LUT、Fmax和route均为`待测`。
+[RUN-20260827-01](../../reports/vivado/manifests/RUN-20260827-01-trike-poly-mul-k1.toml)确认Fully Routed
+为2,740 LUT、628 FF、825 Slice和6 RAMB36。总体WNS `-2.557 ns`来自result RAM到64-bit输出边界；
+同步内部WNS为`+2.032 ns`，关键路径是FSM状态到operand RAM地址，93.57%为布线。
 
-保留为depth-1物理候选，不接入求逆或完整KEM。下一步单独实现depth 2并比较TRIKE-2浅bank代价及
-TRIKE-9容量边界；若`cycles/Fmax`与AT不能补偿bank/重组成本，则停止递归。
+保留为TRIKE-2面积/时序平衡候选。报告缺少源码、XDC和directive provenance，因此不升级为正式物理基线；
+求逆和完整KEM尚未接入。

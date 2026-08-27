@@ -136,9 +136,9 @@ inverse结果。结构门禁要求算术核只展开external support/result stor
 | 边界 | 固定周期 | golden范围 |
 | --- | ---: | --- |
 | 秘密support调度 | 4,778,975 | 候选0合格与候选1才合格 |
-| KeyGen算术 | 12,774,257 | 官方TRIKE-2 `t0/r2`逐word |
-| KeyGen core | 17,607,119 | PK/SK逐byte，两种候选路径 |
-| `trike_keygen_synth_top` | 17,614,690 | 8-bit输入、PK、SK流逐byte |
+| KeyGen算术 | 10,066,537 | 官方TRIKE-2 `t0/r2`逐word |
+| KeyGen core | 待复测 | PK/SK逐byte，两种候选路径 |
+| `trike_keygen_synth_top` | 待复测 | 8-bit输入、PK、SK流逐byte |
 
 `success`只报告固定候选集合中是否找到合格support，不改变H123、算术或序列化调度。
 

@@ -20,9 +20,10 @@ subproduct word执行`4/4/2/4/4/2/2/2/1`组product-RAM XOR；输入值不改变�
 
 ## 结构诊断与结论
 
-TRIKE-2强制block的Yosys 0.68诊断为3,104 Estimated LC、10 RAMB36；depth 1同流程为2,309 LC、
-6 RAMB36。未强制时quarter bank被映为176个RAM64M和2 RAMB36，说明最终映射必须由Vivado确认。
+[RUN-20260827-02](../../reports/vivado/manifests/RUN-20260827-02-trike-poly-mul-k2.toml)确认Fully Routed
+为3,712 LUT、661 FF、1,156 Slice和10 RAMB36；同步内部WNS为`+1.483 ns`。相对depth 1，内部诊断
+Fmax下降6.45%，但`cycles/Fmax`延时仍下降7.32%；LUT/Slice/BRAM则增加35.47%/40.12%/66.67%。
 
-TRIKE-9静态block几何下depth 1/2均为19个RAMB36等价容量：operand 8、product 7、result 4。
-保留depth 2作为大参数候选；TRIKE-2是否保留取决于同条件Vivado `cycles/Fmax`、Tile和AT。
-depth 3在depth-2物理门前不实现，避免16个operand bank和更大的重组网络提前扩散。
+depth 1/2构成TRIKE-2面积与延时Pareto点：depth 1为平衡候选，depth 2为最低延时候选。TRIKE-9静态
+block几何下两者均为19个RAMB36等价容量，depth 2保留为大参数首选。报告provenance不完整，求逆、
+完整KEM和depth 3均不在本实验结论内。

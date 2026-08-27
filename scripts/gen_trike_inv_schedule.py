@@ -6,6 +6,78 @@ from __future__ import annotations
 import argparse
 
 
+TRIKE2_SHORT_CHAIN = (
+    1,
+    2,
+    4,
+    8,
+    9,
+    18,
+    36,
+    72,
+    144,
+    288,
+    576,
+    577,
+    1154,
+    2308,
+    4616,
+    5193,
+    10386,
+    15579,
+)
+
+TRIKE2_SHORT_STEPS = (
+    (1, 1),
+    (2, 2),
+    (4, 4),
+    (8, 1),
+    (9, 9),
+    (18, 18),
+    (36, 36),
+    (72, 72),
+    (144, 144),
+    (288, 288),
+    (1, 576),
+    (577, 577),
+    (1154, 1154),
+    (2308, 2308),
+    (577, 4616),
+    (5193, 5193),
+    (10386, 5193),
+)
+
+
+def short_addition_chain(r_bits: int) -> tuple[int, ...] | None:
+    if r_bits == 15581:
+        return TRIKE2_SHORT_CHAIN
+    return None
+
+
+def inversion_counts(r_bits: int) -> tuple[int, int]:
+    chain = short_addition_chain(r_bits)
+    if chain is not None:
+        multiplications = len(chain) - 1
+    else:
+        target = r_bits - 2
+        multiplications = target.bit_length() - 1 + target.bit_count() - 1
+    return multiplications + 1, multiplications
+
+
+def validate_short_chain(r_bits: int, chain: tuple[int, ...]) -> None:
+    if chain[0] != 1 or chain[-1] != (r_bits - 2):
+        raise ValueError("short addition-chain endpoints are invalid")
+    if len(TRIKE2_SHORT_STEPS) != (len(chain) - 1):
+        raise ValueError("short addition-chain operation count is invalid")
+    known = {1}
+    for value, (left, right) in zip(chain[1:], TRIKE2_SHORT_STEPS, strict=True):
+        if left not in known or right not in known or (left + right) != value:
+            raise ValueError(
+                f"short addition-chain step {value} has invalid operands {left},{right}"
+            )
+        known.add(value)
+
+
 def inversion_schedule(r_bits: int) -> list[tuple[int, int, int, int]]:
     if r_bits < 3:
         raise ValueError("r must be at least 3")
@@ -53,6 +125,20 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    short_chain = short_addition_chain(args.r_bits)
+    if short_chain is not None:
+        validate_short_chain(args.r_bits, short_chain)
+        permutations, multiplications = inversion_counts(args.r_bits)
+        print(
+            f"r={args.r_bits} permutations={permutations} "
+            f"multiplications={multiplications}"
+        )
+        print("chain=" + ",".join(str(value) for value in short_chain))
+        print("operation left right permutation_stride")
+        for operation, (left, right) in enumerate(TRIKE2_SHORT_STEPS):
+            stride = pow(pow(2, left, args.r_bits), -1, args.r_bits)
+            print(f"{operation} {left} {right} {stride}")
+        return 0
     schedule = inversion_schedule(args.r_bits)
     validate_schedule(args.r_bits, schedule)
     multiplications = len(schedule) + sum(k1 != 0 for _, _, k1, _ in schedule)

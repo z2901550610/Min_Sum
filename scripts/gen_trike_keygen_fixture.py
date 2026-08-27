@@ -4,75 +4,32 @@
 from __future__ import annotations
 
 import argparse
-from collections import Counter
 from pathlib import Path
-import struct
 
-from gen_trike_encaps_fixture import (
+from trike_fixture_utils import (
     Sm3Drng,
-    cyclic_multiply,
     first_hex_field,
     format_byte_array,
     format_word_array,
     h123_vectors,
+    is_weak as is_weak_scores,
+    sample_indices,
+    serialize_key_pair,
+    weak_scores,
     words_from_bytes,
 )
-from gen_trike_poly_inv_fixture import polynomial_inverse
 
 
 R_BITS = 15581
 WEIGHT = 35
 M_BYTES = 32
+WORDS = (R_BITS + 63) // 64
 SELF_THRESHOLD = 46
 CROSS_THRESHOLD = 83
 
 
-def sample_indices(drng: Sm3Drng) -> list[int]:
-    indices = [0] * WEIGHT
-    for position in range(WEIGHT - 1, -1, -1):
-        random_word = int.from_bytes(drng.generate(4), "little")
-        candidate = position + ((random_word * (R_BITS - position)) >> 32)
-        if candidate in indices[position + 1 :]:
-            candidate = position
-        indices[position] = candidate
-    return indices
-
-
-def collision_score(values: list[int]) -> int:
-    counts = Counter(values)
-    return sum(count * (count - 1) // 2 for count in counts.values())
-
-
-def self_score(indices: list[int]) -> int:
-    distances = []
-    for upper in range(1, WEIGHT):
-        for lower in range(upper):
-            distance = (indices[lower] - indices[upper]) % R_BITS
-            distances.append(min(distance, R_BITS - distance))
-    return collision_score(distances)
-
-
-def cross_score(left: list[int], right: list[int]) -> int:
-    return collision_score(
-        [(right_index - left_index) % R_BITS for left_index in left for right_index in right]
-    )
-
-
-def weak_scores(blocks: list[list[int]]) -> tuple[int, int, int, int, int, int]:
-    return (
-        self_score(blocks[0]),
-        self_score(blocks[1]),
-        self_score(blocks[2]),
-        cross_score(blocks[0], blocks[1]),
-        cross_score(blocks[1], blocks[2]),
-        cross_score(blocks[2], blocks[0]),
-    )
-
-
-def is_weak(scores: tuple[int, int, int, int, int, int]) -> bool:
-    return any(score > SELF_THRESHOLD for score in scores[:3]) or any(
-        score > CROSS_THRESHOLD for score in scores[3:]
-    )
+def is_weak(scores: tuple[int, ...]) -> bool:
+    return is_weak_scores(scores, SELF_THRESHOLD, CROSS_THRESHOLD)
 
 
 def first_record(text: str) -> str:
@@ -98,7 +55,13 @@ def candidate_stream(key_seed: bytes, count: int) -> tuple[list[list[list[int]]]
     drng = Sm3Drng(key_seed)
     candidates = []
     for _ in range(count):
-        candidates.append([sample_indices(drng), sample_indices(drng), sample_indices(drng)])
+        candidates.append(
+            [
+                sample_indices(drng, R_BITS, WEIGHT),
+                sample_indices(drng, R_BITS, WEIGHT),
+                sample_indices(drng, R_BITS, WEIGHT),
+            ]
+        )
     return candidates, drng
 
 
@@ -107,13 +70,13 @@ def find_weak_first_seed(kat_seed: bytes) -> bytes:
     for _ in range(2000):
         key_seed = source.generate(M_BYTES)
         candidates, _ = candidate_stream(key_seed, 2)
-        scores = [weak_scores(candidate) for candidate in candidates]
+        scores = [weak_scores(candidate, R_BITS) for candidate in candidates]
         if is_weak(scores[0]) and not is_weak(scores[1]):
             return key_seed
     raise ValueError("no weak-first schedule fixture found in 2000 deterministic trials")
 
 
-def serialize_key_pair(
+def serialize_support(
     blocks: list[list[int]],
     t1: bytes,
     t2: bytes,
@@ -121,24 +84,10 @@ def serialize_key_pair(
     sigma: bytes,
     sigma2: bytes,
 ) -> tuple[bytes, bytes]:
-    h_values = [sum(1 << coefficient for coefficient in block) for block in blocks]
-    t1_value = int.from_bytes(t1, "little")
-    t2_value = int.from_bytes(t2, "little")
-    r1_value = int.from_bytes(r1, "little")
-    denominator1 = polynomial_inverse(t1_value ^ r1_value, R_BITS)
-    numerator1 = cyclic_multiply(h_values[0], r1_value) ^ h_values[1]
-    t0_value = cyclic_multiply(numerator1, denominator1)
-    denominator2 = polynomial_inverse(t0_value ^ h_values[0], R_BITS)
-    numerator2 = cyclic_multiply(t0_value, t2_value) ^ h_values[2]
-    r2_value = cyclic_multiply(numerator2, denominator2)
-    r_bytes = (R_BITS + 7) // 8
-    h0 = h_values[0].to_bytes(r_bytes, "little")
-    t0 = t0_value.to_bytes(r_bytes, "little")
-    r2 = r2_value.to_bytes(r_bytes, "little")
-    support_data = b"".join(
-        struct.pack("<I", coefficient) for block in blocks for coefficient in block
+    public_key, secret_key, _, _ = serialize_key_pair(
+        blocks, t1, t2, r1, sigma, sigma2, R_BITS
     )
-    return r2 + sigma, support_data + h0 + t0 + r2 + sigma + sigma2
+    return public_key, secret_key
 
 
 def format_support_array(name: str, blocks: list[list[int]]) -> list[str]:
@@ -162,7 +111,7 @@ def generate_fixture(kat_path: Path, output_path: Path, candidate_count: int) ->
     sigma2 = global_drng.generate(M_BYTES)
     sigma = global_drng.generate(M_BYTES)
     candidates, final_drng = candidate_stream(key_seed, candidate_count)
-    t1, t2, r1 = h123_vectors(sigma)
+    t1, t2, r1 = h123_vectors(sigma, R_BITS)
 
     r_bytes = (R_BITS + 7) // 8
     support_bytes = 3 * WEIGHT * 4
@@ -183,7 +132,7 @@ def generate_fixture(kat_path: Path, output_path: Path, candidate_count: int) ->
     selected_number = 0
     score_table = []
     for number, candidate in enumerate(candidates):
-        scores = weak_scores(candidate)
+        scores = weak_scores(candidate, R_BITS)
         score_table.append(scores)
         if selected is None and not is_weak(scores):
             selected = candidate
@@ -200,16 +149,16 @@ def generate_fixture(kat_path: Path, output_path: Path, candidate_count: int) ->
     alternate_selected_number = next(
         number
         for number, candidate in enumerate(alternate_candidates)
-        if not is_weak(weak_scores(candidate))
+        if not is_weak(weak_scores(candidate, R_BITS))
     )
     alternate_selected = alternate_candidates[alternate_selected_number]
-    alternate_scores = weak_scores(alternate_selected)
-    computed_public_key, computed_secret_key = serialize_key_pair(
+    alternate_scores = weak_scores(alternate_selected, R_BITS)
+    computed_public_key, computed_secret_key = serialize_support(
         selected, t1, t2, r1, sigma, sigma2
     )
     if computed_public_key != public_key or computed_secret_key != secret_key:
         raise ValueError("recomputed official KeyGen output does not match KAT")
-    alternate_public_key, alternate_secret_key = serialize_key_pair(
+    alternate_public_key, alternate_secret_key = serialize_support(
         alternate_selected, t1, t2, r1, sigma, sigma2
     )
 
@@ -218,7 +167,7 @@ def generate_fixture(kat_path: Path, output_path: Path, candidate_count: int) ->
         f"localparam int REF_R_BITS = {R_BITS};",
         f"localparam int REF_SECRET_WEIGHT = {WEIGHT};",
         f"localparam int REF_CANDIDATE_COUNT = {candidate_count};",
-        f"localparam int REF_WORDS = {(R_BITS + 63) // 64};",
+        f"localparam int REF_WORDS = {WORDS};",
         f"localparam int REF_PK_BYTES = {len(public_key)};",
         f"localparam int REF_SK_BYTES = {len(secret_key)};",
         "localparam int REF_INDEX_W = $clog2(REF_R_BITS);",
@@ -268,7 +217,7 @@ def generate_fixture(kat_path: Path, output_path: Path, candidate_count: int) ->
         ("REF_T0_WORDS", t0),
         ("REF_R2_WORDS", r2),
     ):
-        lines.extend(format_word_array(name, words_from_bytes(data)))
+        lines.extend(format_word_array(name, words_from_bytes(data, WORDS)))
         lines.append("")
     for number, scores in enumerate(score_table):
         lines.append(
@@ -294,7 +243,7 @@ def analyze(kat_path: Path, trials: int) -> None:
     for _ in range(trials):
         key_seed = source.generate(M_BYTES)
         candidates, _ = candidate_stream(key_seed, 1)
-        scores = weak_scores(candidates[0])
+        scores = weak_scores(candidates[0], R_BITS)
         maxima = [max(left, right) for left, right in zip(maxima, scores)]
         weak = is_weak(scores)
         weak_count += int(weak)

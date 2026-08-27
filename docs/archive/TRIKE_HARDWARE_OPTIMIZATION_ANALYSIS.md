@@ -536,6 +536,11 @@ EXP-0119完成word-array depth 2：九个quarter-size子积按固定phase地址�
 TRIKE-9的固定周期公式给出1,646,057拍，且depth 1/2静态block容量均为19个RAMB36；该扩展性结论仍需
 大参数golden和Vivado映射确认。
 
+EXP-0118/0119的TRIKE-2 Fully Routed诊断形成Pareto前沿：depth 1为2,740 LUT、825 Slice、6 RAMB36和
+内部WNS `+2.032 ns`；depth 2为3,712 LUT、1,156 Slice、10 RAMB36和内部WNS `+1.483 ns`。
+按各自内部诊断周期换算，depth 2延时低7.32%，但LUT/Slice/BRAM显著增加；两次GUI运行均缺少完整
+source/XDC/directive provenance，不能作为正式baseline或系统AT结论。
+
 ### 14.2 Sparse multiplier matrix
 
 | Axis | Values | Required checks |

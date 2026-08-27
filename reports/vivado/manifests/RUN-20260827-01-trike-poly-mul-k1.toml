@@ -1,0 +1,70 @@
+schema_version = 1
+run_id = "RUN-20260827-01-trike-poly-mul-k1"
+experiment_id = "EXP-0118"
+date = "2026-08-27"
+status = "fail"
+verdict = "pending"
+source_revision = "unrecorded-windows-copy"
+dirty_tree = true
+report_root = "external-user-attachment/RUN-20260827-01-trike-poly-mul-k1"
+notes = "User supplied five Fully Routed reports for the standalone depth-1 core. Report headers identify tool, top, part and timing shape, but do not embed source revision, XDC path, synthesis/place/route directives or run provenance. The original report path was D:/trike_reports/K1. Overall setup fails only at the unregistered 64-bit result output boundary; the synchronous internal data-pin report meets 100 MHz. No post-synthesis utilization, methodology or DRC report was supplied, so this is a routed diagnostic rather than a retained comparable baseline."
+
+[artifacts]
+files = [
+  "post_route_utilization_hier.rpt",
+  "post_route_utilization.rpt",
+  "post_route_timing_summary.rpt",
+  "post_route_internal_setup_paths.rpt",
+  "post_route_high_fanout.rpt",
+]
+sha256_manifest = ""
+routed_hierarchical_utilization_sha256 = "ae56da840d4640da72507f51d1794ad47b6e37d059fa8e36686016e416a3c7f4"
+routed_utilization_sha256 = "e81b4dad5afc2043b7e805cf959d7fb25a60ae30ce5e08ad7fb9688b2760e7b8"
+routed_timing_summary_sha256 = "6fe48a37d71dc78f64050bd86cc8cd8a1a1e9e8ee180e98921aba03dfd0d6e12"
+internal_data_setup_sha256 = "16fbd0574a939092f6f7ae171925043fe8b35c241ec63c5b02630d74d4f3143b"
+high_fanout_sha256 = "83485ece60c017fd2ba2b4c04073eb95212ac5dcc9215b82a99468228f36c30e0"
+
+[design]
+top = "trike_poly_mul_karatsuba_core"
+profile = "official TRIKE-2 r=15581, 64-bit word, base Karatsuba depth 1, word-array depth 1"
+memory_geometry = "Four 122x64 operand half banks, one 488x64 product RAM and one 244x64 result RAM; observed six RAMB36."
+
+[tool]
+vivado = "2023.2 build 4029153"
+part = "xc7k355tffg901-2L"
+xdc = "unreported; timing constraints show 10 ns core_clk, 0.100 ns uncertainty and 2.000 ns input/output delays"
+report_stage = "fully_routed"
+clock_period_ns = 10.0
+clock_uncertainty_ns = 0.100
+
+[functional]
+fixed_cycles = 50993
+tests = ["260 base carry-less vectors", "r=129 bit-exact golden", "official TRIKE-2 word-exact golden"]
+result = "Repository-local functional and fixed-cycle tests passed separately from the unprovenanced Windows physical run."
+
+[results]
+lut = "2740"
+logic_lut = "2740"
+lutram = "0"
+srl = "0"
+ff = "628"
+slice = "825"
+block_ram_tile = "6"
+ramb36 = "6"
+ramb18 = "0"
+dsp = "0"
+bonded_iob = "204"
+setup_wns_ns = "-2.557"
+setup_tns_ns = "-149.950"
+setup_failing_endpoints = "70"
+hold_whs_ns = "0.015"
+hold_ths_ns = "0.000"
+pulse_width_wps_ns = "4.600"
+internal_data_setup_wns_ns = "2.032"
+internal_diagnostic_period_ns = "7.968"
+internal_diagnostic_fmax_mhz = "125.502"
+internal_diagnostic_latency_us = "406.312"
+overall_setup_path = "result RAMB36 to o_result_data[52] through one OBUF; 6.176 ns data path plus 2.000 ns output delay and clock insertion/skew"
+internal_setup_path = "FSM state decode to u_a0_mem RAMB36 address bit; 7.242 ns data path, 6.776 ns routing (93.565 percent), three LUT levels"
+high_fanout_path = "Asynchronous reset distribution fanout 628; state data-control nets fanout up to 362."
+comparison_run = "RUN-20260827-02-trike-poly-mul-k2; diagnostic comparison only because both runs lack complete source/XDC/directive provenance"

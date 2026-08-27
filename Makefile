@@ -244,7 +244,7 @@ test-kem-unit:
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_decoder_residual_check rtl/ram_bram.sv rtl/trike_decoder_residual_check.sv tb/tb_trike_decoder_residual_check.sv
 	@$(SIM) ./obj_dir/Vtb_trike_decoder_residual_check +verilator+quiet
 
-$(TRIKE_KEYGEN_REFERENCE_FIXTURE): scripts/gen_trike_keygen_fixture.py scripts/gen_trike_encaps_fixture.py $(TRIKE_POLY_REFERENCE_KAT)
+$(TRIKE_KEYGEN_REFERENCE_FIXTURE): scripts/gen_trike_keygen_fixture.py scripts/trike_fixture_utils.py $(TRIKE_POLY_REFERENCE_KAT)
 	@python3 scripts/gen_trike_keygen_fixture.py \
 		--kat "$(TRIKE_POLY_REFERENCE_KAT)" \
 		--output "$@" \
@@ -313,7 +313,7 @@ test-trike-keygen-synth-reference: $(TRIKE_KEYGEN_REFERENCE_FIXTURE)
 	@$(VERILATOR) $(VERILATOR_FLAGS) -GUSE_SYNTH_TOP=1 --top-module tb_trike_keygen_core_reference $(TRIKE_KEYGEN_RTL) tb/tb_trike_keygen_core_reference.sv
 	@$(SIM) ./obj_dir/Vtb_trike_keygen_core_reference +verilator+quiet
 
-$(TRIKE_POLY_REFERENCE_FIXTURE): scripts/gen_trike_poly_mul_fixture.py $(TRIKE_POLY_REFERENCE_KAT)
+$(TRIKE_POLY_REFERENCE_FIXTURE): scripts/gen_trike_poly_mul_fixture.py scripts/trike_fixture_utils.py $(TRIKE_POLY_REFERENCE_KAT)
 	@python3 scripts/gen_trike_poly_mul_fixture.py \
 		--kat "$(TRIKE_POLY_REFERENCE_KAT)" \
 		--output "$@"
@@ -322,12 +322,12 @@ test-trike-poly-reference: $(TRIKE_POLY_REFERENCE_FIXTURE)
 	@$(VERILATOR) $(VERILATOR_FLAGS) -GDUT_DIGIT_W=$(TRIKE_POLY_DIGIT_W) -GDUT_DENSE_KARATSUBA_DEPTH=$(TRIKE_POLY_KARATSUBA_DEPTH) --top-module tb_trike_poly_mul_reference rtl/ram_bram.sv rtl/trike_poly_mul_core.sv tb/tb_trike_poly_mul_reference.sv
 	@$(SIM) ./obj_dir/Vtb_trike_poly_mul_reference +verilator+quiet
 
-$(TRIKE_POLY_INV_REFERENCE_FIXTURE): scripts/gen_trike_poly_inv_fixture.py $(TRIKE_POLY_REFERENCE_KAT)
+$(TRIKE_POLY_INV_REFERENCE_FIXTURE): scripts/gen_trike_poly_inv_fixture.py scripts/gen_trike_inv_schedule.py scripts/trike_fixture_utils.py $(TRIKE_POLY_REFERENCE_KAT)
 	@python3 scripts/gen_trike_poly_inv_fixture.py \
 		--kat "$(TRIKE_POLY_REFERENCE_KAT)" \
 		--output "$@"
 
-$(TRIKE_MINSUM_POLY_INV_FIXTURE): scripts/gen_trike_poly_inv_fixture.py scripts/gen_trike_inv_schedule.py
+$(TRIKE_MINSUM_POLY_INV_FIXTURE): scripts/gen_trike_poly_inv_fixture.py scripts/gen_trike_inv_schedule.py scripts/trike_fixture_utils.py
 	@python3 scripts/gen_trike_poly_inv_fixture.py \
 		--input-seed 1 \
 		--r-bits 12589 \
@@ -453,10 +453,10 @@ test-trike-decaps-runtime-four-profile-reference:
 		$(MAKE) test-trike-decaps-runtime-synth-reference TRIKE_MINSUM_PROFILE=$$profile TRIKE_RUNTIME_REFERENCE_DEFINES=-DTRIKE_RUNTIME_ACCEPT_REJECT_ONLY || exit 1; \
 	done
 
-$(TRIKE_ENCAPS_REFERENCE_FIXTURE): scripts/gen_trike_encaps_fixture.py $(TRIKE_POLY_REFERENCE_KAT)
+$(TRIKE_ENCAPS_REFERENCE_FIXTURE): scripts/gen_trike_encaps_fixture.py scripts/trike_fixture_utils.py $(TRIKE_POLY_REFERENCE_KAT)
 	@python3 scripts/gen_trike_encaps_fixture.py --kat "$(TRIKE_POLY_REFERENCE_KAT)" --output "$@"
 
-$(TRIKE_DECAPS_SYNDROME_REFERENCE_FIXTURE): scripts/gen_trike_decaps_syndrome_fixture.py scripts/gen_trike_encaps_fixture.py $(TRIKE_POLY_REFERENCE_KAT)
+$(TRIKE_DECAPS_SYNDROME_REFERENCE_FIXTURE): scripts/gen_trike_decaps_syndrome_fixture.py scripts/trike_fixture_utils.py $(TRIKE_POLY_REFERENCE_KAT)
 	@python3 scripts/gen_trike_decaps_syndrome_fixture.py --kat "$(TRIKE_POLY_REFERENCE_KAT)" --output "$@"
 
 test-trike-decaps-syndrome-reference: $(TRIKE_DECAPS_SYNDROME_REFERENCE_FIXTURE)

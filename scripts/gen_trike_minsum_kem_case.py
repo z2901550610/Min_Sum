@@ -4,18 +4,25 @@
 from __future__ import annotations
 
 import argparse
-from collections import Counter
 from dataclasses import dataclass
 import hashlib
 import json
 from pathlib import Path
 import re
-import struct
 import subprocess
 
-from gen_trike_encaps_fixture import Sm3Drng, pseudohash
-from gen_trike_poly_inv_fixture import cyclic_multiply, polynomial_inverse
 from run_bike_random import PARAM_SETS
+from trike_fixture_utils import (
+    Sm3Drng,
+    cyclic_multiply,
+    h123_vectors,
+    is_weak,
+    pseudohash,
+    sample_indices,
+    serialize_key_pair,
+    support_blocks,
+    weak_scores,
+)
 
 
 M_BYTES = 32
@@ -65,39 +72,6 @@ def load_profile(name: str) -> Profile:
     )
 
 
-def sample_indices(drng: Sm3Drng, length: int, weight: int) -> list[int]:
-    indices = [0] * weight
-    for position in range(weight - 1, -1, -1):
-        random_word = int.from_bytes(drng.generate(4), "little")
-        candidate = position + ((random_word * (length - position)) >> 32)
-        if candidate in indices[position + 1 :]:
-            candidate = position
-        indices[position] = candidate
-    return indices
-
-
-def collision_score(values: list[int]) -> int:
-    counts = Counter(values)
-    return sum(count * (count - 1) // 2 for count in counts.values())
-
-
-def weak_scores(blocks: list[list[int]], r_bits: int) -> tuple[int, ...]:
-    self_scores = []
-    for block in blocks:
-        distances = []
-        for upper in range(1, len(block)):
-            for lower in range(upper):
-                distance = (block[lower] - block[upper]) % r_bits
-                distances.append(min(distance, r_bits - distance))
-        self_scores.append(collision_score(distances))
-    cross_scores = []
-    for left, right in ((blocks[0], blocks[1]), (blocks[1], blocks[2]), (blocks[2], blocks[0])):
-        cross_scores.append(
-            collision_score([(r_idx - l_idx) % r_bits for l_idx in left for r_idx in right])
-        )
-    return tuple(self_scores + cross_scores)
-
-
 def select_secret_support(
     key_seed: bytes, profile: Profile
 ) -> tuple[list[list[int]], int, tuple[int, ...]]:
@@ -112,9 +86,7 @@ def select_secret_support(
             sample_indices(drng, profile.r_bits, profile.secret_weight),
         ]
         scores = weak_scores(blocks, profile.r_bits)
-        weak = any(score > profile.self_threshold for score in scores[:3]) or any(
-            score > profile.cross_threshold for score in scores[3:]
-        )
+        weak = is_weak(scores, profile.self_threshold, profile.cross_threshold)
         if selected is None and not weak:
             selected = blocks
             selected_number = candidate_number
@@ -124,33 +96,6 @@ def select_secret_support(
     return selected, selected_number, selected_scores
 
 
-def set_parity(vector: bytes, target: int, r_bits: int) -> bytes:
-    result = bytearray(vector)
-    parity_bit = (r_bits - 1) & 7
-    result[-1] &= (1 << parity_bit) - 1
-    parity = sum(byte.bit_count() for byte in result) & 1
-    result[-1] |= (target ^ parity) << parity_bit
-    return bytes(result)
-
-
-def h123_vectors(sigma: bytes, r_bits: int) -> tuple[bytes, bytes, bytes]:
-    r_bytes = (r_bits + 7) // 8
-    drng = Sm3Drng(sigma)
-    return (
-        set_parity(drng.generate(r_bytes), 0, r_bits),
-        set_parity(drng.generate(r_bytes), 0, r_bits),
-        set_parity(drng.generate(r_bytes), 1, r_bits),
-    )
-
-
-def support_blocks(indices: list[int], r_bits: int) -> tuple[int, int, int]:
-    blocks = [0, 0, 0]
-    for index in indices:
-        block, coefficient = divmod(index, r_bits)
-        blocks[block] |= 1 << coefficient
-    return blocks[0], blocks[1], blocks[2]
-
-
 def padded_error_bytes(blocks: tuple[int, int, int], r_bits: int) -> bytes:
     r_bytes = (r_bits + 7) // 8
     padded_r_bytes = ((r_bits + 511) // 512) * 64
@@ -158,35 +103,6 @@ def padded_error_bytes(blocks: tuple[int, int, int], r_bits: int) -> bytes:
         value.to_bytes(r_bytes, "little") + bytes(padded_r_bytes - r_bytes)
         for value in blocks
     )
-
-
-def serialize_key_pair(
-    support: list[list[int]],
-    t1: bytes,
-    t2: bytes,
-    r1: bytes,
-    sigma: bytes,
-    sigma2: bytes,
-    profile: Profile,
-) -> tuple[bytes, bytes, bytes, bytes]:
-    h_values = [sum(1 << coefficient for coefficient in block) for block in support]
-    t1_value = int.from_bytes(t1, "little")
-    t2_value = int.from_bytes(t2, "little")
-    r1_value = int.from_bytes(r1, "little")
-    denominator1_inv = polynomial_inverse(t1_value ^ r1_value, profile.r_bits)
-    numerator1 = cyclic_multiply(h_values[0], r1_value, profile.r_bits) ^ h_values[1]
-    t0_value = cyclic_multiply(numerator1, denominator1_inv, profile.r_bits)
-    denominator2_inv = polynomial_inverse(t0_value ^ h_values[0], profile.r_bits)
-    numerator2 = cyclic_multiply(t0_value, t2_value, profile.r_bits) ^ h_values[2]
-    r2_value = cyclic_multiply(numerator2, denominator2_inv, profile.r_bits)
-    r_bytes = (profile.r_bits + 7) // 8
-    h0 = h_values[0].to_bytes(r_bytes, "little")
-    t0 = t0_value.to_bytes(r_bytes, "little")
-    r2 = r2_value.to_bytes(r_bytes, "little")
-    support_data = b"".join(
-        struct.pack("<I", coefficient) for block in support for coefficient in block
-    )
-    return r2 + sigma, support_data + h0 + t0 + r2 + sigma + sigma2, t0, r2
 
 
 def write_decoder_fixture(
@@ -472,7 +388,7 @@ def generate_case(
     decoder_support = [sorted(block) for block in support]
     t1, t2, r1 = h123_vectors(sigma, profile.r_bits)
     public_key, secret_key, t0, r2 = serialize_key_pair(
-        support, t1, t2, r1, sigma, sigma2, profile
+        support, t1, t2, r1, sigma, sigma2, profile.r_bits
     )
 
     error_support = sample_indices(
