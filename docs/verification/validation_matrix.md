@@ -6,6 +6,7 @@
 | --- | --- | --- |
 | 纯文档、实验索引或Vivado manifest | `make check-records` | 再运行`git diff --check` |
 | 工具锁、filelist、waiver、Make/Tcl入口 | `make check-tool-versions check-filelists check-records check-rtl` | Tcl改动至少dry-run对应Vivado目标 |
+| 本地工作流、PoC、综合/QoR脚本或仓库Skill | `make workflow-smoke` + `make -C workflow-smoke check-failures` + `make compile synth qor` | Skill运行官方validator；Yosys结果只标为估计 |
 | 局部RTL/TB修复 | 最小定向test + `make check-rtl` | 接口、参数或共享源受影响时升级至`ci-fast` |
 | Decoder数据路径、调度、RAM或K-sign | `make ci-fast` + K=3/K=4受影响profile | 固定周期、`residual=0`和`exact=1`分开记录 |
 | 公开参数、`r/L/K/COLS_PER_TILE`或存储几何 | `make ci-smoke`并运行全部受影响profile | 重算周期；DFR/FLS报告trials、failures和置信界 |

@@ -302,7 +302,7 @@ Tile 内 selector 工作状态按 `COLS_PER_TILE=1168`、`D=4` 估算：
 `ram_sign_delta` 保存两个 iteration pair、每个 pair `R` bit 的 `dev_xor`，逻辑容量为 `2*R_MAX=213,562 bit`。它按 L 个 row bank 组织，物理 BRAM 数量以 Vivado 报告为准。
 
 统一TRIKE、`L=16`的K=3和K=4 RTL实现及Vivado资源结果见
-[implementation_status.md](implementation_status.md)。
+[implementation_status.md](../design/implementation_status.md)。
 
 ## 仿真观察
 

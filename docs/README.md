@@ -15,6 +15,10 @@
 ## 项目管理
 
 - [项目工作流](project_workflow.md)：Git、实验、Vivado报告、基线和生成物的记录边界。
+- [本地SystemVerilog工作流](workflow.md)：环境入口、统一Make目标、PoC、真实RTL切入和证据边界。
+- [本地RTL环境基线](environment.md)：安装布局、锁定工具版本和已验证能力。
+- [已知限制](known-limitations.md)：cocotb/FST兼容层、Yosys估计和物理实现边界。
+- [复位与时钟契约](reset-and-clock.md)：生产RTL的复位、时钟、CDC和报告边界速查。
 - [Vivado manifest规范](../reports/vivado/manifests/README.md)：存放在`D:/trike_reports`的原始报告如何与仓库中的结构化结果对应。
 
 ## 验证和结果

@@ -1,6 +1,6 @@
 # BIKE Min-Sum 译码器架构
 
-本文档描述 RTL 的模块划分、数据通路、存储职责和控制边界。算法语义和顶层接口见 [bike_decoder.md](bike_decoder.md)，tile 几何见 [tile_decoder_design.md](tile_decoder_design.md)，固定窗口周期见 [decoder_schedule.md](decoder_schedule.md)。
+本文档描述 RTL 的模块划分、数据通路、存储职责和控制边界。算法语义和顶层接口见 [bike_decoder.md](../design/bike_decoder.md)，tile 几何见 [tile_decoder_design.md](tile_decoder_design.md)，固定窗口周期见 [decoder_schedule.md](decoder_schedule.md)。
 
 ## 设计目标
 
@@ -135,8 +135,8 @@ last window   : V2C(last tile)
 
 ## 相关文档
 
-- [implementation_status.md](implementation_status.md)：当前RTL配置、RAM生命周期、固定周期、验证状态和物理证据边界。
+- [implementation_status.md](../design/implementation_status.md)：当前RTL配置、RAM生命周期、固定周期、验证状态和物理证据边界。
 - [tile_decoder_design.md](tile_decoder_design.md)：tile 内地址、guard、状态组织和 C2V/V2C 公式。
 - [decoder_schedule.md](decoder_schedule.md)：调度状态、计数器和固定周期预算。
-- [naming_conventions.md](naming_conventions.md)：RTL 命名规则。
+- [naming_conventions.md](../design/naming_conventions.md)：RTL 命名规则。
 - [decoder_verification.md](../verification/decoder_verification.md)：回归入口和检查项。

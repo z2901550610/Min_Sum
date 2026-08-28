@@ -40,3 +40,12 @@ Git records ordinary changes. Do not create experiment entries for formatting, s
 5. Run `make check-tool-versions`, `make check-rtl`, `make formal-fast`, and the smallest relevant simulations before accepting the lock update. Run `make ci-fast` for the complete local gate.
 6. A tool upgrade that changes formatting or diagnostics requires an audited mechanical update or a narrowly documented exception; do not restore global non-fatal warning flags.
 7. Vivado versions are project baselines and are not upgraded as part of the open-source local tool refresh. Re-run comparable Vivado implementation before using a new Vivado version for resource or timing claims.
+
+## Local Workflow Entry
+
+Source `scripts/eda-env.sh` before running local RTL gates. The canonical
+aggregate commands and their evidence boundaries are defined in
+`docs/workflow.md`; exact tool versions remain in
+`config/rtl_toolchain.lock`. Repository-specific Codex skills live under
+`.agents/skills/` and refine stages without replacing this record policy or
+`AGENTS.md`.

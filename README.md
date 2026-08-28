@@ -6,7 +6,15 @@
 ## 快速入口
 
 ```sh
+source scripts/eda-env.sh
 make check-local-tools
+make check-tool-versions
+make lint
+make compile
+make workflow-smoke
+make synth
+make qor
+make check
 make ci-fast
 make ci-smoke
 make ci-nightly
@@ -18,6 +26,10 @@ make ci-kem-reference
 - `ci-nightly`：加入扩展形式参数与多参数、多seed回归。
 - `ci-kem-reference`：使用机器本地的官方TRIKE KAT/Reference C执行KeyGen、Encaps和Decaps
   byte-for-byte发布门禁；该入口明确不属于日常快速回归。
+- `workflow-smoke`：独立计数器的lint、cocotb、formal与Yosys互操作证明。
+- `synth` / `qor`：本地Yosys结构估计与受验证状态约束的JSON/Markdown报告，
+  不属于Vivado物理证据。
+- `check`：`ci-fast`、展开、独立PoC与本地综合的统一完整入口。
 
 Vivado实现入口为`make vivado-impl-trike-{poly-inv,pseudohash,encaps,keygen,decaps}`。
 资源与时序结论只使用同器件、Vivado版本、XDC、参数和报告阶段的可比结果。
@@ -31,8 +43,11 @@ Vivado实现入口为`make vivado-impl-trike-{poly-inv,pseudohash,encaps,keygen,
 - `scripts/`：生成、验证和Vivado入口。
 - `docs/`：成品设计、验证、实验和项目工作流。
 - `reports/vivado/manifests/`：版本化的Vivado运行摘要；原始报告保存在外部报告根目录。
+- `.agents/skills/`：仓库级Codex RTL工作阶段指令。
+- `workflow-smoke/`：不进入生产filelist的独立工具链PoC。
 
-完整文档入口见[docs/README.md](docs/README.md)，项目约束见[AGENTS.md](AGENTS.md)。
+完整文档入口见[docs/README.md](docs/README.md)，本地流程见
+[docs/workflow.md](docs/workflow.md)，项目约束见[AGENTS.md](AGENTS.md)。
 
 ## 本机配置
 

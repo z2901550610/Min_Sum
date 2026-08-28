@@ -30,8 +30,12 @@ Each tool produces exactly one evidence layer. RTL simulation, formal proof, str
 
 Expected on `PATH`: `verilator`, `verible-verilog-format`, `verible-verilog-lint`, `slang`, `yosys`, `sby`, `z3`. `config/rtl_toolchain.lock` pins validated versions; audit with `make check-local-tools` / `make check-tool-versions`, display with `make tool-versions`.
 
+Source `scripts/eda-env.sh` in each new terminal before running the canonical local workflow. Repository-scoped RTL workflow skills live under `.agents/skills/`; read the matching `SKILL.md` when a request falls within its description.
+
 ## Canonical Commands
 
+- Unified local entrypoints: `make format`, `make lint`, `make compile`, `make test`, `make regress`, `make formal`, `make synth`, `make qor`, and `make check`. `make check` includes `ci-fast`, compile, the independent workflow smoke test, and local synthesis.
+- Workflow qualification: `make workflow-smoke`; deliberate negative checks: `make -C workflow-smoke check-failures`.
 - Daily: `make format-rtl`, `make check-rtl` (filelist + format + Verible + Verilator lint + Slang `-Werror`), `make test-unit`, `make test-integration`.
 - Random regression: `make test-bike-random BIKE_RANDOM_PARAM_SET=<set> BIKE_RANDOM_BASE_SEED=<n> BIKE_RANDOM_TRIALS=<n>`; same variable pattern for `test-bike-unified-random` and `test-trike-unified-ksign-random TRIKE_UNIFIED_KSIGN_K={3,4}`.
 - Formal: `make formal` / `make formal-fast` (short matrix + cover witnesses), `make formal-nightly` (extended cases).

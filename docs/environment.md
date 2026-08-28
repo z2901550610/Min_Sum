@@ -1,0 +1,42 @@
+# 本地 RTL 环境基线
+
+审计日期：2026-08-28；主机：macOS 27.0（26A5421a），Apple Silicon arm64，
+默认 shell 为 zsh。
+
+## 安装布局
+
+- OSS CAD Suite 版本目录：`~/tools/oss-cad-suite-20260827`
+- 稳定选择链接：`~/tools/oss-cad-suite`
+- 仓库环境入口：`source scripts/eda-env.sh`
+- Verible：已有主机安装，由环境入口保留在 PATH
+- Surfer：Homebrew 安装
+- Python/cocotb：主机 Python 3.12.10 与 cocotb 2.0.1
+
+## 锁定版本
+
+| 工具 | 已验证版本 |
+| --- | --- |
+| Verilator | 5.051 devel, v5.050-277-g99c6f9ced |
+| Verible | v0.0-4133-g873f559f |
+| Slang | 11.0.448+e222e7dc0 |
+| Yosys | 0.68+132；`yosys -m slang`可用 |
+| SymbiYosys | 0.68 |
+| Z3 | 4.15.5 |
+| Boolector | 3.2.4 |
+| Bitwuzla | 0.9.1 |
+| cocotb | 2.0.1 |
+| Surfer | 0.7.0 |
+| Python | 3.12.10 |
+
+主机辅助工具为 Homebrew 6.0.15、Apple Git 2.54.0、Apple clang 21.0.0 和
+GNU Make 3.81。精确匹配由`config/rtl_toolchain.lock`和
+`scripts/check_tool_versions.py`执行，文档表格不是程序化锁源。
+
+## 已验证能力
+
+- `make check-local-tools`：包含 Slang frontend 加载、solver、cocotb 和 Surfer。
+- `make check-tool-versions`：锁文件全部匹配。
+- OSS CAD Suite 的 Verilator/Slang/Yosys/SBY/Z3 可运行生产静态与 formal gate。
+- 主机 cocotb 可驱动 Suite Verilator；FST 生成使用 Homebrew lz4 头文件和库。
+
+工具升级遵循`docs/project_workflow.md`；Vivado版本不属于本地开源工具刷新。

@@ -1,7 +1,13 @@
-# Tool versions validated together on 2026-08-09.
-verilator=Verilator 5.050
+# Tool versions validated together on 2026-08-28.
+# OSS CAD Suite release: 2026-08-27 darwin-arm64.
+verilator=Verilator 5.051 devel rev v5.050-277-g99c6f9ced (mod)
 verible=Version\tv0.0-4133-g873f559f
-slang=slang version 11.0.0+7ddf4059f
-yosys=Yosys 0.68
+slang=slang version 11.0.448+e222e7dc0
+yosys=Yosys 0.68+132
 sby=SBY v0.68
-z3=Z3 version 4.16.0
+z3=Z3 version 4.15.5
+boolector=3.2.4
+bitwuzla=0.9.1
+cocotb=2.0.1
+surfer=surfer 0.7.0
+python=Python 3.12.10

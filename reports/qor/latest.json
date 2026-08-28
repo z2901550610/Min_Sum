@@ -1,0 +1,33 @@
+{
+  "fpga_estimate": {
+    "bram": 0,
+    "dsp": 0,
+    "family": "xc7",
+    "ff": 0,
+    "lut": 411,
+    "mapped_cells": 1692
+  },
+  "generic_synthesis": {
+    "cells": 849,
+    "ff": 0
+  },
+  "git_commit": "c877513b5aa82544ff3994a3285cfae4b8d78941",
+  "git_dirty": true,
+  "latency_cycles": null,
+  "not_verified": [
+    "Vivado synthesis",
+    "Vivado implementation",
+    "post-route timing",
+    "physical FPGA behavior"
+  ],
+  "parameters": {},
+  "throughput": null,
+  "timestamp": "2026-08-27T17:11:17.325084+00:00",
+  "tool": "Yosys",
+  "top": "kem_ct_compare_select",
+  "verification": {
+    "formal": "PASS",
+    "lint": "PASS",
+    "simulation": "PASS"
+  }
+}

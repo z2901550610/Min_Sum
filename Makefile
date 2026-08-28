@@ -17,8 +17,19 @@ YOSYS ?= yosys
 SLANG ?= slang
 SBY ?= sby
 Z3 ?= z3
+BOOLECTOR ?= boolector
+BITWUZLA ?= bitwuzla
+COCOTB_CONFIG ?= cocotb-config
+SURFER ?= surfer
 SLANG_FLAGS ?= --std 1800-2017 --single-unit --lint-only --quiet -Werror -I tb -I rtl
 FORMAL_BUILD_DIR ?= build/formal
+LOCAL_SYNTH_TOP ?= kem_ct_compare_select
+LOCAL_SYNTH_SOURCES ?= rtl/kem_ct_compare_select.sv
+LOCAL_SYNTH_BUILD_DIR ?= build/synth/$(LOCAL_SYNTH_TOP)
+QOR_TOP := kem_ct_compare_select
+QOR_SOURCES := rtl/kem_ct_compare_select.sv
+QOR_BUILD_DIR := build/synth/$(QOR_TOP)
+QOR_REPORT_DIR ?= reports/qor
 VIVADO_PART ?= xc7k355tffg901-2L
 VIVADO_RUN_TAG ?= $(shell date +%Y%m%d-%H%M%S)
 VIVADO_BUILD_DIR ?= build/vivado/$(VIVADO_RUN_TAG)
@@ -123,11 +134,27 @@ TRIKE_UNIFIED_KSIGN_TIMEOUT_CYCLES ?= 40000000
 CI_SMOKE_SEED ?= 1
 CI_NIGHTLY_TRIALS ?= 4
 
-.PHONY: all sim test test-unit test-kem-unit test-trike-clmul-karatsuba test-trike-poly-base-karatsuba-matrix test-trike-poly-karatsuba-matrix test-trike-poly-karatsuba-core test-trike-poly-karatsuba-reference test-trike-poly-karatsuba2-core test-trike-poly-karatsuba2-reference test-trike-weak-key-reference test-trike-keygen-secret-reference test-trike-keygen-arith-reference test-trike-keygen-core-reference test-trike-keygen-synth-reference test-trike-poly-reference test-trike-poly-inv-reference test-trike-poly-kernel-matrix test-trike-encaps-components-reference test-trike-encaps-hash-reference test-trike-encaps-core-reference test-trike-decaps-syndrome-reference test-trike-error-store-reference test-trike-h4-vector-reference check-trike-sm3-sharing test-integration test-bike-random test-bike-unified-random test-trike-unified-ksign-random model-min-sum run-model-min-sum sweep-min-sum optimum-min-sum campaign-min-sum confirm-min-sum check-model-rtl check-model-rtl-bike128 software-trike-kem test-software-trike-kem test-trike-reference-kat check-local-tools format-rtl check-format-rtl lint-rtl lint-slang check-rtl formal formal-ct-select formal-ct-control verify-rtl vivado-synth vivado-synth-trike-unified-ksign vivado-impl-trike-kem-core vivado-impl-trike-poly-inv vivado-impl-trike-pseudohash vivado-impl-trike-encaps vivado-impl-trike-keygen vivado-impl-trike-decaps vivado-impl-trike-decaps-runtime vivado-impl-trike-kem-cores FORCE
+.PHONY: all format lint compile test regress formal synth synth-generic synth-xilinx qor check workflow-smoke test-kem-ct-compare-select test-unit test-kem-unit test-trike-clmul-karatsuba test-trike-poly-base-karatsuba-matrix test-trike-poly-karatsuba-matrix test-trike-poly-karatsuba-core test-trike-poly-karatsuba-reference test-trike-poly-karatsuba2-core test-trike-poly-karatsuba2-reference test-trike-weak-key-reference test-trike-keygen-secret-reference test-trike-keygen-arith-reference test-trike-keygen-core-reference test-trike-keygen-synth-reference test-trike-poly-reference test-trike-poly-inv-reference test-trike-poly-kernel-matrix test-trike-encaps-components-reference test-trike-encaps-hash-reference test-trike-encaps-core-reference test-trike-decaps-syndrome-reference test-trike-error-store-reference test-trike-h4-vector-reference check-trike-sm3-sharing test-integration test-bike-random test-bike-unified-random test-trike-unified-ksign-random model-min-sum run-model-min-sum sweep-min-sum optimum-min-sum campaign-min-sum confirm-min-sum check-model-rtl check-model-rtl-bike128 software-trike-kem test-software-trike-kem test-trike-reference-kat check-local-tools format-rtl check-format-rtl lint-rtl lint-slang check-rtl formal-ct-select formal-ct-control verify-rtl vivado-synth vivado-synth-trike-unified-ksign vivado-impl-trike-kem-core vivado-impl-trike-poly-inv vivado-impl-trike-pseudohash vivado-impl-trike-encaps vivado-impl-trike-keygen vivado-impl-trike-decaps vivado-impl-trike-decaps-runtime vivado-impl-trike-kem-cores FORCE
 .PHONY: test-trike-poly-inv-minsum-reference gen-trike-minsum-kem-case test-trike-pseudohash-runtime test-trike-h4-runtime test-trike-ct-verify-runtime test-trike-decaps-postprocess-runtime test-trike-decaps-input-loader test-trike-decaps-input-store test-trike-decaps-syndrome-runtime test-trike-decaps-syndrome-store-core test-trike-decaps-input-syndrome-core test-trike-decaps-support-prefetch test-trike-decaps-input-decoder-load-core test-trike-decaps-decoder-postcheck-core test-trike-fixed-support-sorter-runtime test-trike-decoder-load-adapter-runtime test-trike-decaps-message-reference test-trike-decaps-verify-reference test-trike-decaps-kdf-reference test-trike-decoder-residual-reference test-trike-decaps-pipeline-reference test-trike-decaps-synth-reference test-trike-decaps-runtime-synth-reference test-trike-decaps-runtime-four-profile-reference test-trike-kem-operation-control test-trike-h123-vector-store formal-trike-kem-operation-control
 .PHONY: tool-versions check-tool-versions check-filelists check-records check-trike-reference-data lint-verilator formal-fast formal-nightly formal-ct-control-extended ci-fast ci-smoke ci-nightly ci-kem-reference
 
 all: test
+
+format: format-rtl
+
+lint: check-rtl
+
+compile:
+	@mkdir -p build/compile/decoder build/compile/kem_ct_compare_select
+	@$(REAL_VERILATOR) --cc --sv -Wall --quiet -I./rtl $(VERILATOR_WAIVER_FILE) -DBIKE_PARALLEL_L=$(BIKE_PARALLEL_L) --top-module decoder_top --Mdir build/compile/decoder $(RTL)
+	@$(REAL_VERILATOR) --cc --sv -Wall --quiet $(VERILATOR_WAIVER_FILE) --top-module kem_ct_compare_select --Mdir build/compile/kem_ct_compare_select rtl/kem_ct_compare_select.sv
+
+regress: ci-smoke
+
+check: ci-fast compile workflow-smoke synth
+
+workflow-smoke:
+	@$(MAKE) -C workflow-smoke check
 
 $(TOY_CASE_SVH): FORCE scripts/gen_toy_case_fixture.py scripts/run_bike_random.py scripts/qc_matrix_data.py
 	@python3 scripts/gen_toy_case_fixture.py --output $@
@@ -231,8 +258,7 @@ test-kem-unit:
 	@$(SIM) ./obj_dir/Vtb_keccak_f1600 +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_shake256_stream rtl/keccak_f1600.sv rtl/shake256_stream.sv tb/tb_shake256_stream.sv
 	@$(SIM) ./obj_dir/Vtb_shake256_stream +verilator+quiet
-	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_kem_ct_compare_select rtl/kem_ct_compare_select.sv tb/tb_kem_ct_compare_select.sv
-	@$(SIM) ./obj_dir/Vtb_kem_ct_compare_select +verilator+quiet
+	@$(MAKE) test-kem-ct-compare-select
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_ct_verify_stream rtl/kem_ct_compare_select.sv rtl/trike_ct_verify_stream.sv tb/tb_trike_ct_verify_stream.sv
 	@$(SIM) ./obj_dir/Vtb_trike_ct_verify_stream +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_decoder_load_adapter rtl/trike_fixed_support_sorter.sv rtl/trike_decoder_load_adapter.sv tb/tb_trike_decoder_load_adapter.sv
@@ -271,6 +297,10 @@ test-trike-h123-vector-store:
 test-trike-clmul-karatsuba:
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_clmul_karatsuba rtl/trike_poly_mul_core.sv tb/tb_trike_clmul_karatsuba.sv
 	@$(SIM) ./obj_dir/Vtb_trike_clmul_karatsuba +verilator+quiet
+
+test-kem-ct-compare-select:
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_kem_ct_compare_select rtl/kem_ct_compare_select.sv tb/tb_kem_ct_compare_select.sv
+	@$(SIM) ./obj_dir/Vtb_kem_ct_compare_select +verilator+quiet
 
 test-trike-poly-base-karatsuba-matrix:
 	@$(MAKE) test-trike-clmul-karatsuba
@@ -576,9 +606,10 @@ check-model-rtl-bike128: model-min-sum
 	@python3 scripts/check_model_rtl.py --model $(MIN_SUM_MODEL) --verilator $(VERILATOR) --seed 1 --r 12323 --w 71 --errors 134 --iterations 7 --msg-bits 5 --c-val 5 --alpha-shift-0 3 --alpha-shift-1 4 --parallel-l 32 --cols-per-tile 576
 
 check-local-tools:
-	@for tool in $(REAL_VERILATOR) $(VERIBLE_FORMAT) $(VERIBLE_LINT) $(SLANG) $(YOSYS) $(SBY) $(Z3); do \
+	@for tool in $(REAL_VERILATOR) $(VERIBLE_FORMAT) $(VERIBLE_LINT) $(SLANG) $(YOSYS) $(SBY) $(Z3) $(BOOLECTOR) $(BITWUZLA) $(COCOTB_CONFIG) $(SURFER); do \
 		command -v $$tool >/dev/null || { echo "missing required local tool: $$tool"; exit 1; }; \
 	done
+	@$(YOSYS) -m slang -Q -p 'help read_slang' | grep -q 'Read SystemVerilog sources' || { echo "missing Yosys read_slang frontend"; exit 1; }
 	@echo "Local RTL tools PASS"
 
 tool-versions:
@@ -675,6 +706,20 @@ ci-nightly:
 
 ci-kem-reference: check-local-tools check-tool-versions check-records check-rtl check-trike-reference-data $(TRIKE_KEM_REFERENCE_TARGETS)
 
+synth: synth-generic synth-xilinx
+
+synth-generic:
+	@mkdir -p $(LOCAL_SYNTH_BUILD_DIR)
+	@$(YOSYS) -m slang -ql $(LOCAL_SYNTH_BUILD_DIR)/generic.log -p 'read_slang --std 1800-2017 $(LOCAL_SYNTH_SOURCES) --top $(LOCAL_SYNTH_TOP); synth -top $(LOCAL_SYNTH_TOP); tee -o $(LOCAL_SYNTH_BUILD_DIR)/generic-stat.json stat -json'
+
+synth-xilinx:
+	@mkdir -p $(LOCAL_SYNTH_BUILD_DIR)
+	@$(YOSYS) -m slang -ql $(LOCAL_SYNTH_BUILD_DIR)/xilinx.log -p 'read_slang --std 1800-2017 $(LOCAL_SYNTH_SOURCES) --top $(LOCAL_SYNTH_TOP); synth_xilinx -family xc7 -top $(LOCAL_SYNTH_TOP); tee -o $(LOCAL_SYNTH_BUILD_DIR)/xilinx-stat.json stat -json'
+
+qor: check-rtl test-kem-ct-compare-select formal-ct-select
+	@$(MAKE) synth LOCAL_SYNTH_TOP=$(QOR_TOP) LOCAL_SYNTH_SOURCES="$(QOR_SOURCES)" LOCAL_SYNTH_BUILD_DIR=$(QOR_BUILD_DIR)
+	@python3 scripts/report_qor.py --top $(QOR_TOP) --generic $(QOR_BUILD_DIR)/generic-stat.json --xilinx $(QOR_BUILD_DIR)/xilinx-stat.json --output-json $(QOR_REPORT_DIR)/latest.json --output-markdown $(QOR_REPORT_DIR)/latest.md --lint PASS --simulation PASS --formal PASS
+
 vivado-synth:
 	@mkdir -p $(VIVADO_BUILD_DIR)
 	@BIKE_PARAM_DEFINE=$(BIKE_SYNTH_PARAM) BIKE_PARALLEL_L=$(BIKE_SYNTH_PARALLEL_L) BIKE_K_SIGN_K=$(TRIKE_UNIFIED_KSIGN_K) $(if $(BIKE_SYNTH_COLS_PER_TILE),BIKE_COLS_PER_TILE=$(BIKE_SYNTH_COLS_PER_TILE),) $(VIVADO) -mode batch -source scripts/vivado_synth.tcl -tclargs $(VIVADO_BUILD_DIR)
@@ -707,5 +752,3 @@ vivado-impl-trike-decaps-runtime:
 vivado-impl-trike-kem-cores:
 	@$(MAKE) vivado-impl-trike-poly-inv VIVADO_BUILD_DIR=$(VIVADO_BUILD_DIR)
 	@$(MAKE) vivado-impl-trike-pseudohash VIVADO_BUILD_DIR=$(VIVADO_BUILD_DIR)
-
-sim: test

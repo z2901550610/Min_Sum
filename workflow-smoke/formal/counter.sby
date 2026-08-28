@@ -1,0 +1,19 @@
+[tasks]
+prove prove
+cover cover
+
+[options]
+prove: mode prove
+cover: mode cover
+depth 24
+
+[engines]
+smtbmc z3
+
+[script]
+read -formal -sv workflow_counter.sv workflow_counter_formal.sv
+prep -top workflow_counter_formal
+
+[files]
+rtl/workflow_counter.sv
+formal/workflow_counter_formal.sv

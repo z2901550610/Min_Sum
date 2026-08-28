@@ -5,7 +5,7 @@
 > 证据标签：**MEASURED**=本仓库仿真或Vivado记录；**SOURCE**=TRIKE随包C/当前RTL直接推导；
 > **PUBLISHED**=公开文献实测；**ESTIMATE**=解析模型；**PROPOSAL**=尚未实现的TRIKE硬件方案。
 > 当前实现、周期和验证结论见[EXP-0115](../experiments/EXP-0115-dense-mul-diagonal-comba.md)、
-> [实现状态](implementation_status.md)和[TRIKE KEM优化路线图](trike_kem_optimization_roadmap.md)。
+> [实现状态](../design/implementation_status.md)和[TRIKE KEM优化路线图](../design/trike_kem_optimization_roadmap.md)。
 
 ## 0. 结论摘要
 

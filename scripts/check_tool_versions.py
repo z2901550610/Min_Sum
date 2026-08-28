@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 from pathlib import Path
 
@@ -11,12 +12,17 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 LOCK_PATH = REPO_ROOT / "config" / "rtl_toolchain.lock"
 COMMANDS = {
-    "verilator": ["verilator", "--version"],
+    "verilator": [os.environ.get("REAL_VERILATOR", "verilator"), "--version"],
     "verible": ["verible-verilog-lint", "--version"],
     "slang": ["slang", "--version"],
     "yosys": ["yosys", "-V"],
     "sby": ["sby", "--version"],
     "z3": ["z3", "--version"],
+    "boolector": ["boolector", "--version"],
+    "bitwuzla": ["bitwuzla", "--version"],
+    "cocotb": ["cocotb-config", "--version"],
+    "surfer": ["surfer", "--version"],
+    "python": ["python3", "--version"],
 }
 
 

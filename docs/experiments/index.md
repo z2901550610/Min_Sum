@@ -1,6 +1,6 @@
 # 实验索引
 
-下一个实验ID：`EXP-0121`。
+下一个实验ID：`EXP-0122`。
 
 TRIKE KEM实验的主题归类、依赖和当前推进点见
 [TRIKE KEM优化路线图](../design/trike_kem_optimization_roadmap.md)；本表继续作为按实施时间追加的实验台账。
@@ -47,6 +47,7 @@ TRIKE KEM实验的主题归类、依赖和当前推进点见
 | EXP-0118 | 2026-08-27 | 整多项式Karatsuba depth 1 | TRIKE-2，`W=244,H=122`，四个half operand bank | 小参数及官方golden通过；61,977降至50,993拍（-17.72%） | [RUN-20260827-01](../../reports/vivado/manifests/RUN-20260827-01-trike-poly-mul-k1.toml)：2,740 LUT/6 RAMB36；internal WNS +2.032 ns | `pending` | [详情](EXP-0118-dense-poly-karatsuba-depth1.md) |
 | EXP-0119 | 2026-08-27 | 整多项式Karatsuba depth 2 | TRIKE-2，`W=244,Q=61`，八个quarter operand bank | 小参数及官方golden通过；61,977降至44,216拍（-28.66%） | [RUN-20260827-02](../../reports/vivado/manifests/RUN-20260827-02-trike-poly-mul-k2.toml)：3,712 LUT/10 RAMB36；internal WNS +1.483 ns | `pending` | [详情](EXP-0119-dense-poly-karatsuba-depth2.md) |
 | EXP-0120 | 2026-08-27 | TRIKE-2低寄存器短求逆链 | `r=15581`，三份整环scratch，D16/32/64 | 18次置换/17次乘法；官方golden固定4,635,018/2,610,794/1,598,682拍 | 待测 | `pending` | [详情](EXP-0120-trike2-short-inversion-chain.md) |
+| EXP-0121 | 2026-08-28 | 常时compare-select三元选择候选 | `COMPARE_W=DATA_W=256`，显式mask对比ternary mux | 定向257/193-bit仿真与W1/8/256 proof/cover通过；组合逻辑无周期 | Vivado未运行；Yosys generic 849增至850，xc7保持1692 cells/411 LUT | `rejected` | 候选已撤回，保留显式mask |
 
 新实验只追加一行。需要详细说明时，详情列链接到`EXP-xxxx-<slug>.md`；Vivado列链接到
 `reports/vivado/manifests/<run-id>.toml`。
