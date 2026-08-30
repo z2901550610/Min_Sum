@@ -40,6 +40,7 @@
 *.bak
 __pycache__/
 *.pyc
+/.venv/
 
 # Editor / OS files
 .DS_Store
@@ -54,3 +55,4 @@ Thumbs.db
 
 # Machine-local paths and tool configuration
 /config/local.mk
+/config/vivado_local.tcl

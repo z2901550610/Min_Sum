@@ -30,7 +30,9 @@ logic [ROW_IDX_W-1:0] c2v_check_row_idx[0:L-1];
 logic signed [ACC_W-1:0] c2v_raw_next[0:L-1];
 ```
 
-- 维护 RTL/TB 文件后运行 `make format-rtl`。格式检查使用 `make check-format-rtl`。
+- 维护 RTL/TB/Formal 文件后运行 `make format FILES="<本任务修改的 .sv 文件>"`。
+  全仓格式门禁使用非修改式的 `make format-check`；仅在明确需要时运行
+  `make format-changed`或`make format-all`。
 
 ## SystemVerilog 子集
 
@@ -223,9 +225,9 @@ localparam int ROW_IDX_W = (R > 1) ? $clog2(R) : 1;
 常规检查：
 
 ```bash
-make format-rtl
-make check-format-rtl
-make lint-rtl
+make format FILES="rtl/foo.sv tb/tb_foo.sv"
+make format-check
+make lint
 make test
 ```
 

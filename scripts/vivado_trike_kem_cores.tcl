@@ -1,9 +1,10 @@
 # Windows Vivado Tcl Console example:
-#   set TRIKE_KEM_BUILD_DIR D:/trike_reports/RUN-YYYYMMDD-NN-trike-kem-asic
+#   source D:/path/to/Min_Sum/config/vivado_local.tcl
 #   set TRIKE_KEM_SYNTH_TOP trike_kem_asic_top
 #   set VIVADO_RUN_ID RUN-YYYYMMDD-NN-trike-kem-asic
 #   source D:/path/to/Min_Sum/scripts/vivado_trike_kem_cores.tcl
-# VIVADO_PART, VIVADO_XDC and implementation directives are optional globals.
+# VIVADO_REPORT_ROOT, VIVADO_PART, VIVADO_XDC and implementation directives may
+# also be supplied as Tcl globals or environment variables.
 
 proc config_value {name default_value} {
   if {[uplevel #0 [list info exists $name]]} {
@@ -21,7 +22,16 @@ if {($build_dir eq "") && [info exists argv] && ([llength $argv] > 0)} {
   set build_dir [lindex $argv 0]
 }
 if {$build_dir eq ""} {
-  set build_dir [config_value TRIKE_KEM_BUILD_DIR "build/vivado/trike_kem_core"]
+  set report_root [config_value VIVADO_REPORT_ROOT ""]
+  set configured_run_id [config_value VIVADO_RUN_ID ""]
+  if {$report_root ne ""} {
+    if {$configured_run_id eq ""} {
+      error "VIVADO_RUN_ID is required when VIVADO_REPORT_ROOT is set"
+    }
+    set build_dir [file join $report_root $configured_run_id]
+  } else {
+    set build_dir "build/vivado/trike_kem_core"
+  }
 }
 if {[file pathtype $build_dir] eq "relative"} {
   set build_dir [file join $repo_root $build_dir]

@@ -1,7 +1,9 @@
 # Vivado运行清单
 
 每次新Vivado运行在本目录提交一个`RUN-YYYYMMDD-NN-<top>.toml`。原始`.rpt`和`.dcp`
-保存在`D:/trike_reports/<run-id>/`，不复制进Git。
+保存在`${VIVADO_REPORT_ROOT}/<run-id>/`，不复制进Git。报告根目录通过 Windows Tcl
+环境、`config/vivado_local.tcl`或可选的`config/local.mk`配置；历史 manifest 保留
+该次运行实际使用的绝对路径。
 
 1. 复制`template.toml.example`并更名为唯一run ID。
 2. 从外部run目录的`run_provenance.txt`填写Git revision、dirty状态、filelist、defines、XDC和directive；

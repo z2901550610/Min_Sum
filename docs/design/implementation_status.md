@@ -302,7 +302,7 @@ async recovery WNS为`-3.550 ns`，最差decoder reset分发网fanout 9,206。�
 
 每次新运行使用`RUN-YYYYMMDD-NN-<top>`标识，在
 `reports/vivado/manifests/`提交运行manifest，原始`.rpt/.dcp`保存在
-`D:/trike_reports/<run-id>/`。只有器件、Vivado、XDC、参数、`L/K`、存储几何、时钟和报告阶段一致的
+`${VIVADO_REPORT_ROOT}/<run-id>/`。只有器件、Vivado、XDC、参数、`L/K`、存储几何、时钟和报告阶段一致的
 Fully Routed结果才可更新[Vivado基线注册表](vivado_baseline_registry.md)。wrapper没有package pin约束，
 因此核心100 MHz通过不等于板级I/O签核。
 

@@ -301,6 +301,6 @@ BF 与 Min-Sum 使用不同的消息更新方式、阈值/归一化参数和经�
 2. `TRIKE_document_newtemplate-6.pdf`，重点参考第 10 页参数表和第 13–15 页 DFR 外推方法及表 8。
    - 文件：`/Users/z2901550610/Library/CloudStorage/GoogleDrive-z2901550610@gmail.com/其他计算机/我的windows/JiuCuoMa/TRIKE/bf/TRIKE_document_newtemplate-6.pdf`
 3. 本项目 K-sign DFR 汇总：
-   - `ksign_results_summary.csv`
+   - [`ksign_results_summary.csv`](../figures/ksign_results_summary.csv)
 
 本文档中的 Min-Sum 数值属于当前数据快照下的统计外推结果。若修改消息位宽、`K`、`alpha`、迭代次数、Top-K tie 规则、错误生成方式或试验数据，应重新执行完整外推。

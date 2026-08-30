@@ -115,6 +115,6 @@ residual = syndrome ^ H * e_hat
 ```sh
 make test
 make test-bike-random BIKE_RANDOM_TRIALS=1
-make check-format-rtl && make lint-rtl
-make vivado-synth
+make format-check && make lint
+vivado -mode batch -source scripts/vivado_synth.tcl -tclargs <run-dir>
 ```

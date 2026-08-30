@@ -1,0 +1,23 @@
+[tasks]
+prove_w2 prove width2
+prove_w8 prove width8
+cover_w2 cover width2
+cover_w8 cover width8
+
+[options]
+prove: mode prove
+cover: mode cover
+depth 2
+
+[engines]
+smtbmc z3
+
+[script]
+read -formal -sv trike_poly_divstep_s1.sv trike_poly_divstep_s1_formal.sv
+width2: chparam -set WORD_W 2 -set DELTA_W 4 trike_poly_divstep_s1_formal
+width8: chparam -set WORD_W 8 -set DELTA_W 6 trike_poly_divstep_s1_formal
+prep -top trike_poly_divstep_s1_formal
+
+[files]
+rtl/trike_poly_divstep_s1.sv
+formal/trike_poly_divstep_s1_formal.sv

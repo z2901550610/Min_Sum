@@ -1,53 +1,29 @@
-# 实验索引
+# 实验决策索引
 
-下一个实验ID：`EXP-0122`。
+下一个实验ID：`EXP-0123`。
 
-TRIKE KEM实验的主题归类、依赖和当前推进点见
-[TRIKE KEM优化路线图](../design/trike_kem_optimization_roadmap.md)；本表继续作为按实施时间追加的实验台账。
+本页按“可比较假设/实验系列”汇总结论，不再逐个列出每次小修改。已有
+`EXP-0082`至`EXP-0122`的单项文档和 Vivado RUN manifest 保留原 ID，作为需要时
+下钻的历史证据。TRIKE KEM 的依赖和下一门禁见
+[优化路线图](../design/trike_kem_optimization_roadmap.md)。
 
-| ID | 日期 | 主题 | 配置/比较键 | 功能与周期 | Vivado | 结论 | 详情 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| LEGACY-0001-0081 | 2026-07-10至2026-08-09 | 解码器、K-sign与TRIKE KEM阶段1至81 | 多配置 | 见归档 | 见归档 | `superseded` | [历史探索归档](../design/optimization_exploration_history.md) |
-| EXP-0082 | 2026-08-10 | 统一Decaps寄存分段物理复测 | 五档统一最大几何，L32/K4/C256 | 五档decoder与KEM分层门禁通过 | [RUN-20260810-01-trike-decaps](../../reports/vivado/manifests/RUN-20260810-01-trike-decaps.toml) | `superseded` | [详情](EXP-0082-decaps-route-config-audit.md) |
-| EXP-0083 | 2026-08-10 | 统一架构删除非提交TRIKE-1档 | `TRIKE_UNIFIED_PARAMS`，TRIKE-2/5/7/9 | 四档K=4、软件KEM与参考门禁通过 | [EXP-0084](EXP-0084-four-profile-decaps-route.md) | `retained` | [详情](EXP-0083-four-submission-profiles.md) |
-| EXP-0084 | 2026-08-11 | 四档统一Decaps物理复测 | 四档统一最大几何，L32/K4/C256 | 沿用EXP-0083分层门禁 | [RUN-20260811-01-trike-decaps](../../reports/vivado/manifests/RUN-20260811-01-trike-decaps.toml) | `retained` | [详情](EXP-0084-four-profile-decaps-route.md) |
-| EXP-0085 | 2026-08-13 | 当前KeyGen同条件物理复测 | TRIKE-2窄I/O，当前共享乘法调度 | 核心两路径及wrapper byte golden/固定周期通过 | [RUN-20260811-02-trike-keygen](../../reports/vivado/manifests/RUN-20260811-02-trike-keygen.toml) | `retained` | [详情](EXP-0085-current-keygen-route.md) |
-| EXP-0086 | 2026-08-13 | 当前Encaps同条件物理复测 | TRIKE-2窄I/O，当前共享乘法调度 | CT/SS byte golden与2,384,421固定周期通过 | [RUN-20260813-01-trike-encaps](../../reports/vivado/manifests/RUN-20260813-01-trike-encaps.toml) | `retained` | [详情](EXP-0086-current-encaps-route.md) |
-| EXP-0087 | 2026-08-13 | Decaps四档运行时输入事务前端 | 四档项目Min-Sum参数，8-bit `SK || CT` | 分档长度、地址、写次数和数据无关周期通过 | 待测 | `retained` | [详情](EXP-0087-decaps-runtime-input-loader.md) |
-| EXP-0088 | 2026-08-13 | Decaps四档最大几何输入存储 | 四档项目Min-Sum参数，最大档RAM几何 | 全档有效地址逐项回读通过 | 待测 | `retained` | [详情](EXP-0088-decaps-runtime-input-store.md) |
-| EXP-0089 | 2026-08-13 | Decaps运行时syndrome环几何 | 最大乘法器，运行时公开`r/w/word` | 小几何逐word golden及旧reference通过 | 待测 | `retained` | [详情](EXP-0089-decaps-runtime-syndrome-geometry.md) |
-| EXP-0090 | 2026-08-13 | Decaps输入存储到syndrome固定预取 | 最大输入RAM，运行时活动几何 | 小几何逐word及TRIKE160端到端golden通过 | 待测 | `retained` | [详情](EXP-0090-decaps-syndrome-prefetch.md) |
-| EXP-0091 | 2026-08-17 | Decaps运行时support排序与decoder装载 | 最大`r/w`，三块support | 三档逐项golden及成对固定周期通过 | 待测 | `retained` | [详情](EXP-0091-runtime-support-sorter-adapter.md) |
-| EXP-0092 | 2026-08-17 | Decaps共享support固定预取 | 单support读口，运行时`r/w` | 小几何读次数及TRIKE160装载golden通过 | 待测 | `retained` | [详情](EXP-0092-shared-support-prefetch.md) |
-| EXP-0093 | 2026-08-17 | Decaps运行时decoder后检查 | 最大RAM，活动`r/w`，共享decision读口 | padding跨界、error逐byte及residual固定周期通过 | 待测 | `retained` | [详情](EXP-0093-runtime-decoder-postcheck.md) |
-| EXP-0094 | 2026-08-17 | Decaps运行时pseudohash长度底座 | 最大消息几何，公开活动byte数 | 跨padding digest golden及L/K reference通过 | 待测 | `retained` | [详情](EXP-0094-runtime-pseudohash-lengths.md) |
-| EXP-0095 | 2026-08-17 | Decaps运行时H4与完整postprocess | 最大H4/error RAM，活动`r/t/byte` | 三档golden、隐式拒绝及成对固定周期通过 | 待测 | `retained` | [详情](EXP-0095-runtime-h4-postprocess.md) |
-| EXP-0096 | 2026-08-18 | 四档运行时Decaps流水线集成 | 最大几何，L32/K4/C256，8-bit I/O | TRIKE160完整golden、四档decoder分层通过 | 待测 | `retained` | [详情](EXP-0096-unified-runtime-decaps-pipeline.md) |
-| EXP-0097 | 2026-08-18 | 四档运行时Decaps端到端golden | 四档项目Min-Sum参数，L32/K4/C256 | 全档有效/c2拒绝byte golden与固定周期通过 | 待测 | `retained` | [详情](EXP-0097-four-profile-runtime-decaps-golden.md) |
-| EXP-0098 | 2026-08-19 | 双行并行residual扫描 | 两个decision读bank，相邻row固定配对 | 四档byte golden，residual与固定周期通过 | 待测 | `retained` | [详情](EXP-0098-dual-row-residual-scan.md) |
-| EXP-0099 | 2026-08-20 | KEM稠密乘法16-bit digit并行化 | 64-bit word，16-bit digit，KeyGen与四档Decaps | KeyGen及四档Decaps golden/固定周期通过 | [poly-inv](../../reports/vivado/manifests/RUN-20260820-01-trike-poly-inv.toml) / [KeyGen 100 MHz通过](../../reports/vivado/manifests/RUN-20260820-02-trike-keygen.toml) | `retained` | [详情](EXP-0099-kem-dense-mul-digit16.md) |
-| EXP-0100 | 2026-08-24 | 单发射统一KEM ASIC与全局SM3 | 公开2-bit operation，三阶段单SM3 | one-hot形式化；三阶段外置SM3 byte golden/固定周期通过 | 待测 | `retained` | [详情](EXP-0100-unified-kem-asic-sm3.md) |
-| EXP-0101 | 2026-08-24 | 统一KEM运行时几何多项式服务 | 单发射operation，最大`r`/`weight`乘法核 | KeyGen/Encaps/Decaps外置乘法golden与固定周期通过；完整层次2个乘法核 | 待测 | `retained` | [详情](EXP-0101-unified-kem-poly-mul-service.md) |
-| EXP-0102 | 2026-08-24 | KeyGen/Encaps共享H1/H2/H3服务 | 官方TRIKE-2，单发射operation | 两阶段外置H123 byte golden与固定周期通过；完整层次单H123/parity实例 | 待测 | `retained` | [详情](EXP-0102-unified-kem-h123-service.md) |
-| EXP-0103 | 2026-08-24 | 三阶段共享固定重量采样服务 | 最大`length=320343,weight=877`，运行时公开几何 | 三阶段外置sampler golden/固定周期通过；完整层次单采样链 | 待测 | `retained` | [详情](EXP-0103-unified-kem-weight-sampler-service.md) |
-| EXP-0104 | 2026-08-24 | Encaps/Decaps共享H4结果存储 | 最大`r=106781,t=877`，support与dense error RAM | 两阶段外置store byte golden/固定周期通过；完整层次单H4 store | 待测 | `retained` | [详情](EXP-0104-unified-kem-h4-store-service.md) |
-| EXP-0105 | 2026-08-24 | KeyGen/Encaps共享H123向量存储 | 官方TRIKE-2，三组244x64-bit同步RAM | 两阶段外置store byte golden与固定周期通过；完整层次单H123 store | 待测 | `retained` | [详情](EXP-0105-unified-kem-h123-vector-store.md) |
-| EXP-0106 | 2026-08-24 | Encaps UV累加与持久结果共用RAM | 官方TRIKE-2，两组244x64-bit同步RAM | 内外store UV golden通过；core与窄I/O byte golden/固定周期通过 | 待测 | `retained` | [详情](EXP-0106-encaps-uv-persistent-store.md) |
-| EXP-0107 | 2026-08-24 | KeyGen numerator/r2原位覆盖 | 官方TRIKE-2，一组244x64-bit同步RAM | 算术逐word、core与窄I/O byte golden/固定周期通过 | 待测 | `retained` | [详情](EXP-0107-keygen-numerator-r2-store.md) |
-| EXP-0108 | 2026-08-24 | KeyGen算术与序列化共用结果RAM | 官方TRIKE-2，两组244x64-bit同步RAM | 双store单测、core与窄I/O byte golden/固定周期通过 | 待测 | `retained` | [详情](EXP-0108-keygen-persistent-result-store.md) |
-| EXP-0109 | 2026-08-24 | KeyGen算术复用stage support视图 | 官方TRIKE-2，3x35x14-bit support | 本地/外部视图单测及完整KeyGen byte golden/固定周期通过 | 待测 | `retained` | [详情](EXP-0109-keygen-shared-support-view.md) |
-| EXP-0110 | 2026-08-24 | KeyGen inverse复用H123 t1 bank | 官方TRIKE-2，244x64-bit同步RAM | store覆盖/重装、算术及完整KeyGen golden/固定周期通过 | 待测 | `retained` | [详情](EXP-0110-keygen-inverse-t1-bank.md) |
-| EXP-0111 | 2026-08-25 | 统一KEM ASIC首轮物理实现 | 单发射三功能，L32/K4/C256，100 MHz | 沿用统一顶层分层功能门禁；Windows源码版本未记录 | [RUN-20260825-01](../../reports/vivado/manifests/RUN-20260825-01-trike-kem-asic.toml) | `rejected` | [详情](EXP-0111-unified-kem-asic-route.md) |
-| EXP-0112 | 2026-08-25 | H4运行时索引无除法映射 | 三块公开运行时`r/padded_r_bytes`几何 | store、Encaps、Decaps golden及固定周期通过；目标层次无`$div/$mod` | [RUN-20260825-02](../../reports/vivado/manifests/RUN-20260825-02-trike-kem-asic.toml)；internal WNS -3.529 ns | `retained` | [详情](EXP-0112-h4-index-map.md) |
-| EXP-0113 | 2026-08-25 | 固定重量采样索引存储BRAM化 | 最大`877 x 19-bit`索引阵列 | 三阶段共享reference/golden通过；固定周期不变 | [RUN-20260825-04](../../reports/vivado/manifests/RUN-20260825-04-trike-kem-asic-gui.toml)确认1个RAMB36；internal WNS -3.914 ns | `retained` | [详情](EXP-0113-fixed-weight-index-bram.md) |
-| EXP-0114 | 2026-08-25 | SM3结果寄存器局部扇出 | 单SM3，256-bit结果，`max_fanout=8` | SM3 digest/116拍、RTL与单SM3结构门禁通过 | [RUN-20260826-01](../../reports/vivado/manifests/RUN-20260826-01-trike-kem-asic-sm3-fanout.toml)：SM3退出内部top-20，internal WNS -4.017 ns；fanout/provenance待补 | `pending` | [详情](EXP-0114-sm3-result-local-fanout.md) |
-| EXP-0115 | 2026-08-26 | 64-bit稠密乘法diagonal/Comba调度 | `WORD_W=64,DIGIT_W=16`，保留`2W` product与独立result | TRIKE-2 dense 240,585拍；求逆5,988,878拍；KeyGen byte golden通过 | 待测 | `pending` | [详情](EXP-0115-dense-mul-diagonal-comba.md) |
-| EXP-0116 | 2026-08-27 | diagonal/Comba base-width矩阵 | `WORD_W=64,DIGIT_W=16/32/64`，其余结构相同 | 三档TRIKE-2乘法/求逆golden通过；求逆5,988,878/3,369,294/2,059,502拍 | Yosys LC诊断2,379/3,147/4,252；Vivado待测 | `pending` | [详情](EXP-0116-dense-mul-base-width-matrix.md) |
-| EXP-0117 | 2026-08-27 | 64x64 base Karatsuba深度 | `DIGIT_W=64`，depth 0/1/2/3，外层Comba不变 | 260组base及三档整多项式/求逆golden通过；周期不变 | depth-1 Yosys base LC -19.54%；Vivado待测 | `pending` | [详情](EXP-0117-dense-base-karatsuba.md) |
-| EXP-0118 | 2026-08-27 | 整多项式Karatsuba depth 1 | TRIKE-2，`W=244,H=122`，四个half operand bank | 小参数及官方golden通过；61,977降至50,993拍（-17.72%） | [RUN-20260827-01](../../reports/vivado/manifests/RUN-20260827-01-trike-poly-mul-k1.toml)：2,740 LUT/6 RAMB36；internal WNS +2.032 ns | `pending` | [详情](EXP-0118-dense-poly-karatsuba-depth1.md) |
-| EXP-0119 | 2026-08-27 | 整多项式Karatsuba depth 2 | TRIKE-2，`W=244,Q=61`，八个quarter operand bank | 小参数及官方golden通过；61,977降至44,216拍（-28.66%） | [RUN-20260827-02](../../reports/vivado/manifests/RUN-20260827-02-trike-poly-mul-k2.toml)：3,712 LUT/10 RAMB36；internal WNS +1.483 ns | `pending` | [详情](EXP-0119-dense-poly-karatsuba-depth2.md) |
-| EXP-0120 | 2026-08-27 | TRIKE-2低寄存器短求逆链 | `r=15581`，三份整环scratch，D16/32/64 | 18次置换/17次乘法；官方golden固定4,635,018/2,610,794/1,598,682拍 | 待测 | `pending` | [详情](EXP-0120-trike2-short-inversion-chain.md) |
-| EXP-0121 | 2026-08-28 | 常时compare-select三元选择候选 | `COMPARE_W=DATA_W=256`，显式mask对比ternary mux | 定向257/193-bit仿真与W1/8/256 proof/cover通过；组合逻辑无周期 | Vivado未运行；Yosys generic 849增至850，xc7保持1692 cells/411 LUT | `rejected` | 候选已撤回，保留显式mask |
+| 实验系列 | 时间 | 核心问题与范围 | 已形成的证据 | 当前结论 | 下钻入口 |
+| --- | --- | --- | --- | --- | --- |
+| LEGACY-0001–0081 | 2026-07-10至08-09 | Decoder、K-sign、RAM和早期TRIKE KEM探索 | 历史功能、周期及部分物理记录 | `superseded`，仅作设计来源 | [冻结归档](../design/optimization_exploration_history.md) |
+| EXP-0082–0086 | 2026-08-10至08-13 | 统一Decaps配置收敛，并建立Decaps、KeyGen、Encaps物理参考 | 四档功能门禁；三个窄I/O/统一顶层 routed run | EXP-0084/0085/0086为保留参考；0082被后续四档配置替代 | [基线注册表](../design/vivado_baseline_registry.md) / [EXP-0084](EXP-0084-four-profile-decaps-route.md) |
+| EXP-0087–0098 | 2026-08-13至08-19 | 四档运行时Decaps从输入、存储、syndrome、support到postprocess和端到端闭环 | 分层golden、固定周期、四档byte对拍；双行residual扫描 | RTL架构`retained`；运行时顶层物理实现仍待测 | [实现状态](../design/implementation_status.md) / [EXP-0097](EXP-0097-four-profile-runtime-decaps-golden.md) |
+| EXP-0099 | 2026-08-20 | 16-bit digit稠密乘法替换串行基础实现 | KeyGen及四档Decaps golden/固定周期；poly-inv与KeyGen routed | `retained`，作为后续算术优化起点 | [详情](EXP-0099-kem-dense-mul-digit16.md) |
+| EXP-0100–0110 | 2026-08-24 | 单发射统一KEM服务和RAM生命周期复用 | 单SM3、共享乘法/H123/sampler/store，KeyGen持久RAM与support视图分层验证 | 架构`retained`；统一顶层物理收敛交给后续系列 | [统一KEM设计](../design/trike_kem_common_cores.md) / [EXP-0100](EXP-0100-unified-kem-asic-sm3.md) |
+| EXP-0111–0114 | 2026-08-25至08-26 | 统一KEM首轮route的除法链、采样索引RAM和SM3扇出诊断 | H4无除法映射、1个RAMB36索引存储、SM3局部扇出；多次routed诊断 | 0111 `rejected`；0112/0113 `retained`；0114物理结论`pending` | [EXP-0111](EXP-0111-unified-kem-asic-route.md) / [EXP-0114](EXP-0114-sm3-result-local-fanout.md) |
+| EXP-0115–0120 | 2026-08-26至08-28 | 稠密乘法Comba/base宽度、Karatsuba层级和短求逆链 | 定向/官方golden、固定周期、Yosys矩阵；K1/K2和短链routed诊断 | 候选系列`pending`，已形成周期/资源Pareto但未进入完整KeyGen基线 | [优化路线图](../design/trike_kem_optimization_roadmap.md) / [EXP-0120](EXP-0120-trike2-short-inversion-chain.md) |
+| EXP-0121 | 2026-08-28 | compare-select三元mux候选 | 定向仿真与W1/8/256 proof/cover；Yosys无收益 | `rejected`，保留显式mask | 本页结论 |
+| EXP-0122 | 2026-08-28 | Bernstein-Yang divstep架构锚点 | r13穷举、r15581 golden、s1 formal、s8更新验证 | `pending`，下一门是全长BRAM扫描核 | [详情](EXP-0122-trike-bernstein-yang-divstep-anchor.md) |
 
-新实验只追加一行。需要详细说明时，详情列链接到`EXP-xxxx-<slug>.md`；Vivado列链接到
-`reports/vivado/manifests/<run-id>.toml`。
+## 新实验的记录门槛
+
+- 普通RTL修改、bug修复、格式调整和等价重构只由Git与测试记录。
+- 一个明确、可比较的架构/QoR假设或连续实验系列只分配一个EXP ID；同一假设下的
+  中间实现、参数扫点和多次验证不重复建EXP。
+- 只有比较问题、硬件边界或决策目标实质改变时才建立新EXP。
+- 每次Vivado执行仍分配独立RUN ID和manifest；RUN数量不决定EXP数量。
+- 需要保存失败原因、RAM生命周期、周期边界或关键定量结果时才创建单项EXP文档。

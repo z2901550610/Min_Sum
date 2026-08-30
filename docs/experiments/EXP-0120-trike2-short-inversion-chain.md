@@ -28,5 +28,8 @@
 
 ## 结论
 
-局部功能与固定周期门通过。置换/乘法次数固定为18/17；Vivado资源、WNS和完整KeyGen门禁待测，
-因此不把周期收益表述为routed latency或面积收益。
+局部功能与固定周期门通过。置换/乘法次数固定为18/17。
+[RUN-20260828-01](../../reports/vivado/manifests/RUN-20260828-01-trike-poly-inv-short-chain.toml)为Fully Routed
+诊断：2,354 LUT、903 FF、799 Slice、4 RAMB36，内部setup WNS `+1.092 ns`；整体`-2.624 ns`来自
+BRAM到顶层输出的I/O路径。run缺源码/generic/XDC provenance及methodology/DRC，完整KeyGen门禁也待测，
+因此保持`pending`且不计算严格物理增减。

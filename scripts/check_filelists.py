@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 
@@ -18,6 +19,7 @@ EXPECTED_TOPS = {
     "trike_decaps.f": "rtl/trike_decaps_synth_top.sv",
     "trike_kem_asic.f": "rtl/trike_kem_asic_top.sv",
 }
+FILELIST_ENTRY_RE = re.compile(r"rtl/[A-Za-z0-9_./-]+\.sv$")
 
 
 def read_filelist(path: Path) -> list[str]:
@@ -30,9 +32,18 @@ def read_filelist(path: Path) -> list[str]:
 
 
 def main() -> None:
+    makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
+    vivado_tcl = (REPO_ROOT / "scripts" / "vivado_trike_kem_cores.tcl").read_text(
+        encoding="utf-8"
+    )
     for name, expected_top in EXPECTED_TOPS.items():
         path = REPO_ROOT / "filelists" / name
         entries = read_filelist(path)
+        invalid = [entry for entry in entries if FILELIST_ENTRY_RE.fullmatch(entry) is None]
+        if invalid:
+            raise SystemExit(
+                f"{path}: unsupported entry syntax for Make/Tcl consumers: {', '.join(invalid)}"
+            )
         if len(entries) != len(set(entries)):
             raise SystemExit(f"{path}: duplicate source entry")
         missing = [entry for entry in entries if not (REPO_ROOT / entry).is_file()]
@@ -40,6 +51,18 @@ def main() -> None:
             raise SystemExit(f"{path}: missing sources: {', '.join(missing)}")
         if expected_top not in entries:
             raise SystemExit(f"{path}: missing implementation top {expected_top}")
+        if f"filelists/{name}" not in makefile:
+            raise SystemExit(f"{path}: not registered in the root Makefile")
+    for name in (
+        "trike_poly_inv.f",
+        "trike_pseudohash.f",
+        "trike_encaps.f",
+        "trike_keygen.f",
+        "trike_decaps.f",
+        "trike_kem_asic.f",
+    ):
+        if f"filelists/{name}" not in vivado_tcl:
+            raise SystemExit(f"filelists/{name}: not registered in the Vivado Tcl entrypoint")
     print("Canonical RTL filelists PASS")
 
 

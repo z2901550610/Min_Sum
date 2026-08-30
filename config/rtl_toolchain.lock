@@ -9,5 +9,7 @@ z3=Z3 version 4.15.5
 boolector=3.2.4
 bitwuzla=0.9.1
 cocotb=2.0.1
+pyyaml=6.0.3
+pytest=pytest 9.1.1
 surfer=surfer 0.7.0
 python=Python 3.12.10

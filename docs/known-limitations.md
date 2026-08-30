@@ -1,8 +1,8 @@
 # 已知限制
 
 - OSS CAD Suite 2026-08-27 自带 cocotb/Python 在本机加载`libpython3.11.dylib`
-  时无法解析相对`libintl.8.dylib`。环境入口使用主机 Python 3.12 和 cocotb
-  2.0.1；EDA可执行程序仍来自 Suite。该组合已由独立 PoC 验证。
+  时无法解析相对`libintl.8.dylib`。环境入口使用`uv.lock`创建的项目 Python
+  3.12/cocotb 2.0.1环境；EDA可执行程序仍来自 Suite。该组合已由独立 PoC验证。
 - Suite Verilator 的 FST 构建需要 Homebrew lz4 的显式 include/link 参数。
   `workflow-smoke/Makefile`仅在`WAVES=1`时加入这些参数。
 - `make synth`和`make qor`提供 Yosys generic/xc7-oriented 结构估计，不验证

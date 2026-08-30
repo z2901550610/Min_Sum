@@ -1,5 +1,6 @@
 -include config/local.mk
 
+# Tool and build configuration.
 VERILATOR ?= ./scripts/verilator_quiet.py
 REAL_VERILATOR ?= verilator
 VERILATOR_LOG_DIR ?= build/logs/verilator
@@ -21,6 +22,7 @@ BOOLECTOR ?= boolector
 BITWUZLA ?= bitwuzla
 COCOTB_CONFIG ?= cocotb-config
 SURFER ?= surfer
+UV ?= uv
 SLANG_FLAGS ?= --std 1800-2017 --single-unit --lint-only --quiet -Werror -I tb -I rtl
 FORMAL_BUILD_DIR ?= build/formal
 LOCAL_SYNTH_TOP ?= kem_ct_compare_select
@@ -133,14 +135,49 @@ TRIKE_UNIFIED_KSIGN_PARAM_SETS ?= trike160 trike256 trike384 trike512
 TRIKE_UNIFIED_KSIGN_TIMEOUT_CYCLES ?= 40000000
 CI_SMOKE_SEED ?= 1
 CI_NIGHTLY_TRIALS ?= 4
+DECODER_UNIT_TARGETS := \
+	test-reset-sync \
+	test-msg-codec \
+	test-tile-scheduler \
+	test-edge-addr-gen \
+	test-ram-i \
+	test-ram-m \
+	test-ram-sign-delta \
+	test-k-sign-update \
+	test-ram-accum \
+	test-ram-t \
+	test-ram-decision \
+	test-ram-syndrome \
+	test-cnu-a \
+	test-cnu-b
 
-.PHONY: all format lint compile test regress formal synth synth-generic synth-xilinx qor check workflow-smoke test-kem-ct-compare-select test-unit test-kem-unit test-trike-clmul-karatsuba test-trike-poly-base-karatsuba-matrix test-trike-poly-karatsuba-matrix test-trike-poly-karatsuba-core test-trike-poly-karatsuba-reference test-trike-poly-karatsuba2-core test-trike-poly-karatsuba2-reference test-trike-weak-key-reference test-trike-keygen-secret-reference test-trike-keygen-arith-reference test-trike-keygen-core-reference test-trike-keygen-synth-reference test-trike-poly-reference test-trike-poly-inv-reference test-trike-poly-kernel-matrix test-trike-encaps-components-reference test-trike-encaps-hash-reference test-trike-encaps-core-reference test-trike-decaps-syndrome-reference test-trike-error-store-reference test-trike-h4-vector-reference check-trike-sm3-sharing test-integration test-bike-random test-bike-unified-random test-trike-unified-ksign-random model-min-sum run-model-min-sum sweep-min-sum optimum-min-sum campaign-min-sum confirm-min-sum check-model-rtl check-model-rtl-bike128 software-trike-kem test-software-trike-kem test-trike-reference-kat check-local-tools format-rtl check-format-rtl lint-rtl lint-slang check-rtl formal-ct-select formal-ct-control verify-rtl vivado-synth vivado-synth-trike-unified-ksign vivado-impl-trike-kem-core vivado-impl-trike-poly-inv vivado-impl-trike-pseudohash vivado-impl-trike-encaps vivado-impl-trike-keygen vivado-impl-trike-decaps vivado-impl-trike-decaps-runtime vivado-impl-trike-kem-cores FORCE
+.PHONY: all format lint compile test regress formal synth synth-generic synth-xilinx qor check workflow-smoke test-kem-ct-compare-select test-unit test-kem-unit test-trike-poly-divstep-model test-trike-poly-divstep-s1 test-trike-clmul-karatsuba test-trike-poly-base-karatsuba-matrix test-trike-poly-karatsuba-matrix test-trike-poly-karatsuba-core test-trike-poly-karatsuba-reference test-trike-poly-karatsuba2-core test-trike-poly-karatsuba2-reference test-trike-weak-key-reference test-trike-keygen-secret-reference test-trike-keygen-arith-reference test-trike-keygen-core-reference test-trike-keygen-synth-reference test-trike-poly-reference test-trike-poly-inv-reference test-trike-poly-kernel-matrix test-trike-encaps-components-reference test-trike-encaps-hash-reference test-trike-encaps-core-reference test-trike-decaps-syndrome-reference test-trike-error-store-reference test-trike-h4-vector-reference check-trike-sm3-sharing test-integration test-bike-random test-bike-unified-random test-trike-unified-ksign-random model-min-sum run-model-min-sum sweep-min-sum optimum-min-sum campaign-min-sum confirm-min-sum check-model-rtl check-model-rtl-bike128 software-trike-kem test-software-trike-kem test-trike-reference-kat check-local-tools format-rtl check-format-rtl lint-rtl lint-slang check-rtl formal-ct-select formal-ct-control formal-trike-poly-divstep-s1 formal-k-sign-overlap-scheduler formal-tile-scheduler verify-rtl vivado-synth vivado-synth-trike-unified-ksign vivado-impl-trike-kem-core vivado-impl-trike-poly-inv vivado-impl-trike-pseudohash vivado-impl-trike-encaps vivado-impl-trike-keygen vivado-impl-trike-decaps vivado-impl-trike-decaps-runtime vivado-impl-trike-kem-cores FORCE
 .PHONY: test-trike-poly-inv-minsum-reference gen-trike-minsum-kem-case test-trike-pseudohash-runtime test-trike-h4-runtime test-trike-ct-verify-runtime test-trike-decaps-postprocess-runtime test-trike-decaps-input-loader test-trike-decaps-input-store test-trike-decaps-syndrome-runtime test-trike-decaps-syndrome-store-core test-trike-decaps-input-syndrome-core test-trike-decaps-support-prefetch test-trike-decaps-input-decoder-load-core test-trike-decaps-decoder-postcheck-core test-trike-fixed-support-sorter-runtime test-trike-decoder-load-adapter-runtime test-trike-decaps-message-reference test-trike-decaps-verify-reference test-trike-decaps-kdf-reference test-trike-decoder-residual-reference test-trike-decaps-pipeline-reference test-trike-decaps-synth-reference test-trike-decaps-runtime-synth-reference test-trike-decaps-runtime-four-profile-reference test-trike-kem-operation-control test-trike-h123-vector-store formal-trike-kem-operation-control
+.PHONY: test-trike-poly-divstep-round
 .PHONY: tool-versions check-tool-versions check-filelists check-records check-trike-reference-data lint-verilator formal-fast formal-nightly formal-ct-control-extended ci-fast ci-smoke ci-nightly ci-kem-reference
+.PHONY: python-sync format-changed format-all format-check
+.PHONY: $(DECODER_UNIT_TARGETS)
 
+# Stable human and Agent entrypoints.
 all: test
 
-format: format-rtl
+format:
+	@if [ -z "$(strip $(FILES))" ]; then \
+		echo 'FILES is required; use make format FILES="rtl/foo.sv tb/tb_foo.sv", make format-changed, or make format-all'; \
+		exit 2; \
+	fi
+	@$(VERIBLE_FORMAT) $(VERIBLE_FORMAT_FLAGS) --inplace $(FILES)
+	@$(SV_DECL_FORMAT) $(FILES)
+
+format-changed:
+	@files="$$( { git diff --name-only --diff-filter=ACMR HEAD -- 'rtl/*.sv' 'tb/*.sv' 'formal/*.sv'; git ls-files --others --exclude-standard -- 'rtl/*.sv' 'tb/*.sv' 'formal/*.sv'; } | sort -u | tr '\n' ' ' )"; \
+	if [ -z "$$files" ]; then echo 'No changed SystemVerilog files'; else $(MAKE) format FILES="$$files"; fi
+
+format-all:
+	@$(VERIBLE_FORMAT) $(VERIBLE_FORMAT_FLAGS) --inplace $(MAINTAINED_SV)
+	@$(SV_DECL_FORMAT) $(MAINTAINED_SV)
+
+format-check: check-format-rtl
 
 lint: check-rtl
 
@@ -156,42 +193,77 @@ check: ci-fast compile workflow-smoke synth
 workflow-smoke:
 	@$(MAKE) -C workflow-smoke check
 
+python-sync:
+	@$(UV) sync --frozen
+
 $(TOY_CASE_SVH): FORCE scripts/gen_toy_case_fixture.py scripts/run_bike_random.py scripts/qc_matrix_data.py
 	@python3 scripts/gen_toy_case_fixture.py --output $@
 
 test: test-unit test-integration
 
-test-unit: test-kem-unit
+# Decoder and KEM unit tests. Each decoder test remains directly reproducible.
+test-unit: test-kem-unit $(DECODER_UNIT_TARGETS)
+
+test-reset-sync:
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_reset_sync rtl/reset_sync.sv tb/tb_reset_sync.sv
 	@$(SIM) ./obj_dir/Vtb_reset_sync +verilator+quiet
+
+test-msg-codec:
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_msg_codec rtl/bike_pkg.sv rtl/msg_signmag_to_tc.sv rtl/msg_tc_to_signmag_sat.sv tb/tb_msg_codec.sv
 	@$(SIM) ./obj_dir/Vtb_msg_codec +verilator+quiet
+
+test-tile-scheduler:
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_tile_scheduler rtl/bike_pkg.sv rtl/tile_scheduler.sv tb/tb_tile_scheduler.sv
 	@$(SIM) ./obj_dir/Vtb_tile_scheduler +verilator+quiet
+
+test-edge-addr-gen:
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_edge_addr_gen rtl/bike_pkg.sv rtl/edge_addr_gen.sv tb/tb_edge_addr_gen.sv
 	@$(SIM) ./obj_dir/Vtb_edge_addr_gen +verilator+quiet
+
+test-ram-i:
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_i rtl/bike_pkg.sv rtl/ram_bram.sv rtl/ram_i.sv tb/tb_ram_i.sv
 	@$(SIM) ./obj_dir/Vtb_ram_i +verilator+quiet
+
+test-ram-m:
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_m rtl/bike_pkg.sv rtl/ram_bram.sv rtl/ram_m.sv tb/tb_ram_m.sv
 	@$(SIM) ./obj_dir/Vtb_ram_m +verilator+quiet
+
+test-ram-sign-delta:
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_sign_delta rtl/bike_pkg.sv rtl/ram_bram.sv rtl/ram_sign_delta.sv tb/tb_ram_sign_delta.sv
 	@$(SIM) ./obj_dir/Vtb_ram_sign_delta +verilator+quiet
+
+test-k-sign-update:
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_k_sign_update rtl/bike_pkg.sv rtl/ram_bram.sv rtl/barrel_rotate.sv rtl/k_sign_update.sv rtl/k_sign_reconstruct.sv rtl/ram_k_tile.sv rtl/k_sign_selector.sv rtl/ram_k_global.sv tb/tb_k_sign_update.sv
 	@$(SIM) ./obj_dir/Vtb_k_sign_update +verilator+quiet
+
+test-ram-accum:
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_accum rtl/bike_pkg.sv rtl/barrel_rotate.sv rtl/ram_accum.sv tb/tb_ram_accum.sv
 	@$(SIM) ./obj_dir/Vtb_ram_accum +verilator+quiet
+
+test-ram-t:
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_t rtl/bike_pkg.sv rtl/barrel_rotate.sv rtl/ram_bram.sv rtl/ram_t.sv tb/tb_ram_t.sv
 	@$(SIM) ./obj_dir/Vtb_ram_t +verilator+quiet
+
+test-ram-decision:
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_decision rtl/bike_pkg.sv rtl/ram_bram.sv rtl/ram_decision.sv tb/tb_ram_decision.sv
 	@$(SIM) ./obj_dir/Vtb_ram_decision +verilator+quiet
+
+test-ram-syndrome:
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_syndrome rtl/bike_pkg.sv rtl/ram_bram.sv rtl/ram_syndrome.sv tb/tb_ram_syndrome.sv
 	@$(SIM) ./obj_dir/Vtb_ram_syndrome +verilator+quiet
+
+test-cnu-a:
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_cnu_a rtl/bike_pkg.sv rtl/cnu_a.sv tb/tb_cnu_a.sv
 	@$(SIM) ./obj_dir/Vtb_cnu_a +verilator+quiet
+
+test-cnu-b:
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_cnu_b rtl/bike_pkg.sv rtl/cnu_b.sv tb/tb_cnu_b.sv
 	@$(SIM) ./obj_dir/Vtb_cnu_b +verilator+quiet
 
 test-kem-unit:
+	@$(MAKE) test-trike-poly-divstep-model
+	@$(MAKE) test-trike-poly-divstep-s1
+	@$(MAKE) test-trike-poly-divstep-round
 	@$(MAKE) test-trike-clmul-karatsuba
 	@$(MAKE) test-trike-poly-karatsuba-core
 	@$(MAKE) test-trike-poly-karatsuba2-core
@@ -269,6 +341,17 @@ test-kem-unit:
 	@$(SIM) ./obj_dir/Vtb_trike_decoder_error_vector +verilator+quiet
 	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_decoder_residual_check rtl/ram_bram.sv rtl/trike_decoder_residual_check.sv tb/tb_trike_decoder_residual_check.sv
 	@$(SIM) ./obj_dir/Vtb_trike_decoder_residual_check +verilator+quiet
+
+test-trike-poly-divstep-model:
+	@python3 scripts/model_trike_poly_inv_by.py --self-test
+
+test-trike-poly-divstep-s1:
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_poly_divstep_s1 rtl/trike_poly_divstep_s1.sv tb/tb_trike_poly_divstep_s1.sv
+	@$(SIM) ./obj_dir/Vtb_trike_poly_divstep_s1 +verilator+quiet
+
+test-trike-poly-divstep-round:
+	@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_poly_divstep_round rtl/trike_poly_divstep_control.sv rtl/trike_poly_divstep_update.sv tb/tb_trike_poly_divstep_round.sv
+	@$(SIM) ./obj_dir/Vtb_trike_poly_divstep_round +verilator+quiet
 
 $(TRIKE_KEYGEN_REFERENCE_FIXTURE): scripts/gen_trike_keygen_fixture.py scripts/trike_fixture_utils.py $(TRIKE_POLY_REFERENCE_KAT)
 	@python3 scripts/gen_trike_keygen_fixture.py \
@@ -609,6 +692,7 @@ check-local-tools:
 	@for tool in $(REAL_VERILATOR) $(VERIBLE_FORMAT) $(VERIBLE_LINT) $(SLANG) $(YOSYS) $(SBY) $(Z3) $(BOOLECTOR) $(BITWUZLA) $(COCOTB_CONFIG) $(SURFER); do \
 		command -v $$tool >/dev/null || { echo "missing required local tool: $$tool"; exit 1; }; \
 	done
+	@python3 -c 'import cocotb, pytest, yaml' || { echo "project Python dependencies missing; run uv sync --frozen"; exit 1; }
 	@$(YOSYS) -m slang -Q -p 'help read_slang' | grep -q 'Read SystemVerilog sources' || { echo "missing Yosys read_slang frontend"; exit 1; }
 	@echo "Local RTL tools PASS"
 
@@ -624,12 +708,10 @@ check-filelists:
 check-records:
 	@python3 scripts/check_project_records.py
 
-format-rtl:
-	@$(VERIBLE_FORMAT) $(VERIBLE_FORMAT_FLAGS) --inplace $(MAINTAINED_SV)
-	@$(SV_DECL_FORMAT) $(MAINTAINED_SV)
+format-rtl: format-all
 
 check-format-rtl:
-	@for f in $(MAINTAINED_SV); do tmp=$$(mktemp /private/tmp/format-rtl.XXXXXX.sv); cp $$f $$tmp; $(VERIBLE_FORMAT) $(VERIBLE_FORMAT_FLAGS) --inplace $$tmp; $(SV_DECL_FORMAT) $$tmp; cmp -s $$f $$tmp || { echo "$$f: formatting needed"; rm -f $$tmp; exit 1; }; rm -f $$tmp; done
+	@for f in $(MAINTAINED_SV); do tmp_dir="$${TMPDIR:-/tmp}"; tmp=$$(mktemp "$$tmp_dir/format-rtl.XXXXXX.sv"); cp $$f $$tmp; $(VERIBLE_FORMAT) $(VERIBLE_FORMAT_FLAGS) --inplace $$tmp; $(SV_DECL_FORMAT) $$tmp; cmp -s $$f $$tmp || { echo "$$f: formatting needed"; rm -f $$tmp; exit 1; }; rm -f $$tmp; done
 
 lint-rtl:
 	@$(VERIBLE_LINT) $(VERIBLE_LINT_FLAGS) $(MAINTAINED_SV)
@@ -658,7 +740,25 @@ check-rtl: check-filelists check-format-rtl lint-rtl lint-verilator lint-slang
 
 formal: formal-fast
 
-formal-fast: formal-ct-select formal-ct-control formal-trike-kem-operation-control
+formal-fast: formal-ct-select formal-ct-control formal-trike-kem-operation-control formal-trike-poly-divstep-s1 formal-k-sign-overlap-scheduler formal-tile-scheduler
+
+formal-k-sign-overlap-scheduler:
+	@mkdir -p $(FORMAL_BUILD_DIR)
+	@for task in prove cover; do \
+		$(SBY) -f -d $(FORMAL_BUILD_DIR)/k_sign_overlap_scheduler_$$task formal/k_sign_overlap_scheduler.sby $$task || exit 1; \
+	done
+
+formal-tile-scheduler:
+	@mkdir -p $(FORMAL_BUILD_DIR)
+	@for task in prove cover; do \
+		$(SBY) -f -d $(FORMAL_BUILD_DIR)/tile_scheduler_$$task formal/tile_scheduler.sby $$task || exit 1; \
+	done
+
+formal-trike-poly-divstep-s1:
+	@mkdir -p $(FORMAL_BUILD_DIR)
+	@for task in prove_w2 prove_w8 cover_w2 cover_w8; do \
+		$(SBY) -f -d $(FORMAL_BUILD_DIR)/trike_poly_divstep_s1_$$task formal/trike_poly_divstep_s1.sby $$task || exit 1; \
+	done
 
 formal-trike-kem-operation-control:
 	@mkdir -p $(FORMAL_BUILD_DIR)

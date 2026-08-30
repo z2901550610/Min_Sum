@@ -9,6 +9,17 @@ make test
 make test-bike-random BIKE_RANDOM_TRIALS=1
 ```
 
+## Testbench形式选择
+
+- 周期精确的握手、地址、RAM事务、固定延迟和小型RTL单元优先使用直接编写的
+  self-checking SystemVerilog testbench。
+- 大规模输入、密码学golden、确定性随机样本和复杂数据整理使用Python模型或fixture
+  生成器，再由SystemVerilog testbench读取对拍。
+- 只有Python侧动态驱动或数据编排明显更清晰时才使用cocotb。cocotb直接驱动仿真器中
+  的DUT，不负责生成SystemVerilog。
+- 常见组合是“Python生成golden/fixture + SystemVerilog检查协议、周期和结果”；不为
+  简单定向单测额外引入cocotb层。
+
 `make test-unit` 覆盖：
 
 - message codec
@@ -16,6 +27,9 @@ make test-bike-random BIKE_RANDOM_TRIALS=1
 - edge address generator
 - H matrix RAM
 - CNU_A/CNU_B 参考小模块
+
+每项decoder单测同时提供独立`make test-<name>`入口，例如`test-tile-scheduler`、
+`test-edge-addr-gen`和`test-k-sign-update`；`test-unit`聚合这些入口与KEM单测。
 
 `make test-integration` 使用 toy 参数运行完整 `decoder_top`。
 
@@ -63,6 +77,16 @@ python3 scripts/run_bike_random.py \
 - `o_iter_count == I_MAX`
 - 主循环周期数等于 `I_MAX * (ROW_SEG_SIZE + (TILES_TOTAL + 1) * W * Q_TILE)`
 
+## 调度器形式化边界
+
+`make formal-k-sign-overlap-scheduler`在toy公开几何下证明correction扫描坐标有界、按固定词典序推进、
+固定drain并在`N0*TILE_COUNT*W*Q_TILE+K_SIGN_OVERLAP_DRAIN_CYCLES`拍完成。
+`make formal-tile-scheduler`对单次公开start后的完整316拍toy事务做有界证明，覆盖
+clear/C2V/V2C阶段互斥关系、地址与坐标范围、tile重叠间距和固定完成周期。两者均包含完整done cover。
+
+这些proof只覆盖harness固定的toy公开几何和调度器接口；生产K=3/K=4及四档TRIKE的实际固定周期仍由
+对应reference/random仿真测量，不把toy形式化外推为全参数或完整decoder证明。
+
 ## 日志
 
 Verilator 编译日志：
@@ -86,8 +110,10 @@ VERILATOR_QUIET=0 make test
 ## 格式和 lint
 
 ```sh
-make format-rtl
-make check-format-rtl && make lint-rtl
+make format FILES="<本任务修改的 .sv 文件>"
+make format-check
+make lint
 ```
 
-维护态 RTL/TB 文件通过 `MAINTAINED_SV` 自动发现。生成目录不参与格式化。
+`make format`只原地修改显式列出的任务文件；`make format-check`通过
+`MAINTAINED_SV`检查全部维护态 RTL/TB/Formal 文件。生成目录不参与格式化。

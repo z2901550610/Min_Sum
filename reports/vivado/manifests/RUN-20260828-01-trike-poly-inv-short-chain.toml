@@ -1,0 +1,78 @@
+schema_version = 1
+run_id = "RUN-20260828-01-trike-poly-inv-short-chain"
+experiment_id = "EXP-0120"
+date = "2026-08-28"
+status = "fail"
+verdict = "incomparable"
+source_revision = "unrecorded-windows-copy"
+dirty_tree = true
+report_root = "D:/trike_reports/RUN-20260828-01-trike-poly-inv-short-chain"
+notes = "Six user-supplied Fully Routed reports identify the top, Vivado build, part and 10 ns clock. Source revision, dirty status, top generics, XDC filename, directives, run provenance, methodology and DRC were not supplied. DIGIT_W=16 and DENSE_KARATSUBA_DEPTH=0 are inferred from the requested/default wrapper configuration, not embedded report facts. The core internal synchronous setup path passes; overall setup fails only on the g RAM to top-level output path under the apparent 2 ns output delay. This run is a routed diagnostic, not a comparable baseline or proof of board I/O closure."
+
+[artifacts]
+files = [
+  "post_route_utilization.rpt",
+  "post_route_utilization_hier.rpt",
+  "post_route_timing_summary.rpt",
+  "post_route_setup_paths.rpt",
+  "post_route_internal_data_setup_paths.rpt",
+  "post_route_high_fanout.rpt",
+]
+sha256_manifest = ""
+post_route_utilization_sha256 = "55a3e03ea02f33d4e61c0e56a1e7fc371c4f21df5817047ab1b4e9774eadb2ae"
+post_route_utilization_hier_sha256 = "472ec39515119fedc06c14797444c161b6dbd870db02ed28ce7faade99de90c0"
+post_route_timing_summary_sha256 = "f99007e25fc4c4c61bc693b71450acb03f6fc32549df99fc43c9128a250ca757"
+post_route_high_fanout_sha256 = "cb58be206d35f07adefd5ecfd52be80e34fc986204d51e32563e4cc6340ba530"
+post_route_internal_data_setup_sha256 = "53577b8f869f2d7fe20d6a4fdd9af0fe0be30ac6bbe064ea2d21c4e4eb6c78ca"
+post_route_setup_paths_sha256 = "afc1cf3a4e8d6506ae25b289c8179d4d155fa214dd7fd1ce03697b4c606a5c3c"
+
+[design]
+top = "trike_poly_inv_synth_top"
+profile = "TRIKE-2, R_BITS=15581, WORD_W=64; inferred DIGIT_W=16 and DENSE_KARATSUBA_DEPTH=0"
+memory_geometry = "Three 244x64-bit f/g/t scratch banks plus one 488x64-bit product bank; 4 RAMB36 observed"
+
+[tool]
+vivado = "2023.2 build 4029153"
+part = "xc7k355tffg901-2L"
+xdc = "unreported; timing is consistent with constraints/trike_kem_core.xdc"
+report_stage = "fully_routed"
+clock_period_ns = 10.0
+clock_uncertainty_ns = 0.100
+
+[functional]
+fixed_cycles = 4635018
+tests = [
+  "make test-kem-unit",
+  "make test-trike-poly-inv-reference",
+  "make test-trike-poly-inv-minsum-reference",
+  "make test-trike-keygen-arith-reference",
+  "make check-rtl",
+]
+result = "Local D16/D32/D64 inverse golden, legacy schedules and KeyGen arithmetic passed separately from this unprovenanced Windows run"
+
+[results]
+lut = "2354"
+ff = "903"
+slice = "799"
+block_ram_tile = "4"
+ramb36 = "4"
+ramb18 = "0"
+dsp = "0"
+bonded_iob = "138"
+setup_wns_ns = "-2.624"
+setup_tns_ns = "-152.459"
+setup_failing_endpoints = "69"
+hold_whs_ns = "0.068"
+hold_ths_ns = "0.000"
+pulse_width_wps_ns = "4.600"
+async_recovery_wns_ns = "3.785"
+async_removal_whs_ns = "0.487"
+internal_data_setup_wns_ns = "1.092"
+internal_data_path_delay_ns = "8.249"
+internal_setup_path = "u_inv/u_mul/state_q_reg[0]_rep__0 to u_inv/perm_word_accum_q_reg[26]/CE; seven LUT levels; 7.528 ns route of 8.249 ns data path"
+overall_setup_path = "u_inv/u_g_mem RAMB36E1 CLKARDCLK to o_result_data[54]; one OBUF, 2.000 ns output delay and -4.259 ns clock skew"
+highest_fanout = "u_inv/digit_idx_q[31]_i_3_n_0, fanout 646, reset load, +3.785 ns worst slack"
+short_chain_mux_observation = "mul_source_t_q/f-t source selection is absent from the 20 worst internal setup paths and 30 highest-fanout nets"
+methodology_summary = "not supplied"
+drc_summary = "not supplied"
+comparison_run = "RUN-20260820-01-trike-poly-inv, diagnostic context only; source and architecture conditions are not comparable"

@@ -41,6 +41,8 @@ Vivado实现入口为`make vivado-impl-trike-{poly-inv,pseudohash,encaps,keygen,
 - `formal/`：SymbiYosys proof/cover harness。
 - `filelists/`：实现顶层的规范源文件顺序。
 - `scripts/`：生成、验证和Vivado入口。
+- `software/`：TRIKE软件参考与RTL对拍辅助实现。
+- `constraints/`：Vivado XDC约束。
 - `docs/`：成品设计、验证、实验和项目工作流。
 - `reports/vivado/manifests/`：版本化的Vivado运行摘要；原始报告保存在外部报告根目录。
 - `.agents/skills/`：仓库级Codex RTL工作阶段指令。
@@ -52,4 +54,5 @@ Vivado实现入口为`make vivado-impl-trike-{poly-inv,pseudohash,encaps,keygen,
 ## 本机配置
 
 将`config/local.mk.example`复制为不进入Git的`config/local.mk`，在其中设置官方TRIKE
-Reference C/KAT等机器相关路径。仓库默认使用`external/trike-reference`。
+Reference C/KAT等机器相关路径。`external/trike-reference`只是本地配置的默认查找路径，
+该外部Reference C目录不随仓库分发，可在`config/local.mk`中覆盖。

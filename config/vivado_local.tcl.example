@@ -1,0 +1,6 @@
+# Copy to config/vivado_local.tcl on the Vivado host and edit machine-local paths.
+# In the Vivado Tcl Console, source this file before the implementation script.
+
+set VIVADO_REPORT_ROOT "D:/trike_reports"
+set VIVADO_PART "xc7k355tffg901-2L"
+set VIVADO_XDC "constraints/trike_kem_core.xdc"

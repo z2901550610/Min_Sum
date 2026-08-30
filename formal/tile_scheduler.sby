@@ -1,0 +1,27 @@
+[tasks]
+prove prove
+cover cover
+
+[options]
+prove: mode bmc
+cover: mode cover
+depth 330
+
+[engines]
+prove: smtbmc z3
+cover: smtbmc z3
+
+[script]
+plugin -i slang
+read_slang --std 1800-2017 --single-unit -D BIKE_TOY_PARAMS -D BIKE_PARALLEL_L=2 -D BIKE_COLS_PER_TILE=4 --top tile_scheduler_formal_dut bike_pkg.sv tile_scheduler.sv tile_scheduler_formal_dut.sv
+write_rtlil tile_scheduler_formal_dut.il
+design -reset
+read_rtlil tile_scheduler_formal_dut.il
+read -formal -sv tile_scheduler_formal.sv
+prep -top tile_scheduler_formal
+
+[files]
+rtl/bike_pkg.sv
+rtl/tile_scheduler.sv
+formal/tile_scheduler_formal_dut.sv
+formal/tile_scheduler_formal.sv

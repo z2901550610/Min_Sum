@@ -2,3 +2,7 @@
 # config/local.mk is ignored by Git and is loaded before Makefile defaults.
 
 TRIKE_REFERENCE_SOURCE_ROOT := /absolute/path/to/TRIKE-reference-and-test-vectors
+
+# Optional external archive root for Make-wrapped Vivado runs. Direct Windows
+# Tcl runs use config/vivado_local.tcl or the VIVADO_REPORT_ROOT environment variable.
+VIVADO_REPORT_ROOT := D:/trike_reports

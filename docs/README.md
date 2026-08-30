@@ -8,7 +8,7 @@
 - [译码器硬件设计说明](design/decoder_hardware_design_guide.md)：译码器数据通路、存储组织、K-sign、固定调度和周期预算的完整设计说明。
 - [RTL实现状态](design/implementation_status.md)：当前配置、数据通路、RAM生命周期、固定周期、验证状态和证据边界。
 - [Vivado基线注册表](design/vivado_baseline_registry.md)：指向各实现顶层的有效基线、历史参考和待测边界。
-- [实验索引](experiments/index.md)：以一行一实验记录架构、RAM、周期、资源与时序探索。
+- [实验决策索引](experiments/index.md)：按可比较假设/实验系列汇总架构、RAM、周期、资源与时序结论。
 - [历史探索归档](design/optimization_exploration_history.md)：阶段1至81的冻结历史记录。
 - [RTL 命名规范](design/naming_conventions.md)：坐标、buffer、端口和 debug 信号命名规则。
 
@@ -19,7 +19,7 @@
 - [本地RTL环境基线](environment.md)：安装布局、锁定工具版本和已验证能力。
 - [已知限制](known-limitations.md)：cocotb/FST兼容层、Yosys估计和物理实现边界。
 - [复位与时钟契约](reset-and-clock.md)：生产RTL的复位、时钟、CDC和报告边界速查。
-- [Vivado manifest规范](../reports/vivado/manifests/README.md)：存放在`D:/trike_reports`的原始报告如何与仓库中的结构化结果对应。
+- [Vivado manifest规范](../reports/vivado/manifests/README.md)：外部`VIVADO_REPORT_ROOT`中的原始报告如何与仓库中的结构化结果对应。
 
 ## 验证和结果
 

@@ -1,0 +1,27 @@
+[tasks]
+prove prove
+cover cover
+
+[options]
+prove: mode prove
+cover: mode cover
+depth 80
+
+[engines]
+prove: abc pdr
+cover: smtbmc z3
+
+[script]
+plugin -i slang
+read_slang --std 1800-2017 --single-unit -D BIKE_TOY_PARAMS -D BIKE_PARALLEL_L=2 -D BIKE_COLS_PER_TILE=4 --top k_sign_overlap_scheduler_formal_dut bike_pkg.sv k_sign_overlap_scheduler.sv k_sign_overlap_scheduler_formal_dut.sv
+write_rtlil k_sign_overlap_scheduler_formal_dut.il
+design -reset
+read_rtlil k_sign_overlap_scheduler_formal_dut.il
+read -formal -sv k_sign_overlap_scheduler_formal.sv
+prep -top k_sign_overlap_scheduler_formal
+
+[files]
+rtl/bike_pkg.sv
+rtl/k_sign_overlap_scheduler.sv
+formal/k_sign_overlap_scheduler_formal_dut.sv
+formal/k_sign_overlap_scheduler_formal.sv

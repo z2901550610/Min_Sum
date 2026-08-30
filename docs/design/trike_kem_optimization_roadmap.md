@@ -1,8 +1,8 @@
 # TRIKE KEM优化路线图
 
-> 更新日期：2026-08-27<br>
-> 起点源码：`e2fbb8df068c`；EXP-0115至0120工作树待提交。
-> 当前推进点：EXP-0120短求逆链通过局部功能与固定周期门，下一门是KeyGen集成回归和求逆同源物理复测。
+> 更新日期：2026-08-28<br>
+> 起点源码：`e2fbb8df068c`；EXP-0115至0122工作树待提交。
+> 当前推进点：EXP-0122完成`s=1/8` divstep算法与word-update锚点，下一门是`b=64,s=8`全长BRAM扫描核。
 
 本文是TRIKE KEM优化工作的长期推进入口，回答三个问题：已经完成哪些架构收敛、当前门禁是什么、
 下一个实验应验证什么。当前成品架构仍以[实现状态](implementation_status.md)为准，实验细节以
@@ -44,8 +44,8 @@
 | Sparse accumulator | `planned` | 当前8拍/support-word基线 | forwarding/ping-pong实测 | G4 |
 | Encaps tagged pass | `planned` | 算法和constant-access方案已评估 | RTL、访问轨迹和route | G5 |
 | Frobenius单元 | `planned` | 当前固定`2r`拍基线 | direct/repeated交叉点 | G6 |
-| Divstep inverter | `research` | Racing BIKE公开设计空间 | TRIKE同条件系统AT | G7 |
-| Addition-chain inverter | `in_progress` | EXP-0120官方inverse/KeyGen算术golden及D16/32/64周期矩阵 | 完整KeyGen与Vivado结果 | G7 |
+| Divstep inverter | `in_progress` | EXP-0122的r13/r15581黄金模型、s1形式化和s8广播更新 | 全长BRAM扫描、实测周期与Vivado | G7 |
+| Addition-chain inverter | `in_progress` | EXP-0120官方inverse/KeyGen算术golden及D16/32/64周期矩阵；D16 routed diagnostic内部WNS +1.092 ns | 完整KeyGen与可复现Vivado结果 | G7 |
 | Karatsuba + Comba | `in_progress` | EXP-0117 base及EXP-0118/0119 word-array depth 1/2 | TRIKE-9 golden与Vivado实测 | G8 |
 
 ## 已有EXP证据地图
@@ -194,8 +194,16 @@ dense multiplier”的面积收益带入模型。
 
 EXP-0120实现TRIKE-2低寄存器短链：保持`f/g/t`三份整环scratch，以公开bank角色执行18次置换和17次
 乘法。D16/32/64局部reference固定周期为4,635,018/2,610,794/1,598,682拍，官方inverse golden、
-`r=13` toy与`r=12589`旧链均通过；KeyGen算术逐word golden固定10,066,537拍。完整KeyGen和Vivado门禁
-完成前保持`pending`；Bernstein-Yang/divstep继续作为独立架构点，不与短链或乘法核接口改动合并。
+`r=13` toy与`r=12589`旧链均通过；KeyGen算术逐word golden固定10,066,537拍。D16 Fully Routed诊断为
+2,354 LUT、4 RAMB36，内部setup WNS `+1.092 ns`；新增bank选择不在内部最差20条路径或高扇出top-30。
+该run缺少源码/generic/XDC provenance及methodology/DRC。完整KeyGen和可复现Vivado门禁完成前保持
+`pending`；Bernstein-Yang/divstep继续作为独立架构点，不与短链或乘法核接口改动合并。
+
+EXP-0122建立独立二元多项式divstep锚点：黄金模型固定`2r-1`步并保留`r+1`位状态，`r=13`全部
+4095个可逆输入和一个`r=15581`确定性输入通过Euclid golden；局部`s=1`原语通过形式化，`s=8`
+control广播与word update通过2049例。Racing BIKE式(3)在`b=64,d=2,u=8`下给出`s=8`为
+982,534拍的未集成投影，该数值不是RTL实测或Vivado证据。下一实验只增加四多项式BRAM扫描与边界处理，
+完成全尺寸inverse和固定访问计数后再建立独立Vivado top；暂不接入KeyGen。
 
 ### G8：Karatsuba + Comba
 

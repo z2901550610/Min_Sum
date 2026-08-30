@@ -6,6 +6,8 @@
 | --- | --- |
 | `decoder_datapath.d2` | 译码器数据通路 D2 图源 |
 | `decoder_datapath.svg/png` | 译码器数据通路导出图 |
+| `ksign_results_summary.csv` | K-sign DFR/FLS数据快照 |
+| `trike*_logdfr*.png`、`trike*_4bit_compare.png` | K-sign参数与DFR对比图 |
 
 D2 数据通路图渲染命令：
 
