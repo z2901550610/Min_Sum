@@ -12,11 +12,11 @@ import shlex
 import subprocess
 import sys
 import tempfile
-import time
 from datetime import UTC, datetime
 from pathlib import Path
 
 from validation_events import append_event
+from tool_runner import new_log, run_logged, diagnostic_lines
 
 
 IMPORTANT_RE = re.compile(
@@ -117,11 +117,8 @@ def tool_version(real_sby: str) -> str:
 
 def log_path(project: Path | None, task: str) -> Path:
     log_dir = Path(os.environ.get("SBY_LOG_DIR", "build/logs/sby"))
-    log_dir.mkdir(parents=True, exist_ok=True)
-    stamp = time.strftime("%Y%m%d-%H%M%S")
-    unique = f"{time.time_ns() % 1_000_000_000:09d}"
     project_name = project.stem if project is not None else "sby"
-    return log_dir / f"{stamp}-{unique}-{safe_name(project_name)}-{safe_name(task)}.log"
+    return new_log(log_dir, f"{project_name}-{task}")
 
 
 def write_summary(result: dict[str, object]) -> Path:
@@ -164,19 +161,8 @@ def write_summary(result: dict[str, object]) -> Path:
 
 
 def emit_failure(output: str, log_file: Path) -> None:
-    lines = output.splitlines()
-    important = [line for line in lines if IMPORTANT_RE.search(line)]
-    emitted: set[str] = set()
-    if important:
-        print("---- sby important output ----", file=sys.stderr)
-        for line in important[:60]:
-            print(line, file=sys.stderr)
-            emitted.add(line)
-    tail = [line for line in lines[-40:] if line not in emitted]
-    if tail:
-        print("---- sby tail ----", file=sys.stderr)
-        for line in tail:
-            print(line, file=sys.stderr)
+    for line in diagnostic_lines(output, IMPORTANT_RE, failed=True):
+        print(line, file=sys.stderr)
     print(f"full log: {log_file}", file=sys.stderr)
 
 
@@ -193,22 +179,7 @@ def main() -> int:
     real_sby = os.environ.get("REAL_SBY", "sby")
     log_file = log_path(project, task)
     started_at = datetime.now(UTC)
-    start_time = time.monotonic()
-    try:
-        process = subprocess.run(
-            [real_sby, *args],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            check=False,
-        )
-        output = process.stdout or ""
-        returncode = process.returncode
-    except FileNotFoundError:
-        output = f"sby executable not found: {real_sby}\n"
-        returncode = 127
-    duration_seconds = time.monotonic() - start_time
-    log_file.write_text(output, encoding="utf-8", errors="replace")
+    returncode, output, duration_seconds = run_logged([real_sby, *args], log_file)
 
     project_name = display_path(project, cwd) if project is not None else "unknown"
     result_id = f"sby:{project_name}:{task}"

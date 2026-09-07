@@ -1,0 +1,1278 @@
+# Canonical test commands and owners. Make variables in commands are expanded by Make.
+schema_version = 1
+
+[[tests]]
+name = "test"
+prerequisites = "test-unit test-integration"
+
+[[tests]]
+name = "test-unit"
+prerequisites = "test-kem-unit $(DECODER_UNIT_TARGETS)"
+[[tests.owners]]
+exact = ["rtl/ram_bram.sv"]
+covers_profiles = ["decoder"]
+
+[[tests]]
+name = "test-reset-sync"
+groups = ["DECODER_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_reset_sync rtl/reset_sync.sv tb/tb_reset_sync.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_reset_sync +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/reset_sync.sv", "tb/tb_reset_sync.sv"]
+covers_profiles = ["decoder"]
+
+[[tests]]
+name = "test-msg-codec"
+groups = ["DECODER_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_msg_codec rtl/bike_pkg.sv rtl/msg_signmag_to_tc.sv rtl/msg_tc_to_signmag_sat.sv tb/tb_msg_codec.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_msg_codec +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/msg_signmag_to_tc.sv", "rtl/msg_tc_to_signmag_sat.sv", "tb/tb_msg_codec.sv"]
+covers_profiles = ["decoder"]
+
+[[tests]]
+name = "test-tile-scheduler"
+groups = ["DECODER_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_tile_scheduler rtl/bike_pkg.sv rtl/tile_scheduler.sv tb/tb_tile_scheduler.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_tile_scheduler +verilator+quiet",
+]
+[[tests.owners]]
+within_prefixes = ["rtl/", "tb/"]
+contains = ["tile_scheduler"]
+covers_profiles = ["decoder"]
+
+[[tests]]
+name = "test-edge-addr-gen"
+groups = ["DECODER_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_edge_addr_gen rtl/bike_pkg.sv rtl/edge_addr_gen.sv tb/tb_edge_addr_gen.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_edge_addr_gen +verilator+quiet",
+]
+[[tests.owners]]
+within_prefixes = ["rtl/", "tb/"]
+contains = ["edge_addr_gen"]
+covers_profiles = ["decoder"]
+
+[[tests]]
+name = "test-ram-i"
+groups = ["DECODER_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_i rtl/bike_pkg.sv rtl/ram_bram.sv rtl/ram_i.sv tb/tb_ram_i.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_ram_i +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/ram_i.sv", "tb/tb_ram_i.sv"]
+covers_profiles = ["decoder"]
+
+[[tests]]
+name = "test-ram-m"
+groups = ["DECODER_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_m rtl/bike_pkg.sv rtl/ram_bram.sv rtl/ram_m.sv tb/tb_ram_m.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_ram_m +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/ram_m.sv", "tb/tb_ram_m.sv"]
+covers_profiles = ["decoder"]
+
+[[tests]]
+name = "test-ram-sign-delta"
+groups = ["DECODER_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_sign_delta rtl/bike_pkg.sv rtl/ram_bram.sv rtl/ram_sign_delta.sv tb/tb_ram_sign_delta.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_ram_sign_delta +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/ram_sign_delta.sv", "tb/tb_ram_sign_delta.sv"]
+covers_profiles = ["decoder"]
+
+[[tests]]
+name = "test-k-sign-update"
+groups = ["DECODER_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_k_sign_update rtl/bike_pkg.sv rtl/ram_bram.sv rtl/barrel_rotate.sv rtl/k_sign_update.sv rtl/k_sign_reconstruct.sv rtl/ram_k_tile.sv rtl/k_sign_selector.sv rtl/ram_k_global.sv tb/tb_k_sign_update.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_k_sign_update +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/k_sign_reconstruct.sv", "rtl/k_sign_selector.sv", "rtl/k_sign_update.sv", "tb/tb_k_sign_update.sv"]
+covers_profiles = ["decoder"]
+[[tests.owners]]
+exact = ["rtl/ram_k_global.sv", "rtl/ram_k_tile.sv"]
+covers_profiles = ["decoder"]
+
+[[tests]]
+name = "test-ram-accum"
+groups = ["DECODER_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_accum rtl/bike_pkg.sv rtl/barrel_rotate.sv rtl/ram_accum.sv tb/tb_ram_accum.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_ram_accum +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/ram_accum.sv", "tb/tb_ram_accum.sv"]
+covers_profiles = ["decoder"]
+[[tests.owners]]
+exact = ["rtl/barrel_rotate.sv"]
+covers_profiles = ["decoder"]
+also_targets = ["test-ram-t", "test-k-sign-update"]
+
+[[tests]]
+name = "test-ram-t"
+groups = ["DECODER_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_t rtl/bike_pkg.sv rtl/barrel_rotate.sv rtl/ram_bram.sv rtl/ram_t.sv tb/tb_ram_t.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_ram_t +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/ram_t.sv", "tb/tb_ram_t.sv"]
+covers_profiles = ["decoder"]
+
+[[tests]]
+name = "test-ram-decision"
+groups = ["DECODER_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_decision rtl/bike_pkg.sv rtl/ram_bram.sv rtl/ram_decision.sv tb/tb_ram_decision.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_ram_decision +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/ram_decision.sv", "tb/tb_ram_decision.sv"]
+covers_profiles = ["decoder"]
+
+[[tests]]
+name = "test-ram-syndrome"
+groups = ["DECODER_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_ram_syndrome rtl/bike_pkg.sv rtl/ram_bram.sv rtl/ram_syndrome.sv tb/tb_ram_syndrome.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_ram_syndrome +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/ram_syndrome.sv", "tb/tb_ram_syndrome.sv"]
+covers_profiles = ["decoder"]
+
+[[tests]]
+name = "test-cnu-a"
+groups = ["DECODER_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_cnu_a rtl/bike_pkg.sv rtl/cnu_a.sv tb/tb_cnu_a.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_cnu_a +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/cnu_a.sv", "tb/tb_cnu_a.sv"]
+covers_profiles = ["decoder"]
+
+[[tests]]
+name = "test-cnu-b"
+groups = ["DECODER_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_cnu_b rtl/bike_pkg.sv rtl/cnu_b.sv tb/tb_cnu_b.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_cnu_b +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/cnu_b.sv", "tb/tb_cnu_b.sv"]
+covers_profiles = ["decoder"]
+
+[[tests]]
+name = "test-kem-unit"
+prerequisites = "$(KEM_UNIT_TARGETS)"
+
+[[tests]]
+name = "test-sm3-compress"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_sm3_compress $(SM3_COMPRESS_RTL) tb/tb_sm3_compress.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_sm3_compress +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/sm3_compress.sv", "rtl/trike_sm3_service.sv", "tb/tb_sm3_compress.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-sm3-hash-stream"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_sm3_hash_stream $(SM3_COMPRESS_RTL) rtl/sm3_hash_stream.sv tb/tb_sm3_hash_stream.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_sm3_hash_stream +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/sm3_hash_stream.sv", "tb/tb_sm3_hash_stream.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-hmac-sm3-64byte-key-stream"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_hmac_sm3_64byte_key_stream $(SM3_COMPRESS_RTL) rtl/sm3_hash_stream.sv rtl/hmac_sm3_64byte_key_stream.sv tb/tb_hmac_sm3_64byte_key_stream.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_hmac_sm3_64byte_key_stream +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/hmac_sm3_64byte_key_stream.sv", "tb/tb_hmac_sm3_64byte_key_stream.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-sm3-df-stream"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_sm3_df_stream $(SM3_COMPRESS_RTL) rtl/sm3_hash_stream.sv rtl/sm3_df_stream.sv tb/tb_sm3_df_stream.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_sm3_df_stream +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/sm3_df_stream.sv", "tb/tb_sm3_df_stream.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-sm3-drng-instantiate-stream"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_sm3_drng_instantiate_stream $(SM3_COMPRESS_RTL) rtl/sm3_hash_stream.sv rtl/sm3_df_stream.sv rtl/trike_sm3_drng_instantiate_stream.sv tb/tb_trike_sm3_drng_instantiate_stream.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_sm3_drng_instantiate_stream +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_sm3_drng_instantiate_stream.sv", "tb/tb_trike_sm3_drng_instantiate_stream.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-sm3-drng-generate-stream"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_sm3_drng_generate_stream $(SM3_COMPRESS_RTL) rtl/sm3_hash_stream.sv rtl/trike_sm3_drng_generate_stream.sv tb/tb_trike_sm3_drng_generate_stream.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_sm3_drng_generate_stream +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_sm3_drng_generate_stream.sv", "tb/tb_trike_sm3_drng_generate_stream.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-pseudohash512-stream"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_pseudohash512_stream $(SM3_COMPRESS_RTL) rtl/sm3_hash_stream.sv rtl/hmac_sm3_64byte_key_stream.sv rtl/trike_pseudohash512_stream.sv tb/tb_trike_pseudohash512_stream.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_pseudohash512_stream +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_pseudohash512_stream.sv"]
+covers_profiles = ["kem"]
+also_targets = ["test-trike-pseudohash-runtime"]
+[[tests.owners]]
+exact = ["tb/tb_trike_pseudohash512_stream.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-pseudohash-synth-top"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_pseudohash_synth_top rtl/reset_sync.sv $(SM3_COMPRESS_RTL) rtl/sm3_hash_stream.sv rtl/hmac_sm3_64byte_key_stream.sv rtl/trike_pseudohash512_stream.sv rtl/trike_pseudohash_synth_top.sv tb/tb_trike_pseudohash_synth_top.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_pseudohash_synth_top +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_pseudohash_synth_top.sv", "tb/tb_trike_pseudohash_synth_top.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-parity-map-stream"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_parity_map_stream rtl/trike_parity_map_stream.sv tb/tb_trike_parity_map_stream.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_parity_map_stream +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_parity_map_stream.sv", "tb/tb_trike_parity_map_stream.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-sampler-candidate"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_sampler_candidate rtl/trike_sampler_candidate.sv tb/tb_trike_sampler_candidate.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_sampler_candidate +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_sampler_candidate.sv", "tb/tb_trike_sampler_candidate.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-fixed-weight-sampler"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_fixed_weight_sampler rtl/ram_bram.sv rtl/trike_sampler_candidate.sv rtl/trike_fixed_weight_sampler.sv tb/tb_trike_fixed_weight_sampler.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_fixed_weight_sampler +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_fixed_weight_sampler.sv", "tb/tb_trike_fixed_weight_sampler.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-weak-key-test"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_weak_key_test rtl/ram_bram.sv rtl/trike_weak_key_test.sv tb/tb_trike_weak_key_test.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_weak_key_test +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_weak_key_test.sv", "tb/tb_trike_weak_key_test.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-drng-weight-sampler"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_drng_weight_sampler $(SM3_COMPRESS_RTL) rtl/sm3_hash_stream.sv rtl/trike_sm3_drng_generate_stream.sv rtl/ram_bram.sv rtl/trike_sampler_candidate.sv rtl/trike_fixed_weight_sampler.sv rtl/trike_drng_weight_sampler.sv tb/tb_trike_drng_weight_sampler.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_drng_weight_sampler +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_drng_weight_sampler.sv", "tb/tb_trike_drng_weight_sampler.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-h4-error-sampler"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_h4_error_sampler $(SM3_COMPRESS_RTL) rtl/sm3_hash_stream.sv rtl/sm3_df_stream.sv rtl/trike_sm3_drng_instantiate_stream.sv rtl/trike_sm3_drng_generate_stream.sv rtl/ram_bram.sv rtl/trike_sampler_candidate.sv rtl/trike_fixed_weight_sampler.sv rtl/trike_drng_weight_sampler.sv rtl/trike_h4_error_sampler.sv tb/tb_trike_h4_error_sampler.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_h4_error_sampler +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_h4_error_sampler.sv", "tb/tb_trike_h4_error_sampler.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-h123-vectors"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_h123_vectors $(SM3_COMPRESS_RTL) rtl/sm3_hash_stream.sv rtl/sm3_df_stream.sv rtl/trike_sm3_drng_instantiate_stream.sv rtl/trike_sm3_drng_generate_stream.sv rtl/trike_parity_map_stream.sv rtl/trike_h123_vectors.sv tb/tb_trike_h123_vectors.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_h123_vectors +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_h123_vectors.sv", "tb/tb_trike_h123_vectors.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-poly-mul-core"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_poly_mul_core rtl/ram_bram.sv rtl/trike_poly_mul_core.sv tb/tb_trike_poly_mul_core.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_poly_mul_core +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_poly_mul_core.sv", "tb/tb_trike_poly_mul_core.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-encaps-uv-core"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_encaps_uv_core $(TRIKE_ENCAPS_UV_UNIT_RTL) tb/tb_trike_encaps_uv_core.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_encaps_uv_core +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_encaps_uv_core.sv", "tb/tb_trike_encaps_uv_core.sv"]
+covers_profiles = ["kem"]
+also_targets = ["test-trike-encaps-uv-core-external-store"]
+
+[[tests]]
+name = "test-trike-encaps-uv-core-external-store"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) -GUSE_EXTERNAL_UV_STORE=1 --top-module tb_trike_encaps_uv_core $(TRIKE_ENCAPS_UV_UNIT_RTL) tb/tb_trike_encaps_uv_core.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_encaps_uv_core +verilator+quiet",
+]
+
+[[tests]]
+name = "test-trike-poly-inv-core"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_poly_inv_core rtl/trike_inv_schedule_pkg.sv rtl/ram_bram.sv rtl/trike_poly_mul_core.sv rtl/trike_poly_inv_core.sv tb/tb_trike_poly_inv_core.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_poly_inv_core +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_poly_inv_core.sv", "tb/tb_trike_poly_inv_core.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-keygen-arith-core"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_keygen_arith_core $(TRIKE_KEYGEN_ARITH_UNIT_RTL) tb/tb_trike_keygen_arith_core.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_keygen_arith_core +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_keygen_arith_core.sv", "tb/tb_trike_keygen_arith_core.sv"]
+covers_profiles = ["kem"]
+also_targets = ["test-trike-keygen-arith-core-external-result-store", "test-trike-keygen-arith-core-external-stores"]
+
+[[tests]]
+name = "test-trike-keygen-arith-core-external-result-store"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) -GUSE_EXTERNAL_RESULT_STORE=1 --top-module tb_trike_keygen_arith_core $(TRIKE_KEYGEN_ARITH_UNIT_RTL) tb/tb_trike_keygen_arith_core.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_keygen_arith_core +verilator+quiet",
+]
+
+[[tests]]
+name = "test-trike-keygen-arith-core-external-stores"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) -GUSE_EXTERNAL_RESULT_STORE=1 -GUSE_EXTERNAL_SUPPORT_STORE=1 --top-module tb_trike_keygen_arith_core $(TRIKE_KEYGEN_ARITH_UNIT_RTL) tb/tb_trike_keygen_arith_core.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_keygen_arith_core +verilator+quiet",
+]
+
+[[tests]]
+name = "test-keccak-f1600"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_keccak_f1600 rtl/keccak_f1600.sv tb/tb_keccak_f1600.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_keccak_f1600 +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/keccak_f1600.sv"]
+covers_profiles = ["kem"]
+also_targets = ["test-shake256-stream"]
+[[tests.owners]]
+exact = ["tb/tb_keccak_f1600.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-shake256-stream"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_shake256_stream rtl/keccak_f1600.sv rtl/shake256_stream.sv tb/tb_shake256_stream.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_shake256_stream +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/shake256_stream.sv", "tb/tb_shake256_stream.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-ct-verify-stream"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_ct_verify_stream rtl/kem_ct_compare_select.sv rtl/trike_ct_verify_stream.sv tb/tb_trike_ct_verify_stream.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_ct_verify_stream +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_ct_verify_stream.sv"]
+covers_profiles = ["kem"]
+also_targets = ["test-trike-ct-verify-runtime", "formal-ct-control"]
+[[tests.owners]]
+exact = ["tb/tb_trike_ct_verify_stream.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-decoder-load-adapter"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_decoder_load_adapter rtl/trike_fixed_support_sorter.sv rtl/trike_decoder_load_adapter.sv tb/tb_trike_decoder_load_adapter.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_decoder_load_adapter +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_decoder_load_adapter.sv"]
+covers_profiles = ["kem"]
+also_targets = ["test-trike-decoder-load-adapter-runtime"]
+[[tests.owners]]
+exact = ["tb/tb_trike_decoder_load_adapter.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-fixed-support-sorter"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_fixed_support_sorter rtl/trike_fixed_support_sorter.sv tb/tb_trike_fixed_support_sorter.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_fixed_support_sorter +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_fixed_support_sorter.sv"]
+covers_profiles = ["kem"]
+also_targets = ["test-trike-fixed-support-sorter-runtime"]
+[[tests.owners]]
+exact = ["tb/tb_trike_fixed_support_sorter.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-decoder-error-vector"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_decoder_error_vector rtl/ram_bram.sv rtl/trike_decoder_error_vector.sv tb/tb_trike_decoder_error_vector.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_decoder_error_vector +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_decoder_error_vector.sv", "tb/tb_trike_decoder_error_vector.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-decoder-residual-check"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_decoder_residual_check rtl/ram_bram.sv rtl/trike_decoder_residual_check.sv tb/tb_trike_decoder_residual_check.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_decoder_residual_check +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_decoder_residual_check.sv", "tb/tb_trike_decoder_residual_check.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-poly-divstep-model"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@python3 scripts/model_trike_poly_inv_by.py --self-test",
+]
+[[tests.owners]]
+exact = ["scripts/model_trike_poly_inv_by.py"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-poly-divstep-s1"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_poly_divstep_s1 rtl/trike_poly_divstep_s1.sv tb/tb_trike_poly_divstep_s1.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_poly_divstep_s1 +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_poly_divstep_control.sv", "rtl/trike_poly_divstep_s1.sv", "rtl/trike_poly_divstep_update.sv", "tb/tb_trike_poly_divstep_round.sv", "tb/tb_trike_poly_divstep_s1.sv"]
+covers_profiles = ["kem"]
+also_targets = ["test-trike-poly-divstep-round"]
+
+[[tests]]
+name = "test-trike-poly-divstep-round"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_poly_divstep_round rtl/trike_poly_divstep_control.sv rtl/trike_poly_divstep_update.sv tb/tb_trike_poly_divstep_round.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_poly_divstep_round +verilator+quiet",
+]
+
+[[tests]]
+name = "test-trike-weak-key-reference"
+prerequisites = "$(TRIKE_KEYGEN_REFERENCE_FIXTURE)"
+groups = ["TRIKE_KEM_REFERENCE_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_weak_key_reference rtl/ram_bram.sv rtl/trike_weak_key_test.sv tb/tb_trike_weak_key_reference.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_weak_key_reference +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["tb/tb_trike_weak_key_reference.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-keygen-secret-reference"
+prerequisites = "test-trike-keygen-secret-sampler-reference test-trike-keygen-secret-schedule-reference"
+groups = ["TRIKE_KEM_REFERENCE_TARGETS"]
+[[tests.owners]]
+exact = ["rtl/trike_keygen_secret_sampler.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-keygen-secret-sampler-reference"
+prerequisites = "$(TRIKE_KEYGEN_REFERENCE_FIXTURE)"
+groups = ["KEM_REFERENCE_VARIANT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_keygen_secret_sampler_reference $(TRIKE_KEYGEN_SECRET_REFERENCE_RTL) tb/tb_trike_keygen_secret_sampler_reference.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_keygen_secret_sampler_reference +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["tb/tb_trike_keygen_secret_sampler_reference.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-keygen-secret-schedule-reference"
+prerequisites = "$(TRIKE_KEYGEN_REFERENCE_FIXTURE)"
+groups = ["KEM_REFERENCE_VARIANT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_keygen_secret_sampler_schedule $(TRIKE_KEYGEN_SECRET_REFERENCE_RTL) tb/tb_trike_keygen_secret_sampler_schedule.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_keygen_secret_sampler_schedule +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["tb/tb_trike_keygen_secret_sampler_schedule.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-keygen-arith-reference"
+prerequisites = "$(TRIKE_KEYGEN_REFERENCE_FIXTURE)"
+groups = ["TRIKE_KEM_REFERENCE_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_keygen_arith_reference rtl/trike_inv_schedule_pkg.sv rtl/ram_bram.sv rtl/trike_poly_mul_core.sv rtl/trike_poly_inv_core.sv rtl/trike_keygen_arith_core.sv tb/tb_trike_keygen_arith_reference.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_keygen_arith_reference +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_keygen_synth_top.sv", "tb/tb_trike_keygen_arith_reference.sv"]
+covers_profiles = ["kem"]
+also_targets = ["test-trike-keygen-synth-reference"]
+
+[[tests]]
+name = "test-trike-h123-vector-store"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_h123_vector_store rtl/ram_bram.sv rtl/trike_h123_vector_store.sv tb/tb_trike_h123_vector_store.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_h123_vector_store +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_h123_vector_store.sv", "tb/tb_trike_h123_vector_store.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-clmul-karatsuba"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_clmul_karatsuba rtl/trike_poly_mul_core.sv tb/tb_trike_clmul_karatsuba.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_clmul_karatsuba +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["tb/tb_trike_clmul_karatsuba.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-kem-ct-compare-select"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_kem_ct_compare_select rtl/kem_ct_compare_select.sv tb/tb_kem_ct_compare_select.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_kem_ct_compare_select +verilator+quiet",
+]
+[[tests.owners]]
+within_prefixes = ["rtl/", "tb/"]
+contains = ["kem_ct_compare_select"]
+covers_profiles = ["kem"]
+also_targets = ["formal-ct-select"]
+
+[[tests]]
+name = "test-trike-poly-base-karatsuba-matrix"
+commands = [
+  "@$(MAKE) test-trike-clmul-karatsuba",
+  "@$(MAKE) test-trike-poly-reference test-trike-poly-inv-reference TRIKE_POLY_DIGIT_W=64 TRIKE_POLY_KARATSUBA_DEPTH=1",
+  "@$(MAKE) test-trike-poly-reference test-trike-poly-inv-reference TRIKE_POLY_DIGIT_W=64 TRIKE_POLY_KARATSUBA_DEPTH=2",
+  "@$(MAKE) test-trike-poly-reference test-trike-poly-inv-reference TRIKE_POLY_DIGIT_W=64 TRIKE_POLY_KARATSUBA_DEPTH=3",
+]
+
+[[tests]]
+name = "test-trike-poly-karatsuba-core"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_poly_mul_karatsuba_core $(TRIKE_POLY_KARATSUBA_RTL) tb/tb_trike_poly_mul_karatsuba_core.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_poly_mul_karatsuba_core +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_poly_mul_karatsuba_core.sv", "tb/tb_trike_poly_mul_karatsuba_core.sv", "tb/tb_trike_poly_mul_karatsuba_reference.sv"]
+covers_profiles = ["kem"]
+also_targets = ["test-trike-poly-karatsuba-reference"]
+
+[[tests]]
+name = "test-trike-poly-karatsuba-reference"
+prerequisites = "$(TRIKE_POLY_REFERENCE_FIXTURE)"
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_poly_mul_karatsuba_reference $(TRIKE_POLY_KARATSUBA_RTL) tb/tb_trike_poly_mul_karatsuba_reference.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_poly_mul_karatsuba_reference +verilator+quiet",
+]
+
+[[tests]]
+name = "test-trike-poly-karatsuba2-core"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_poly_mul_karatsuba2_core $(TRIKE_POLY_KARATSUBA2_RTL) tb/tb_trike_poly_mul_karatsuba2_core.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_poly_mul_karatsuba2_core +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_poly_mul_karatsuba2_core.sv", "tb/tb_trike_poly_mul_karatsuba2_core.sv", "tb/tb_trike_poly_mul_karatsuba2_reference.sv"]
+covers_profiles = ["kem"]
+also_targets = ["test-trike-poly-karatsuba2-reference"]
+
+[[tests]]
+name = "test-trike-poly-karatsuba2-reference"
+prerequisites = "$(TRIKE_POLY_REFERENCE_FIXTURE)"
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_poly_mul_karatsuba2_reference $(TRIKE_POLY_KARATSUBA2_RTL) tb/tb_trike_poly_mul_karatsuba2_reference.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_poly_mul_karatsuba2_reference +verilator+quiet",
+]
+
+[[tests]]
+name = "test-trike-poly-karatsuba-matrix"
+commands = [
+  "@$(MAKE) test-trike-clmul-karatsuba",
+  "@$(MAKE) test-trike-poly-karatsuba-core test-trike-poly-karatsuba-reference",
+  "@$(MAKE) test-trike-poly-karatsuba2-core test-trike-poly-karatsuba2-reference",
+]
+
+[[tests]]
+name = "test-trike-keygen-core-reference"
+prerequisites = "test-trike-keygen-core-reference-base test-trike-keygen-core-reference-alt-case test-trike-keygen-core-reference-shared-sm3 test-trike-keygen-core-reference-shared-resources"
+groups = ["TRIKE_KEM_REFERENCE_TARGETS"]
+[[tests.owners]]
+exact = ["scripts/gen_trike_keygen_fixture.py"]
+covers_profiles = ["kem"]
+[[tests.owners]]
+exact = ["rtl/trike_keygen_core.sv", "tb/tb_trike_keygen_core_reference.sv"]
+covers_profiles = ["kem"]
+also_targets = ["test-trike-keygen-synth-reference"]
+
+[[tests]]
+name = "test-trike-keygen-core-reference-base"
+prerequisites = "$(TRIKE_KEYGEN_REFERENCE_FIXTURE)"
+groups = ["KEM_REFERENCE_VARIANT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_keygen_core_reference $(TRIKE_KEYGEN_CORE_REFERENCE_RTL) tb/tb_trike_keygen_core_reference.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_keygen_core_reference +verilator+quiet",
+]
+
+[[tests]]
+name = "test-trike-keygen-core-reference-alt-case"
+prerequisites = "$(TRIKE_KEYGEN_REFERENCE_FIXTURE)"
+groups = ["KEM_REFERENCE_VARIANT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) -GALT_CASE=1 --top-module tb_trike_keygen_core_reference $(TRIKE_KEYGEN_CORE_REFERENCE_RTL) tb/tb_trike_keygen_core_reference.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_keygen_core_reference +verilator+quiet",
+]
+
+[[tests]]
+name = "test-trike-keygen-core-reference-shared-sm3"
+prerequisites = "$(TRIKE_KEYGEN_REFERENCE_FIXTURE)"
+groups = ["KEM_REFERENCE_VARIANT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) -GUSE_SHARED_SM3=1 --top-module tb_trike_keygen_core_reference $(TRIKE_KEYGEN_CORE_REFERENCE_RTL) tb/tb_trike_keygen_core_reference.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_keygen_core_reference +verilator+quiet",
+]
+
+[[tests]]
+name = "test-trike-keygen-core-reference-shared-resources"
+prerequisites = "$(TRIKE_KEYGEN_REFERENCE_FIXTURE)"
+groups = ["KEM_REFERENCE_VARIANT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) -GUSE_SHARED_SM3=1 -GUSE_SHARED_MUL=1 -GUSE_SHARED_H123=1 -GUSE_SHARED_SAMPLER=1 -GUSE_SHARED_H123_STORE=1 --top-module tb_trike_keygen_core_reference $(TRIKE_KEYGEN_CORE_REFERENCE_RTL) tb/tb_trike_keygen_core_reference.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_keygen_core_reference +verilator+quiet",
+]
+
+[[tests]]
+name = "test-trike-keygen-synth-reference"
+prerequisites = "$(TRIKE_KEYGEN_REFERENCE_FIXTURE)"
+groups = ["TRIKE_KEM_REFERENCE_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) -GUSE_SYNTH_TOP=1 --top-module tb_trike_keygen_core_reference $(TRIKE_KEYGEN_RTL) tb/tb_trike_keygen_core_reference.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_keygen_core_reference +verilator+quiet",
+]
+
+[[tests]]
+name = "test-trike-poly-reference"
+prerequisites = "$(TRIKE_POLY_REFERENCE_FIXTURE)"
+groups = ["TRIKE_KEM_REFERENCE_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) -GDUT_DIGIT_W=$(TRIKE_POLY_DIGIT_W) -GDUT_DENSE_KARATSUBA_DEPTH=$(TRIKE_POLY_KARATSUBA_DEPTH) --top-module tb_trike_poly_mul_reference rtl/ram_bram.sv rtl/trike_poly_mul_core.sv tb/tb_trike_poly_mul_reference.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_poly_mul_reference +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["scripts/gen_trike_poly_mul_fixture.py"]
+covers_profiles = ["kem"]
+[[tests.owners]]
+exact = ["tb/tb_trike_poly_mul_reference.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-poly-inv-reference"
+prerequisites = "$(TRIKE_POLY_INV_REFERENCE_FIXTURE)"
+groups = ["TRIKE_KEM_REFERENCE_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) -GDUT_DIGIT_W=$(TRIKE_POLY_DIGIT_W) -GDUT_DENSE_KARATSUBA_DEPTH=$(TRIKE_POLY_KARATSUBA_DEPTH) --top-module tb_trike_poly_inv_reference rtl/trike_inv_schedule_pkg.sv rtl/ram_bram.sv rtl/trike_poly_mul_core.sv rtl/trike_poly_inv_core.sv tb/tb_trike_poly_inv_reference.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_poly_inv_reference +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["scripts/gen_trike_poly_inv_fixture.py", "scripts/gen_trike_inv_schedule.py"]
+covers_profiles = ["kem"]
+[[tests.owners]]
+exact = ["rtl/trike_inv_schedule_pkg.sv", "rtl/trike_poly_inv_synth_top.sv", "tb/tb_trike_poly_inv_reference.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-poly-kernel-matrix"
+commands = [
+  "@$(MAKE) test-trike-poly-reference test-trike-poly-inv-reference TRIKE_POLY_DIGIT_W=16",
+  "@$(MAKE) test-trike-poly-reference test-trike-poly-inv-reference TRIKE_POLY_DIGIT_W=32",
+  "@$(MAKE) test-trike-poly-reference test-trike-poly-inv-reference TRIKE_POLY_DIGIT_W=64",
+]
+
+[[tests]]
+name = "test-trike-poly-inv-minsum-reference"
+prerequisites = "$(TRIKE_MINSUM_POLY_INV_FIXTURE)"
+groups = ["TRIKE_KEM_REFERENCE_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) -DTRIKE_MINSUM_INV_FIXTURE -GDUT_DIGIT_W=$(TRIKE_POLY_DIGIT_W) -GDUT_DENSE_KARATSUBA_DEPTH=$(TRIKE_POLY_KARATSUBA_DEPTH) --top-module tb_trike_poly_inv_reference rtl/trike_inv_schedule_pkg.sv rtl/ram_bram.sv rtl/trike_poly_mul_core.sv rtl/trike_poly_inv_core.sv tb/tb_trike_poly_inv_reference.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_poly_inv_reference +verilator+quiet",
+]
+
+[[tests]]
+name = "test-trike-pseudohash-runtime"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) --binary $(VERILATOR_MDIR_FLAG) --sv -Wall -I./tb -I./rtl $(VERILATOR_WAIVER_FILE) --top-module tb_trike_pseudohash512_runtime $(SM3_COMPRESS_RTL) rtl/sm3_hash_stream.sv rtl/hmac_sm3_64byte_key_stream.sv rtl/trike_pseudohash512_stream.sv tb/tb_trike_pseudohash512_runtime.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_pseudohash512_runtime +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["tb/tb_trike_pseudohash512_runtime.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-h4-runtime"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) --binary $(VERILATOR_MDIR_FLAG) --sv -Wall -I./tb -I./rtl $(VERILATOR_WAIVER_FILE) --top-module tb_trike_h4_runtime $(SM3_COMPRESS_RTL) rtl/sm3_hash_stream.sv rtl/sm3_df_stream.sv rtl/trike_sm3_drng_instantiate_stream.sv rtl/trike_sm3_drng_generate_stream.sv rtl/trike_sampler_candidate.sv rtl/trike_fixed_weight_sampler.sv rtl/trike_drng_weight_sampler.sv rtl/trike_h4_error_sampler.sv rtl/ram_bram.sv rtl/trike_error_support_store.sv rtl/trike_h4_error_vector.sv tb/tb_trike_h4_runtime.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_h4_runtime +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["tb/tb_trike_h4_runtime.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-ct-verify-runtime"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) --binary $(VERILATOR_MDIR_FLAG) --sv -Wall -I./tb -I./rtl $(VERILATOR_WAIVER_FILE) --top-module tb_trike_ct_verify_runtime rtl/kem_ct_compare_select.sv rtl/trike_ct_verify_stream.sv tb/tb_trike_ct_verify_runtime.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_ct_verify_runtime +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["tb/tb_trike_ct_verify_runtime.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-decaps-postprocess-runtime"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) --binary $(VERILATOR_MDIR_FLAG) --sv -Wall -I./tb -I./rtl $(VERILATOR_WAIVER_FILE) --top-module tb_trike_decaps_postprocess_runtime $(SM3_COMPRESS_RTL) rtl/sm3_hash_stream.sv rtl/sm3_df_stream.sv rtl/hmac_sm3_64byte_key_stream.sv rtl/trike_sm3_drng_instantiate_stream.sv rtl/trike_sm3_drng_generate_stream.sv rtl/trike_sampler_candidate.sv rtl/trike_fixed_weight_sampler.sv rtl/trike_drng_weight_sampler.sv rtl/trike_h4_error_sampler.sv rtl/ram_bram.sv rtl/trike_error_support_store.sv rtl/trike_h4_error_vector.sv rtl/kem_ct_compare_select.sv rtl/trike_ct_verify_stream.sv rtl/trike_decaps_message_recover.sv rtl/trike_decaps_reencrypt_verify.sv rtl/trike_pseudohash512_stream.sv rtl/trike_decaps_kdf.sv rtl/trike_decaps_postprocess_core.sv tb/tb_trike_decaps_postprocess_runtime.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_decaps_postprocess_runtime +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_decaps_postprocess_core.sv", "tb/tb_trike_decaps_postprocess_reference.sv"]
+covers_profiles = ["kem"]
+also_targets = ["test-trike-decaps-postprocess-reference"]
+[[tests.owners]]
+exact = ["tb/tb_trike_decaps_postprocess_runtime.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-decaps-input-loader"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) --binary $(VERILATOR_MDIR_FLAG) --sv -DTRIKE_UNIFIED_PARAMS -Wall -I./tb -I./rtl $(VERILATOR_WAIVER_FILE) --top-module tb_trike_decaps_input_loader rtl/bike_pkg.sv rtl/trike_decaps_profile_config.sv rtl/trike_decaps_input_loader.sv tb/tb_trike_decaps_input_loader.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_decaps_input_loader +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_decaps_input_loader.sv", "tb/tb_trike_decaps_input_loader.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-decaps-input-store"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) --binary $(VERILATOR_MDIR_FLAG) --sv -DTRIKE_UNIFIED_PARAMS -Wall -I./tb -I./rtl $(VERILATOR_WAIVER_FILE) --top-module tb_trike_decaps_input_store rtl/bike_pkg.sv rtl/trike_decaps_profile_config.sv rtl/trike_decaps_input_loader.sv rtl/ram_bram.sv rtl/trike_decaps_input_store.sv tb/tb_trike_decaps_input_store.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_decaps_input_store +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_decaps_input_store.sv", "tb/tb_trike_decaps_input_store.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-decaps-syndrome-runtime"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) --binary $(VERILATOR_MDIR_FLAG) --sv -Wall -I./tb -I./rtl $(VERILATOR_WAIVER_FILE) --top-module tb_trike_decaps_syndrome_runtime rtl/ram_bram.sv rtl/trike_poly_mul_core.sv rtl/trike_decaps_syndrome_core.sv tb/tb_trike_decaps_syndrome_runtime.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_decaps_syndrome_runtime +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_decaps_syndrome_core.sv", "tb/tb_trike_decaps_syndrome_reference.sv"]
+covers_profiles = ["kem"]
+also_targets = ["test-trike-decaps-syndrome-reference"]
+[[tests.owners]]
+exact = ["tb/tb_trike_decaps_syndrome_runtime.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-decaps-syndrome-store-core"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) --binary $(VERILATOR_MDIR_FLAG) --sv -DTRIKE_UNIFIED_PARAMS -Wall -I./tb -I./rtl $(VERILATOR_WAIVER_FILE) --top-module tb_trike_decaps_syndrome_store_core rtl/bike_pkg.sv rtl/ram_bram.sv rtl/trike_poly_mul_core.sv rtl/trike_decaps_syndrome_core.sv rtl/trike_decaps_syndrome_prefetch.sv rtl/trike_decaps_syndrome_store_core.sv tb/tb_trike_decaps_syndrome_store_core.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_decaps_syndrome_store_core +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_decaps_syndrome_store_core.sv", "rtl/trike_decaps_syndrome_prefetch.sv", "tb/tb_trike_decaps_syndrome_store_core.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-decaps-input-syndrome-core"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) --binary $(VERILATOR_MDIR_FLAG) --sv -DTRIKE_UNIFIED_PARAMS -Wall -I./tb -I./rtl $(VERILATOR_WAIVER_FILE) --top-module tb_trike_decaps_input_syndrome_core rtl/bike_pkg.sv rtl/trike_decaps_profile_config.sv rtl/trike_decaps_input_loader.sv rtl/ram_bram.sv rtl/trike_decaps_input_store.sv rtl/trike_poly_mul_core.sv rtl/trike_decaps_syndrome_core.sv rtl/trike_decaps_syndrome_prefetch.sv rtl/trike_decaps_syndrome_store_core.sv rtl/trike_decaps_input_syndrome_core.sv tb/tb_trike_decaps_input_syndrome_core.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_decaps_input_syndrome_core +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_decaps_input_syndrome_core.sv", "tb/tb_trike_decaps_input_syndrome_core.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-decaps-support-prefetch"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) --binary $(VERILATOR_MDIR_FLAG) --sv -DTRIKE_UNIFIED_PARAMS -Wall -I./tb -I./rtl $(VERILATOR_WAIVER_FILE) --top-module tb_trike_decaps_support_prefetch rtl/bike_pkg.sv rtl/trike_decaps_support_prefetch.sv tb/tb_trike_decaps_support_prefetch.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_decaps_support_prefetch +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_decaps_support_prefetch.sv", "tb/tb_trike_decaps_support_prefetch.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-decaps-input-decoder-load-core"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) --binary $(VERILATOR_MDIR_FLAG) --sv -DTRIKE_UNIFIED_PARAMS -Wall -I./tb -I./rtl $(VERILATOR_WAIVER_FILE) --top-module tb_trike_decaps_input_decoder_load_core rtl/bike_pkg.sv rtl/trike_decaps_profile_config.sv rtl/trike_decaps_input_loader.sv rtl/ram_bram.sv rtl/trike_decaps_input_store.sv rtl/trike_decaps_support_prefetch.sv rtl/trike_poly_mul_core.sv rtl/trike_decaps_syndrome_core.sv rtl/trike_decaps_syndrome_prefetch.sv rtl/trike_decaps_syndrome_store_core.sv rtl/trike_fixed_support_sorter.sv rtl/trike_decoder_load_adapter.sv rtl/trike_decaps_input_decoder_load_core.sv tb/tb_trike_decaps_input_decoder_load_core.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_decaps_input_decoder_load_core +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_decaps_input_decoder_load_core.sv", "tb/tb_trike_decaps_input_decoder_load_core.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-decaps-decoder-postcheck-core"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) --binary $(VERILATOR_MDIR_FLAG) --sv -Wall -I./tb -I./rtl $(VERILATOR_WAIVER_FILE) --top-module tb_trike_decaps_decoder_postcheck_core rtl/ram_bram.sv rtl/trike_decoder_error_vector.sv rtl/trike_decoder_residual_check.sv rtl/trike_decaps_decoder_postcheck_core.sv tb/tb_trike_decaps_decoder_postcheck_core.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_decaps_decoder_postcheck_core +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_decaps_decoder_postcheck_core.sv", "tb/tb_trike_decaps_decoder_postcheck_core.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-fixed-support-sorter-runtime"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) --binary $(VERILATOR_MDIR_FLAG) --sv -Wall -I./tb -I./rtl $(VERILATOR_WAIVER_FILE) --top-module tb_trike_fixed_support_sorter_runtime rtl/trike_fixed_support_sorter.sv tb/tb_trike_fixed_support_sorter_runtime.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_fixed_support_sorter_runtime +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["tb/tb_trike_fixed_support_sorter_runtime.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-decoder-load-adapter-runtime"
+groups = ["KEM_UNIT_TARGETS"]
+commands = [
+  "@$(VERILATOR) --binary $(VERILATOR_MDIR_FLAG) --sv -Wall -I./tb -I./rtl $(VERILATOR_WAIVER_FILE) --top-module tb_trike_decoder_load_adapter_runtime rtl/trike_fixed_support_sorter.sv rtl/trike_decoder_load_adapter.sv tb/tb_trike_decoder_load_adapter_runtime.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_decoder_load_adapter_runtime +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["tb/tb_trike_decoder_load_adapter_runtime.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-decaps-message-reference"
+prerequisites = "gen-trike-minsum-kem-case"
+groups = ["TRIKE_KEM_REFERENCE_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_decaps_message_reference $(SM3_COMPRESS_RTL) rtl/sm3_hash_stream.sv rtl/hmac_sm3_64byte_key_stream.sv rtl/trike_pseudohash512_stream.sv rtl/trike_decaps_message_recover.sv tb/tb_trike_decaps_message_reference.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_decaps_message_reference +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_decaps_message_recover.sv", "tb/tb_trike_decaps_message_reference.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-decaps-verify-reference"
+prerequisites = "gen-trike-minsum-kem-case"
+groups = ["TRIKE_KEM_REFERENCE_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_decaps_verify_reference $(SM3_COMPRESS_RTL) rtl/sm3_hash_stream.sv rtl/sm3_df_stream.sv rtl/trike_sm3_drng_instantiate_stream.sv rtl/trike_sm3_drng_generate_stream.sv rtl/trike_sampler_candidate.sv rtl/trike_fixed_weight_sampler.sv rtl/trike_drng_weight_sampler.sv rtl/trike_h4_error_sampler.sv rtl/ram_bram.sv rtl/trike_error_support_store.sv rtl/trike_h4_error_vector.sv rtl/kem_ct_compare_select.sv rtl/trike_ct_verify_stream.sv rtl/trike_decaps_reencrypt_verify.sv tb/tb_trike_decaps_verify_reference.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_decaps_verify_reference +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_decaps_reencrypt_verify.sv", "tb/tb_trike_decaps_verify_reference.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-decaps-kdf-reference"
+prerequisites = "gen-trike-minsum-kem-case"
+groups = ["TRIKE_KEM_REFERENCE_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_decaps_kdf_reference $(SM3_COMPRESS_RTL) rtl/sm3_hash_stream.sv rtl/hmac_sm3_64byte_key_stream.sv rtl/trike_pseudohash512_stream.sv rtl/trike_decaps_kdf.sv tb/tb_trike_decaps_kdf_reference.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_decaps_kdf_reference +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_decaps_kdf.sv", "tb/tb_trike_decaps_kdf_reference.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-decaps-postprocess-reference"
+prerequisites = "test-trike-decaps-postprocess-reference-base test-trike-decaps-postprocess-reference-shared-sm3 test-trike-decaps-postprocess-reference-shared-resources"
+groups = ["TRIKE_KEM_REFERENCE_TARGETS"]
+
+[[tests]]
+name = "test-trike-decaps-postprocess-reference-base"
+prerequisites = "gen-trike-minsum-kem-case"
+groups = ["KEM_REFERENCE_VARIANT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_decaps_postprocess_reference $(TRIKE_DECAPS_POSTPROCESS_REFERENCE_RTL) tb/tb_trike_decaps_postprocess_reference.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_decaps_postprocess_reference +verilator+quiet",
+]
+
+[[tests]]
+name = "test-trike-decaps-postprocess-reference-shared-sm3"
+prerequisites = "gen-trike-minsum-kem-case"
+groups = ["KEM_REFERENCE_VARIANT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) -GUSE_SHARED_SM3=1 --top-module tb_trike_decaps_postprocess_reference $(TRIKE_DECAPS_POSTPROCESS_REFERENCE_RTL) tb/tb_trike_decaps_postprocess_reference.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_decaps_postprocess_reference +verilator+quiet",
+]
+
+[[tests]]
+name = "test-trike-decaps-postprocess-reference-shared-resources"
+prerequisites = "gen-trike-minsum-kem-case"
+groups = ["KEM_REFERENCE_VARIANT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) -GUSE_SHARED_SM3=1 -GUSE_SHARED_SAMPLER=1 -GUSE_SHARED_H4_STORE=1 --top-module tb_trike_decaps_postprocess_reference $(TRIKE_DECAPS_POSTPROCESS_REFERENCE_RTL) tb/tb_trike_decaps_postprocess_reference.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_decaps_postprocess_reference +verilator+quiet",
+]
+
+[[tests]]
+name = "test-trike-decoder-residual-reference"
+prerequisites = "gen-trike-minsum-kem-case"
+groups = ["TRIKE_KEM_REFERENCE_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_decoder_residual_reference rtl/ram_bram.sv rtl/trike_decoder_residual_check.sv tb/tb_trike_decoder_residual_reference.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_decoder_residual_reference +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["tb/tb_trike_decoder_residual_reference.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-decaps-pipeline-reference"
+prerequisites = "gen-trike-minsum-kem-case"
+groups = ["TRIKE_KEM_REFERENCE_TARGETS"]
+commands = [
+  "@$(VERILATOR) --binary $(VERILATOR_MDIR_FLAG) --sv -DTRIKE_160_PARAMS -DBIKE_PARALLEL_L=32 -DBIKE_K_SIGN_K=4 -DBIKE_MSG_BITS=5 -DBIKE_SIM_DEBUG -Wall -I./tb -I./rtl $(VERILATOR_WAIVER_FILE) --top-module tb_trike_decaps_pipeline_reference $(TRIKE_DECAPS_RTL) tb/tb_trike_decaps_pipeline_reference.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_decaps_pipeline_reference +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_decaps_pipeline_core.sv", "tb/tb_trike_decaps_pipeline_reference.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-decaps-synth-reference"
+prerequisites = "gen-trike-minsum-kem-case"
+groups = ["TRIKE_KEM_REFERENCE_TARGETS"]
+commands = [
+  "@$(VERILATOR) --binary $(VERILATOR_MDIR_FLAG) --sv -DTRIKE_160_PARAMS -DBIKE_PARALLEL_L=32 -DBIKE_K_SIGN_K=4 -DBIKE_MSG_BITS=5 -DBIKE_SIM_DEBUG -Wall -I./tb -I./rtl $(VERILATOR_WAIVER_FILE) --top-module tb_trike_decaps_synth_reference $(TRIKE_DECAPS_SYNTH_RTL) tb/tb_trike_decaps_synth_reference.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_decaps_synth_reference +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_decaps_synth_top.sv", "tb/tb_trike_decaps_synth_reference.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-decaps-runtime-synth-reference"
+prerequisites = "gen-trike-minsum-kem-case"
+commands = [
+  "@$(VERILATOR) --binary $(VERILATOR_MDIR_FLAG) --sv -DTRIKE_UNIFIED_PARAMS -DBIKE_PARALLEL_L=32 -DBIKE_K_SIGN_K=4 -DBIKE_MSG_BITS=5 -DBIKE_COLS_PER_TILE=256 -DBIKE_SIM_DEBUG $(TRIKE_RUNTIME_REFERENCE_DEFINES) $(TRIKE_RUNTIME_REFERENCE_CFLAGS) -Wall -I./tb -I./rtl $(VERILATOR_WAIVER_FILE) --top-module tb_trike_decaps_runtime_synth_reference $(TRIKE_DECAPS_SYNTH_RTL) tb/tb_trike_decaps_runtime_synth_reference.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_decaps_runtime_synth_reference +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_decaps_runtime_pipeline_core.sv", "rtl/trike_decaps_runtime_synth_top.sv", "rtl/trike_decaps_unified_core.sv", "tb/tb_trike_decaps_runtime_synth_reference.sv"]
+covers_profiles = ["kem"]
+also_targets = ["test-trike-decaps-runtime-four-profile-reference"]
+
+[[tests]]
+name = "test-trike-decaps-runtime-four-profile-reference"
+commands = [
+  "@for profile in $(TRIKE_MINSUM_PROFILES); do \\",
+  "\t$(MAKE) test-trike-decaps-runtime-synth-reference TRIKE_MINSUM_PROFILE=$$profile TRIKE_RUNTIME_REFERENCE_DEFINES=-DTRIKE_RUNTIME_ACCEPT_REJECT_ONLY || exit 1; \\",
+  "done",
+]
+[[tests.owners]]
+exact = ["rtl/trike_decaps_profile_config.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-decaps-syndrome-reference"
+prerequisites = "test-trike-decaps-syndrome-reference-base test-trike-decaps-syndrome-reference-shared-mul"
+groups = ["TRIKE_KEM_REFERENCE_TARGETS"]
+[[tests.owners]]
+exact = ["scripts/gen_trike_decaps_syndrome_fixture.py"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-decaps-syndrome-reference-base"
+prerequisites = "$(TRIKE_DECAPS_SYNDROME_REFERENCE_FIXTURE)"
+groups = ["KEM_REFERENCE_VARIANT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_decaps_syndrome_reference $(TRIKE_DECAPS_SYNDROME_REFERENCE_RTL) tb/tb_trike_decaps_syndrome_reference.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_decaps_syndrome_reference +verilator+quiet",
+]
+
+[[tests]]
+name = "test-trike-decaps-syndrome-reference-shared-mul"
+prerequisites = "$(TRIKE_DECAPS_SYNDROME_REFERENCE_FIXTURE)"
+groups = ["KEM_REFERENCE_VARIANT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) -GUSE_SHARED_MUL=1 --top-module tb_trike_decaps_syndrome_reference $(TRIKE_DECAPS_SYNDROME_REFERENCE_RTL) tb/tb_trike_decaps_syndrome_reference.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_decaps_syndrome_reference +verilator+quiet",
+]
+
+[[tests]]
+name = "test-trike-encaps-components-reference"
+prerequisites = "$(TRIKE_ENCAPS_REFERENCE_FIXTURE)"
+groups = ["TRIKE_KEM_REFERENCE_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_encaps_components_reference $(SM3_COMPRESS_RTL) rtl/sm3_hash_stream.sv rtl/sm3_df_stream.sv rtl/trike_sm3_drng_instantiate_stream.sv rtl/trike_sm3_drng_generate_stream.sv rtl/trike_sampler_candidate.sv rtl/trike_fixed_weight_sampler.sv rtl/trike_drng_weight_sampler.sv rtl/trike_h4_error_sampler.sv rtl/trike_parity_map_stream.sv rtl/trike_h123_vectors.sv rtl/ram_bram.sv rtl/trike_poly_mul_core.sv rtl/trike_encaps_uv_core.sv tb/tb_trike_encaps_components_reference.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_encaps_components_reference +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["scripts/gen_trike_encaps_fixture.py"]
+covers_profiles = ["kem"]
+[[tests.owners]]
+exact = ["tb/tb_trike_encaps_components_reference.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-encaps-hash-reference"
+prerequisites = "$(TRIKE_ENCAPS_REFERENCE_FIXTURE)"
+groups = ["TRIKE_KEM_REFERENCE_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_encaps_hash_reference $(SM3_COMPRESS_RTL) rtl/sm3_hash_stream.sv rtl/hmac_sm3_64byte_key_stream.sv rtl/trike_pseudohash512_stream.sv tb/tb_trike_encaps_hash_reference.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_encaps_hash_reference +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["tb/tb_trike_encaps_hash_reference.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-encaps-core-reference"
+prerequisites = "test-trike-encaps-core-reference-base test-trike-encaps-core-reference-shared-sm3 test-trike-encaps-core-reference-shared-resources"
+groups = ["TRIKE_KEM_REFERENCE_TARGETS"]
+[[tests.owners]]
+exact = ["rtl/trike_encaps_core.sv", "tb/tb_trike_encaps_core_reference.sv"]
+covers_profiles = ["kem"]
+also_targets = ["test-trike-encaps-synth-reference"]
+
+[[tests]]
+name = "test-trike-encaps-core-reference-base"
+prerequisites = "$(TRIKE_ENCAPS_REFERENCE_FIXTURE)"
+groups = ["KEM_REFERENCE_VARIANT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_encaps_core_reference $(TRIKE_ENCAPS_RTL) tb/tb_trike_encaps_core_reference.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_encaps_core_reference +verilator+quiet",
+]
+
+[[tests]]
+name = "test-trike-encaps-core-reference-shared-sm3"
+prerequisites = "$(TRIKE_ENCAPS_REFERENCE_FIXTURE)"
+groups = ["KEM_REFERENCE_VARIANT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) -GUSE_SHARED_SM3=1 --top-module tb_trike_encaps_core_reference $(TRIKE_ENCAPS_RTL) tb/tb_trike_encaps_core_reference.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_encaps_core_reference +verilator+quiet",
+]
+
+[[tests]]
+name = "test-trike-encaps-core-reference-shared-resources"
+prerequisites = "$(TRIKE_ENCAPS_REFERENCE_FIXTURE)"
+groups = ["KEM_REFERENCE_VARIANT_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) -GUSE_SHARED_SM3=1 -GUSE_SHARED_MUL=1 -GUSE_SHARED_H123=1 -GUSE_SHARED_SAMPLER=1 -GUSE_SHARED_H4_STORE=1 -GUSE_SHARED_H123_STORE=1 --top-module tb_trike_encaps_core_reference $(TRIKE_ENCAPS_RTL) tb/tb_trike_encaps_core_reference.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_encaps_core_reference +verilator+quiet",
+]
+
+[[tests]]
+name = "test-trike-encaps-synth-reference"
+prerequisites = "$(TRIKE_ENCAPS_REFERENCE_FIXTURE)"
+groups = ["TRIKE_KEM_REFERENCE_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) -GUSE_SYNTH_TOP=1 --top-module tb_trike_encaps_core_reference $(TRIKE_ENCAPS_RTL) tb/tb_trike_encaps_core_reference.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_encaps_core_reference +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_encaps_synth_top.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-error-store-reference"
+prerequisites = "$(TRIKE_ENCAPS_REFERENCE_FIXTURE)"
+groups = ["TRIKE_KEM_REFERENCE_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_error_support_store_reference rtl/ram_bram.sv rtl/trike_error_support_store.sv tb/tb_trike_error_support_store_reference.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_error_support_store_reference +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_error_support_store.sv", "tb/tb_trike_error_support_store_reference.sv"]
+covers_profiles = ["kem"]
+
+[[tests]]
+name = "test-trike-h4-vector-reference"
+prerequisites = "$(TRIKE_ENCAPS_REFERENCE_FIXTURE)"
+groups = ["TRIKE_KEM_REFERENCE_TARGETS"]
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_h4_error_vector_reference $(SM3_COMPRESS_RTL) rtl/sm3_hash_stream.sv rtl/sm3_df_stream.sv rtl/trike_sm3_drng_instantiate_stream.sv rtl/trike_sm3_drng_generate_stream.sv rtl/trike_sampler_candidate.sv rtl/trike_fixed_weight_sampler.sv rtl/trike_drng_weight_sampler.sv rtl/trike_h4_error_sampler.sv rtl/ram_bram.sv rtl/trike_error_support_store.sv rtl/trike_h4_error_vector.sv tb/tb_trike_h4_error_vector_reference.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_h4_error_vector_reference +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_h4_error_vector.sv", "tb/tb_trike_h4_error_vector_reference.sv"]
+covers_profiles = ["kem"]
+also_targets = ["test-trike-h4-runtime"]
+
+[[tests]]
+name = "test-trike-kem-operation-control"
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_trike_kem_operation_control rtl/trike_kem_operation_control.sv tb/tb_trike_kem_operation_control.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_trike_kem_operation_control +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["rtl/trike_kem_operation_control.sv", "tb/tb_trike_kem_operation_control.sv"]
+covers_profiles = ["kem"]
+also_targets = ["formal-trike-kem-operation-control"]
+
+[[tests]]
+name = "test-integration"
+prerequisites = "$(TOY_CASE_SVH)"
+commands = [
+  "@$(VERILATOR) $(VERILATOR_FLAGS) --top-module tb_decoder_top $(RTL) tb/tb_decoder_top.sv",
+  "@$(SIM) $(VERILATOR_MDIR)/Vtb_decoder_top +verilator+quiet",
+]
+[[tests.owners]]
+exact = ["scripts/gen_toy_case_fixture.py", "scripts/qc_matrix_data.py"]
+covers_profiles = ["decoder"]
+[[tests.owners]]
+exact = ["rtl/decoder_top.sv", "rtl/decoder_profile_config.sv", "rtl/ram_s.sv", "rtl/vnu.sv", "tb/tb_decoder_top.sv"]
+covers_profiles = ["decoder"]
+
+[[tests]]
+name = "test-bike-random"
+commands = [
+  "@python3 scripts/run_bike_random.py --param-set $(BIKE_RANDOM_PARAM_SET) --base-seed $(BIKE_RANDOM_BASE_SEED) --trials $(BIKE_RANDOM_TRIALS) $(BIKE_RANDOM_ERROR_ARG) --parallel-l $(BIKE_RANDOM_PARALLEL_L) --cols-per-tile $(BIKE_RANDOM_COLS_PER_TILE) --timeout-cycles $(BIKE_RANDOM_TIMEOUT_CYCLES) --verilator $(VERILATOR)",
+]
+
+[[tests]]
+name = "test-bike-unified-random"
+commands = [
+  "@for param_set in $(BIKE_UNIFIED_RANDOM_PARAM_SETS); do \\",
+  "\tpython3 scripts/run_bike_random.py --unified --param-set $$param_set --base-seed $(BIKE_RANDOM_BASE_SEED) --trials $(BIKE_RANDOM_TRIALS) $(BIKE_RANDOM_ERROR_ARG) --parallel-l $(BIKE_RANDOM_PARALLEL_L) --cols-per-tile $(BIKE_UNIFIED_RANDOM_COLS_PER_TILE) --timeout-cycles $(BIKE_UNIFIED_RANDOM_TIMEOUT_CYCLES) --out-dir tb/generated/bike_unified_random/$$param_set --verilator $(VERILATOR); \\",
+  "done",
+]
+
+[[tests]]
+name = "test-trike-unified-ksign-random"
+commands = [
+  "@for param_set in $(TRIKE_UNIFIED_KSIGN_PARAM_SETS); do \\",
+  "\tpython3 scripts/run_bike_random.py --unified --param-set $$param_set --base-seed $(BIKE_RANDOM_BASE_SEED) --trials $(BIKE_RANDOM_TRIALS) $(BIKE_RANDOM_ERROR_ARG) --parallel-l $(TRIKE_UNIFIED_KSIGN_PARALLEL_L) --cols-per-tile $(TRIKE_UNIFIED_KSIGN_COLS_PER_TILE) --k-sign-k $(TRIKE_UNIFIED_KSIGN_K) --timeout-cycles $(TRIKE_UNIFIED_KSIGN_TIMEOUT_CYCLES) --out-dir tb/generated/trike_unified_ksign/k$(TRIKE_UNIFIED_KSIGN_K)/$$param_set --verilator $(VERILATOR); \\",
+  "done",
+]
+
+[[tests]]
+name = "test-software-trike-kem"
+prerequisites = "software-trike-kem"
+groups = ["TRIKE_KEM_REFERENCE_TARGETS"]
+commands = [
+  "@for profile in $(TRIKE_KEM_TEST_PROFILES); do \\",
+  "\t$(TRIKE_KEM_SELFTEST) $$profile 1 || exit 1; \\",
+  "done",
+]
+
+[[tests]]
+name = "test-trike-reference-kat"
+groups = ["TRIKE_KEM_REFERENCE_TARGETS"]
+commands = [
+  "@python3 scripts/run_trike_reference_kat.py \\",
+  "\t--source-root \"$(TRIKE_REFERENCE_SOURCE_ROOT)\" \\",
+  "\t--build-root \"$(TRIKE_REFERENCE_BUILD_DIR)\" \\",
+  "\t--parameter-sets $(TRIKE_REFERENCE_PARAM_SETS) \\",
+  "\t--cc \"$(CC)\"",
+]

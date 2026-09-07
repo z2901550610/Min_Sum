@@ -7,12 +7,11 @@ import hashlib
 import json
 import os
 import re
-import subprocess
 import sys
-import time
 from pathlib import Path
 
 from validation_events import append_event
+from tool_runner import new_log, run_logged, diagnostic_lines
 
 
 SUPPRESS_RE = re.compile(
@@ -27,12 +26,8 @@ IMPORTANT_RE = re.compile(
 
 def log_path(command: list[str]) -> Path:
     log_dir = Path(os.environ.get("RUN_QUIET_LOG_DIR", "build/logs/run"))
-    log_dir.mkdir(parents=True, exist_ok=True)
-    stamp = time.strftime("%Y%m%d-%H%M%S")
-    unique = f"{time.time_ns() % 1_000_000_000:09d}"
     name = Path(command[0]).name if command else "command"
-    safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", name)
-    return log_dir / f"{stamp}-{unique}-{safe_name}.log"
+    return new_log(log_dir, name)
 
 
 def filtered_lines(output: str) -> list[str]:
@@ -64,20 +59,7 @@ def main() -> int:
         return 2
 
     log_file = log_path(command)
-    start = time.monotonic()
-    try:
-        proc = subprocess.run(
-            command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
-    except FileNotFoundError:
-        print(f"command FAIL: executable not found: {command[0]}", file=sys.stderr)
-        return 127
-    output = proc.stdout or ""
-    duration_seconds = time.monotonic() - start
-    log_file.write_text(output, encoding="utf-8", errors="replace")
+    returncode, output, duration_seconds = run_logged(command, log_file)
 
     binary_signature = executable_signature(command[0])
     signature = hashlib.sha256(
@@ -88,8 +70,8 @@ def main() -> int:
             {
                 "evidence_layer": "simulation",
                 "name": Path(command[0]).name,
-                "status": "PASS" if proc.returncode == 0 else "FAIL",
-                "returncode": proc.returncode,
+                "status": "PASS" if returncode == 0 else "FAIL",
+                "returncode": returncode,
                 "duration_seconds": round(duration_seconds, 3),
                 "command": command,
                 "signature": f"simulation:{signature}",
@@ -101,27 +83,22 @@ def main() -> int:
         )
     except (OSError, ValueError) as error:
         print(f"command FAIL: could not update validation evidence: {error}", file=sys.stderr)
-        return proc.returncode if proc.returncode != 0 else 1
+        return returncode if returncode != 0 else 1
 
     lines = filtered_lines(output)
-    max_lines = int(os.environ.get("RUN_QUIET_MAX_LINES", "200"))
-    if proc.returncode == 0:
+    max_lines = int(os.environ.get("RUN_QUIET_MAX_LINES", "20"))
+    if returncode == 0:
         for line in lines[:max_lines]:
             print(line)
         if len(lines) > max_lines:
             print(f"... suppressed {len(lines) - max_lines} more lines; see {log_file}")
     else:
-        important = [line for line in lines if IMPORTANT_RE.search(line)]
-        for line in important[:max_lines]:
-            print(line, file=sys.stderr)
-        if len(important) > max_lines:
-            print(f"... suppressed {len(important) - max_lines} more important lines; see {log_file}", file=sys.stderr)
-        print("---- command tail ----", file=sys.stderr)
-        for line in lines[-80:]:
+        selected = diagnostic_lines("\n".join(lines), IMPORTANT_RE, failed=True, limit=max_lines)
+        for line in selected:
             print(line, file=sys.stderr)
         print(f"command FAIL: {command[0]} (log: {log_file})", file=sys.stderr)
 
-    return proc.returncode
+    return returncode
 
 
 if __name__ == "__main__":

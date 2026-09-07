@@ -8,7 +8,6 @@ import sys
 from pathlib import Path
 
 import pytest
-import yaml
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -119,14 +118,13 @@ def test_check_plan_routes_formal_and_workflow_changes() -> None:
         ]
     )
     profile_ids = [profile["id"] for profile in plan["profiles"]]
-    assert "tool_entry" in profile_ids
     assert "workflow" in profile_ids
     assert "formal" in profile_ids
-    assert "make validate-workflow" in plan["commands"]
+    assert "validate-workflow" in plan["targets"]
     assert "make check" not in plan["commands"]
-    assert "make formal-ct-control" not in plan["commands"]
+    assert "formal-ct-control" in plan["targets"]
     assert "make formal-fast" not in plan["commands"]
-    assert plan["release_commands"] == []
+    assert plan["release_commands"] == ["make formal-fast"]
     assert plan["read_only"] is True
 
 
@@ -134,12 +132,11 @@ def test_check_plan_self_routes_workflow_and_scopes_hardware_tokens() -> None:
     check_plan = load_script("check_plan")
     config_plan = check_plan.build_plan(["config/validation_profiles.toml"])
     assert [profile["id"] for profile in config_plan["profiles"]] == [
-        "tool_entry",
         "workflow",
     ]
     assert config_plan["commands"] == [
         "git diff --check -- config/validation_profiles.toml",
-        "make validate-workflow",
+        "make check-agent-workflow",
     ]
 
     test_plan = check_plan.build_plan(["tests/test_agent_workflow.py"])
@@ -156,7 +153,6 @@ def test_check_plan_self_routes_workflow_and_scopes_hardware_tokens() -> None:
     assert [profile["id"] for profile in documentation_plan["profiles"]] == ["records"]
     assert documentation_plan["commands"] == [
         "git diff --check -- docs/k_sign_notes.md docs/parameter_notes.md",
-        "make check-records",
     ]
 
     dependency_plan = check_plan.build_plan(["pyproject.toml"])
@@ -179,7 +175,7 @@ def test_check_plan_self_routes_workflow_and_scopes_hardware_tokens() -> None:
     )
     assert scoped.returncode == 0
     assert "Validation plan: 2 changed path(s)" in scoped.stdout
-    assert "make check-rtl test-reset-sync" in scoped.stdout
+    assert "make check-fast test-reset-sync" in scoped.stdout
 
 
 def test_check_plan_uses_owning_targets_before_aggregate_gates() -> None:
@@ -200,14 +196,14 @@ def test_check_plan_uses_owning_targets_before_aggregate_gates() -> None:
     ]
     assert ram_plan["commands"] == [
         "git diff --check -- rtl/ram_i.sv",
-        "make check-rtl test-ram-i",
+        "make check-fast test-ram-i",
     ]
     assert ram_plan["release_commands"] == ["make ci-fast"]
 
     kem_plan = check_plan.build_plan(["rtl/kem_ct_compare_select.sv"])
     assert kem_plan["commands"] == [
         "git diff --check -- rtl/kem_ct_compare_select.sv",
-        "make check-rtl test-kem-ct-compare-select formal-ct-select",
+        "make check-fast test-kem-ct-compare-select formal-ct-select",
     ]
     assert kem_plan["release_commands"] == ["make ci-kem-reference"]
 
@@ -221,11 +217,9 @@ def test_check_plan_command_coverage_keeps_manual_evidence_requirements() -> Non
             "formal/tile_scheduler.sby",
         ]
     )
-    assert plan["commands"] == [
-        "git diff --check -- scripts/run_validation.py rtl/decoder_top.sv formal/tile_scheduler.sby",
-        "make validate-workflow",
-    ]
-    assert "make formal-tile-scheduler" not in plan["commands"]
+    assert set(plan["targets"]) == {
+        "validate-workflow", "check-fast", "test-integration", "formal-tile-scheduler"
+    }
     assert plan["manual_requirements"] == [
         "Run the smallest deterministic test that owns the changed behavior.",
         "If shared scheduling, geometry, or fixed cycles changed, run affected K=3/K=4 profiles and record the boundaries.",
@@ -269,18 +263,9 @@ def test_regress_is_only_the_fixed_seed_random_smoke() -> None:
     assert result.stdout.count("scripts/run_bike_random.py") == 4
 
 
-def test_rtl_gate_does_not_validate_workflow_itself() -> None:
-    makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
-    check_line = next(line for line in makefile.splitlines() if line.startswith("check:"))
-    ci_fast_line = next(
-        line for line in makefile.splitlines() if line.startswith("ci-fast:")
-    )
-    assert "workflow-smoke" not in check_line
-    assert "check-agent-workflow" not in ci_fast_line
-
-
 def test_verilator_tests_use_target_scoped_build_directories() -> None:
-    makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
+    catalog = load_script("test_catalog")
+    makefile = catalog.render_make(catalog.load_catalog())
     assert "obj_dir/" not in makefile
     kem_aggregate = makefile.split("test-kem-unit:", 1)[1].split("\n\n", 1)[0]
     assert kem_aggregate == " $(KEM_UNIT_TARGETS)"
@@ -361,7 +346,7 @@ def test_check_plan_routes_kem_units_without_aggregate_replay() -> None:
     implementation_plan = check_plan.build_plan(["rtl/trike_encaps_uv_core.sv"])
     assert implementation_plan["commands"] == [
         "git diff --check -- rtl/trike_encaps_uv_core.sv",
-        "make check-rtl test-trike-encaps-uv-core test-trike-encaps-uv-core-external-store",
+        "make check-fast test-trike-encaps-uv-core test-trike-encaps-uv-core-external-store",
     ]
     assert implementation_plan["release_commands"] == ["make ci-kem-reference"]
 
@@ -370,7 +355,7 @@ def test_check_plan_routes_kem_units_without_aggregate_replay() -> None:
     )
     assert runtime_tb_plan["commands"] == [
         "git diff --check -- tb/tb_trike_pseudohash512_runtime.sv",
-        "make check-rtl test-trike-pseudohash-runtime",
+        "make check-fast test-trike-pseudohash-runtime",
     ]
     assert "make test-kem-unit" not in runtime_tb_plan["commands"]
 
@@ -379,13 +364,14 @@ def test_check_plan_routes_kem_units_without_aggregate_replay() -> None:
     )
     assert reference_plan["commands"] == [
         "git diff --check -- tb/tb_trike_keygen_secret_sampler_schedule.sv",
-        "make check-rtl test-trike-keygen-secret-schedule-reference",
+        "make check-fast test-trike-keygen-secret-schedule-reference",
     ]
     assert "make ci-kem-reference" not in reference_plan["commands"]
 
 
 def test_each_named_test_target_has_at_most_one_verilator_compile() -> None:
-    makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
+    catalog = load_script("test_catalog")
+    makefile = catalog.render_make(catalog.load_catalog())
     compile_counts: dict[str, int] = {}
     target = ""
     for line in makefile.splitlines():
@@ -446,17 +432,6 @@ def test_validation_profiles_drive_routing_and_generated_matrix(tmp_path: Path) 
     profiles = load_script("validation_profiles")
     renderer = load_script("render_validation_matrix")
     config = profiles.load_profiles()
-    assert config.profile_order == (
-        "records",
-        "tool_entry",
-        "workflow",
-        "local_rtl",
-        "decoder",
-        "public_params",
-        "kem",
-        "formal",
-        "physical",
-    )
     selected, owners, manual = profiles.classify_paths(
         ["docs/removed-record.md", "formal/trike_ct_verify_stream_formal.sv"],
         config,
@@ -495,51 +470,10 @@ def test_validation_profiles_drive_routing_and_generated_matrix(tmp_path: Path) 
     assert "generated table is stale" in result.stderr
 
 
-def test_validation_profile_schema_stores_targets_not_shell_commands() -> None:
-    source = (
-        REPO_ROOT / "config" / "validation_profiles.toml"
-    ).read_text(encoding="utf-8")
-    assert "schema_version = 3" in source
-    assert "[[owners]]" in source
-    assert "[[targeted_rules]]" not in source
-    assert "commands =" not in source
-    assert '"make ' not in source
-
-
-def test_validation_profiles_route_every_repository_file() -> None:
-    profiles = load_script("validation_profiles")
-    config = profiles.load_profiles()
-    paths = subprocess.run(
-        ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
-        cwd=REPO_ROOT,
-        check=True,
-        text=True,
-        stdout=subprocess.PIPE,
-    ).stdout.splitlines()
-    unrouted = []
-    for path in paths:
-        selected, owners, manual = profiles.classify_paths([path], config)
-        if not selected and not owners and not manual:
-            unrouted.append(path)
-    assert unrouted == []
-
-
 def test_validation_profile_repository_bindings_are_live() -> None:
     profiles = load_script("validation_profiles")
     config = profiles.load_profiles()
     assert profiles.repository_binding_errors(config) == []
-
-
-def test_hardware_sources_have_at_most_one_owner() -> None:
-    profiles = load_script("validation_profiles")
-    config = profiles.load_profiles()
-    for path in profiles.repository_paths():
-        if not path.startswith(("rtl/", "tb/", "formal/")) or not path.endswith(
-            (".sv", ".sby")
-        ):
-            continue
-        _, owners, _ = profiles.classify_paths([path], config)
-        assert len(owners) <= 1, path
 
 
 def test_public_parameter_and_kem_aggregate_plans_do_not_repeat_static_gate() -> None:
@@ -556,7 +490,7 @@ def test_public_parameter_and_kem_aggregate_plans_do_not_repeat_static_gate() ->
         "git diff --check -- rtl/trike_decaps_profile_config.sv",
         "make ci-smoke test-trike-decaps-runtime-four-profile-reference",
     ]
-    assert all(command != "make check-rtl" for command in trike_plan["commands"])
+    assert all(command != "make check-fast" for command in trike_plan["commands"])
 
     asic_plan = check_plan.build_plan(["rtl/trike_kem_asic_top.sv"])
     assert asic_plan["commands"] == [
@@ -573,7 +507,7 @@ def test_validation_profile_allows_missing_owner_and_rejects_multiple(
 
     missing_path = tmp_path / "missing-owner.toml"
     missing_path.write_text(
-        source.replace(
+        profiles.CATALOG_PATH.read_text().replace(
             'exact = ["rtl/reset_sync.sv", "tb/tb_reset_sync.sv"]',
             'exact = ["rtl/missing_reset_sync.sv", "tb/tb_reset_sync.sv"]',
             1,
@@ -581,12 +515,12 @@ def test_validation_profile_allows_missing_owner_and_rejects_multiple(
         encoding="utf-8",
     )
     missing_errors = profiles.repository_binding_errors(
-        profiles.load_profiles(missing_path)
+        profiles.load_profiles(catalog_path=missing_path)
     )
     assert missing_errors == []
     check_plan = load_script("check_plan")
     missing_plan = check_plan.build_plan(
-        ["rtl/reset_sync.sv"], profiles.load_profiles(missing_path)
+        ["rtl/reset_sync.sv"], profiles.load_profiles(catalog_path=missing_path)
     )
     assert missing_plan["commands"] == [
         "git diff --check -- rtl/reset_sync.sv",
@@ -639,56 +573,7 @@ def test_validation_profile_rejects_owner_rule_without_files(tmp_path: Path) -> 
     config_path.write_text(invalid, encoding="utf-8")
     config = profiles.load_profiles(config_path)
     errors = profiles.repository_binding_errors(config)
-    assert any("owners[0] matches no repository path" in error for error in errors)
-
-
-def test_ci_workflow_calls_only_the_canonical_local_gate() -> None:
-    workflow_path = REPO_ROOT / ".github" / "workflows" / "ci.yml"
-    workflow = yaml.load(workflow_path.read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
-    assert workflow["permissions"] == {"contents": "read"}
-    steps = workflow["jobs"]["check"]["steps"]
-    actions = [step["uses"] for step in steps if "uses" in step]
-    assert "YosysHQ/setup-oss-cad-suite@v4" in actions
-    verible_step = next(step for step in steps if step.get("name") == "Install pinned Verible")
-    assert verible_step["env"]["VERIBLE_VERSION"] == "v0.0-4133-g873f559f"
-    assert verible_step["env"]["VERIBLE_SHA256"] == (
-        "73e83be9928e8274494ba39973ab07e76aed084c7da8bc81073b361ba196f9f4"
-    )
-    commands = [step["run"] for step in steps if "run" in step]
-    assert "sha256sum -c -" in commands[0]
-    assert commands[-2:] == [
-        "uv sync --frozen",
-        'PATH="$GITHUB_WORKSPACE/.venv/bin:$PATH" make check',
-    ]
-
-
-def test_required_toolchain_and_smoke_are_portable() -> None:
-    combined = "\n".join(
-        (REPO_ROOT / path).read_text(encoding="utf-8")
-        for path in (
-            "Makefile",
-            "config/rtl_toolchain.lock",
-            "scripts/check_tool_versions.py",
-        )
-    ).lower()
-    for unused in ("boolector", "bitwuzla", "surfer"):
-        assert unused not in combined
-    smoke = (REPO_ROOT / "workflow-smoke" / "Makefile").read_text(encoding="utf-8")
-    assert "/private/tmp" not in smoke
-    assert "brew --prefix" not in smoke
-    assert "LZ4_PREFIX to name an installed lz4 prefix" in smoke
-
-
-def test_repository_skills_have_minimal_valid_frontmatter() -> None:
-    for skill_path in sorted((REPO_ROOT / ".agents" / "skills").glob("*/SKILL.md")):
-        text = skill_path.read_text(encoding="utf-8")
-        assert text.startswith("---\n")
-        _, frontmatter, body = text.split("---", maxsplit=2)
-        metadata = yaml.safe_load(frontmatter)
-        assert metadata["name"] == skill_path.parent.name
-        assert isinstance(metadata.get("description"), str)
-        assert metadata["description"].strip()
-        assert body.strip().startswith("# ")
+    assert any("matches no repository path" in error for error in errors)
 
 
 def test_validation_profile_config_rejects_unknown_coverage(tmp_path: Path) -> None:
@@ -698,22 +583,6 @@ def test_validation_profile_config_rejects_unknown_coverage(tmp_path: Path) -> N
     config_path = tmp_path / "validation_profiles.toml"
     config_path.write_text(invalid, encoding="utf-8")
     with pytest.raises(profiles.ProfileConfigError, match="unknown profiles"):
-        profiles.load_profiles(config_path)
-
-
-def test_validation_profile_config_rejects_documented_command_drift(
-    tmp_path: Path,
-) -> None:
-    profiles = load_script("validation_profiles")
-    source = profiles.DEFAULT_CONFIG_PATH.read_text(encoding="utf-8")
-    invalid = source.replace(
-        'minimum_gate = "`make check-records`"',
-        'minimum_gate = "`make stale-record-check`"',
-        1,
-    )
-    config_path = tmp_path / "validation_profiles.toml"
-    config_path.write_text(invalid, encoding="utf-8")
-    with pytest.raises(profiles.ProfileConfigError, match="minimum_gate omits targets"):
         profiles.load_profiles(config_path)
 
 
@@ -776,10 +645,9 @@ def test_validation_profile_runs_deduplicated_stages_and_writes_summary(
     calls = (tmp_path / "make-calls.txt").read_text(encoding="utf-8").splitlines()
     assert calls[0] == "check-agent-workflow"
     assert calls[1] == "workflow-smoke"
-    assert calls[2] == "check"
-    assert calls[3] == "-C workflow-smoke check-failures"
-    assert calls[4].startswith("qor-report QOR_REPORT_DIR=")
-    assert all(call != "qor" for call in calls)
+    assert calls[2] == "-C workflow-smoke check-failures"
+    assert len(calls) == 3
+    assert not any("qor" in call or call == "check" for call in calls)
     run_dir = tmp_path / "runs" / "unit-run"
     environments = (tmp_path / "make-env.txt").read_text(encoding="utf-8").splitlines()
     expected = "|".join(
@@ -791,24 +659,24 @@ def test_validation_profile_runs_deduplicated_stages_and_writes_summary(
             run_dir / "check-summary.json",
         )
     )
-    assert environments == [expected, expected, expected, "|||", expected]
+    assert environments == [expected, expected, "|||"]
     metadata = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
     assert metadata["profile"] == "workflow"
     assert metadata["log_directory"] == str(run_dir / "logs")
     assert len(metadata["worktree_digest_sha256"]) == 64
     summary = json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))
     assert summary["status"] == "PASS"
-    assert summary["event_count"] == 5
+    assert summary["event_count"] == 3
     assert summary["duplicate_signatures"] == []
     assert "verbose tool output" not in result.stdout
     assert "verbose tool output" in (run_dir / "run.log").read_text(encoding="utf-8")
 
 
 def test_validation_profile_stops_on_first_failure(tmp_path: Path) -> None:
-    result = run_validation(tmp_path, fail_on="check")
+    result = run_validation(tmp_path, fail_on="workflow-smoke")
     assert result.returncode == 9
     calls = (tmp_path / "make-calls.txt").read_text(encoding="utf-8").splitlines()
-    assert calls == ["check-agent-workflow", "workflow-smoke", "check"]
+    assert calls == ["check-agent-workflow", "workflow-smoke"]
     summary = json.loads(
         (tmp_path / "runs" / "unit-run" / "summary.json").read_text(
             encoding="utf-8"
@@ -822,7 +690,7 @@ def test_validation_profile_passes_bounded_parallelism_to_make(tmp_path: Path) -
     result = run_validation(tmp_path, jobs=2)
     assert result.returncode == 0
     calls = (tmp_path / "make-calls.txt").read_text(encoding="utf-8").splitlines()
-    assert calls[2] == "-j2 check"
+    assert calls[1] == "-j2 workflow-smoke"
     metadata = json.loads(
         (tmp_path / "runs" / "unit-run" / "run.json").read_text(encoding="utf-8")
     )
@@ -877,12 +745,6 @@ def test_qor_report_defaults_to_ignored_build_results() -> None:
     assert "reports/qor/latest.json" not in result.stdout
 
 
-def test_obsolete_make_aliases_are_absent() -> None:
-    makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
-    assert "\nformat-rtl:" not in makefile
-    assert "\nverify-rtl:" not in makefile
-
-
 def test_simulation_signature_tracks_compiled_variant(tmp_path: Path) -> None:
     run_quiet = load_script("run_quiet")
     executable = tmp_path / "Vdut"
@@ -896,3 +758,100 @@ def test_simulation_signature_tracks_compiled_variant(tmp_path: Path) -> None:
         json.dumps({"compile_signature": "variant-b"}), encoding="utf-8"
     )
     assert run_quiet.executable_signature(str(executable)) == "variant-b"
+
+
+@pytest.mark.parametrize("path", ["scripts/scratch_analysis.py", "experiments/sweep.csv"])
+def test_research_files_need_no_registration(path, monkeypatch):
+    profiles = load_script("validation_profiles")
+    paths = profiles.repository_paths()
+    monkeypatch.setattr(profiles, "repository_paths", lambda root: paths + [path])
+    assert profiles.repository_binding_errors(profiles.load_profiles()) == []
+    plan = load_script("check_plan").build_plan([path])
+    assert plan["unrouted_paths"] == [path]
+    assert plan["targets"] == []
+
+
+def test_daily_gate_excludes_formal_synthesis_and_workflow():
+    result = subprocess.run(["make", "-n", "ci-fast"], cwd=REPO_ROOT,
+                            text=True, capture_output=True, check=True)
+    for heavy in [".sby", "synth_xilinx", "check_tool_versions.py", "check_project_records.py", "run_validation.py"]:
+        assert heavy not in result.stdout
+    assert "--binary" in result.stdout
+
+
+def test_helper_and_skill_changes_do_not_qualify_toolchain():
+    planner = load_script("check_plan")
+    assert planner.build_plan(["scripts/sby_quiet.py"])["targets"] == ["check-agent-workflow"]
+    assert planner.build_plan([".agents/skills/rtl-implement/SKILL.md"])["targets"] == []
+    assert "validate-workflow" in planner.build_plan(["Makefile"])["targets"]
+
+
+@pytest.mark.parametrize("strict,returncode,output,failed", [
+    (False, 0, "tool 2.0", False), (True, 0, "tool 2.0", True),
+    (False, 0, "tool 1.0", False), (True, 0, "tool 1.0", False),
+    (False, 1, "tool 1.0", True), (False, None, "", True),
+])
+def test_tool_version_policy(monkeypatch, capsys, strict, returncode, output, failed):
+    versions = load_script("check_tool_versions")
+    monkeypatch.setattr(versions, "load_lock", lambda: {"verilator": "tool 1.0"})
+    monkeypatch.setattr(sys, "argv", ["check_tool_versions.py"] + (["--check"] if strict else []))
+    def run(*args, **kwargs):
+        if returncode is None:
+            raise FileNotFoundError("missing tool")
+        return subprocess.CompletedProcess(args, returncode, output, "")
+    monkeypatch.setattr(versions.subprocess, "run", run)
+    if failed:
+        with pytest.raises(SystemExit):
+            versions.main()
+    else:
+        versions.main()
+        assert ("WARNING" if output == "tool 2.0" else "PASS") in capsys.readouterr().out
+
+
+def test_toy_fixture_preserves_timestamp_only_when_content_matches(tmp_path):
+    generator = load_script("gen_toy_case_fixture")
+    path = tmp_path / "toy.svh"
+    generator.emit_fixture(path, error_positions=[14])
+    original = path.read_bytes()
+    os.utime(path, ns=(1_000_000_000, 1_000_000_000))
+    generator.emit_fixture(path, error_positions=[14])
+    assert path.stat().st_mtime_ns == 1_000_000_000
+    generator.emit_fixture(path, error_positions=[13])
+    assert path.read_bytes() != original
+    generator.emit_fixture(path, error_positions=[14])
+    assert path.read_bytes() == original
+
+
+def test_failure_output_is_bounded_without_losing_log_or_exit_code(tmp_path):
+    environment = os.environ.copy()
+    environment.update(VALIDATION_RUN_ID="bounded-output-test",
+                       RUN_QUIET_LOG_DIR=str(tmp_path / "logs"),
+                       VALIDATION_EVENTS_PATH=str(tmp_path / "events.jsonl"),
+                       RUN_QUIET_MAX_LINES="20")
+    result = subprocess.run(
+        [sys.executable, str(REPO_ROOT / "scripts/run_quiet.py"), sys.executable,
+         "-c", "for i in range(100): print(f'error: diagnostic {i}')\nraise SystemExit(7)"],
+        env=environment, text=True, capture_output=True,
+    )
+    assert result.returncode == 7
+    assert len(result.stderr.splitlines()) <= 41
+    assert "diagnostic 0" in result.stderr and "diagnostic 99" in result.stderr
+    log = next((tmp_path / "logs").glob("*.log")).read_text()
+    assert len(log.splitlines()) == 100
+    assert json.loads((tmp_path / "events.jsonl").read_text())["status"] == "FAIL"
+
+
+def test_verilator_diagnostics_are_bounded_and_deduplicated(capsys, tmp_path):
+    wrapper = load_script("verilator_quiet")
+    wrapper.emit_filtered("\n".join(f"%Error: diagnostic {i}" for i in range(100)),
+                          failed=True, log_file=tmp_path / "full.log")
+    lines = capsys.readouterr().err.splitlines()
+    assert len(lines) <= 41
+    assert len(lines) == len(set(lines))
+    assert "%Error: diagnostic 0" in lines and "%Error: diagnostic 99" in lines
+
+
+def test_ordinary_docs_are_light_but_experiment_records_are_checked():
+    planner = load_script("check_plan")
+    assert planner.build_plan(["README.md", "docs/workflow.md"])["targets"] == []
+    assert planner.build_plan(["docs/experiments/index.md"])["targets"] == ["check-records"]

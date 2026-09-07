@@ -7,31 +7,22 @@
 
 ```sh
 source scripts/eda-env.sh
-make check-local-tools
-make check-tool-versions
-make lint
-make compile
-make workflow-smoke
-make synth
-make qor
-make check
-make ci-fast
-make ci-smoke
-make ci-nightly
-make ci-kem-reference
+make check-fast
+make test-trike-poly-mul-core  # 换成当前模块的定向测试
 ```
 
-- `ci-fast`：工具锁、记录结构、格式/lint、短形式矩阵、单元和集成测试。
+- `ci-fast`：轻量静态检查（filelist + Slang）、单元和集成测试；局部修改使用 `check-fast` 加定向 test。
 - `ci-smoke`：加入固定seed的BIKE和TRIKE K=3/K=4随机点。
 - `ci-nightly`：加入扩展形式参数与多参数、多seed回归。
 - `ci-kem-reference`：使用机器本地的官方TRIKE KAT/Reference C执行KeyGen、Encaps和Decaps
   byte-for-byte发布门禁；该入口明确不属于日常快速回归。
+- `validate-workflow`：工作流单测与正/负工具 smoke；不运行生产 RTL 全套检查或 QoR。
 - `workflow-smoke`：独立计数器的lint、cocotb、formal与Yosys互操作证明。
 - `synth` / `qor`：本地Yosys结构估计与受验证状态约束的JSON/Markdown报告，
   不属于Vivado物理证据。
-- `check`：`ci-fast`、展开、独立PoC与本地综合的统一完整入口。
+- `check`：工具基线、记录、完整静态、短形式矩阵、仿真、展开与本地综合；独立 PoC 属于 `validate-workflow`。
 
-Vivado实现入口为`make vivado-impl-trike-{poly-inv,pseudohash,encaps,keygen,decaps}`。
+Vivado以 Windows Tcl Console 或直接 `vivado -mode batch -source scripts/vivado_trike_kem_cores.tcl` 为主入口，Make包装可选。
 资源与时序结论只使用同器件、Vivado版本、XDC、参数和报告阶段的可比结果。
 
 ## 目录

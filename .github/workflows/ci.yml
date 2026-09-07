@@ -1,4 +1,4 @@
-name: Local RTL gate
+name: RTL checks
 
 on:
   pull_request:
@@ -30,6 +30,7 @@ jobs:
           version: "2026-08-27"
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install pinned Verible
+        if: github.event_name == 'workflow_dispatch'
         env:
           VERIBLE_VERSION: v0.0-4133-g873f559f
           VERIBLE_SHA256: 73e83be9928e8274494ba39973ab07e76aed084c7da8bc81073b361ba196f9f4
@@ -42,5 +43,9 @@ jobs:
           echo "$RUNNER_TEMP/verible/bin" >> "$GITHUB_PATH"
       - name: Sync locked Python environment
         run: uv sync --frozen
-      - name: Run canonical local gate
+      - name: Run daily RTL checks
+        if: github.event_name != 'workflow_dispatch'
+        run: PATH="$GITHUB_WORKSPACE/.venv/bin:$PATH" make ci-fast
+      - name: Run complete local qualification
+        if: github.event_name == 'workflow_dispatch'
         run: PATH="$GITHUB_WORKSPACE/.venv/bin:$PATH" make check

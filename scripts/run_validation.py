@@ -10,11 +10,11 @@ import os
 import re
 import subprocess
 import sys
-import time
 from datetime import UTC, datetime
 from pathlib import Path
 
 from validation_events import append_event, summary_text, write_summary
+from tool_runner import run_command, diagnostic_lines
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -77,16 +77,6 @@ def repository_worktree_digest(repo_root: Path = REPO_ROOT) -> str:
     return digest.hexdigest()
 
 
-def diagnostic_lines(output: str) -> list[str]:
-    lines = output.splitlines()
-    important = [line for line in lines if IMPORTANT_RE.search(line)]
-    selected: list[str] = []
-    for line in important[:30] + lines[-20:]:
-        if line not in selected:
-            selected.append(line)
-    return selected
-
-
 def write_metadata(path: Path, payload: dict[str, object]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
@@ -101,30 +91,19 @@ def run_stage(
     show_output: bool,
 ) -> int:
     print(f"validation RUN: {name}", flush=True)
-    start = time.monotonic()
-    process = subprocess.run(
-        command,
-        cwd=REPO_ROOT,
-        env=environment,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        check=False,
-    )
-    duration = time.monotonic() - start
-    output = process.stdout or ""
+    returncode, output, duration = run_command(command, env=environment, cwd=REPO_ROOT)
     with log_file.open("a", encoding="utf-8") as log:
         log.write(f"\n===== {name}: {' '.join(command)} =====\n")
         log.write(output)
         if output and not output.endswith("\n"):
             log.write("\n")
-    status = "PASS" if process.returncode == 0 else "FAIL"
+    status = "PASS" if returncode == 0 else "FAIL"
     append_event(
         {
             "evidence_layer": layer,
             "name": name,
             "status": status,
-            "returncode": process.returncode,
+            "returncode": returncode,
             "duration_seconds": round(duration, 3),
             "command": command,
             "signature": f"stage:{command_signature(command)}",
@@ -135,14 +114,14 @@ def run_stage(
     )
     if show_output:
         print(output, end="" if output.endswith("\n") else "\n")
-    elif process.returncode != 0:
+    elif returncode != 0:
         print(f"validation FAIL: {name}", file=sys.stderr)
-        for line in diagnostic_lines(output):
+        for line in diagnostic_lines(output, IMPORTANT_RE, failed=True):
             print(line, file=sys.stderr)
         print(f"full log: {log_file}", file=sys.stderr)
     else:
         print(f"validation PASS: {name} ({duration:.2f}s)", flush=True)
-    return process.returncode
+    return returncode
 
 
 def main() -> int:
@@ -184,6 +163,7 @@ def main() -> int:
         "schema_version": 1,
         "run_id": run_id,
         "profile": "workflow",
+        "evidence_scope": "workflow tools and smoke design only; no production RTL or QoR",
         "started_at": datetime.now(UTC).isoformat(),
         "git_commit": git_value("rev-parse", "HEAD"),
         "git_dirty": bool(git_value("status", "--porcelain")),
@@ -194,10 +174,10 @@ def main() -> int:
     }
     write_metadata(run_dir / "run.json", metadata)
 
-    check_command = [args.make]
+    smoke_command = [args.make]
     if args.jobs > 1:
-        check_command.append(f"-j{args.jobs}")
-    check_command.append("check")
+        smoke_command.append(f"-j{args.jobs}")
+    smoke_command.append("workflow-smoke")
 
     stages = [
         (
@@ -209,13 +189,7 @@ def main() -> int:
         (
             "workflow tool smoke",
             "workflow",
-            [args.make, "workflow-smoke"],
-            environment,
-        ),
-        (
-            "complete local RTL gate",
-            "workflow",
-            check_command,
+            smoke_command,
             environment,
         ),
         (
@@ -227,20 +201,6 @@ def main() -> int:
                 for key, value in environment.items()
                 if key not in validation_environment
             },
-        ),
-        (
-            "QoR report from current gate",
-            "qor",
-            [
-                args.make,
-                "qor-report",
-                f"QOR_REPORT_DIR={run_dir / 'qor'}",
-                "QOR_LINT_STATUS=PASS",
-                "QOR_SIMULATION_STATUS=PASS",
-                "QOR_FORMAL_STATUS=PASS",
-                f"QOR_VALIDATION_RUN_ID={run_id}",
-            ],
-            environment,
         ),
     ]
 

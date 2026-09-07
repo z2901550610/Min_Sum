@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from test_catalog import CATALOG_PATH, load_catalog, owners as catalog_owners
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG_PATH = REPO_ROOT / "config" / "validation_profiles.toml"
@@ -86,7 +88,7 @@ def _validate_rule(rule: object, context: str, profile_ids: set[str]) -> dict[st
     return normalized
 
 
-def load_profiles(path: Path = DEFAULT_CONFIG_PATH) -> ValidationProfiles:
+def load_profiles(path: Path = DEFAULT_CONFIG_PATH, *, catalog_path: Path = CATALOG_PATH) -> ValidationProfiles:
     try:
         with path.open("rb") as profile_file:
             data = tomllib.load(profile_file)
@@ -129,24 +131,6 @@ def load_profiles(path: Path = DEFAULT_CONFIG_PATH) -> ValidationProfiles:
 
     profile_ids = set(profiles)
     for profile in profiles.values():
-        missing_targets = [
-            target for target in profile.targets if target not in profile.minimum_gate
-        ]
-        if missing_targets:
-            raise ProfileConfigError(
-                f"profiles.{profile.profile_id}.minimum_gate omits targets: "
-                f"{missing_targets}"
-            )
-        missing_release_targets = [
-            target
-            for target in profile.release_targets
-            if target not in profile.boundary
-        ]
-        if missing_release_targets:
-            raise ProfileConfigError(
-                f"profiles.{profile.profile_id}.boundary omits release targets: "
-                f"{missing_release_targets}"
-            )
         unknown = set(profile.covers) - profile_ids
         if unknown:
             raise ProfileConfigError(
@@ -194,6 +178,7 @@ def load_profiles(path: Path = DEFAULT_CONFIG_PATH) -> ValidationProfiles:
     raw_owners = data.get("owners", [])
     if not isinstance(raw_owners, list):
         raise ProfileConfigError("owners must be an array of tables")
+    raw_owners = raw_owners + catalog_owners(load_catalog(catalog_path))
     owners: list[dict[str, Any]] = []
     for index, raw_rule in enumerate(raw_owners):
         context = f"owners[{index}]"
@@ -333,8 +318,10 @@ def repository_binding_errors(
             if not any(path_matches(path, rule) for path in paths):
                 errors.append(f"{category}[{index}] matches no repository path")
     for path in paths:
-        if not any(path_matches(path, rule) for rule in config.routing):
-            errors.append(f"repository path has no validation profile: {path}")
+        if path.startswith(("rtl/", "tb/", "formal/", "filelists/")) and not any(
+            path_matches(path, rule) for rule in config.routing
+        ):
+            errors.append(f"core source has no validation profile: {path}")
         matched_owners = [rule for rule in config.owners if path_matches(path, rule)]
         if path.startswith(("rtl/", "tb/", "formal/")) and path.endswith(
             (".sv", ".sby")
@@ -350,7 +337,7 @@ def repository_binding_errors(
                     f"validation owner covers no routed profile for {path}: "
                     f"{list(owner['covers_profiles'])}"
                 )
-    known_targets = makefile_targets(repo_root / "Makefile")
+    known_targets = makefile_targets(repo_root / "Makefile") | {test["name"] for test in load_catalog()}
     for target in configured_targets(config):
         if target not in known_targets:
             errors.append(f"configured owner names unknown Make target {target!r}")

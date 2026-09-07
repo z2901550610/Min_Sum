@@ -38,7 +38,7 @@ def load_lock() -> dict[str, str]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--check", action="store_true")
+    parser.add_argument("--check", action="store_true", help="require the recorded tool versions")
     args = parser.parse_args()
     expected_versions = load_lock()
     failed = False
@@ -56,11 +56,16 @@ def main() -> None:
             continue
         output = (result.stdout + result.stderr).strip()
         first_line = output.splitlines()[0] if output else "<no output>"
-        status = "PASS" if result.returncode == 0 and expected in output else "MISMATCH"
+        if result.returncode != 0:
+            status = "FAIL"
+        elif expected in output:
+            status = "PASS"
+        else:
+            status = "MISMATCH" if args.check else "WARNING"
         print(f"{name:10} {status:8} {first_line}")
-        failed |= status != "PASS"
-    if args.check and failed:
-        raise SystemExit("RTL toolchain differs from config/rtl_toolchain.lock")
+        failed |= status in {"FAIL", "MISMATCH"}
+    if failed:
+        raise SystemExit("RTL toolchain unavailable, failed, or differs from the required baseline")
 
 
 if __name__ == "__main__":

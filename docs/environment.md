@@ -29,7 +29,7 @@
 | Python | 3.12.10 |
 
 主机辅助工具为 Homebrew 6.0.15、Apple Git 2.54.0、Apple clang 21.0.0 和
-GNU Make 3.81。Python依赖及哈希由`uv.lock`锁定；实际工具版本匹配由
+GNU Make 3.81。Python依赖及哈希由`uv.lock`锁定；日常 `make tool-versions` 记录差异并告警，缺失/失败的工具仍报错；显式 `make check-tool-versions` 和完整资格验证要求版本匹配。版本基线由
 `config/rtl_toolchain.lock`和`scripts/check_tool_versions.py`执行，文档表格
 不是程序化锁源。
 

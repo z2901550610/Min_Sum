@@ -32,8 +32,7 @@ def emit_fixture(path: Path, *, error_positions: list[int]) -> None:
     syndrome = calc_syndrome(h_base_rows, error_bits, r_value, w_value)
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        f"""`ifndef BIKE_TOY_CASE_SVH
+    content = f"""`ifndef BIKE_TOY_CASE_SVH
 `define BIKE_TOY_CASE_SVH
 
 localparam int TOY_CASE_C_VAL = {c_val};
@@ -47,9 +46,9 @@ localparam int unsigned TOY_CASE_H_BASE_ROWS [0:N0-1][0:W-1] = '{{
 }};
 
 `endif
-""",
-        encoding="utf-8",
-    )
+"""
+    if not path.exists() or path.read_text(encoding="utf-8") != content:
+        path.write_text(content, encoding="utf-8")
 
 
 def main() -> int:

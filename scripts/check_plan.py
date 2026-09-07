@@ -136,6 +136,7 @@ def build_plan(
         "generated_at": datetime.now(UTC).isoformat(),
         "read_only": True,
         "changed_paths": paths,
+        "unrouted_paths": [path for path in paths if not any(classify_paths([path], config))],
         "profiles": [
             {
                 "id": profile_id,
@@ -163,6 +164,10 @@ def print_human(plan: dict[str, object]) -> None:
     print("Profiles:")
     for profile in plan["profiles"]:
         print(f"  - {profile['id']}: {profile['description']}")
+    if plan["unrouted_paths"]:
+        print("Unrouted research files (choose task-appropriate checks; registration optional):")
+        for path in plan["unrouted_paths"]:
+            print(f"  - {path}")
     print("Commands:")
     for command in plan["commands"]:
         print(f"  {command}")
