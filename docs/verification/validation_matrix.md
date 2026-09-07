@@ -1,18 +1,29 @@
 # 验证矩阵
 
-下表给出每类改动的最小门禁。可以增加验证，不能用较弱的证据替代要求的证据层。
+下表是任务级最小门禁的权威。可以增加验证，不能用较弱的证据替代要求的证据层。
+表格由`config/validation_profiles.toml`生成；修改profile后运行`make update-validation-matrix`，漂移由`make check-validation-profiles`拒绝。
+`make check-plan`只读分析当前Git差异并输出保守计划；dirty worktree使用
+`VALIDATION_PATHS="<task-owned paths>"`限定范围。它不执行命令，也不产生PASS。
+输出中的任务命令是本次改动的最小完成门禁；发布/共享范围升级命令只在对应边界
+适用时执行。已知owner优先运行定向目标，无owner时回退到profile聚合门禁；同一层
+目标合并为一次Make调用。owner是可选的加速映射；配置拒绝重叠owner，但不要求每个
+RTL/TB/formal源都登记owner。
+共享生产RTL、工作流/工具链、发布/CI资格或下表明确要求时运行完整`make check`；
+其他变更完成对应矩阵行后，完整`make check`可报告为`NOT_APPLICABLE`。
 
+<!-- BEGIN GENERATED VALIDATION PROFILES -->
 | 改动范围 | 最小必跑 | 附加边界 |
 | --- | --- | --- |
 | 纯文档、实验索引或Vivado manifest | `make check-records` | 再运行`git diff --check` |
-| 工具锁、filelist、waiver、Make/Tcl入口 | `make check-tool-versions check-filelists check-records check-rtl` | Tcl改动至少dry-run对应Vivado目标 |
-| 本地工作流、PoC、综合/QoR脚本或仓库Skill | `make workflow-smoke` + `make -C workflow-smoke check-failures` + `make compile synth qor` | Skill运行官方validator；Yosys结果只标为估计 |
+| 工具锁、filelist、waiver、Make/Tcl入口 | `make check-filelists check-records check-rtl` | 工具锁按owning rule运行`make check`；Tcl改动至少dry-run对应Vivado目标 |
+| 本地工作流、PoC、综合/QoR脚本或仓库Skill | 所属定向目标；无owner或核心入口运行`make validate-workflow` | 核心工作流改动运行`make validate-workflow`；定向规则完成测试、Skill或功能脚本改动；Yosys结果只标为估计 |
 | 局部RTL/TB修复 | 最小定向test + `make check-rtl` | 接口、参数或共享源受影响时升级至`ci-fast` |
-| Decoder数据路径、调度、RAM或K-sign | `make ci-fast` + K=3/K=4受影响profile | 固定周期、`residual=0`和`exact=1`分开记录 |
-| 公开参数、`r/L/K/COLS_PER_TILE`或存储几何 | `make ci-smoke`并运行全部受影响profile | 重算周期；DFR/FLS报告trials、failures和置信界 |
-| KEM密码语义、序列化、SM3/DRNG边界或完整顶层 | 最小reference test，发布前`make ci-kem-reference` | 逐byte/word golden、固定start/done边界和失败路径分开报告 |
-| 形式属性或constant-time小控制 | 相关proof + cover；完整入口为`make formal-fast` | 说明harness、assumption、参数和未覆盖状态 |
-| 会影响RAM推断、层次、资源、布局或时序的RTL/XDC | 上述功能门禁 + 同条件Vivado | 新run manifest；只有routed可比结果可更新基线 |
+| Decoder数据路径、调度、RAM或K-sign | 所属定向test + `make check-rtl`；无owner运行`make ci-fast` | 叶级定向目标完成后，发布或共享decoder改动运行`make ci-fast`；固定周期、`residual=0`和`exact=1`分开记录 |
+| 公开参数、`r/L/K/COLS_PER_TILE`或存储几何 | `make ci-smoke`并运行全部受影响profile | 发布运行`make ci-smoke`；重算周期；DFR/FLS报告trials、failures和置信界 |
+| KEM密码语义、序列化、SM3/DRNG边界或完整顶层 | 所属最小reference test + `make check-rtl`；无owner运行`make ci-kem-reference` | 定向目标完成后，发布或共享KEM语义改动运行`make ci-kem-reference`；逐byte/word golden、固定start/done边界和失败路径分开报告 |
+| 形式属性或constant-time小控制 | 所属proof + cover；无owner运行`make formal-fast` | 已知harness运行所属proof/cover；发布或共享formal基础设施运行`make formal-fast`；说明assumption、参数和未覆盖状态 |
+| 涉及FPGA映射、资源、布局或时序的RTL/XDC | 所需功能门禁；物理验收或基线更新另须同条件Vivado | 仅功能修复标明物理影响未验证，不宣称物理收益或更新基线；Vivado执行须新run manifest，只有routed可比结果可更新基线 |
+<!-- END GENERATED VALIDATION PROFILES -->
 
 `ci-nightly`是译码器多参数/多seed深度门禁；`ci-kem-reference`是官方KAT字节闭环门禁。
 两者不互相替，也不代替Vivado物理实现。

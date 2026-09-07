@@ -248,10 +248,12 @@ module trike_decoder_residual_check #(
     end
   end
 
+`ifndef SYNTHESIS
   initial begin
     if ((R_BITS <= 0) || (BLOCKS <= 0) || (WEIGHT <= 0))
       $fatal(1, "trike_decoder_residual_check requires positive geometry");
   end
+`endif
 
 `ifndef SYNTHESIS
   always_ff @(posedge i_clk) begin

@@ -10,7 +10,7 @@
 - 项目 Python 环境：`.venv`，由`pyproject.toml`和`uv.lock`创建
 - 仓库环境入口：`source scripts/eda-env.sh`
 - Verible：已有主机安装，由环境入口保留在 PATH
-- Surfer：Homebrew 安装
+- 波形查看器不属于必需门禁；FST由workflow smoke生成后可用任意兼容查看器检查
 - Python/cocotb：项目`.venv`中的 Python 3.12.10 与 cocotb 2.0.1
 
 ## 锁定版本
@@ -23,12 +23,9 @@
 | Yosys | 0.68+132；`yosys -m slang`可用 |
 | SymbiYosys | 0.68 |
 | Z3 | 4.15.5 |
-| Boolector | 3.2.4 |
-| Bitwuzla | 0.9.1 |
 | cocotb | 2.0.1 |
 | PyYAML | 6.0.3 |
 | pytest | 9.1.1 |
-| Surfer | 0.7.0 |
 | Python | 3.12.10 |
 
 主机辅助工具为 Homebrew 6.0.15、Apple Git 2.54.0、Apple clang 21.0.0 和
@@ -38,10 +35,10 @@ GNU Make 3.81。Python依赖及哈希由`uv.lock`锁定；实际工具版本匹�
 
 ## 已验证能力
 
-- `make check-local-tools`：包含 Slang frontend 加载、solver、cocotb 和 Surfer。
+- `make check-local-tools`：包含Slang frontend加载、当前SBY任务使用的Z3和cocotb。
 - `make check-tool-versions`：锁文件全部匹配。
 - OSS CAD Suite 的 Verilator/Slang/Yosys/SBY/Z3 可运行生产静态与 formal gate。
-- 项目`.venv`中的 cocotb 可驱动 Suite Verilator；FST 生成使用 Homebrew lz4
-  头文件和库。
+- 项目`.venv`中的cocotb可驱动Suite Verilator；可选FST生成由调用者通过
+  `LZ4_PREFIX`显式选择lz4头文件和库。
 
 工具升级遵循`docs/project_workflow.md`；Vivado版本不属于本地开源工具刷新。

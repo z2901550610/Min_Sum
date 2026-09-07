@@ -101,6 +101,7 @@ proc read_rtl_filelist {path repo_root} {
 }
 
 set filelist_by_top [dict create \
+  trike_poly_mul_karatsuba_core filelists/trike_poly_mul_karatsuba.f \
   trike_poly_inv_synth_top filelists/trike_poly_inv.f \
   trike_pseudohash_synth_top filelists/trike_pseudohash.f \
   trike_encaps_synth_top filelists/trike_encaps.f \

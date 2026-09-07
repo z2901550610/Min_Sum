@@ -142,11 +142,13 @@ module trike_fixed_support_sorter #(
     end
   end
 
+`ifndef SYNTHESIS
   initial begin
     if (R_BITS <= 0) $fatal(1, "trike_fixed_support_sorter requires R_BITS > 0");
     if ((BLOCKS <= 0) || (WEIGHT <= 0))
       $fatal(1, "trike_fixed_support_sorter requires positive support geometry");
   end
+`endif
 
 `ifndef SYNTHESIS
   always_ff @(posedge i_clk) begin

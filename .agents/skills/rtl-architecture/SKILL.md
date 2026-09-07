@@ -5,7 +5,9 @@ description: Design BIKE or TRIKE RTL microarchitecture, RAM lifecycle, scheduli
 
 # RTL architecture
 
-Start from the approved behavioral contract and current production design docs.
+Start from the behavioral contract authorized by the current task or explicitly
+reviewed by the user, and current production design docs. Apply the authorization
+and clarification rules in `AGENTS.md`; a skill transition is not an approval gate.
 Describe the module-tied datapath, control/address/data roles, RAM bank geometry
 and lifecycle, handshake boundaries, and a symbolic fixed-cycle equation.
 Evaluate public parameter profiles separately. Compare options by fixed cycles,

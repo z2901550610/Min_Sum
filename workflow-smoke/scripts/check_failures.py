@@ -82,6 +82,10 @@ def main() -> None:
             str(formal_project),
             "formal",
             f"BUILD_DIR={formal_build}",
+            f"SBY={ROOT / 'scripts' / 'sby_quiet.py'}",
+            "REAL_SBY=sby",
+            f"SBY_LOG_DIR={OUTPUT / 'sby-logs'}",
+            f"CHECK_SUMMARY_PATH={OUTPUT / 'check-summary.json'}",
         ],
         ROOT,
     )

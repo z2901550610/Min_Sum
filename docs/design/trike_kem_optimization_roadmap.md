@@ -1,8 +1,9 @@
 # TRIKE KEM优化路线图
 
-> 更新日期：2026-08-28<br>
+> 更新日期：2026-09-07<br>
 > 起点源码：`e2fbb8df068c`；EXP-0115至0122工作树待提交。
-> 当前推进点：EXP-0122完成`s=1/8` divstep算法与word-update锚点，下一门是`b=64,s=8`全长BRAM扫描核。
+> 当前乘法推进点：EXP-0123选择一层串行Karatsuba-Comba＋循环折叠候选，局部功能通过，下一门是同条件Vivado及KEM接口迁移。FFT不纳入当前路线。<br>
+> 求逆独立方向：EXP-0122完成`s=1/8` divstep锚点，下一门仍是`b=64,s=8`全长BRAM扫描核。
 
 本文是TRIKE KEM优化工作的长期推进入口，回答三个问题：已经完成哪些架构收敛、当前门禁是什么、
 下一个实验应验证什么。当前成品架构仍以[实现状态](implementation_status.md)为准，实验细节以
@@ -47,6 +48,7 @@
 | Divstep inverter | `in_progress` | EXP-0122的r13/r15581黄金模型、s1形式化和s8广播更新 | 全长BRAM扫描、实测周期与Vivado | G7 |
 | Addition-chain inverter | `in_progress` | EXP-0120官方inverse/KeyGen算术golden及D16/32/64周期矩阵；D16 routed diagnostic内部WNS +1.092 ns | 完整KeyGen与可复现Vivado结果 | G7 |
 | Karatsuba + Comba | `in_progress` | EXP-0117 base及EXP-0118/0119 word-array depth 1/2 | TRIKE-9 golden与Vivado实测 | G8 |
+| 一层Karatsuba循环折叠 | `in_progress` | EXP-0123边界/固定轨迹、官方TRIKE-2与四档项目几何卷积、同次Yosys估计 | 同条件Vivado及external-RAM/runtime接口迁移 | G3/G8 |
 
 ## 已有EXP证据地图
 
@@ -160,6 +162,11 @@ EXP-0116在相同结构边界下完成16/32/64-bit base局部矩阵。TRIKE-2求
 
 必须证明：末wordmask、high word跨两个目的word、连续同址RMW forwarding，以及inverter源bank在所有读取
 完成前不被覆盖。该门只改变reduction/store策略，不改变Karatsuba depth。
+
+[EXP-0123](../experiments/EXP-0123-trike-k1-cyclic-fold.md)在已存在的一层Karatsuba候选上完成
+直接折叠：删除完整product RAM，保留独立结果RAM与输入半bank。顺序RMW不依赖同拍RAW；
+TRIKE-2周期50,993→50,999，逻辑word容量1,220→732，本地Yosys RAMB36 6→5。
+四档项目几何卷积通过；物理和主线集成仍待完成，详见[架构说明](trike_karatsuba_fold.md)。
 
 ### G4：Sparse accumulator
 

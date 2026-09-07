@@ -2,8 +2,15 @@ VERIBLE_FORMAT ?= verible-verilog-format
 VERIBLE_LINT ?= verible-verilog-lint
 SLANG ?= slang
 VERILATOR ?= verilator
-SBY ?= sby
+SBY ?= $(abspath ../scripts/sby_quiet.py)
+REAL_SBY ?= sby
+SBY_LOG_DIR ?= $(abspath ../build/logs/sby)
+CHECK_SUMMARY_PATH ?= $(abspath ../build/results/check-summary.json)
 YOSYS ?= yosys
+
+export REAL_SBY
+export SBY_LOG_DIR
+export CHECK_SUMMARY_PATH
 
 BUILD_DIR ?= $(abspath ../build/workflow-smoke)
 SIM_BUILD := $(BUILD_DIR)/sim-host-cocotb-2.0b$(if $(filter 1,$(WAVES)),-waves-lz4,)
@@ -22,7 +29,8 @@ format:
 
 check-format:
 	@for f in rtl/workflow_counter.sv formal/workflow_counter_formal.sv; do \
-		tmp=$$(mktemp /private/tmp/workflow-smoke-format.XXXXXX.sv); \
+		tmp_dir="$${TMPDIR:-/tmp}"; \
+		tmp=$$(mktemp "$$tmp_dir/workflow-smoke-format.XXXXXX.sv"); \
 		cp $$f $$tmp; \
 		$(VERIBLE_FORMAT) --inplace $$tmp; \
 		cmp -s $$f $$tmp || { echo "$$f: formatting needed"; rm -f $$tmp; exit 1; }; \
@@ -77,7 +85,9 @@ export PATH
 export PYTHONPATH
 
 ifeq ($(WAVES),1)
-LZ4_PREFIX ?= $(shell brew --prefix lz4)
+ifeq ($(strip $(LZ4_PREFIX)),)
+$(error WAVES=1 requires LZ4_PREFIX to name an installed lz4 prefix)
+endif
 COMPILE_ARGS += --trace-fst -CFLAGS "-I$(LZ4_PREFIX)/include" -LDFLAGS "-L$(LZ4_PREFIX)/lib -llz4"
 SIM_ARGS += --trace --trace-file $(WAVE_BUILD)/dump.fst
 CUSTOM_SIM_DEPS += $(WAVE_BUILD)

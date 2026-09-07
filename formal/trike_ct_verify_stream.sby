@@ -2,9 +2,13 @@
 prove_words1 prove words1 short
 prove_words3 prove words3 short
 prove_words16 prove words16 extended
+prove_runtime3 prove runtime words3 short
+prove_runtime16 prove runtime words16 extended
 cover_words1 cover words1 short
 cover_words3 cover words3 short
 cover_words16 cover words16 extended
+cover_runtime3 cover runtime words3 short
+cover_runtime16 cover runtime words16 extended
 
 [options]
 prove: mode prove
@@ -21,6 +25,7 @@ read -formal -sv kem_ct_compare_select.sv trike_ct_verify_stream.sv trike_ct_ver
 words1: chparam -set WORD_COUNT 1 trike_ct_verify_stream_formal
 words3: chparam -set WORD_COUNT 3 trike_ct_verify_stream_formal
 words16: chparam -set WORD_COUNT 16 trike_ct_verify_stream_formal
+runtime: chparam -set RUNTIME_COUNT 1 trike_ct_verify_stream_formal
 prep -top trike_ct_verify_stream_formal
 
 [files]

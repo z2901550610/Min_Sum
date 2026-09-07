@@ -181,11 +181,13 @@ module trike_decoder_load_adapter #(
     end
   end
 
+`ifndef SYNTHESIS
   initial begin
     if (R_BITS <= 0) $fatal(1, "trike_decoder_load_adapter requires R_BITS > 0");
     if ((BLOCKS <= 0) || (WEIGHT <= 0))
       $fatal(1, "trike_decoder_load_adapter requires positive H geometry");
   end
+`endif
 
 `ifndef SYNTHESIS
   always_ff @(posedge i_clk) begin

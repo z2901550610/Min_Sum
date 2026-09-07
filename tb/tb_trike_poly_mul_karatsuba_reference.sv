@@ -4,9 +4,26 @@ module tb_trike_poly_mul_karatsuba_reference;
   `include "generated/trike_poly_mul_reference_case.svh"
 
   localparam int HALF_WORDS = (REF_WORDS + 1) / 2;
+  // Number of shifted subproduct words intersecting the reduction boundary
+  // or the unaligned high half. Count intervals, independently of DUT control.
+  function automatic int overlap_words(input int first_word);
+    int lo;
+    int hi;
+    lo = (first_word > (REF_WORDS - 1)) ? first_word : (REF_WORDS - 1);
+    hi = first_word + 2 * HALF_WORDS - 1;
+    if (hi > (2 * REF_WORDS - 2)) hi = 2 * REF_WORDS - 2;
+    return (hi >= lo) ? (hi - lo + 1) : 0;
+  endfunction
+  localparam int SECOND_WRITES = ((REF_R_BITS % REF_WORD_W) == 0) ? 0 : overlap_words(
+      0
+  ) + 3 * overlap_words(
+      HALF_WORDS
+  ) + overlap_words(
+      2 * HALF_WORDS
+  );
   localparam int REF_DENSE_CYCLES =
-      (8 * REF_WORDS) + (3 * HALF_WORDS * HALF_WORDS) + (36 * HALF_WORDS) - 3 +
-      (2 * (REF_WORDS % 2));
+      (5 * REF_WORDS) + (3 * HALF_WORDS * HALF_WORDS) + (32 * HALF_WORDS) - 3 +
+      (2 * (REF_WORDS % 2)) + (2 * SECOND_WRITES);
 
   logic                  clk;
   logic                  rst_n;
@@ -144,7 +161,8 @@ module tb_trike_poly_mul_karatsuba_reference;
       $fatal(1, "reference dense cycles=%0d expected=%0d", dense_cycles, REF_DENSE_CYCLES);
     end
 
-    $display("tb_trike_poly_mul_karatsuba_reference PASS dense=%0d", dense_cycles);
+    $display("tb_trike_poly_mul_karatsuba_reference PASS r=%0d dense=%0d", REF_R_BITS,
+             dense_cycles);
     $finish;
   end
 

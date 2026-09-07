@@ -1,9 +1,9 @@
 # 实验决策索引
 
-下一个实验ID：`EXP-0123`。
+下一个实验ID：`EXP-0124`。
 
 本页按“可比较假设/实验系列”汇总结论，不再逐个列出每次小修改。已有
-`EXP-0082`至`EXP-0122`的单项文档和 Vivado RUN manifest 保留原 ID，作为需要时
+`EXP-0082`至`EXP-0123`的单项文档和 Vivado RUN manifest 保留原 ID，作为需要时
 下钻的历史证据。TRIKE KEM 的依赖和下一门禁见
 [优化路线图](../design/trike_kem_optimization_roadmap.md)。
 
@@ -18,6 +18,7 @@
 | EXP-0115–0120 | 2026-08-26至08-28 | 稠密乘法Comba/base宽度、Karatsuba层级和短求逆链 | 定向/官方golden、固定周期、Yosys矩阵；K1/K2和短链routed诊断 | 候选系列`pending`，已形成周期/资源Pareto但未进入完整KeyGen基线 | [优化路线图](../design/trike_kem_optimization_roadmap.md) / [EXP-0120](EXP-0120-trike2-short-inversion-chain.md) |
 | EXP-0121 | 2026-08-28 | compare-select三元mux候选 | 定向仿真与W1/8/256 proof/cover；Yosys无收益 | `rejected`，保留显式mask | 本页结论 |
 | EXP-0122 | 2026-08-28 | Bernstein-Yang divstep架构锚点 | r13穷举、r15581 golden、s1 formal、s8更新验证 | `pending`，下一门是全长BRAM扫描核 | [详情](EXP-0122-trike-bernstein-yang-divstep-anchor.md) |
+| EXP-0123 | 2026-09-07 | 一层Karatsuba子积直接循环折叠，删除完整product RAM | 边界/背压/固定轨迹、五档full-size卷积、Yosys同次估计 | `pending`，选为集成候选；Vivado和KEM迁移待完成 | [详情](EXP-0123-trike-k1-cyclic-fold.md) |
 
 ## 新实验的记录门槛
 

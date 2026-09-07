@@ -628,11 +628,13 @@ module trike_decaps_syndrome_core #(
     end
   end
 
+`ifndef SYNTHESIS
   initial begin
     if (SECRET_WEIGHT <= 0) $fatal(1, "trike_decaps_syndrome_core requires SECRET_WEIGHT > 0");
     if ((WORD_W % DIGIT_W) != 0)
       $fatal(1, "trike_decaps_syndrome_core requires WORD_W divisible by DIGIT_W");
   end
+`endif
 
 `ifndef SYNTHESIS
   always_ff @(posedge i_clk) begin

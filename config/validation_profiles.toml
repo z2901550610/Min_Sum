@@ -1,0 +1,930 @@
+schema_version = 3
+profile_order = [
+  "records",
+  "tool_entry",
+  "workflow",
+  "local_rtl",
+  "decoder",
+  "public_params",
+  "kem",
+  "formal",
+  "physical",
+]
+
+[profiles.records]
+description = "Documentation, experiment records, or Vivado manifests"
+targets = ["check-records"]
+release_targets = []
+iteration_targets = []
+manual_requirements = []
+covers = []
+scope = "纯文档、实验索引或Vivado manifest"
+minimum_gate = "`make check-records`"
+boundary = "再运行`git diff --check`"
+
+[profiles.tool_entry]
+description = "Tool lock, filelist, waiver, Make, or Tcl entrypoint"
+targets = ["check-filelists", "check-records", "check-rtl"]
+release_targets = []
+iteration_targets = []
+manual_requirements = []
+covers = ["records"]
+scope = "工具锁、filelist、waiver、Make/Tcl入口"
+minimum_gate = "`make check-filelists check-records check-rtl`"
+boundary = "工具锁按owning rule运行`make check`；Tcl改动至少dry-run对应Vivado目标"
+
+[profiles.workflow]
+description = "Local or CI workflow, helper script, workflow smoke test, or repository skill"
+targets = ["validate-workflow"]
+release_targets = []
+iteration_targets = ["check-agent-workflow"]
+manual_requirements = []
+covers = ["records", "tool_entry", "formal", "local_rtl", "decoder"]
+scope = "本地工作流、PoC、综合/QoR脚本或仓库Skill"
+minimum_gate = "所属定向目标；无owner或核心入口运行`make validate-workflow`"
+boundary = "核心工作流改动运行`make validate-workflow`；定向规则完成测试、Skill或功能脚本改动；Yosys结果只标为估计"
+
+[profiles.local_rtl]
+description = "Local RTL or testbench change"
+targets = ["check-rtl"]
+release_targets = []
+iteration_targets = []
+manual_requirements = ["Run the smallest deterministic test that owns the changed behavior."]
+covers = []
+scope = "局部RTL/TB修复"
+minimum_gate = "最小定向test + `make check-rtl`"
+boundary = "接口、参数或共享源受影响时升级至`ci-fast`"
+
+[profiles.decoder]
+description = "Decoder datapath, scheduler, RAM, or K-sign change"
+targets = ["ci-fast"]
+release_targets = ["ci-fast"]
+iteration_targets = []
+manual_requirements = ["If shared scheduling, geometry, or fixed cycles changed, run affected K=3/K=4 profiles and record the boundaries."]
+covers = ["local_rtl"]
+scope = "Decoder数据路径、调度、RAM或K-sign"
+minimum_gate = "所属定向test + `make check-rtl`；无owner运行`make ci-fast`"
+boundary = "叶级定向目标完成后，发布或共享decoder改动运行`make ci-fast`；固定周期、`residual=0`和`exact=1`分开记录"
+
+[profiles.public_params]
+description = "Public parameters or storage geometry"
+targets = ["ci-smoke"]
+release_targets = ["ci-smoke"]
+iteration_targets = []
+manual_requirements = ["Run every affected public profile and recompute cycle budgets."]
+covers = ["decoder", "local_rtl"]
+scope = "公开参数、`r/L/K/COLS_PER_TILE`或存储几何"
+minimum_gate = "`make ci-smoke`并运行全部受影响profile"
+boundary = "发布运行`make ci-smoke`；重算周期；DFR/FLS报告trials、failures和置信界"
+
+[profiles.kem]
+description = "KEM semantics, serialization, SM3/DRNG, or complete top-level change"
+targets = ["ci-kem-reference"]
+release_targets = ["ci-kem-reference"]
+iteration_targets = []
+manual_requirements = ["Record byte/word golden results, fixed boundaries, and failure paths separately."]
+covers = ["local_rtl"]
+scope = "KEM密码语义、序列化、SM3/DRNG边界或完整顶层"
+minimum_gate = "所属最小reference test + `make check-rtl`；无owner运行`make ci-kem-reference`"
+boundary = "定向目标完成后，发布或共享KEM语义改动运行`make ci-kem-reference`；逐byte/word golden、固定start/done边界和失败路径分开报告"
+
+[profiles.formal]
+description = "Formal harness, property, or SymbiYosys task"
+targets = ["formal-fast"]
+release_targets = ["formal-fast"]
+iteration_targets = []
+manual_requirements = ["Report harness boundary, assumptions, parameters, and unreachable states."]
+covers = []
+scope = "形式属性或constant-time小控制"
+minimum_gate = "所属proof + cover；无owner运行`make formal-fast`"
+boundary = "已知harness运行所属proof/cover；发布或共享formal基础设施运行`make formal-fast`；说明assumption、参数和未覆盖状态"
+
+[profiles.physical]
+description = "XDC or implementation behavior that can affect physical evidence"
+targets = []
+release_targets = []
+iteration_targets = []
+manual_requirements = ["For FPGA mapping, resource or timing acceptance, or physical baseline updates, run a provenance-complete, same-condition Vivado implementation and create a RUN manifest. For functional-only fixes, complete required functional gates and report physical effects as unverified; do not claim physical benefits or update physical baselines."]
+covers = []
+scope = "涉及FPGA映射、资源、布局或时序的RTL/XDC"
+minimum_gate = "所需功能门禁；物理验收或基线更新另须同条件Vivado"
+boundary = "仅功能修复标明物理影响未验证，不宣称物理收益或更新基线；Vivado执行须新run manifest，只有routed可比结果可更新基线"
+
+[[routing]]
+profile = "records"
+prefixes = ["docs/", "reports/"]
+exact = ["README.md", "CLAUDE.md", "AGENTS.md", ".gitignore"]
+
+[[routing]]
+profile = "tool_entry"
+prefixes = ["config/", "filelists/"]
+exact = ["Makefile", ".rules.verible_lint"]
+suffixes = [".tcl", ".vlt"]
+
+[[routing]]
+profile = "workflow"
+prefixes = ["workflow-smoke/", ".agents/skills/", ".github/workflows/"]
+exact = [
+  "Makefile",
+  "pyproject.toml",
+  "uv.lock",
+  "config/validation_profiles.toml",
+  "scripts/check_filelists.py",
+  "scripts/check_plan.py",
+  "scripts/check_project_records.py",
+  "scripts/check_tool_versions.py",
+  "scripts/eda-env.sh",
+  "scripts/format_sv_decls.py",
+  "scripts/render_validation_matrix.py",
+  "scripts/report_qor.py",
+  "scripts/run_quiet.py",
+  "scripts/run_validation.py",
+  "scripts/sby_quiet.py",
+  "scripts/validation_events.py",
+  "scripts/validation_profiles.py",
+  "scripts/verilator_quiet.py",
+  "tests/test_agent_workflow.py",
+]
+
+[[routing]]
+profile = "decoder"
+exact = [
+  "scripts/check_model_rtl.py",
+  "scripts/gen_toy_case_fixture.py",
+  "scripts/min_sum_model.c",
+  "scripts/qc_matrix_data.py",
+  "scripts/run_bike_random.py",
+  "scripts/run_quantization_experiment.py",
+]
+
+[[routing]]
+profile = "kem"
+exact = [
+  "scripts/check_trike_kem_asic_structure.py",
+  "scripts/check_trike_sm3_sharing.ys",
+  "scripts/gen_trike_decaps_syndrome_fixture.py",
+  "scripts/gen_trike_encaps_fixture.py",
+  "scripts/gen_trike_inv_schedule.py",
+  "scripts/gen_trike_keygen_fixture.py",
+  "scripts/gen_trike_minsum_kem_case.py",
+  "scripts/gen_trike_poly_inv_fixture.py",
+  "scripts/gen_trike_poly_mul_fixture.py",
+  "scripts/model_trike_poly_inv_by.py",
+  "scripts/run_trike_reference_kat.py",
+  "scripts/trike_fixture_utils.py",
+]
+
+[[routing]]
+profile = "formal"
+prefixes = ["formal/"]
+exact = ["rtl/k_sign_overlap_scheduler.sv"]
+
+[[routing]]
+profile = "local_rtl"
+prefixes = ["rtl/", "tb/"]
+
+[[routing]]
+profile = "decoder"
+prefixes = ["rtl/ram_", "rtl/cnu_", "rtl/decoder_", "tb/tb_ram_", "tb/tb_cnu_"]
+exact = [
+  "rtl/barrel_rotate.sv",
+  "rtl/msg_signmag_to_tc.sv",
+  "rtl/msg_tc_to_signmag_sat.sv",
+  "rtl/reset_sync.sv",
+  "rtl/vnu.sv",
+  "tb/tb_decoder_top.sv",
+  "tb/tb_msg_codec.sv",
+  "tb/tb_reset_sync.sv",
+]
+
+[[routing]]
+profile = "decoder"
+within_prefixes = ["rtl/", "tb/"]
+contains = ["k_sign", "tile_scheduler", "edge_addr_gen"]
+
+[[routing]]
+profile = "public_params"
+within_prefixes = ["rtl/", "tb/"]
+exact = [
+  "rtl/bike_pkg.sv",
+  "rtl/decoder_profile_config.sv",
+  "rtl/trike_decaps_profile_config.sv",
+]
+contains = ["parameter", "geometry", "cols_per_tile"]
+
+[[routing]]
+profile = "kem"
+prefixes = ["software/trike_kem/"]
+
+[[routing]]
+profile = "kem"
+exact = [
+  "rtl/keccak_f1600.sv",
+  "rtl/shake256_stream.sv",
+  "rtl/trike_error_support_store.sv",
+  "rtl/trike_h4_error_vector.sv",
+  "rtl/trike_inv_schedule_pkg.sv",
+  "rtl/trike_poly_divstep_control.sv",
+  "rtl/trike_poly_divstep_s1.sv",
+  "rtl/trike_poly_divstep_update.sv",
+  "rtl/trike_poly_inv_synth_top.sv",
+  "rtl/trike_poly_mul_karatsuba_core.sv",
+  "rtl/trike_poly_mul_karatsuba2_core.sv",
+  "rtl/trike_ct_verify_stream.sv",
+  "rtl/trike_decoder_error_vector.sv",
+  "rtl/trike_decoder_load_adapter.sv",
+  "rtl/trike_decoder_residual_check.sv",
+  "rtl/trike_drng_weight_sampler.sv",
+  "rtl/trike_encaps_uv_core.sv",
+  "rtl/trike_fixed_support_sorter.sv",
+  "rtl/trike_fixed_weight_sampler.sv",
+  "rtl/trike_h123_vector_store.sv",
+  "rtl/trike_h123_vectors.sv",
+  "rtl/trike_h4_error_sampler.sv",
+  "rtl/trike_parity_map_stream.sv",
+  "rtl/trike_poly_inv_core.sv",
+  "rtl/trike_poly_mul_core.sv",
+  "rtl/trike_sampler_candidate.sv",
+  "rtl/trike_weak_key_test.sv",
+  "tb/tb_keccak_f1600.sv",
+  "tb/tb_shake256_stream.sv",
+  "tb/tb_trike_decoder_residual_reference.sv",
+  "tb/tb_trike_error_support_store_reference.sv",
+  "tb/tb_trike_h4_error_vector_reference.sv",
+  "tb/tb_trike_h4_runtime.sv",
+  "tb/tb_trike_clmul_karatsuba.sv",
+  "tb/tb_trike_poly_divstep_round.sv",
+  "tb/tb_trike_poly_divstep_s1.sv",
+  "tb/tb_trike_poly_inv_reference.sv",
+  "tb/tb_trike_poly_mul_karatsuba_core.sv",
+  "tb/tb_trike_poly_mul_karatsuba_reference.sv",
+  "tb/tb_trike_poly_mul_karatsuba2_core.sv",
+  "tb/tb_trike_poly_mul_karatsuba2_reference.sv",
+  "tb/tb_trike_poly_mul_reference.sv",
+  "tb/tb_trike_weak_key_reference.sv",
+  "tb/tb_trike_ct_verify_runtime.sv",
+  "tb/tb_trike_ct_verify_stream.sv",
+  "tb/tb_trike_decoder_error_vector.sv",
+  "tb/tb_trike_decoder_load_adapter.sv",
+  "tb/tb_trike_decoder_load_adapter_runtime.sv",
+  "tb/tb_trike_decoder_residual_check.sv",
+  "tb/tb_trike_drng_weight_sampler.sv",
+  "tb/tb_trike_encaps_uv_core.sv",
+  "tb/tb_trike_fixed_support_sorter.sv",
+  "tb/tb_trike_fixed_support_sorter_runtime.sv",
+  "tb/tb_trike_fixed_weight_sampler.sv",
+  "tb/tb_trike_h123_vector_store.sv",
+  "tb/tb_trike_h123_vectors.sv",
+  "tb/tb_trike_h4_error_sampler.sv",
+  "tb/tb_trike_parity_map_stream.sv",
+  "tb/tb_trike_poly_inv_core.sv",
+  "tb/tb_trike_poly_mul_core.sv",
+  "tb/tb_trike_sampler_candidate.sv",
+  "tb/tb_trike_weak_key_test.sv",
+]
+
+[[routing]]
+profile = "kem"
+within_prefixes = ["rtl/", "tb/"]
+contains = ["sm3", "drng", "kem_", "keygen", "encaps", "decaps", "pseudohash"]
+
+[[routing]]
+profile = "physical"
+prefixes = ["constraints/", "scripts/vivado_"]
+
+[[owners]]
+exact = ["tests/test_agent_workflow.py"]
+targets = ["check-agent-workflow"]
+covers_profiles = ["workflow"]
+
+[[owners]]
+exact = ["pyproject.toml", "uv.lock"]
+targets = ["python-sync", "validate-workflow"]
+covers_profiles = ["workflow"]
+
+[[owners]]
+prefixes = [".agents/skills/"]
+targets = ["check-agent-workflow"]
+covers_profiles = ["workflow"]
+
+[[owners]]
+prefixes = ["scripts/vivado_"]
+targets = ["check-records"]
+covers_profiles = ["tool_entry", "workflow"]
+
+[[owners]]
+exact = [".rules.verible_lint"]
+targets = ["check-rtl"]
+covers_profiles = ["tool_entry"]
+
+[[owners]]
+exact = ["config/rtl_toolchain.lock"]
+targets = ["check"]
+covers_profiles = ["records", "tool_entry", "local_rtl", "decoder", "formal"]
+
+[[owners]]
+exact = ["scripts/run_bike_random.py"]
+targets = ["regress"]
+covers_profiles = ["decoder"]
+
+[[owners]]
+exact = ["scripts/gen_toy_case_fixture.py", "scripts/qc_matrix_data.py"]
+targets = ["test-integration"]
+covers_profiles = ["decoder"]
+
+[[owners]]
+exact = ["scripts/check_model_rtl.py", "scripts/min_sum_model.c"]
+targets = ["check-model-rtl-bike128"]
+covers_profiles = ["decoder"]
+
+[[owners]]
+exact = ["scripts/gen_trike_keygen_fixture.py"]
+targets = ["test-trike-keygen-core-reference"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["scripts/gen_trike_poly_mul_fixture.py"]
+targets = ["test-trike-poly-reference"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["scripts/gen_trike_poly_inv_fixture.py", "scripts/gen_trike_inv_schedule.py"]
+targets = ["test-trike-poly-inv-reference"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["scripts/gen_trike_encaps_fixture.py"]
+targets = ["test-trike-encaps-components-reference"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["scripts/gen_trike_decaps_syndrome_fixture.py"]
+targets = ["test-trike-decaps-syndrome-reference"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["scripts/model_trike_poly_inv_by.py"]
+targets = ["test-trike-poly-divstep-model"]
+covers_profiles = ["kem"]
+
+[[owners]]
+within_prefixes = ["formal/"]
+contains = ["kem_ct_compare_select"]
+targets = ["formal-ct-select"]
+covers_profiles = ["formal"]
+
+[[owners]]
+within_prefixes = ["formal/"]
+contains = ["trike_ct_verify_stream"]
+targets = ["formal-ct-control"]
+covers_profiles = ["formal"]
+
+[[owners]]
+within_prefixes = ["formal/"]
+contains = ["trike_kem_operation_control"]
+targets = ["formal-trike-kem-operation-control"]
+covers_profiles = ["formal"]
+
+[[owners]]
+within_prefixes = ["formal/"]
+contains = ["trike_poly_divstep_s1"]
+targets = ["formal-trike-poly-divstep-s1"]
+covers_profiles = ["formal"]
+
+[[owners]]
+within_prefixes = ["formal/"]
+contains = ["k_sign_overlap_scheduler"]
+targets = ["formal-k-sign-overlap-scheduler"]
+covers_profiles = ["formal"]
+
+[[owners]]
+within_prefixes = ["formal/"]
+contains = ["tile_scheduler"]
+targets = ["formal-tile-scheduler"]
+covers_profiles = ["formal"]
+
+[[owners]]
+within_prefixes = ["rtl/", "tb/"]
+contains = ["tile_scheduler"]
+targets = ["test-tile-scheduler"]
+covers_profiles = ["decoder"]
+
+[[owners]]
+within_prefixes = ["rtl/", "tb/"]
+contains = ["edge_addr_gen"]
+targets = ["test-edge-addr-gen"]
+covers_profiles = ["decoder"]
+
+[[owners]]
+exact = [
+  "rtl/k_sign_reconstruct.sv",
+  "rtl/k_sign_selector.sv",
+  "rtl/k_sign_update.sv",
+  "tb/tb_k_sign_update.sv",
+]
+targets = ["test-k-sign-update"]
+covers_profiles = ["decoder"]
+
+[[owners]]
+exact = ["rtl/k_sign_overlap_scheduler.sv"]
+targets = ["formal-k-sign-overlap-scheduler"]
+covers_profiles = ["decoder", "formal"]
+
+[[owners]]
+exact = ["rtl/ram_i.sv", "tb/tb_ram_i.sv"]
+targets = ["test-ram-i"]
+covers_profiles = ["decoder"]
+
+[[owners]]
+exact = ["rtl/ram_m.sv", "tb/tb_ram_m.sv"]
+targets = ["test-ram-m"]
+covers_profiles = ["decoder"]
+
+[[owners]]
+exact = ["rtl/ram_sign_delta.sv", "tb/tb_ram_sign_delta.sv"]
+targets = ["test-ram-sign-delta"]
+covers_profiles = ["decoder"]
+
+[[owners]]
+exact = ["rtl/ram_accum.sv", "tb/tb_ram_accum.sv"]
+targets = ["test-ram-accum"]
+covers_profiles = ["decoder"]
+
+[[owners]]
+exact = ["rtl/ram_t.sv", "tb/tb_ram_t.sv"]
+targets = ["test-ram-t"]
+covers_profiles = ["decoder"]
+
+[[owners]]
+exact = ["rtl/ram_decision.sv", "tb/tb_ram_decision.sv"]
+targets = ["test-ram-decision"]
+covers_profiles = ["decoder"]
+
+[[owners]]
+exact = ["rtl/ram_syndrome.sv", "tb/tb_ram_syndrome.sv"]
+targets = ["test-ram-syndrome"]
+covers_profiles = ["decoder"]
+
+[[owners]]
+exact = ["rtl/cnu_a.sv", "tb/tb_cnu_a.sv"]
+targets = ["test-cnu-a"]
+covers_profiles = ["decoder"]
+
+[[owners]]
+exact = ["rtl/cnu_b.sv", "tb/tb_cnu_b.sv"]
+targets = ["test-cnu-b"]
+covers_profiles = ["decoder"]
+
+[[owners]]
+within_prefixes = ["rtl/", "tb/"]
+contains = ["kem_ct_compare_select"]
+targets = ["test-kem-ct-compare-select", "formal-ct-select"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/sm3_compress.sv", "rtl/trike_sm3_service.sv", "tb/tb_sm3_compress.sv"]
+targets = ["test-sm3-compress"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/sm3_hash_stream.sv", "tb/tb_sm3_hash_stream.sv"]
+targets = ["test-sm3-hash-stream"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/hmac_sm3_64byte_key_stream.sv", "tb/tb_hmac_sm3_64byte_key_stream.sv"]
+targets = ["test-hmac-sm3-64byte-key-stream"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/sm3_df_stream.sv", "tb/tb_sm3_df_stream.sv"]
+targets = ["test-sm3-df-stream"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_sm3_drng_instantiate_stream.sv", "tb/tb_trike_sm3_drng_instantiate_stream.sv"]
+targets = ["test-trike-sm3-drng-instantiate-stream"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_sm3_drng_generate_stream.sv", "tb/tb_trike_sm3_drng_generate_stream.sv"]
+targets = ["test-trike-sm3-drng-generate-stream"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_pseudohash512_stream.sv"]
+targets = ["test-trike-pseudohash512-stream", "test-trike-pseudohash-runtime"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["tb/tb_trike_pseudohash512_stream.sv"]
+targets = ["test-trike-pseudohash512-stream"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["tb/tb_trike_pseudohash512_runtime.sv"]
+targets = ["test-trike-pseudohash-runtime"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_pseudohash_synth_top.sv", "tb/tb_trike_pseudohash_synth_top.sv"]
+targets = ["test-trike-pseudohash-synth-top"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_parity_map_stream.sv", "tb/tb_trike_parity_map_stream.sv"]
+targets = ["test-trike-parity-map-stream"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_sampler_candidate.sv", "tb/tb_trike_sampler_candidate.sv"]
+targets = ["test-trike-sampler-candidate"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_fixed_weight_sampler.sv", "tb/tb_trike_fixed_weight_sampler.sv"]
+targets = ["test-trike-fixed-weight-sampler"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_weak_key_test.sv", "tb/tb_trike_weak_key_test.sv"]
+targets = ["test-trike-weak-key-test"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_drng_weight_sampler.sv", "tb/tb_trike_drng_weight_sampler.sv"]
+targets = ["test-trike-drng-weight-sampler"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_h4_error_sampler.sv", "tb/tb_trike_h4_error_sampler.sv"]
+targets = ["test-trike-h4-error-sampler"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_h123_vectors.sv", "tb/tb_trike_h123_vectors.sv"]
+targets = ["test-trike-h123-vectors"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_h123_vector_store.sv", "tb/tb_trike_h123_vector_store.sv"]
+targets = ["test-trike-h123-vector-store"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_poly_mul_core.sv", "tb/tb_trike_poly_mul_core.sv"]
+targets = ["test-trike-poly-mul-core"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_encaps_uv_core.sv", "tb/tb_trike_encaps_uv_core.sv"]
+targets = ["test-trike-encaps-uv-core", "test-trike-encaps-uv-core-external-store"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_poly_inv_core.sv", "tb/tb_trike_poly_inv_core.sv"]
+targets = ["test-trike-poly-inv-core"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_keygen_arith_core.sv", "tb/tb_trike_keygen_arith_core.sv"]
+targets = ["test-trike-keygen-arith-core", "test-trike-keygen-arith-core-external-result-store", "test-trike-keygen-arith-core-external-stores"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/keccak_f1600.sv"]
+targets = ["test-keccak-f1600", "test-shake256-stream"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["tb/tb_keccak_f1600.sv"]
+targets = ["test-keccak-f1600"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/shake256_stream.sv", "tb/tb_shake256_stream.sv"]
+targets = ["test-shake256-stream"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_ct_verify_stream.sv"]
+targets = ["test-trike-ct-verify-stream", "test-trike-ct-verify-runtime", "formal-ct-control"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["tb/tb_trike_ct_verify_stream.sv"]
+targets = ["test-trike-ct-verify-stream"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["tb/tb_trike_ct_verify_runtime.sv"]
+targets = ["test-trike-ct-verify-runtime"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_decoder_load_adapter.sv"]
+targets = ["test-trike-decoder-load-adapter", "test-trike-decoder-load-adapter-runtime"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["tb/tb_trike_decoder_load_adapter.sv"]
+targets = ["test-trike-decoder-load-adapter"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["tb/tb_trike_decoder_load_adapter_runtime.sv"]
+targets = ["test-trike-decoder-load-adapter-runtime"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_fixed_support_sorter.sv"]
+targets = ["test-trike-fixed-support-sorter", "test-trike-fixed-support-sorter-runtime"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["tb/tb_trike_fixed_support_sorter.sv"]
+targets = ["test-trike-fixed-support-sorter"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["tb/tb_trike_fixed_support_sorter_runtime.sv"]
+targets = ["test-trike-fixed-support-sorter-runtime"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_decoder_error_vector.sv", "tb/tb_trike_decoder_error_vector.sv"]
+targets = ["test-trike-decoder-error-vector"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_decoder_residual_check.sv", "tb/tb_trike_decoder_residual_check.sv"]
+targets = ["test-trike-decoder-residual-check"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_keygen_secret_sampler.sv"]
+targets = ["test-trike-keygen-secret-reference"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["tb/tb_trike_keygen_secret_sampler_reference.sv"]
+targets = ["test-trike-keygen-secret-sampler-reference"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["tb/tb_trike_keygen_secret_sampler_schedule.sv"]
+targets = ["test-trike-keygen-secret-schedule-reference"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_keygen_core.sv", "tb/tb_trike_keygen_core_reference.sv"]
+targets = ["test-trike-keygen-core-reference", "test-trike-keygen-synth-reference"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_decaps_postprocess_core.sv", "tb/tb_trike_decaps_postprocess_reference.sv"]
+targets = ["test-trike-decaps-postprocess-runtime", "test-trike-decaps-postprocess-reference"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_decaps_syndrome_core.sv", "tb/tb_trike_decaps_syndrome_reference.sv"]
+targets = ["test-trike-decaps-syndrome-runtime", "test-trike-decaps-syndrome-reference"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_encaps_core.sv", "tb/tb_trike_encaps_core_reference.sv"]
+targets = ["test-trike-encaps-core-reference", "test-trike-encaps-synth-reference"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = [
+  "rtl/decoder_top.sv",
+  "rtl/decoder_profile_config.sv",
+  "rtl/ram_s.sv",
+  "rtl/vnu.sv",
+  "tb/tb_decoder_top.sv",
+]
+targets = ["test-integration"]
+covers_profiles = ["decoder"]
+
+[[owners]]
+exact = [
+  "rtl/msg_signmag_to_tc.sv",
+  "rtl/msg_tc_to_signmag_sat.sv",
+  "tb/tb_msg_codec.sv",
+]
+targets = ["test-msg-codec"]
+covers_profiles = ["decoder"]
+
+[[owners]]
+exact = ["rtl/reset_sync.sv", "tb/tb_reset_sync.sv"]
+targets = ["test-reset-sync"]
+covers_profiles = ["decoder"]
+
+[[owners]]
+exact = ["rtl/barrel_rotate.sv"]
+targets = ["test-ram-accum", "test-ram-t", "test-k-sign-update"]
+covers_profiles = ["decoder"]
+
+[[owners]]
+exact = ["rtl/ram_bram.sv"]
+targets = ["test-unit"]
+covers_profiles = ["decoder"]
+
+[[owners]]
+exact = ["rtl/ram_k_global.sv", "rtl/ram_k_tile.sv"]
+targets = ["test-k-sign-update"]
+covers_profiles = ["decoder"]
+
+[[owners]]
+exact = [
+  "rtl/trike_poly_divstep_control.sv",
+  "rtl/trike_poly_divstep_s1.sv",
+  "rtl/trike_poly_divstep_update.sv",
+  "tb/tb_trike_poly_divstep_round.sv",
+  "tb/tb_trike_poly_divstep_s1.sv",
+]
+targets = ["test-trike-poly-divstep-s1", "test-trike-poly-divstep-round"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = [
+  "rtl/trike_poly_mul_karatsuba_core.sv",
+  "tb/tb_trike_poly_mul_karatsuba_core.sv",
+  "tb/tb_trike_poly_mul_karatsuba_reference.sv",
+]
+targets = ["test-trike-poly-karatsuba-core", "test-trike-poly-karatsuba-reference"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = [
+  "rtl/trike_poly_mul_karatsuba2_core.sv",
+  "tb/tb_trike_poly_mul_karatsuba2_core.sv",
+  "tb/tb_trike_poly_mul_karatsuba2_reference.sv",
+]
+targets = ["test-trike-poly-karatsuba2-core", "test-trike-poly-karatsuba2-reference"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["tb/tb_trike_clmul_karatsuba.sv"]
+targets = ["test-trike-clmul-karatsuba"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_inv_schedule_pkg.sv", "rtl/trike_poly_inv_synth_top.sv", "tb/tb_trike_poly_inv_reference.sv"]
+targets = ["test-trike-poly-inv-reference"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["tb/tb_trike_poly_mul_reference.sv"]
+targets = ["test-trike-poly-reference"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_error_support_store.sv", "tb/tb_trike_error_support_store_reference.sv"]
+targets = ["test-trike-error-store-reference"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_h4_error_vector.sv", "tb/tb_trike_h4_error_vector_reference.sv"]
+targets = ["test-trike-h4-vector-reference", "test-trike-h4-runtime"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["tb/tb_trike_h4_runtime.sv"]
+targets = ["test-trike-h4-runtime"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["tb/tb_trike_weak_key_reference.sv"]
+targets = ["test-trike-weak-key-reference"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["tb/tb_trike_decoder_residual_reference.sv"]
+targets = ["test-trike-decoder-residual-reference"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_decaps_input_loader.sv", "tb/tb_trike_decaps_input_loader.sv"]
+targets = ["test-trike-decaps-input-loader"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_decaps_input_store.sv", "tb/tb_trike_decaps_input_store.sv"]
+targets = ["test-trike-decaps-input-store"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_decaps_syndrome_store_core.sv", "rtl/trike_decaps_syndrome_prefetch.sv", "tb/tb_trike_decaps_syndrome_store_core.sv"]
+targets = ["test-trike-decaps-syndrome-store-core"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["tb/tb_trike_decaps_syndrome_runtime.sv"]
+targets = ["test-trike-decaps-syndrome-runtime"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_decaps_input_syndrome_core.sv", "tb/tb_trike_decaps_input_syndrome_core.sv"]
+targets = ["test-trike-decaps-input-syndrome-core"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_decaps_support_prefetch.sv", "tb/tb_trike_decaps_support_prefetch.sv"]
+targets = ["test-trike-decaps-support-prefetch"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_decaps_input_decoder_load_core.sv", "tb/tb_trike_decaps_input_decoder_load_core.sv"]
+targets = ["test-trike-decaps-input-decoder-load-core"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_decaps_decoder_postcheck_core.sv", "tb/tb_trike_decaps_decoder_postcheck_core.sv"]
+targets = ["test-trike-decaps-decoder-postcheck-core"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_decaps_message_recover.sv", "tb/tb_trike_decaps_message_reference.sv"]
+targets = ["test-trike-decaps-message-reference"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_decaps_reencrypt_verify.sv", "tb/tb_trike_decaps_verify_reference.sv"]
+targets = ["test-trike-decaps-verify-reference"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_decaps_kdf.sv", "tb/tb_trike_decaps_kdf_reference.sv"]
+targets = ["test-trike-decaps-kdf-reference"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_decaps_pipeline_core.sv", "tb/tb_trike_decaps_pipeline_reference.sv"]
+targets = ["test-trike-decaps-pipeline-reference"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["tb/tb_trike_decaps_postprocess_runtime.sv"]
+targets = ["test-trike-decaps-postprocess-runtime"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_decaps_synth_top.sv", "tb/tb_trike_decaps_synth_reference.sv"]
+targets = ["test-trike-decaps-synth-reference"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = [
+  "rtl/trike_decaps_runtime_pipeline_core.sv",
+  "rtl/trike_decaps_runtime_synth_top.sv",
+  "rtl/trike_decaps_unified_core.sv",
+  "tb/tb_trike_decaps_runtime_synth_reference.sv",
+]
+targets = ["test-trike-decaps-runtime-synth-reference", "test-trike-decaps-runtime-four-profile-reference"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_decaps_profile_config.sv"]
+targets = ["test-trike-decaps-runtime-four-profile-reference"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_encaps_synth_top.sv"]
+targets = ["test-trike-encaps-synth-reference"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["tb/tb_trike_encaps_components_reference.sv"]
+targets = ["test-trike-encaps-components-reference"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["tb/tb_trike_encaps_hash_reference.sv"]
+targets = ["test-trike-encaps-hash-reference"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_keygen_synth_top.sv", "tb/tb_trike_keygen_arith_reference.sv"]
+targets = ["test-trike-keygen-arith-reference", "test-trike-keygen-synth-reference"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/trike_kem_operation_control.sv", "tb/tb_trike_kem_operation_control.sv"]
+targets = ["test-trike-kem-operation-control", "formal-trike-kem-operation-control"]
+covers_profiles = ["kem"]
+
+[[owners]]
+exact = ["rtl/bike_pkg.sv"]
+targets = ["ci-smoke"]
+covers_profiles = ["public_params", "local_rtl"]
+
+[[owners]]
+exact = ["rtl/trike_kem_asic_top.sv"]
+targets = ["ci-kem-reference"]
+covers_profiles = ["kem", "local_rtl"]
+
+[[manual_rules]]
+suffixes = [".tcl"]
+requirement = "Dry-run the affected Vivado Tcl target."

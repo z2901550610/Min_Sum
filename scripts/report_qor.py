@@ -34,9 +34,11 @@ def main() -> None:
     parser.add_argument("--xilinx", type=Path, required=True)
     parser.add_argument("--output-json", type=Path, required=True)
     parser.add_argument("--output-markdown", type=Path, required=True)
-    parser.add_argument("--lint", default="NOT_RUN")
-    parser.add_argument("--simulation", default="NOT_RUN")
-    parser.add_argument("--formal", default="NOT_RUN")
+    statuses = ("PASS", "FAIL", "NOT_RUN", "NOT_APPLICABLE")
+    parser.add_argument("--lint", choices=statuses, default="NOT_RUN")
+    parser.add_argument("--simulation", choices=statuses, default="NOT_RUN")
+    parser.add_argument("--formal", choices=statuses, default="NOT_RUN")
+    parser.add_argument("--validation-run-id")
     args = parser.parse_args()
 
     generic = load_design(args.generic)
@@ -61,6 +63,7 @@ def main() -> None:
         "git_commit": git_value("rev-parse", "HEAD"),
         "git_dirty": dirty,
         "tool": "Yosys",
+        "validation_run_id": args.validation_run_id,
         "top": args.top,
         "parameters": {},
         "verification": {

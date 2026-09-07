@@ -176,12 +176,14 @@ module trike_decoder_error_vector #(
     end
   end
 
+`ifndef SYNTHESIS
   initial begin
     if ((R_BITS <= 0) || (BLOCKS <= 0))
       $fatal(1, "trike_decoder_error_vector requires positive geometry");
     if (PADDED_R_BYTES < ((R_BITS + 7) / 8))
       $fatal(1, "trike_decoder_error_vector padding is too small");
   end
+`endif
 
 `ifndef SYNTHESIS
   always_ff @(posedge i_clk) begin

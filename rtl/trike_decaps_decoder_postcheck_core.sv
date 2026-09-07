@@ -155,10 +155,12 @@ module trike_decaps_decoder_postcheck_core #(
     end
   end
 
+`ifndef SYNTHESIS
   initial begin
     if ((R_BITS <= 0) || (BLOCKS <= 0) || (WEIGHT <= 0))
       $fatal(1, "trike_decaps_decoder_postcheck_core requires positive geometry");
   end
+`endif
 
 `ifndef SYNTHESIS
   always_ff @(posedge i_clk) begin

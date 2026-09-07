@@ -1,0 +1,46 @@
+name: Local RTL gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: local-rtl-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12.10"
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+      - uses: YosysHQ/setup-oss-cad-suite@v4
+        with:
+          version: "2026-08-27"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install pinned Verible
+        env:
+          VERIBLE_VERSION: v0.0-4133-g873f559f
+          VERIBLE_SHA256: 73e83be9928e8274494ba39973ab07e76aed084c7da8bc81073b361ba196f9f4
+        run: |
+          archive="$RUNNER_TEMP/verible.tar.gz"
+          curl -fsSL "https://github.com/chipsalliance/verible/releases/download/$VERIBLE_VERSION/verible-$VERIBLE_VERSION-linux-static-x86_64.tar.gz" -o "$archive"
+          echo "$VERIBLE_SHA256  $archive" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/verible"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/verible" --strip-components=1
+          echo "$RUNNER_TEMP/verible/bin" >> "$GITHUB_PATH"
+      - name: Sync locked Python environment
+        run: uv sync --frozen
+      - name: Run canonical local gate
+        run: PATH="$GITHUB_WORKSPACE/.venv/bin:$PATH" make check

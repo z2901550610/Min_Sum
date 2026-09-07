@@ -50,4 +50,21 @@ aggregate commands and their evidence boundaries are defined in
 `docs/workflow.md`; exact tool versions remain in
 `config/rtl_toolchain.lock`. Repository-specific Codex skills live under
 `.agents/skills/` and refine stages without replacing this record policy or
-`AGENTS.md`.
+`AGENTS.md`. `config/validation_profiles.toml` is the single source for profile
+targets, path routing, coverage, owning-target rules, release escalation, and
+the generated validation-matrix table. It stores Make target names rather than
+shell commands. Owners are optional accelerators for precise local validation;
+overlapping owners are rejected, while unowned sources conservatively fall back
+to their profile aggregate. One planned Make dependency graph deduplicates shared prerequisites. Use
+`make check-plan VALIDATION_PATHS="<task-owned paths>"` in a dirty tree, or
+`make check-plan` when the complete diff belongs to the task, before
+execution; after a profile edit, run `make update-validation-matrix`, while
+`make check-validation-profiles` rejects drift. Standalone SymbiYosys logs remain
+under `build/logs/sby/`, with the latest per-task result in
+`build/results/check-summary.json`; workflow validation places these artifacts
+under its run directory. A per-task summary is not an aggregate gate verdict. Core
+workflow/toolchain completion uses `make validate-workflow`; product release scope uses
+the applicable `make check`, random/reference, and Vivado gates;
+supporting tests, Skills, and functional generators use their owning targets first. Its run-scoped events, aggregate
+summary, QoR estimate, and full terminal log remain under
+`build/results/runs/<run-id>/` without updating tracked QoR records.

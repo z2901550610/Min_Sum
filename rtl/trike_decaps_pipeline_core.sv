@@ -421,10 +421,12 @@ module trike_decaps_pipeline_core #(
   end
 `endif
 
+`ifndef SYNTHESIS
   initial begin
     if (N0 != 3) $fatal(1, "trike_decaps_pipeline_core requires three TRIKE blocks");
     if (WORD_W != 64) $fatal(1, "trike_decaps_pipeline_core requires 64-bit syndrome words");
   end
+`endif
 
   /* verilator lint_off UNUSEDSIGNAL */
   logic unused_status;

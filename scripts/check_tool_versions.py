@@ -18,12 +18,9 @@ COMMANDS = {
     "yosys": ["yosys", "-V"],
     "sby": ["sby", "--version"],
     "z3": ["z3", "--version"],
-    "boolector": ["boolector", "--version"],
-    "bitwuzla": ["bitwuzla", "--version"],
     "cocotb": ["cocotb-config", "--version"],
     "pyyaml": ["python3", "-c", "import yaml; print(yaml.__version__)"],
     "pytest": ["python3", "-m", "pytest", "--version"],
-    "surfer": ["surfer", "--version"],
     "python": ["python3", "--version"],
 }
 

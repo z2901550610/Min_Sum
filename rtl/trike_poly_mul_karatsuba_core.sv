@@ -2,8 +2,10 @@
 
 // Fixed-schedule one-level Karatsuba dense multiplier in
 // GF(2)[x]/(x^R_BITS - 1). Operands are split into banked low/high halves.
-// One Comba datapath sequentially computes Z0, Z2, and Z1 and mixes each
-// subproduct word into a zeroed full product RAM with fixed read/write work.
+// One Comba datapath sequentially computes Z0, Z2, and Z1. Each shifted
+// subproduct word is cyclically folded into an independent WORDS-word result
+// RAM. Operand banks remain intact until the entire result is available.
+// Fold addresses and optional second-word RMW depend only on public geometry.
 module trike_poly_mul_karatsuba_core #(
     parameter int R_BITS               = 15581,
     parameter int WORD_W               = 64,
@@ -28,13 +30,10 @@ module trike_poly_mul_karatsuba_core #(
 
   localparam int WORDS = (R_BITS + WORD_W - 1) / WORD_W;
   localparam int HALF_WORDS = (WORDS + 1) / 2;
-  localparam int PAD_WORDS = 2 * HALF_WORDS;
   localparam int SUBPRODUCT_WORDS = 2 * HALF_WORDS;
-  localparam int PRODUCT_WORDS = 2 * PAD_WORDS;
   localparam int LAST_BITS = R_BITS - ((WORDS - 1) * WORD_W);
   localparam bit ODD_WORDS = (WORDS % 2) != 0;
   localparam int HALF_ADDR_W = (HALF_WORDS > 1) ? $clog2(HALF_WORDS) : 1;
-  localparam int PRODUCT_ADDR_W = (PRODUCT_WORDS > 1) ? $clog2(PRODUCT_WORDS) : 1;
   localparam int RESULT_ADDR_W = (WORDS > 1) ? $clog2(WORDS) : 1;
   localparam logic [WORD_W-1:0] LAST_MASK = {WORD_W{1'b1}} >> (WORD_W - LAST_BITS);
 
@@ -44,7 +43,7 @@ module trike_poly_mul_karatsuba_core #(
     ST_PAD_A,
     ST_LOAD_B,
     ST_PAD_B,
-    ST_CLEAR_PRODUCT,
+    ST_CLEAR_RESULT,
     ST_SUB_PREFETCH,
     ST_SUB_ACCUM,
     ST_MIX_READ_0,
@@ -52,79 +51,70 @@ module trike_poly_mul_karatsuba_core #(
     ST_MIX_READ_1,
     ST_MIX_WRITE_1,
     ST_SUB_ADVANCE,
-    ST_REDUCE_READ_LOW,
-    ST_REDUCE_READ_HIGH0,
-    ST_REDUCE_READ_HIGH1,
-    ST_REDUCE_WRITE,
     ST_OUTPUT_FETCH,
     ST_OUTPUT_VALID
   } state_t;
 
-  state_t                      state_q;
+  state_t                     state_q;
 
-  integer                      word_idx_q;
-  integer                      clear_idx_q;
-  integer                      phase_q;
-  integer                      diagonal_idx_q;
-  integer                      a_word_idx_q;
-  integer                      b_word_idx_q;
-  integer                      sub_word_idx_q;
-  integer                      reduce_idx_q;
-  integer                      output_idx_q;
+  integer                     word_idx_q;
+  integer                     clear_idx_q;
+  integer                     phase_q;
+  integer                     diagonal_idx_q;
+  integer                     a_word_idx_q;
+  integer                     b_word_idx_q;
+  integer                     sub_word_idx_q;
+  integer                     output_idx_q;
 
-  logic                        sub_is_carry_q;
-  logic   [        WORD_W-1:0] diagonal_low_q;
-  logic   [        WORD_W-1:0] diagonal_high_q;
-  logic   [        WORD_W-1:0] carry_word_q;
-  logic   [        WORD_W-1:0] sub_word_q;
-  logic   [        WORD_W-1:0] reduce_low_q;
-  logic   [        WORD_W-1:0] reduce_high0_q;
+  logic                       sub_is_carry_q;
+  logic                       mix_term_q;
+  logic   [       WORD_W-1:0] diagonal_low_q;
+  logic   [       WORD_W-1:0] diagonal_high_q;
+  logic   [       WORD_W-1:0] carry_word_q;
+  logic   [       WORD_W-1:0] sub_word_q;
 
-  logic                        a0_we;
-  logic   [   HALF_ADDR_W-1:0] a0_waddr;
-  logic   [        WORD_W-1:0] a0_wdata;
-  logic                        a0_re;
-  logic   [   HALF_ADDR_W-1:0] a0_raddr;
-  logic   [        WORD_W-1:0] a0_rdata;
-  logic                        a1_we;
-  logic   [   HALF_ADDR_W-1:0] a1_waddr;
-  logic   [        WORD_W-1:0] a1_wdata;
-  logic                        a1_re;
-  logic   [   HALF_ADDR_W-1:0] a1_raddr;
-  logic   [        WORD_W-1:0] a1_rdata;
-  logic                        b0_we;
-  logic   [   HALF_ADDR_W-1:0] b0_waddr;
-  logic   [        WORD_W-1:0] b0_wdata;
-  logic                        b0_re;
-  logic   [   HALF_ADDR_W-1:0] b0_raddr;
-  logic   [        WORD_W-1:0] b0_rdata;
-  logic                        b1_we;
-  logic   [   HALF_ADDR_W-1:0] b1_waddr;
-  logic   [        WORD_W-1:0] b1_wdata;
-  logic                        b1_re;
-  logic   [   HALF_ADDR_W-1:0] b1_raddr;
-  logic   [        WORD_W-1:0] b1_rdata;
+  logic                       a0_we;
+  logic   [  HALF_ADDR_W-1:0] a0_waddr;
+  logic   [       WORD_W-1:0] a0_wdata;
+  logic                       a0_re;
+  logic   [  HALF_ADDR_W-1:0] a0_raddr;
+  logic   [       WORD_W-1:0] a0_rdata;
+  logic                       a1_we;
+  logic   [  HALF_ADDR_W-1:0] a1_waddr;
+  logic   [       WORD_W-1:0] a1_wdata;
+  logic                       a1_re;
+  logic   [  HALF_ADDR_W-1:0] a1_raddr;
+  logic   [       WORD_W-1:0] a1_rdata;
+  logic                       b0_we;
+  logic   [  HALF_ADDR_W-1:0] b0_waddr;
+  logic   [       WORD_W-1:0] b0_wdata;
+  logic                       b0_re;
+  logic   [  HALF_ADDR_W-1:0] b0_raddr;
+  logic   [       WORD_W-1:0] b0_rdata;
+  logic                       b1_we;
+  logic   [  HALF_ADDR_W-1:0] b1_waddr;
+  logic   [       WORD_W-1:0] b1_wdata;
+  logic                       b1_re;
+  logic   [  HALF_ADDR_W-1:0] b1_raddr;
+  logic   [       WORD_W-1:0] b1_rdata;
 
-  logic                        product_we;
-  logic   [PRODUCT_ADDR_W-1:0] product_waddr;
-  logic   [        WORD_W-1:0] product_wdata;
-  logic                        product_re;
-  logic   [PRODUCT_ADDR_W-1:0] product_raddr;
-  logic   [        WORD_W-1:0] product_rdata;
-  logic                        result_we;
-  logic   [ RESULT_ADDR_W-1:0] result_waddr;
-  logic   [        WORD_W-1:0] result_wdata;
-  logic                        result_re;
-  logic   [ RESULT_ADDR_W-1:0] result_raddr;
-  logic   [        WORD_W-1:0] result_rdata;
+  logic                       result_we;
+  logic   [RESULT_ADDR_W-1:0] result_waddr;
+  logic   [       WORD_W-1:0] result_wdata;
+  logic                       result_re;
+  logic   [RESULT_ADDR_W-1:0] result_raddr;
+  logic   [       WORD_W-1:0] result_rdata;
 
-  logic   [        WORD_W-1:0] base_a_c;
-  logic   [        WORD_W-1:0] base_b_c;
-  logic   [    (2*WORD_W)-1:0] base_product_c;
-  logic   [PRODUCT_ADDR_W-1:0] mix_addr0_c;
-  logic   [PRODUCT_ADDR_W-1:0] mix_addr1_c;
-  logic   [        WORD_W-1:0] reduced_word_c;
-  logic                        pair_end_c;
+  logic   [       WORD_W-1:0] base_a_c;
+  logic   [       WORD_W-1:0] base_b_c;
+  logic   [   (2*WORD_W)-1:0] base_product_c;
+  integer                     mix_word_idx_c;
+  logic   [RESULT_ADDR_W-1:0] fold_addr0_c;
+  logic   [RESULT_ADDR_W-1:0] fold_addr1_c;
+  logic   [       WORD_W-1:0] fold_data0_c;
+  logic   [       WORD_W-1:0] fold_data1_c;
+  logic                       fold_second_c;
+  logic                       pair_end_c;
 
   ram_bram #(
       .DATA_W(WORD_W),
@@ -180,19 +170,6 @@ module trike_poly_mul_karatsuba_core #(
 
   ram_bram #(
       .DATA_W(WORD_W),
-      .DEPTH (PRODUCT_WORDS)
-  ) u_product_mem (
-      .i_clk  (i_clk),
-      .i_we   (product_we),
-      .i_waddr(product_waddr),
-      .i_wdata(product_wdata),
-      .i_re   (product_re),
-      .i_raddr(product_raddr),
-      .o_rdata(product_rdata)
-  );
-
-  ram_bram #(
-      .DATA_W(WORD_W),
       .DEPTH (WORDS)
   ) u_result_mem (
       .i_clk  (i_clk),
@@ -229,23 +206,44 @@ module trike_poly_mul_karatsuba_core #(
       end
     endcase
 
-    pair_end_c  = (b_word_idx_q == 0) || (a_word_idx_q == (HALF_WORDS - 1));
+    pair_end_c = (b_word_idx_q == 0) || (a_word_idx_q == (HALF_WORDS - 1));
 
-    mix_addr0_c = PRODUCT_ADDR_W'(sub_word_idx_q);
-    mix_addr1_c = PRODUCT_ADDR_W'(sub_word_idx_q + HALF_WORDS);
-    if (phase_q == 1) begin
-      mix_addr0_c = PRODUCT_ADDR_W'(sub_word_idx_q + (2 * HALF_WORDS));
-    end else if (phase_q == 2) begin
-      mix_addr0_c = PRODUCT_ADDR_W'(sub_word_idx_q + HALF_WORDS);
+    mix_word_idx_c = sub_word_idx_q;
+    if (mix_term_q || (phase_q == 2)) begin
+      mix_word_idx_c = sub_word_idx_q + HALF_WORDS;
+    end else if (phase_q == 1) begin
+      mix_word_idx_c = sub_word_idx_q + (2 * HALF_WORDS);
     end
 
-    if (LAST_BITS == WORD_W) begin
-      reduced_word_c = reduce_low_q ^ product_rdata;
+    // Reduction and recombination are linear over GF(2). Recombination terms
+    // above degree 2*R_BITS-1 cancel in the complete product, so truncate them
+    // consistently instead of wrapping padded intermediate terms a second time.
+    // Every retained word produces at most two masked result contributions.
+    fold_addr0_c  = '0;
+    fold_addr1_c  = '0;
+    fold_data0_c  = '0;
+    fold_data1_c  = '0;
+    fold_second_c = 1'b0;
+    if (mix_word_idx_c < WORDS) begin
+      fold_addr0_c = RESULT_ADDR_W'(mix_word_idx_c);
+      fold_data0_c = sub_word_q;
+      if ((LAST_BITS != WORD_W) && (mix_word_idx_c == (WORDS - 1))) begin
+        fold_second_c = 1'b1;
+        fold_data1_c  = sub_word_q >> LAST_BITS;
+      end
     end else begin
-      reduced_word_c = reduce_low_q ^ (reduce_high0_q >> LAST_BITS) ^
-                       (product_rdata << (WORD_W - LAST_BITS));
+      if ((mix_word_idx_c - WORDS) < WORDS) begin
+        fold_addr0_c = RESULT_ADDR_W'(mix_word_idx_c - WORDS);
+        fold_data0_c = sub_word_q << (WORD_W - LAST_BITS);
+      end
+      if ((LAST_BITS != WORD_W) && ((mix_word_idx_c - WORDS + 1) < WORDS)) begin
+        fold_second_c = 1'b1;
+        fold_addr1_c  = RESULT_ADDR_W'(mix_word_idx_c - WORDS + 1);
+        fold_data1_c  = sub_word_q >> LAST_BITS;
+      end
     end
-    if (reduce_idx_q == (WORDS - 1)) reduced_word_c = reduced_word_c & LAST_MASK;
+    if (fold_addr0_c == RESULT_ADDR_W'(WORDS - 1)) fold_data0_c &= LAST_MASK;
+    if (fold_addr1_c == RESULT_ADDR_W'(WORDS - 1)) fold_data1_c &= LAST_MASK;
   end
 
   always_comb begin
@@ -269,11 +267,6 @@ module trike_poly_mul_karatsuba_core #(
     b1_wdata = '0;
     b1_re = 1'b0;
     b1_raddr = '0;
-    product_we = 1'b0;
-    product_waddr = '0;
-    product_wdata = '0;
-    product_re = 1'b0;
-    product_raddr = '0;
     result_we = 1'b0;
     result_waddr = '0;
     result_wdata = '0;
@@ -319,9 +312,9 @@ module trike_poly_mul_karatsuba_core #(
         b1_waddr = HALF_ADDR_W'(HALF_WORDS - 1);
       end
 
-      ST_CLEAR_PRODUCT: begin
-        product_we = 1'b1;
-        product_waddr = PRODUCT_ADDR_W'(clear_idx_q);
+      ST_CLEAR_RESULT: begin
+        result_we = 1'b1;
+        result_waddr = RESULT_ADDR_W'(clear_idx_q);
       end
 
       ST_SUB_PREFETCH: begin
@@ -349,46 +342,25 @@ module trike_poly_mul_karatsuba_core #(
       end
 
       ST_MIX_READ_0: begin
-        product_re = 1'b1;
-        product_raddr = mix_addr0_c;
+        result_re = 1'b1;
+        result_raddr = fold_addr0_c;
       end
 
       ST_MIX_WRITE_0: begin
-        product_we = 1'b1;
-        product_waddr = mix_addr0_c;
-        product_wdata = product_rdata ^ sub_word_q;
+        result_we = 1'b1;
+        result_waddr = fold_addr0_c;
+        result_wdata = result_rdata ^ fold_data0_c;
       end
 
       ST_MIX_READ_1: begin
-        product_re = 1'b1;
-        product_raddr = mix_addr1_c;
+        result_re = 1'b1;
+        result_raddr = fold_addr1_c;
       end
 
       ST_MIX_WRITE_1: begin
-        product_we = 1'b1;
-        product_waddr = mix_addr1_c;
-        product_wdata = product_rdata ^ sub_word_q;
-      end
-
-      ST_REDUCE_READ_LOW: begin
-        product_re = 1'b1;
-        product_raddr = PRODUCT_ADDR_W'(reduce_idx_q);
-      end
-
-      ST_REDUCE_READ_HIGH0: begin
-        product_re = 1'b1;
-        product_raddr = PRODUCT_ADDR_W'(reduce_idx_q + WORDS - 1);
-      end
-
-      ST_REDUCE_READ_HIGH1: begin
-        product_re = 1'b1;
-        product_raddr = PRODUCT_ADDR_W'(reduce_idx_q + WORDS);
-      end
-
-      ST_REDUCE_WRITE: begin
         result_we = 1'b1;
-        result_waddr = RESULT_ADDR_W'(reduce_idx_q);
-        result_wdata = reduced_word_c;
+        result_waddr = fold_addr1_c;
+        result_wdata = result_rdata ^ fold_data1_c;
       end
 
       ST_OUTPUT_FETCH: begin
@@ -418,15 +390,13 @@ module trike_poly_mul_karatsuba_core #(
       a_word_idx_q <= 0;
       b_word_idx_q <= 0;
       sub_word_idx_q <= 0;
-      reduce_idx_q <= 0;
       output_idx_q <= 0;
       sub_is_carry_q <= 1'b0;
+      mix_term_q <= 1'b0;
       diagonal_low_q <= '0;
       diagonal_high_q <= '0;
       carry_word_q <= '0;
       sub_word_q <= '0;
-      reduce_low_q <= '0;
-      reduce_high0_q <= '0;
       o_done <= 1'b0;
     end else begin
       o_done <= 1'b0;
@@ -458,7 +428,7 @@ module trike_poly_mul_karatsuba_core #(
           if (i_b_valid) begin
             if (word_idx_q == (WORDS - 1)) begin
               clear_idx_q <= 0;
-              state_q <= ODD_WORDS ? ST_PAD_B : ST_CLEAR_PRODUCT;
+              state_q <= ODD_WORDS ? ST_PAD_B : ST_CLEAR_RESULT;
             end else begin
               word_idx_q <= word_idx_q + 1;
             end
@@ -467,11 +437,11 @@ module trike_poly_mul_karatsuba_core #(
 
         ST_PAD_B: begin
           clear_idx_q <= 0;
-          state_q <= ST_CLEAR_PRODUCT;
+          state_q <= ST_CLEAR_RESULT;
         end
 
-        ST_CLEAR_PRODUCT: begin
-          if (clear_idx_q == (PRODUCT_WORDS - 1)) begin
+        ST_CLEAR_RESULT: begin
+          if (clear_idx_q == (WORDS - 1)) begin
             phase_q <= 0;
             diagonal_idx_q <= 0;
             a_word_idx_q <= 0;
@@ -496,6 +466,7 @@ module trike_poly_mul_karatsuba_core #(
             sub_word_q <= diagonal_low_q ^ base_product_c[WORD_W-1:0];
             carry_word_q <= diagonal_high_q ^ base_product_c[(2*WORD_W)-1:WORD_W];
             sub_is_carry_q <= 1'b0;
+            mix_term_q <= 1'b0;
             state_q <= ST_MIX_READ_0;
           end else begin
             a_word_idx_q <= a_word_idx_q + 1;
@@ -508,7 +479,14 @@ module trike_poly_mul_karatsuba_core #(
         end
 
         ST_MIX_WRITE_0: begin
-          state_q <= (phase_q == 2) ? ST_SUB_ADVANCE : ST_MIX_READ_1;
+          if (fold_second_c) begin
+            state_q <= ST_MIX_READ_1;
+          end else if ((phase_q != 2) && !mix_term_q) begin
+            mix_term_q <= 1'b1;
+            state_q <= ST_MIX_READ_0;
+          end else begin
+            state_q <= ST_SUB_ADVANCE;
+          end
         end
 
         ST_MIX_READ_1: begin
@@ -516,7 +494,12 @@ module trike_poly_mul_karatsuba_core #(
         end
 
         ST_MIX_WRITE_1: begin
-          state_q <= ST_SUB_ADVANCE;
+          if ((phase_q != 2) && !mix_term_q) begin
+            mix_term_q <= 1'b1;
+            state_q <= ST_MIX_READ_0;
+          end else begin
+            state_q <= ST_SUB_ADVANCE;
+          end
         end
 
         ST_SUB_ADVANCE: begin
@@ -524,11 +507,12 @@ module trike_poly_mul_karatsuba_core #(
             sub_word_idx_q <= SUBPRODUCT_WORDS - 1;
             sub_word_q <= carry_word_q;
             sub_is_carry_q <= 1'b1;
+            mix_term_q <= 1'b0;
             state_q <= ST_MIX_READ_0;
           end else if (sub_is_carry_q) begin
             if (phase_q == 2) begin
-              reduce_idx_q <= 0;
-              state_q <= ST_REDUCE_READ_LOW;
+              output_idx_q <= 0;
+              state_q <= ST_OUTPUT_FETCH;
             end else begin
               phase_q <= phase_q + 1;
               diagonal_idx_q <= 0;
@@ -550,30 +534,6 @@ module trike_poly_mul_karatsuba_core #(
               b_word_idx_q <= HALF_WORDS - 1;
             end
             state_q <= ST_SUB_PREFETCH;
-          end
-        end
-
-        ST_REDUCE_READ_LOW: begin
-          state_q <= ST_REDUCE_READ_HIGH0;
-        end
-
-        ST_REDUCE_READ_HIGH0: begin
-          reduce_low_q <= product_rdata;
-          state_q <= ST_REDUCE_READ_HIGH1;
-        end
-
-        ST_REDUCE_READ_HIGH1: begin
-          reduce_high0_q <= product_rdata;
-          state_q <= ST_REDUCE_WRITE;
-        end
-
-        ST_REDUCE_WRITE: begin
-          if (reduce_idx_q == (WORDS - 1)) begin
-            output_idx_q <= 0;
-            state_q <= ST_OUTPUT_FETCH;
-          end else begin
-            reduce_idx_q <= reduce_idx_q + 1;
-            state_q <= ST_REDUCE_READ_LOW;
           end
         end
 
