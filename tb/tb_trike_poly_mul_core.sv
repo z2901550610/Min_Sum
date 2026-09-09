@@ -3,49 +3,61 @@
 module tb_trike_poly_mul_core;
   localparam int R_BITS = 13;
   localparam int WORD_W = 8;
-  localparam int DIGIT_W = 4;
+
   localparam int SPARSE_WEIGHT = 3;
   localparam int WORDS = (R_BITS + WORD_W - 1) / WORD_W;
   localparam int INDEX_W = $clog2(R_BITS);
-  localparam int DENSE_CYCLES = (10 * WORDS) + (WORDS * WORDS * (WORD_W / DIGIT_W)) + 1;
+  function automatic integer fold_cycles(input integer r, input integer w);
+    integer n, h, extra, off;
+    begin
+      n = (r + w - 1) / w;
+      h = (n + 1) / 2;
+      extra = 0;
+      if (r % w != 0) begin
+        for (integer phase = 0; phase < 3; phase++) begin
+          for (integer word_idx = 0; word_idx < 2 * h; word_idx++) begin
+            off = word_idx + phase * h;
+            if (off >= n - 1 && off <= 2 * n - 2) extra += (phase == 1 ? 3 : 1);
+          end
+        end
+      end
+      fold_cycles = 3 * h * h + 38 * h + 3 * n - 3 + 2 * extra;
+    end
+  endfunction
+  localparam int DENSE_CYCLES = fold_cycles(
+      R_BITS, WORD_W
+  ) + 2 * ((R_BITS + WORD_W - 1) / WORD_W) + 2;
   localparam int SPARSE_CYCLES = (4 * WORDS) + (2 * SPARSE_WEIGHT) + (8 * SPARSE_WEIGHT * WORDS);
 
-  logic                     clk;
-  logic                     rst_n;
-  logic                     start;
-  logic                     sparse_a;
-  logic                     a_valid;
-  logic [       WORD_W-1:0] a_data;
-  logic                     a_ready;
-  logic                     sparse_index_valid;
-  logic [      INDEX_W-1:0] sparse_index;
-  logic                     sparse_index_ready;
-  logic                     b_valid;
-  logic [       WORD_W-1:0] b_data;
-  logic                     b_ready;
-  logic                     result_valid;
-  logic [       WORD_W-1:0] result_data;
-  logic                     result_last;
-  logic                     result_ready;
-  logic                     busy;
-  logic                     done;
-  logic                     ext_a_re;
-  logic [$clog2(WORDS)-1:0] ext_a_raddr;
-  logic                     ext_b_re;
-  logic [$clog2(WORDS)-1:0] ext_b_raddr;
-  logic                     ext_result_we;
-  logic [$clog2(WORDS)-1:0] ext_result_waddr;
-  logic [       WORD_W-1:0] ext_result_wdata;
+  logic               clk;
+  logic               rst_n;
+  logic               start;
+  logic               sparse_a;
+  logic               a_valid;
+  logic [ WORD_W-1:0] a_data;
+  logic               a_ready;
+  logic               sparse_index_valid;
+  logic [INDEX_W-1:0] sparse_index;
+  logic               sparse_index_ready;
+  logic               b_valid;
+  logic [ WORD_W-1:0] b_data;
+  logic               b_ready;
+  logic               result_valid;
+  logic [ WORD_W-1:0] result_data;
+  logic               result_last;
+  logic               result_ready;
+  logic               busy;
+  logic               done;
 
-  logic [       WORD_W-1:0] a_words[        0:WORDS-1];
-  logic [       WORD_W-1:0] b_words[        0:WORDS-1];
-  logic [       WORD_W-1:0] expected_words[        0:WORDS-1];
-  logic [      INDEX_W-1:0] sparse_indices[0:SPARSE_WEIGHT-1];
+  logic [ WORD_W-1:0] a_words[        0:WORDS-1];
+  logic [ WORD_W-1:0] b_words[        0:WORDS-1];
+  logic [ WORD_W-1:0] expected_words[        0:WORDS-1];
+  logic [INDEX_W-1:0] sparse_indices[0:SPARSE_WEIGHT-1];
 
   trike_poly_mul_core #(
-      .R_BITS       (R_BITS),
-      .WORD_W       (WORD_W),
-      .DIGIT_W      (DIGIT_W),
+      .R_BITS(R_BITS),
+      .WORD_W(WORD_W),
+
       .SPARSE_WEIGHT(SPARSE_WEIGHT)
   ) dut (
       .i_clk                  (clk),
@@ -68,27 +80,12 @@ module tb_trike_poly_mul_core;
       .o_result_data          (result_data),
       .o_result_last          (result_last),
       .i_result_ready         (result_ready),
-      .o_ext_a_re             (ext_a_re),
-      .o_ext_a_raddr          (ext_a_raddr),
-      .i_ext_a_rdata          ('0),
-      .o_ext_b_re             (ext_b_re),
-      .o_ext_b_raddr          (ext_b_raddr),
-      .i_ext_b_rdata          ('0),
-      .o_ext_result_we        (ext_result_we),
-      .o_ext_result_waddr     (ext_result_waddr),
-      .o_ext_result_wdata     (ext_result_wdata),
-      .o_busy                 (busy),
-      .o_done                 (done)
+
+      .o_busy(busy),
+      .o_done(done)
   );
 
   always #5 clk = ~clk;
-
-  always @(posedge clk) begin
-    if (ext_a_re || ext_b_re || ext_result_we) begin
-      $fatal(1, "internal RAM mode drove external port a=%0d b=%0d result=%0d data=%h",
-             ext_a_raddr, ext_b_raddr, ext_result_waddr, ext_result_wdata);
-    end
-  end
 
   task automatic calculate_expected;
     int product_bit;
@@ -117,8 +114,7 @@ module tb_trike_poly_mul_core;
     int                stall_count;
     int                dense_a_read_count;
     int                dense_b_read_count;
-    int                dense_product_read_count;
-    int                dense_product_write_count;
+
     logic              a_transfer;
     logic              b_transfer;
     logic              support_transfer;
@@ -143,8 +139,7 @@ module tb_trike_poly_mul_core;
       stall_count = 0;
       dense_a_read_count = 0;
       dense_b_read_count = 0;
-      dense_product_read_count = 0;
-      dense_product_write_count = 0;
+
       busy_cycles = 0;
       a_valid = !use_sparse;
       a_data = a_words[0];
@@ -161,14 +156,6 @@ module tb_trike_poly_mul_core;
         cycle_busy = busy;
         if (!use_sparse && dut.a_re) dense_a_read_count++;
         if (!use_sparse && dut.b_re) dense_b_read_count++;
-        if (!use_sparse && dut.product_re) dense_product_read_count++;
-        if (!use_sparse && dut.product_we) begin
-          if (int'(dut.product_waddr) != dense_product_write_count) begin
-            $fatal(1, "dense product write address got=%0d expected=%0d", dut.product_waddr,
-                   dense_product_write_count);
-          end
-          dense_product_write_count++;
-        end
         a_transfer = a_valid && a_ready;
         b_transfer = b_valid && b_ready;
         support_transfer = sparse_index_valid && sparse_index_ready;
@@ -239,18 +226,13 @@ module tb_trike_poly_mul_core;
       if (b_idx != WORDS) $fatal(1, "not all B words transferred");
       if (result_idx != WORDS) $fatal(1, "not all result words transferred");
       if (!use_sparse) begin
-        if ((dense_a_read_count != (WORDS * WORDS)) ||
-            (dense_b_read_count != (WORDS * WORDS))) begin
+        if ((dense_a_read_count != (3 * ((WORDS+1)/2) * ((WORDS+1)/2) + 4 * ((WORDS+1)/2))) ||
+            (dense_b_read_count != (3 * ((WORDS+1)/2) * ((WORDS+1)/2) + 4 * ((WORDS+1)/2)))) begin
           $fatal(1, "dense operand reads a=%0d b=%0d expected=%0d", dense_a_read_count,
-                 dense_b_read_count, WORDS * WORDS);
+                 dense_b_read_count,
+                 (3 * ((WORDS + 1) / 2) * ((WORDS + 1) / 2) + 4 * ((WORDS + 1) / 2)));
         end
-        if (dense_product_write_count != (2 * WORDS)) begin
-          $fatal(1, "dense product writes=%0d expected=%0d", dense_product_write_count, 2 * WORDS);
-        end
-        if (dense_product_read_count != (3 * WORDS)) begin
-          $fatal(1, "dense product reduction reads=%0d expected=%0d", dense_product_read_count,
-                 3 * WORDS);
-        end
+
       end
 
       a_valid = 1'b0;

@@ -17,6 +17,7 @@ rtl/trike_h123_vectors.sv
 rtl/trike_h123_vector_store.sv
 rtl/trike_error_support_store.sv
 rtl/trike_h4_error_vector.sv
+rtl/trike_poly_mul_karatsuba_core.sv
 rtl/trike_poly_mul_core.sv
 rtl/trike_encaps_uv_core.sv
 rtl/trike_pseudohash512_stream.sv

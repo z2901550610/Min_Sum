@@ -8,10 +8,10 @@
 //   r2 = (t0*t2 + h2) * inverse(t0 + h0)
 // Operation counts and RAM scans depend only on public parameters.
 module trike_keygen_arith_core #(
-    parameter int R_BITS = 15581,
+    parameter int R_BITS        = 15581,
     parameter int SECRET_WEIGHT = 35,
-    parameter int WORD_W = 64,
-    parameter int DIGIT_W = 16,
+    parameter int WORD_W        = 64,
+
     parameter bit USE_EXTERNAL_MUL = 1'b0,
     parameter bit USE_EXTERNAL_H123_STORE = 1'b0,
     parameter bit USE_EXTERNAL_SUPPORT_STORE = 1'b0,
@@ -343,9 +343,9 @@ module trike_keygen_arith_core #(
       assign mul_done = i_mul_done;
     end else begin : gen_local_mul
       trike_poly_mul_core #(
-          .R_BITS       (R_BITS),
-          .WORD_W       (WORD_W),
-          .DIGIT_W      (DIGIT_W),
+          .R_BITS(R_BITS),
+          .WORD_W(WORD_W),
+
           .SPARSE_WEIGHT(SECRET_WEIGHT)
       ) u_mul (
           .i_clk                  (i_clk),
@@ -368,25 +368,16 @@ module trike_keygen_arith_core #(
           .o_result_data          (mul_result_data),
           .o_result_last          (mul_result_last),
           .i_result_ready         (1'b1),
-          .o_ext_a_re             (),
-          .o_ext_a_raddr          (),
-          .i_ext_a_rdata          ('0),
-          .o_ext_b_re             (),
-          .o_ext_b_raddr          (),
-          .i_ext_b_rdata          ('0),
-          .o_ext_result_we        (),
-          .o_ext_result_waddr     (),
-          .o_ext_result_wdata     (),
-          .o_busy                 (),
-          .o_done                 (mul_done)
+
+          .o_busy(),
+          .o_done(mul_done)
       );
     end
   endgenerate
 
   trike_poly_inv_core #(
-      .R_BITS (R_BITS),
-      .WORD_W (WORD_W),
-      .DIGIT_W(DIGIT_W)
+      .R_BITS(R_BITS),
+      .WORD_W(WORD_W)
   ) u_inv (
       .i_clk         (i_clk),
       .i_rst_n       (i_rst_n),

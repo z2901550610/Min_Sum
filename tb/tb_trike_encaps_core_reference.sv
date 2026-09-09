@@ -411,9 +411,9 @@ module tb_trike_encaps_core_reference #(
 
       if (USE_SHARED_MUL) begin : g_shared_mul
         trike_poly_mul_core #(
-            .R_BITS          (MAX_R_BITS),
-            .WORD_W          (64),
-            .DIGIT_W         (16),
+            .R_BITS(MAX_R_BITS),
+            .WORD_W(64),
+
             .SPARSE_WEIGHT   (263),
             .RUNTIME_GEOMETRY(1'b1)
         ) u_mul_service (
@@ -437,17 +437,9 @@ module tb_trike_encaps_core_reference #(
             .o_result_data          (mul_result_data),
             .o_result_last          (mul_result_last),
             .i_result_ready         (mul_result_ready),
-            .o_ext_a_re             (),
-            .o_ext_a_raddr          (),
-            .i_ext_a_rdata          ('0),
-            .o_ext_b_re             (),
-            .o_ext_b_raddr          (),
-            .i_ext_b_rdata          ('0),
-            .o_ext_result_we        (),
-            .o_ext_result_waddr     (),
-            .o_ext_result_wdata     (),
-            .o_busy                 (),
-            .o_done                 ()
+
+            .o_busy(),
+            .o_done()
         );
       end else begin : g_local_mul
         assign mul_a_ready = 1'b0;

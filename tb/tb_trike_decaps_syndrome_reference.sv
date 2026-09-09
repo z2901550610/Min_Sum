@@ -53,10 +53,10 @@ module tb_trike_decaps_syndrome_reference #(
   integer                   busy_cycles;
 
   trike_decaps_syndrome_core #(
-      .R_BITS          (REF_R_BITS),
-      .SECRET_WEIGHT   (REF_SECRET_WEIGHT),
-      .WORD_W          (REF_WORD_W),
-      .DIGIT_W         (16),
+      .R_BITS       (REF_R_BITS),
+      .SECRET_WEIGHT(REF_SECRET_WEIGHT),
+      .WORD_W       (REF_WORD_W),
+
       .USE_EXTERNAL_MUL(USE_SHARED_MUL)
   ) dut (
       .i_clk                      (clk),
@@ -106,9 +106,9 @@ module tb_trike_decaps_syndrome_reference #(
   generate
     if (USE_SHARED_MUL) begin : g_shared_mul
       trike_poly_mul_core #(
-          .R_BITS          (REF_R_BITS),
-          .WORD_W          (REF_WORD_W),
-          .DIGIT_W         (16),
+          .R_BITS(REF_R_BITS),
+          .WORD_W(REF_WORD_W),
+
           .SPARSE_WEIGHT   (REF_SECRET_WEIGHT),
           .RUNTIME_GEOMETRY(1'b1)
       ) u_mul_service (
@@ -132,17 +132,9 @@ module tb_trike_decaps_syndrome_reference #(
           .o_result_data          (mul_result_data),
           .o_result_last          (mul_result_last),
           .i_result_ready         (mul_result_ready),
-          .o_ext_a_re             (),
-          .o_ext_a_raddr          (),
-          .i_ext_a_rdata          ('0),
-          .o_ext_b_re             (),
-          .o_ext_b_raddr          (),
-          .i_ext_b_rdata          ('0),
-          .o_ext_result_we        (),
-          .o_ext_result_waddr     (),
-          .o_ext_result_wdata     (),
-          .o_busy                 (),
-          .o_done                 ()
+
+          .o_busy(),
+          .o_done()
       );
     end else begin : g_local_mul
       assign mul_a_ready = 1'b0;

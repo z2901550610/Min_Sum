@@ -48,8 +48,8 @@ module tb_trike_decaps_syndrome_store_core;
   integer                      busy_cycles;
 
   trike_decaps_syndrome_store_core #(
-      .WORD_W           (WORD_W),
-      .DIGIT_W          (2),
+      .WORD_W(WORD_W),
+
       .MAX_R_BITS       (MAX_R),
       .MAX_SECRET_WEIGHT(MAX_WEIGHT),
       .SUPPORT_ADDR_W   (SUPPORT_ADDR_W),

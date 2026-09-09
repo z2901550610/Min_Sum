@@ -1,8 +1,8 @@
 `timescale 1ns / 1ps
 
 module tb_trike_poly_inv_reference #(
-    parameter int DUT_DIGIT_W               = 16,
-    parameter int DUT_DENSE_KARATSUBA_DEPTH = 0
+
+    parameter int DUT_BASE_KARATSUBA_DEPTH = 1
 );
 `ifdef TRIKE_MINSUM_INV_FIXTURE
   `include "generated/trike_poly_inv_minsum_case.svh"
@@ -10,9 +10,24 @@ module tb_trike_poly_inv_reference #(
   `include "generated/trike_poly_inv_reference_case.svh"
 `endif
 
-  localparam int REF_INV_DENSE_MUL_CYCLES =
-      (6 * REF_INV_WORDS) +
-      (REF_INV_WORDS * REF_INV_WORDS * (REF_INV_WORD_W / DUT_DIGIT_W)) + 1;
+  function automatic integer fold_cycles(input integer r, input integer w);
+    integer n, h, extra, off;
+    begin
+      n = (r + w - 1) / w;
+      h = (n + 1) / 2;
+      extra = 0;
+      if (r % w != 0) begin
+        for (integer phase = 0; phase < 3; phase++) begin
+          for (integer word_idx = 0; word_idx < 2 * h; word_idx++) begin
+            off = word_idx + phase * h;
+            if (off >= n - 1 && off <= 2 * n - 2) extra += (phase == 1 ? 3 : 1);
+          end
+        end
+      end
+      fold_cycles = 3 * h * h + 38 * h + 3 * n - 3 + 2 * extra;
+    end
+  endfunction
+  localparam int REF_INV_DENSE_MUL_CYCLES = fold_cycles(REF_INV_R_BITS, REF_INV_WORD_W);
   localparam int REF_INV_CYCLES =
       REF_INV_WORDS +
       (2 * REF_INV_R_BITS * REF_INV_PERMUTATIONS) +
@@ -35,8 +50,8 @@ module tb_trike_poly_inv_reference #(
   trike_poly_inv_core #(
       .R_BITS(REF_INV_R_BITS),
       .WORD_W(REF_INV_WORD_W),
-      .DIGIT_W(DUT_DIGIT_W),
-      .DENSE_KARATSUBA_DEPTH(DUT_DENSE_KARATSUBA_DEPTH)
+
+      .BASE_KARATSUBA_DEPTH(DUT_BASE_KARATSUBA_DEPTH)
   ) dut (
       .i_clk         (clk),
       .i_rst_n       (rst_n),

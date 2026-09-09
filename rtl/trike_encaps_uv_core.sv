@@ -244,9 +244,9 @@ module trike_encaps_uv_core #(
       assign mul_result_last = i_mul_result_last;
     end else begin : gen_local_mul
       trike_poly_mul_core #(
-          .R_BITS       (R_BITS),
-          .WORD_W       (WORD_W),
-          .DIGIT_W      (8),
+          .R_BITS(R_BITS),
+          .WORD_W(WORD_W),
+
           .SPARSE_WEIGHT(ERROR_WEIGHT)
       ) u_mul (
           .i_clk                  (i_clk),
@@ -269,17 +269,9 @@ module trike_encaps_uv_core #(
           .o_result_data          (mul_result_data),
           .o_result_last          (mul_result_last),
           .i_result_ready         (mul_result_ready),
-          .o_ext_a_re             (),
-          .o_ext_a_raddr          (),
-          .i_ext_a_rdata          ('0),
-          .o_ext_b_re             (),
-          .o_ext_b_raddr          (),
-          .i_ext_b_rdata          ('0),
-          .o_ext_result_we        (),
-          .o_ext_result_waddr     (),
-          .o_ext_result_wdata     (),
-          .o_busy                 (),
-          .o_done                 ()
+
+          .o_busy(),
+          .o_done()
       );
     end
   endgenerate

@@ -46,10 +46,10 @@ module tb_trike_decaps_syndrome_runtime;
   integer               busy_cycles;
 
   trike_decaps_syndrome_core #(
-      .R_BITS          (MAX_R),
-      .SECRET_WEIGHT   (MAX_WEIGHT),
-      .WORD_W          (WORD_W),
-      .DIGIT_W         (2),
+      .R_BITS       (MAX_R),
+      .SECRET_WEIGHT(MAX_WEIGHT),
+      .WORD_W       (WORD_W),
+
       .RUNTIME_GEOMETRY(1'b1)
   ) dut (
       .i_clk                  (clk),

@@ -4,8 +4,8 @@
 // read ports. The prefetch transaction and arithmetic core start together;
 // the core's load-state ready signals provide the fixed stream schedule.
 module trike_decaps_syndrome_store_core #(
-    parameter int WORD_W            = 64,
-    parameter int DIGIT_W           = 16,
+    parameter int WORD_W = 64,
+
     parameter int MAX_R_BITS        = bike_pkg::P_R_VALS                        [3],
     parameter int MAX_SECRET_WEIGHT = bike_pkg::P_W_VALS                        [3],
     parameter bit EXTERNAL_H0       = 1'b0,
@@ -126,10 +126,10 @@ module trike_decaps_syndrome_store_core #(
   );
 
   trike_decaps_syndrome_core #(
-      .R_BITS          (MAX_R_BITS),
-      .SECRET_WEIGHT   (MAX_SECRET_WEIGHT),
-      .WORD_W          (WORD_W),
-      .DIGIT_W         (DIGIT_W),
+      .R_BITS       (MAX_R_BITS),
+      .SECRET_WEIGHT(MAX_SECRET_WEIGHT),
+      .WORD_W       (WORD_W),
+
       .RUNTIME_GEOMETRY(1'b1),
       .USE_EXTERNAL_MUL(USE_EXTERNAL_MUL),
       .MUL_INDEX_W     (INDEX_W),

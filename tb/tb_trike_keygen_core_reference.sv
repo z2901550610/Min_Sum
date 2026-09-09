@@ -12,8 +12,8 @@ module tb_trike_keygen_core_reference #(
 
   `include "generated/trike_keygen_reference_case.svh"
 
-  localparam int EXPECTED_BUSY_CYCLES = 14899399;
-  localparam int EXPECTED_SYNTH_BUSY_CYCLES = 14906970;
+  localparam int EXPECTED_BUSY_CYCLES = 7928399;
+  localparam int EXPECTED_SYNTH_BUSY_CYCLES = 7935970;
   localparam int MAX_R_BITS = 106781;
   localparam int MUL_INDEX_W = $clog2(MAX_R_BITS);
   localparam int H123_WORD_ADDR_W = $clog2((REF_R_BITS + 63) / 64);
@@ -149,12 +149,12 @@ module tb_trike_keygen_core_reference #(
       );
     end else begin : g_core
       trike_keygen_core #(
-          .M_BYTES                (32),
-          .R_BITS                 (REF_R_BITS),
-          .SECRET_WEIGHT          (REF_SECRET_WEIGHT),
-          .CANDIDATE_COUNT        (REF_CANDIDATE_COUNT),
-          .WORD_W                 (64),
-          .DIGIT_W                (16),
+          .M_BYTES        (32),
+          .R_BITS         (REF_R_BITS),
+          .SECRET_WEIGHT  (REF_SECRET_WEIGHT),
+          .CANDIDATE_COUNT(REF_CANDIDATE_COUNT),
+          .WORD_W         (64),
+
           .USE_EXTERNAL_COMPRESS  (USE_SHARED_SM3),
           .USE_EXTERNAL_MUL       (USE_SHARED_MUL),
           .USE_EXTERNAL_H123      (USE_SHARED_H123),
@@ -397,9 +397,9 @@ module tb_trike_keygen_core_reference #(
 
       if (USE_SHARED_MUL) begin : g_shared_mul
         trike_poly_mul_core #(
-            .R_BITS          (MAX_R_BITS),
-            .WORD_W          (64),
-            .DIGIT_W         (16),
+            .R_BITS(MAX_R_BITS),
+            .WORD_W(64),
+
             .SPARSE_WEIGHT   (263),
             .RUNTIME_GEOMETRY(1'b1)
         ) u_mul_service (
@@ -423,17 +423,9 @@ module tb_trike_keygen_core_reference #(
             .o_result_data          (mul_result_data),
             .o_result_last          (mul_result_last),
             .i_result_ready         (mul_result_ready),
-            .o_ext_a_re             (),
-            .o_ext_a_raddr          (),
-            .i_ext_a_rdata          ('0),
-            .o_ext_b_re             (),
-            .o_ext_b_raddr          (),
-            .i_ext_b_rdata          ('0),
-            .o_ext_result_we        (),
-            .o_ext_result_waddr     (),
-            .o_ext_result_wdata     (),
-            .o_busy                 (),
-            .o_done                 (mul_done)
+
+            .o_busy(),
+            .o_done(mul_done)
         );
       end else begin : g_local_mul
         assign mul_a_ready = 1'b0;

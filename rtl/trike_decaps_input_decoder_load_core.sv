@@ -5,8 +5,8 @@
 // broadcast to both H0 arithmetic and the complete-H sorter from one RAM read;
 // the other two blocks feed only the sorter.
 module trike_decaps_input_decoder_load_core #(
-    parameter int WORD_W            = 64,
-    parameter int DIGIT_W           = 16,
+    parameter int WORD_W = 64,
+
     parameter int BLOCKS            = 3,
     parameter int M_BYTES           = 32,
     parameter bit USE_EXTERNAL_MUL  = 1'b0,
@@ -212,8 +212,8 @@ module trike_decaps_input_decoder_load_core #(
   );
 
   trike_decaps_syndrome_store_core #(
-      .WORD_W           (WORD_W),
-      .DIGIT_W          (DIGIT_W),
+      .WORD_W(WORD_W),
+
       .MAX_R_BITS       (MAX_R_BITS),
       .MAX_SECRET_WEIGHT(MAX_SECRET_WEIGHT),
       .EXTERNAL_H0      (1'b1),

@@ -114,7 +114,7 @@ module trike_decaps_unified_core
   logic [      ITER_W-1:0] decoder_iter_count;
 
   trike_decaps_runtime_pipeline_core #(
-      .DIGIT_W(16),
+
       .USE_EXTERNAL_COMPRESS(USE_EXTERNAL_COMPRESS),
       .USE_EXTERNAL_MUL(USE_EXTERNAL_MUL),
       .USE_EXTERNAL_SAMPLER(USE_EXTERNAL_SAMPLER),

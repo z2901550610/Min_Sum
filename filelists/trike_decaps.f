@@ -31,6 +31,7 @@ rtl/cnu_a.sv
 rtl/cnu_b.sv
 rtl/msg_signmag_to_tc.sv
 rtl/decoder_top.sv
+rtl/trike_poly_mul_karatsuba_core.sv
 rtl/trike_poly_mul_core.sv
 rtl/trike_decaps_syndrome_core.sv
 rtl/trike_decaps_syndrome_store_core.sv

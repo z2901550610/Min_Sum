@@ -319,12 +319,12 @@ module trike_kem_asic_top
   );
 
   trike_keygen_core #(
-      .M_BYTES                (32),
-      .R_BITS                 (15581),
-      .SECRET_WEIGHT          (35),
-      .CANDIDATE_COUNT        (16),
-      .WORD_W                 (64),
-      .DIGIT_W                (16),
+      .M_BYTES        (32),
+      .R_BITS         (15581),
+      .SECRET_WEIGHT  (35),
+      .CANDIDATE_COUNT(16),
+      .WORD_W         (64),
+
       .USE_EXTERNAL_COMPRESS  (1'b1),
       .USE_EXTERNAL_MUL       (1'b1),
       .USE_EXTERNAL_H123      (1'b1),
@@ -939,9 +939,9 @@ module trike_kem_asic_top
 
   /* verilator lint_off PINCONNECTEMPTY */
   trike_poly_mul_core #(
-      .R_BITS          (P_R_VALS[3]),
-      .WORD_W          (64),
-      .DIGIT_W         (16),
+      .R_BITS(P_R_VALS[3]),
+      .WORD_W(64),
+
       .SPARSE_WEIGHT   (263),
       .RUNTIME_GEOMETRY(1'b1)
   ) u_poly_mul_service (
@@ -965,17 +965,9 @@ module trike_kem_asic_top
       .o_result_data          (shared_mul_result_data),
       .o_result_last          (shared_mul_result_last),
       .i_result_ready         (shared_mul_result_ready),
-      .o_ext_a_re             (),
-      .o_ext_a_raddr          (),
-      .i_ext_a_rdata          ('0),
-      .o_ext_b_re             (),
-      .o_ext_b_raddr          (),
-      .i_ext_b_rdata          ('0),
-      .o_ext_result_we        (),
-      .o_ext_result_waddr     (),
-      .o_ext_result_wdata     (),
-      .o_busy                 (),
-      .o_done                 (shared_mul_done)
+
+      .o_busy(),
+      .o_done(shared_mul_done)
   );
   /* verilator lint_on PINCONNECTEMPTY */
 

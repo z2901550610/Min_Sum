@@ -3,9 +3,26 @@
 module tb_trike_poly_inv_core;
   localparam int R_BITS = 13;
   localparam int WORD_W = 8;
-  localparam int DIGIT_W = 4;
-  localparam int WORDS = (R_BITS + WORD_W - 1) / WORD_W;
-  localparam int DENSE_MUL_CYCLES = (6 * WORDS) + (WORDS * WORDS * (WORD_W / DIGIT_W)) + 1;
+
+  localparam int WORDS  = (R_BITS + WORD_W - 1) / WORD_W;
+  function automatic integer fold_cycles(input integer r, input integer w);
+    integer n, h, extra, off;
+    begin
+      n = (r + w - 1) / w;
+      h = (n + 1) / 2;
+      extra = 0;
+      if (r % w != 0) begin
+        for (integer phase = 0; phase < 3; phase++) begin
+          for (integer word_idx = 0; word_idx < 2 * h; word_idx++) begin
+            off = word_idx + phase * h;
+            if (off >= n - 1 && off <= 2 * n - 2) extra += (phase == 1 ? 3 : 1);
+          end
+        end
+      end
+      fold_cycles = 3 * h * h + 38 * h + 3 * n - 3 + 2 * extra;
+    end
+  endfunction
+  localparam int DENSE_MUL_CYCLES = fold_cycles(R_BITS, WORD_W);
   localparam int PERMUTATIONS = 6;
   localparam int MULTIPLICATIONS = 5;
   localparam int INV_CYCLES =
@@ -29,9 +46,8 @@ module tb_trike_poly_inv_core;
   logic [WORD_W-1:0] inverse_words[0:WORDS-1];
 
   trike_poly_inv_core #(
-      .R_BITS (R_BITS),
-      .WORD_W (WORD_W),
-      .DIGIT_W(DIGIT_W)
+      .R_BITS(R_BITS),
+      .WORD_W(WORD_W)
   ) dut (
       .i_clk         (clk),
       .i_rst_n       (rst_n),

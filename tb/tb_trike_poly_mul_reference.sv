@@ -1,64 +1,75 @@
 `timescale 1ns / 1ps
 
 module tb_trike_poly_mul_reference #(
-    parameter int DUT_DIGIT_W               = 16,
-    parameter int DUT_DENSE_KARATSUBA_DEPTH = 0
+
+    parameter int DUT_BASE_KARATSUBA_DEPTH = 1
 );
   `include "generated/trike_poly_mul_reference_case.svh"
 
-  localparam int REF_DENSE_CYCLES =
-      (10 * REF_WORDS) +
-      (REF_WORDS * REF_WORDS * (REF_WORD_W / DUT_DIGIT_W)) + 1;
+  function automatic integer fold_cycles(input integer r, input integer w);
+    integer n, h, extra, off;
+    begin
+      n = (r + w - 1) / w;
+      h = (n + 1) / 2;
+      extra = 0;
+      if (r % w != 0) begin
+        for (integer phase = 0; phase < 3; phase++) begin
+          for (integer word_idx = 0; word_idx < 2 * h; word_idx++) begin
+            off = word_idx + phase * h;
+            if (off >= n - 1 && off <= 2 * n - 2) extra += (phase == 1 ? 3 : 1);
+          end
+        end
+      end
+      fold_cycles = 3 * h * h + 38 * h + 3 * n - 3 + 2 * extra;
+    end
+  endfunction
+  localparam int REF_DENSE_CYCLES = fold_cycles(
+      REF_R_BITS, REF_WORD_W
+  ) + 2 * ((REF_R_BITS + REF_WORD_W - 1) / REF_WORD_W) + 2;
   localparam int REF_SPARSE_CYCLES =
       (4 * REF_WORDS) + (2 * REF_SPARSE_WEIGHT) +
       (8 * REF_SPARSE_WEIGHT * REF_WORDS);
 
-  logic                         clk;
-  logic                         rst_n;
-  logic                         start;
-  logic                         sparse_a;
-  logic                         a_valid;
-  logic [       REF_WORD_W-1:0] a_data;
-  logic                         a_ready;
-  logic                         sparse_index_valid;
-  logic [      REF_INDEX_W-1:0] sparse_index;
-  logic                         sparse_index_ready;
-  logic                         b_valid;
-  logic [       REF_WORD_W-1:0] b_data;
-  logic                         b_ready;
-  logic                         result_valid;
-  logic [       REF_WORD_W-1:0] result_data;
-  logic                         result_last;
-  logic                         result_ready;
-  logic                         busy;
-  logic                         done;
-  logic                         ext_a_re;
-  logic [$clog2(REF_WORDS)-1:0] ext_a_raddr;
-  logic                         ext_b_re;
-  logic [$clog2(REF_WORDS)-1:0] ext_b_raddr;
-  logic                         ext_result_we;
-  logic [$clog2(REF_WORDS)-1:0] ext_result_waddr;
-  logic [       REF_WORD_W-1:0] ext_result_wdata;
+  logic                   clk;
+  logic                   rst_n;
+  logic                   start;
+  logic                   sparse_a;
+  logic                   a_valid;
+  logic [ REF_WORD_W-1:0] a_data;
+  logic                   a_ready;
+  logic                   sparse_index_valid;
+  logic [REF_INDEX_W-1:0] sparse_index;
+  logic                   sparse_index_ready;
+  logic                   b_valid;
+  logic [ REF_WORD_W-1:0] b_data;
+  logic                   b_ready;
+  logic                   result_valid;
+  logic [ REF_WORD_W-1:0] result_data;
+  logic                   result_last;
+  logic                   result_ready;
+  logic                   busy;
+  logic                   done;
 
   trike_poly_mul_core #(
-      .R_BITS               (REF_R_BITS),
-      .WORD_W               (REF_WORD_W),
-      .DIGIT_W              (DUT_DIGIT_W),
-      .DENSE_KARATSUBA_DEPTH(DUT_DENSE_KARATSUBA_DEPTH),
-      .SPARSE_WEIGHT        (REF_SPARSE_WEIGHT)
+      .R_BITS(106781),
+      .WORD_W(REF_WORD_W),
+
+      .BASE_KARATSUBA_DEPTH(DUT_BASE_KARATSUBA_DEPTH),
+      .SPARSE_WEIGHT       (REF_SPARSE_WEIGHT),
+      .RUNTIME_GEOMETRY    (1'b1)
   ) dut (
       .i_clk                  (clk),
       .i_rst_n                (rst_n),
       .i_start                (start),
-      .i_runtime_r_bits       ('0),
-      .i_runtime_words        ('0),
-      .i_runtime_sparse_weight('0),
+      .i_runtime_r_bits       (32'(REF_R_BITS)),
+      .i_runtime_words        (32'(REF_WORDS)),
+      .i_runtime_sparse_weight(32'(REF_SPARSE_WEIGHT)),
       .i_sparse_a             (sparse_a),
       .i_a_valid              (a_valid),
       .i_a_data               (a_data),
       .o_a_ready              (a_ready),
       .i_sparse_index_valid   (sparse_index_valid),
-      .i_sparse_index         (sparse_index),
+      .i_sparse_index         ($clog2(106781)'(sparse_index)),
       .o_sparse_index_ready   (sparse_index_ready),
       .i_b_valid              (b_valid),
       .i_b_data               (b_data),
@@ -67,27 +78,12 @@ module tb_trike_poly_mul_reference #(
       .o_result_data          (result_data),
       .o_result_last          (result_last),
       .i_result_ready         (result_ready),
-      .o_ext_a_re             (ext_a_re),
-      .o_ext_a_raddr          (ext_a_raddr),
-      .i_ext_a_rdata          ('0),
-      .o_ext_b_re             (ext_b_re),
-      .o_ext_b_raddr          (ext_b_raddr),
-      .i_ext_b_rdata          ('0),
-      .o_ext_result_we        (ext_result_we),
-      .o_ext_result_waddr     (ext_result_waddr),
-      .o_ext_result_wdata     (ext_result_wdata),
-      .o_busy                 (busy),
-      .o_done                 (done)
+
+      .o_busy(busy),
+      .o_done(done)
   );
 
   always #1 clk = ~clk;
-
-  always @(posedge clk) begin
-    if (ext_a_re || ext_b_re || ext_result_we) begin
-      $fatal(1, "internal RAM mode drove external port a=%0d b=%0d result=%0d data=%h",
-             ext_a_raddr, ext_b_raddr, ext_result_waddr, ext_result_wdata);
-    end
-  end
 
   task automatic run_reference_case(input  logic use_sparse, output int busy_cycles);
     int                    a_idx;

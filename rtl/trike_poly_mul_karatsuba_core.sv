@@ -1,19 +1,46 @@
 `timescale 1ns / 1ps
 
 // Fixed-schedule one-level Karatsuba dense multiplier in
-// GF(2)[x]/(x^R_BITS - 1). Operands are split into banked low/high halves.
+// GF(2)[x]/(x^R_BITS - 1). Operands are split into logical low/high halves.
 // One Comba datapath sequentially computes Z0, Z2, and Z1. Each shifted
 // subproduct word is cyclically folded into an independent WORDS-word result
-// RAM. Operand banks remain intact until the entire result is available.
+// RAM. External operands use in-place XOR scans and are restored before output;
+// the internal stream binding uses separate, unchanged low/high banks.
 // Fold addresses and optional second-word RMW depend only on public geometry.
 module trike_poly_mul_karatsuba_core #(
-    parameter int R_BITS               = 15581,
-    parameter int WORD_W               = 64,
-    parameter int BASE_KARATSUBA_DEPTH = 1
+    parameter int R_BITS = 15581,
+    parameter int WORD_W = 64,
+    parameter int BASE_KARATSUBA_DEPTH = 1,
+    parameter bit EXTERNAL_OPERANDS = 1'b0,
+    parameter bit EXTERNAL_RESULT = 1'b0,
+    parameter bit RUNTIME_GEOMETRY = 1'b0,
+    parameter int ADDR_W = (((R_BITS + WORD_W - 1) / WORD_W) > 1) ? $clog2(
+        (R_BITS + WORD_W - 1) / WORD_W
+    ) : 1
 ) (
     input  logic              i_clk,
     input  logic              i_rst_n,
     input  logic              i_start,
+    // Compile-time RAM bindings leave the other binding inputs inactive.
+    /* verilator lint_off UNUSEDSIGNAL */
+    input  logic [      31:0] i_runtime_r_bits,
+    input  logic [      31:0] i_runtime_words,
+    output logic              o_operand_re,
+    output logic [ADDR_W-1:0] o_a0_addr,
+    output logic [ADDR_W-1:0] o_b0_addr,
+    input  logic [WORD_W-1:0] i_a0_data,
+    input  logic [WORD_W-1:0] i_b0_data,
+    output logic              o_operand_we,
+    output logic [ADDR_W-1:0] o_operand_waddr,
+    output logic [WORD_W-1:0] o_operand_a_wdata,
+    output logic [WORD_W-1:0] o_operand_b_wdata,
+    output logic              o_acc_we,
+    output logic              o_acc_re,
+    output logic [ADDR_W-1:0] o_acc_waddr,
+    output logic [ADDR_W-1:0] o_acc_raddr,
+    output logic [WORD_W-1:0] o_acc_wdata,
+    input  logic [WORD_W-1:0] i_acc_rdata,
+    /* verilator lint_on UNUSEDSIGNAL */
     input  logic              i_a_valid,
     input  logic [WORD_W-1:0] i_a_data,
     output logic              o_a_ready,
@@ -30,13 +57,15 @@ module trike_poly_mul_karatsuba_core #(
 
   localparam int WORDS = (R_BITS + WORD_W - 1) / WORD_W;
   localparam int HALF_WORDS = (WORDS + 1) / 2;
-  localparam int SUBPRODUCT_WORDS = 2 * HALF_WORDS;
   localparam int LAST_BITS = R_BITS - ((WORDS - 1) * WORD_W);
-  localparam bit ODD_WORDS = (WORDS % 2) != 0;
   localparam int HALF_ADDR_W = (HALF_WORDS > 1) ? $clog2(HALF_WORDS) : 1;
   localparam int RESULT_ADDR_W = (WORDS > 1) ? $clog2(WORDS) : 1;
-  localparam logic [WORD_W-1:0] LAST_MASK = {WORD_W{1'b1}} >> (WORD_W - LAST_BITS);
 
+  integer active_words_q, active_half_q, active_last_bits_q;
+  logic [WORD_W-1:0] active_mask_c;
+  /* verilator lint_off UNUSEDSIGNAL */
+  logic a0_mask_q, b0_mask_q, a_pad_q, b_pad_q;
+  /* verilator lint_on UNUSEDSIGNAL */
   typedef enum logic [4:0] {
     ST_IDLE,
     ST_LOAD_A,
@@ -51,11 +80,17 @@ module trike_poly_mul_karatsuba_core #(
     ST_MIX_READ_1,
     ST_MIX_WRITE_1,
     ST_SUB_ADVANCE,
+    ST_XOR_READ_LOW,
+    ST_XOR_READ_HIGH,
+    ST_XOR_WRITE,
     ST_OUTPUT_FETCH,
     ST_OUTPUT_VALID
   } state_t;
 
-  state_t                     state_q;
+  state_t state_q;
+  logic   restore_q;
+  logic [WORD_W-1:0] xor_a_low_q, xor_b_low_q;
+  integer ext_a_addr_c, ext_b_addr_c;
 
   integer                     word_idx_q;
   integer                     clear_idx_q;
@@ -73,6 +108,8 @@ module trike_poly_mul_karatsuba_core #(
   logic   [       WORD_W-1:0] carry_word_q;
   logic   [       WORD_W-1:0] sub_word_q;
 
+  // Internal bank controls are pruned by the external operand binding.
+  /* verilator lint_off UNUSEDSIGNAL */
   logic                       a0_we;
   logic   [  HALF_ADDR_W-1:0] a0_waddr;
   logic   [       WORD_W-1:0] a0_wdata;
@@ -98,6 +135,7 @@ module trike_poly_mul_karatsuba_core #(
   logic   [  HALF_ADDR_W-1:0] b1_raddr;
   logic   [       WORD_W-1:0] b1_rdata;
 
+  /* verilator lint_on UNUSEDSIGNAL */
   logic                       result_we;
   logic   [RESULT_ADDR_W-1:0] result_waddr;
   logic   [       WORD_W-1:0] result_wdata;
@@ -116,71 +154,115 @@ module trike_poly_mul_karatsuba_core #(
   logic                       fold_second_c;
   logic                       pair_end_c;
 
-  ram_bram #(
-      .DATA_W(WORD_W),
-      .DEPTH (HALF_WORDS)
-  ) u_a0_mem (
-      .i_clk  (i_clk),
-      .i_we   (a0_we),
-      .i_waddr(a0_waddr),
-      .i_wdata(a0_wdata),
-      .i_re   (a0_re),
-      .i_raddr(a0_raddr),
-      .o_rdata(a0_rdata)
-  );
+  generate
+    if (!EXTERNAL_OPERANDS) begin : g_operand_ram
+      ram_bram #(
+          .DATA_W(WORD_W),
+          .DEPTH (HALF_WORDS)
+      ) u_a0_mem (
+          .i_clk  (i_clk),
+          .i_we   (a0_we),
+          .i_waddr(a0_waddr),
+          .i_wdata(a0_wdata),
+          .i_re   (a0_re),
+          .i_raddr(a0_raddr),
+          .o_rdata(a0_rdata)
+      );
 
-  ram_bram #(
-      .DATA_W(WORD_W),
-      .DEPTH (HALF_WORDS)
-  ) u_a1_mem (
-      .i_clk  (i_clk),
-      .i_we   (a1_we),
-      .i_waddr(a1_waddr),
-      .i_wdata(a1_wdata),
-      .i_re   (a1_re),
-      .i_raddr(a1_raddr),
-      .o_rdata(a1_rdata)
-  );
+      ram_bram #(
+          .DATA_W(WORD_W),
+          .DEPTH (HALF_WORDS)
+      ) u_a1_mem (
+          .i_clk  (i_clk),
+          .i_we   (a1_we),
+          .i_waddr(a1_waddr),
+          .i_wdata(a1_wdata),
+          .i_re   (a1_re),
+          .i_raddr(a1_raddr),
+          .o_rdata(a1_rdata)
+      );
 
-  ram_bram #(
-      .DATA_W(WORD_W),
-      .DEPTH (HALF_WORDS)
-  ) u_b0_mem (
-      .i_clk  (i_clk),
-      .i_we   (b0_we),
-      .i_waddr(b0_waddr),
-      .i_wdata(b0_wdata),
-      .i_re   (b0_re),
-      .i_raddr(b0_raddr),
-      .o_rdata(b0_rdata)
-  );
+      ram_bram #(
+          .DATA_W(WORD_W),
+          .DEPTH (HALF_WORDS)
+      ) u_b0_mem (
+          .i_clk  (i_clk),
+          .i_we   (b0_we),
+          .i_waddr(b0_waddr),
+          .i_wdata(b0_wdata),
+          .i_re   (b0_re),
+          .i_raddr(b0_raddr),
+          .o_rdata(b0_rdata)
+      );
 
-  ram_bram #(
-      .DATA_W(WORD_W),
-      .DEPTH (HALF_WORDS)
-  ) u_b1_mem (
-      .i_clk  (i_clk),
-      .i_we   (b1_we),
-      .i_waddr(b1_waddr),
-      .i_wdata(b1_wdata),
-      .i_re   (b1_re),
-      .i_raddr(b1_raddr),
-      .o_rdata(b1_rdata)
-  );
+      ram_bram #(
+          .DATA_W(WORD_W),
+          .DEPTH (HALF_WORDS)
+      ) u_b1_mem (
+          .i_clk  (i_clk),
+          .i_we   (b1_we),
+          .i_waddr(b1_waddr),
+          .i_wdata(b1_wdata),
+          .i_re   (b1_re),
+          .i_raddr(b1_raddr),
+          .o_rdata(b1_rdata)
+      );
 
-  ram_bram #(
-      .DATA_W(WORD_W),
-      .DEPTH (WORDS)
-  ) u_result_mem (
-      .i_clk  (i_clk),
-      .i_we   (result_we),
-      .i_waddr(result_waddr),
-      .i_wdata(result_wdata),
-      .i_re   (result_re),
-      .i_raddr(result_raddr),
-      .o_rdata(result_rdata)
-  );
+    end else begin : g_external_operands
+      assign a0_rdata = a_pad_q ? '0 : (a0_mask_q ? (i_a0_data & active_mask_c) : i_a0_data);
+      assign b0_rdata = b_pad_q ? '0 : (b0_mask_q ? (i_b0_data & active_mask_c) : i_b0_data);
+      assign a1_rdata = '0;
+      assign b1_rdata = '0;
+    end
+  endgenerate
+  generate
+    if (!EXTERNAL_RESULT) begin : g_result_ram
+      ram_bram #(
+          .DATA_W(WORD_W),
+          .DEPTH (WORDS)
+      ) u_result_mem (
+          .i_clk  (i_clk),
+          .i_we   (result_we),
+          .i_waddr(result_waddr),
+          .i_wdata(result_wdata),
+          .i_re   (result_re),
+          .i_raddr(result_raddr),
+          .o_rdata(result_rdata)
+      );
 
+    end else begin : g_external_result
+      assign result_rdata = i_acc_rdata;
+    end
+  endgenerate
+  assign o_operand_re = a0_re;
+  always_comb begin
+    ext_a_addr_c = int'(a0_raddr) + ((phase_q == 1) ? active_half_q : 0);
+    ext_b_addr_c = int'(b0_raddr) + ((phase_q == 1) ? active_half_q : 0);
+    if ((state_q == ST_XOR_READ_LOW) || (state_q == ST_XOR_READ_HIGH)) begin
+      ext_a_addr_c = word_idx_q + ((state_q == ST_XOR_READ_HIGH) ? active_half_q : 0);
+      ext_b_addr_c = ext_a_addr_c;
+    end
+  end
+  assign o_a0_addr = (ext_a_addr_c < active_words_q) ? ADDR_W'(ext_a_addr_c) : '0;
+  assign o_b0_addr = (ext_b_addr_c < active_words_q) ? ADDR_W'(ext_b_addr_c) : '0;
+  assign o_operand_we = EXTERNAL_OPERANDS && (state_q == ST_XOR_WRITE);
+  assign o_operand_waddr = ADDR_W'(word_idx_q);
+  assign o_operand_a_wdata = xor_a_low_q ^ a0_rdata;
+  assign o_operand_b_wdata = xor_b_low_q ^ b0_rdata;
+  assign o_acc_we = result_we;
+  assign o_acc_re = result_re;
+  assign o_acc_waddr = result_waddr;
+  assign o_acc_raddr = result_raddr;
+  assign o_acc_wdata = result_wdata;
+  assign active_mask_c = {WORD_W{1'b1}} >> (WORD_W - active_last_bits_q);
+  always_ff @(posedge i_clk) begin
+    if (a0_re) begin
+      a0_mask_q <= ext_a_addr_c == active_words_q - 1;
+      b0_mask_q <= ext_b_addr_c == active_words_q - 1;
+      a_pad_q   <= ext_a_addr_c >= active_words_q;
+      b_pad_q   <= ext_b_addr_c >= active_words_q;
+    end
+  end
   trike_clmul_karatsuba #(
       .WIDTH (WORD_W),
       .LEVELS(BASE_KARATSUBA_DEPTH)
@@ -206,13 +288,18 @@ module trike_poly_mul_karatsuba_core #(
       end
     endcase
 
-    pair_end_c = (b_word_idx_q == 0) || (a_word_idx_q == (HALF_WORDS - 1));
+    if (EXTERNAL_OPERANDS) begin
+      base_a_c = a0_rdata;
+      base_b_c = b0_rdata;
+    end
+
+    pair_end_c = (b_word_idx_q == 0) || (a_word_idx_q == (active_half_q - 1));
 
     mix_word_idx_c = sub_word_idx_q;
     if (mix_term_q || (phase_q == 2)) begin
-      mix_word_idx_c = sub_word_idx_q + HALF_WORDS;
+      mix_word_idx_c = sub_word_idx_q + active_half_q;
     end else if (phase_q == 1) begin
-      mix_word_idx_c = sub_word_idx_q + (2 * HALF_WORDS);
+      mix_word_idx_c = sub_word_idx_q + (2 * active_half_q);
     end
 
     // Reduction and recombination are linear over GF(2). Recombination terms
@@ -224,26 +311,26 @@ module trike_poly_mul_karatsuba_core #(
     fold_data0_c  = '0;
     fold_data1_c  = '0;
     fold_second_c = 1'b0;
-    if (mix_word_idx_c < WORDS) begin
+    if (mix_word_idx_c < active_words_q) begin
       fold_addr0_c = RESULT_ADDR_W'(mix_word_idx_c);
       fold_data0_c = sub_word_q;
-      if ((LAST_BITS != WORD_W) && (mix_word_idx_c == (WORDS - 1))) begin
+      if ((active_last_bits_q != WORD_W) && (mix_word_idx_c == (active_words_q - 1))) begin
         fold_second_c = 1'b1;
-        fold_data1_c  = sub_word_q >> LAST_BITS;
+        fold_data1_c  = sub_word_q >> active_last_bits_q;
       end
     end else begin
-      if ((mix_word_idx_c - WORDS) < WORDS) begin
-        fold_addr0_c = RESULT_ADDR_W'(mix_word_idx_c - WORDS);
-        fold_data0_c = sub_word_q << (WORD_W - LAST_BITS);
+      if ((mix_word_idx_c - active_words_q) < active_words_q) begin
+        fold_addr0_c = RESULT_ADDR_W'(mix_word_idx_c - active_words_q);
+        fold_data0_c = sub_word_q << (WORD_W - active_last_bits_q);
       end
-      if ((LAST_BITS != WORD_W) && ((mix_word_idx_c - WORDS + 1) < WORDS)) begin
+      if ((active_last_bits_q != WORD_W) && ((mix_word_idx_c - active_words_q + 1) < active_words_q)) begin
         fold_second_c = 1'b1;
-        fold_addr1_c  = RESULT_ADDR_W'(mix_word_idx_c - WORDS + 1);
-        fold_data1_c  = sub_word_q >> LAST_BITS;
+        fold_addr1_c  = RESULT_ADDR_W'(mix_word_idx_c - active_words_q + 1);
+        fold_data1_c  = sub_word_q >> active_last_bits_q;
       end
     end
-    if (fold_addr0_c == RESULT_ADDR_W'(WORDS - 1)) fold_data0_c &= LAST_MASK;
-    if (fold_addr1_c == RESULT_ADDR_W'(WORDS - 1)) fold_data1_c &= LAST_MASK;
+    if (fold_addr0_c == RESULT_ADDR_W'(active_words_q - 1)) fold_data0_c &= active_mask_c;
+    if (fold_addr1_c == RESULT_ADDR_W'(active_words_q - 1)) fold_data1_c &= active_mask_c;
   end
 
   always_comb begin
@@ -276,45 +363,50 @@ module trike_poly_mul_karatsuba_core #(
     unique case (state_q)
       ST_LOAD_A: begin
         if (i_a_valid) begin
-          if (word_idx_q < HALF_WORDS) begin
+          if (word_idx_q < active_half_q) begin
             a0_we = 1'b1;
             a0_waddr = HALF_ADDR_W'(word_idx_q);
-            a0_wdata = (word_idx_q == (WORDS - 1)) ? (i_a_data & LAST_MASK) : i_a_data;
+            a0_wdata = (word_idx_q == (active_words_q - 1)) ? (i_a_data & active_mask_c) : i_a_data;
           end else begin
             a1_we = 1'b1;
-            a1_waddr = HALF_ADDR_W'(word_idx_q - HALF_WORDS);
-            a1_wdata = (word_idx_q == (WORDS - 1)) ? (i_a_data & LAST_MASK) : i_a_data;
+            a1_waddr = HALF_ADDR_W'(word_idx_q - active_half_q);
+            a1_wdata = (word_idx_q == (active_words_q - 1)) ? (i_a_data & active_mask_c) : i_a_data;
           end
         end
       end
 
       ST_PAD_A: begin
         a1_we = 1'b1;
-        a1_waddr = HALF_ADDR_W'(HALF_WORDS - 1);
+        a1_waddr = HALF_ADDR_W'(active_half_q - 1);
       end
 
       ST_LOAD_B: begin
         if (i_b_valid) begin
-          if (word_idx_q < HALF_WORDS) begin
+          if (word_idx_q < active_half_q) begin
             b0_we = 1'b1;
             b0_waddr = HALF_ADDR_W'(word_idx_q);
-            b0_wdata = (word_idx_q == (WORDS - 1)) ? (i_b_data & LAST_MASK) : i_b_data;
+            b0_wdata = (word_idx_q == (active_words_q - 1)) ? (i_b_data & active_mask_c) : i_b_data;
           end else begin
             b1_we = 1'b1;
-            b1_waddr = HALF_ADDR_W'(word_idx_q - HALF_WORDS);
-            b1_wdata = (word_idx_q == (WORDS - 1)) ? (i_b_data & LAST_MASK) : i_b_data;
+            b1_waddr = HALF_ADDR_W'(word_idx_q - active_half_q);
+            b1_wdata = (word_idx_q == (active_words_q - 1)) ? (i_b_data & active_mask_c) : i_b_data;
           end
         end
       end
 
       ST_PAD_B: begin
         b1_we = 1'b1;
-        b1_waddr = HALF_ADDR_W'(HALF_WORDS - 1);
+        b1_waddr = HALF_ADDR_W'(active_half_q - 1);
       end
 
       ST_CLEAR_RESULT: begin
         result_we = 1'b1;
         result_waddr = RESULT_ADDR_W'(clear_idx_q);
+      end
+
+      ST_XOR_READ_LOW, ST_XOR_READ_HIGH: begin
+        a0_re = 1'b1;
+        b0_re = 1'b1;
       end
 
       ST_SUB_PREFETCH: begin
@@ -377,11 +469,14 @@ module trike_poly_mul_karatsuba_core #(
   assign o_b_ready = (state_q == ST_LOAD_B);
   assign o_result_valid = (state_q == ST_OUTPUT_VALID);
   assign o_result_data = result_rdata;
-  assign o_result_last = (output_idx_q == (WORDS - 1));
+  assign o_result_last = (output_idx_q == (active_words_q - 1));
   assign o_busy = (state_q != ST_IDLE);
 
   always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin
+      active_words_q <= WORDS;
+      active_half_q <= HALF_WORDS;
+      active_last_bits_q <= LAST_BITS;
       state_q <= ST_IDLE;
       word_idx_q <= 0;
       clear_idx_q <= 0;
@@ -397,6 +492,9 @@ module trike_poly_mul_karatsuba_core #(
       diagonal_high_q <= '0;
       carry_word_q <= '0;
       sub_word_q <= '0;
+      restore_q <= 1'b0;
+      xor_a_low_q <= '0;
+      xor_b_low_q <= '0;
       o_done <= 1'b0;
     end else begin
       o_done <= 1'b0;
@@ -405,15 +503,19 @@ module trike_poly_mul_karatsuba_core #(
         ST_IDLE: begin
           if (i_start) begin
             word_idx_q <= 0;
-            state_q <= ST_LOAD_A;
+            active_words_q <= RUNTIME_GEOMETRY ? int'(i_runtime_words) : WORDS;
+            active_half_q <= RUNTIME_GEOMETRY ? ((int'(i_runtime_words) + 1) / 2) : HALF_WORDS;
+            active_last_bits_q <= RUNTIME_GEOMETRY ? int'(i_runtime_r_bits)-(int'(i_runtime_words)-1)*WORD_W : LAST_BITS;
+            clear_idx_q <= 0;
+            state_q <= EXTERNAL_OPERANDS ? ST_CLEAR_RESULT : ST_LOAD_A;
           end
         end
 
         ST_LOAD_A: begin
           if (i_a_valid) begin
-            if (word_idx_q == (WORDS - 1)) begin
+            if (word_idx_q == (active_words_q - 1)) begin
               word_idx_q <= 0;
-              state_q <= ODD_WORDS ? ST_PAD_A : ST_LOAD_B;
+              state_q <= ((active_words_q % 2) != 0) ? ST_PAD_A : ST_LOAD_B;
             end else begin
               word_idx_q <= word_idx_q + 1;
             end
@@ -426,9 +528,9 @@ module trike_poly_mul_karatsuba_core #(
 
         ST_LOAD_B: begin
           if (i_b_valid) begin
-            if (word_idx_q == (WORDS - 1)) begin
+            if (word_idx_q == (active_words_q - 1)) begin
               clear_idx_q <= 0;
-              state_q <= ODD_WORDS ? ST_PAD_B : ST_CLEAR_RESULT;
+              state_q <= ((active_words_q % 2) != 0) ? ST_PAD_B : ST_CLEAR_RESULT;
             end else begin
               word_idx_q <= word_idx_q + 1;
             end
@@ -441,7 +543,7 @@ module trike_poly_mul_karatsuba_core #(
         end
 
         ST_CLEAR_RESULT: begin
-          if (clear_idx_q == (WORDS - 1)) begin
+          if (clear_idx_q == (active_words_q - 1)) begin
             phase_q <= 0;
             diagonal_idx_q <= 0;
             a_word_idx_q <= 0;
@@ -503,8 +605,8 @@ module trike_poly_mul_karatsuba_core #(
         end
 
         ST_SUB_ADVANCE: begin
-          if (!sub_is_carry_q && (diagonal_idx_q == (SUBPRODUCT_WORDS - 2))) begin
-            sub_word_idx_q <= SUBPRODUCT_WORDS - 1;
+          if (!sub_is_carry_q && (diagonal_idx_q == ((2 * active_half_q) - 2))) begin
+            sub_word_idx_q <= (2 * active_half_q) - 1;
             sub_word_q <= carry_word_q;
             sub_is_carry_q <= 1'b1;
             mix_term_q <= 1'b0;
@@ -512,7 +614,9 @@ module trike_poly_mul_karatsuba_core #(
           end else if (sub_is_carry_q) begin
             if (phase_q == 2) begin
               output_idx_q <= 0;
-              state_q <= ST_OUTPUT_FETCH;
+              word_idx_q <= 0;
+              restore_q <= 1'b1;
+              state_q <= EXTERNAL_OPERANDS ? ST_XOR_READ_LOW : ST_OUTPUT_FETCH;
             end else begin
               phase_q <= phase_q + 1;
               diagonal_idx_q <= 0;
@@ -520,20 +624,37 @@ module trike_poly_mul_karatsuba_core #(
               b_word_idx_q <= 0;
               diagonal_low_q <= '0;
               diagonal_high_q <= '0;
-              state_q <= ST_SUB_PREFETCH;
+              word_idx_q <= 0;
+              restore_q <= 1'b0;
+              state_q <= (EXTERNAL_OPERANDS && phase_q == 1) ? ST_XOR_READ_LOW : ST_SUB_PREFETCH;
             end
           end else begin
             diagonal_idx_q  <= diagonal_idx_q + 1;
             diagonal_low_q  <= carry_word_q;
             diagonal_high_q <= '0;
-            if ((diagonal_idx_q + 1) < HALF_WORDS) begin
+            if ((diagonal_idx_q + 1) < active_half_q) begin
               a_word_idx_q <= 0;
               b_word_idx_q <= diagonal_idx_q + 1;
             end else begin
-              a_word_idx_q <= (diagonal_idx_q + 1) - (HALF_WORDS - 1);
-              b_word_idx_q <= HALF_WORDS - 1;
+              a_word_idx_q <= (diagonal_idx_q + 1) - (active_half_q - 1);
+              b_word_idx_q <= active_half_q - 1;
             end
             state_q <= ST_SUB_PREFETCH;
+          end
+        end
+
+        ST_XOR_READ_LOW: state_q <= ST_XOR_READ_HIGH;
+        ST_XOR_READ_HIGH: begin
+          xor_a_low_q <= a0_rdata;
+          xor_b_low_q <= b0_rdata;
+          state_q <= ST_XOR_WRITE;
+        end
+        ST_XOR_WRITE: begin
+          if (word_idx_q == active_half_q - 1) begin
+            state_q <= restore_q ? ST_OUTPUT_FETCH : ST_SUB_PREFETCH;
+          end else begin
+            word_idx_q <= word_idx_q + 1;
+            state_q <= ST_XOR_READ_LOW;
           end
         end
 
@@ -543,7 +664,7 @@ module trike_poly_mul_karatsuba_core #(
 
         ST_OUTPUT_VALID: begin
           if (i_result_ready) begin
-            if (output_idx_q == (WORDS - 1)) begin
+            if (output_idx_q == (active_words_q - 1)) begin
               o_done  <= 1'b1;
               state_q <= ST_IDLE;
             end else begin

@@ -24,6 +24,7 @@ rtl/trike_h4_error_sampler.sv
 rtl/trike_error_support_store.sv
 rtl/trike_h4_error_vector.sv
 rtl/trike_pseudohash512_stream.sv
+rtl/trike_poly_mul_karatsuba_core.sv
 rtl/trike_poly_mul_core.sv
 rtl/trike_poly_inv_core.sv
 rtl/trike_keygen_arith_core.sv

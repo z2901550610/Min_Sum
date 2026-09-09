@@ -83,14 +83,37 @@ module trike_poly_fold_test_case #(
   logic [R_BITS-1:0] case_a[               0:11];
   logic [R_BITS-1:0] case_b[               0:11];
 
+  // Stream or RAM outputs unused in this binding.
+  /* verilator lint_off PINCONNECTEMPTY */
   trike_poly_mul_karatsuba_core #(
       .R_BITS              (R_BITS),
       .WORD_W              (WORD_W),
       .BASE_KARATSUBA_DEPTH(1)
   ) dut (
-      .i_clk         (clk),
-      .i_rst_n       (rst_n),
-      .i_start       (start),
+      .i_clk            (clk),
+      .i_rst_n          (rst_n),
+      .i_start          (start),
+      .i_runtime_r_bits ('0),
+      .i_runtime_words  ('0),
+      .o_operand_re     (),
+      .o_operand_we     (),
+      .o_operand_waddr  (),
+      .o_operand_a_wdata(),
+      .o_operand_b_wdata(),
+      .o_a0_addr        (),
+
+      .o_b0_addr(),
+
+      .i_a0_data('0),
+
+      .i_b0_data('0),
+
+      .o_acc_we      (),
+      .o_acc_re      (),
+      .o_acc_waddr   (),
+      .o_acc_raddr   (),
+      .o_acc_wdata   (),
+      .i_acc_rdata   ('0),
       .i_a_valid     (a_valid),
       .i_a_data      (a_data),
       .o_a_ready     (a_ready),
@@ -105,6 +128,7 @@ module trike_poly_fold_test_case #(
       .o_done        (done)
   );
 
+  /* verilator lint_on PINCONNECTEMPTY */
   always #1 clk = ~clk;
 
   function automatic logic [R_BITS-1:0] reference_product(input  logic [R_BITS-1:0] a,

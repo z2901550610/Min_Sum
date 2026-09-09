@@ -5,8 +5,8 @@
 // synchronous operand prefetch begins, so write and arithmetic read phases do
 // not contend for the maximum-geometry memories.
 module trike_decaps_input_syndrome_core #(
-    parameter int WORD_W            = 64,
-    parameter int DIGIT_W           = 16,
+    parameter int WORD_W = 64,
+
     parameter int M_BYTES           = 32,
     parameter int MAX_R_BITS        = bike_pkg::P_R_VALS                [3],
     parameter int MAX_SECRET_WEIGHT = bike_pkg::P_W_VALS                [3],
@@ -145,8 +145,8 @@ module trike_decaps_input_syndrome_core #(
   );
 
   trike_decaps_syndrome_store_core #(
-      .WORD_W           (WORD_W),
-      .DIGIT_W          (DIGIT_W),
+      .WORD_W(WORD_W),
+
       .MAX_R_BITS       (MAX_R_BITS),
       .MAX_SECRET_WEIGHT(MAX_SECRET_WEIGHT),
       .SUPPORT_ADDR_W   (SUPPORT_ADDR_W),

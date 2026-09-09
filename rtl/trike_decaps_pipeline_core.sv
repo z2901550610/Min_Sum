@@ -7,9 +7,9 @@
 // padded error-vector writer and the residual checker. Post-processing then
 // performs L, H4 verification, implicit-rejection selection, and K derivation.
 module trike_decaps_pipeline_core #(
-    parameter int M_BYTES          = 32,
-    parameter int WORD_W           = 64,
-    parameter int DIGIT_W          = 16,
+    parameter int M_BYTES = 32,
+    parameter int WORD_W  = 64,
+
     parameter int PADDED_R_BYTES   = ((bike_pkg::R + 511) / 512) * 64,
     parameter int CIPHERTEXT_BYTES = (2 * ((bike_pkg::R + 7) / 8)) + M_BYTES,
     parameter int DATA_W           = 8 * M_BYTES,
@@ -143,8 +143,7 @@ module trike_decaps_pipeline_core #(
   trike_decaps_syndrome_core #(
       .R_BITS       (R),
       .SECRET_WEIGHT(W),
-      .WORD_W       (WORD_W),
-      .DIGIT_W      (DIGIT_W)
+      .WORD_W       (WORD_W)
   ) u_syndrome (
       .i_clk                      (i_clk),
       .i_rst_n                    (i_rst_n),

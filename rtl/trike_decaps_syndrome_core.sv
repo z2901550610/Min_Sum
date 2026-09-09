@@ -11,10 +11,10 @@
 // and output backpressure may extend the outer transaction, but operand data
 // does not alter the accepted word count or internal arithmetic schedule.
 module trike_decaps_syndrome_core #(
-    parameter int R_BITS = 15581,
+    parameter int R_BITS        = 15581,
     parameter int SECRET_WEIGHT = 35,
-    parameter int WORD_W = 64,
-    parameter int DIGIT_W = 16,
+    parameter int WORD_W        = 64,
+
     parameter bit RUNTIME_GEOMETRY = 1'b0,
     parameter bit USE_EXTERNAL_MUL = 1'b0,
     parameter int MUL_INDEX_W = ((R_BITS > 1) ? $clog2(R_BITS) : 1),
@@ -247,9 +247,9 @@ module trike_decaps_syndrome_core #(
       assign mul_done = 1'b0;
     end else begin : gen_local_mul
       trike_poly_mul_core #(
-          .R_BITS          (R_BITS),
-          .WORD_W          (WORD_W),
-          .DIGIT_W         (DIGIT_W),
+          .R_BITS(R_BITS),
+          .WORD_W(WORD_W),
+
           .SPARSE_WEIGHT   (SECRET_WEIGHT),
           .RUNTIME_GEOMETRY(RUNTIME_GEOMETRY)
       ) u_mul (
@@ -273,17 +273,9 @@ module trike_decaps_syndrome_core #(
           .o_result_data          (mul_result_data),
           .o_result_last          (mul_result_last),
           .i_result_ready         (mul_result_ready),
-          .o_ext_a_re             (),
-          .o_ext_a_raddr          (),
-          .i_ext_a_rdata          ('0),
-          .o_ext_b_re             (),
-          .o_ext_b_raddr          (),
-          .i_ext_b_rdata          ('0),
-          .o_ext_result_we        (),
-          .o_ext_result_waddr     (),
-          .o_ext_result_wdata     (),
-          .o_busy                 (mul_busy),
-          .o_done                 (mul_done)
+
+          .o_busy(mul_busy),
+          .o_done(mul_done)
       );
     end
   endgenerate
@@ -631,8 +623,6 @@ module trike_decaps_syndrome_core #(
 `ifndef SYNTHESIS
   initial begin
     if (SECRET_WEIGHT <= 0) $fatal(1, "trike_decaps_syndrome_core requires SECRET_WEIGHT > 0");
-    if ((WORD_W % DIGIT_W) != 0)
-      $fatal(1, "trike_decaps_syndrome_core requires WORD_W divisible by DIGIT_W");
   end
 `endif
 

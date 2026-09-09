@@ -53,7 +53,6 @@ def generate_fixture(kat_path: Path, output_path: Path, r_bits: int, weight: int
         "// Generated from the first record of the official TRIKE-2 KAT.",
         f"localparam int REF_R_BITS = {r_bits};",
         f"localparam int REF_WORD_W = {WORD_W};",
-        "localparam int REF_DIGIT_W = 16;",
         f"localparam int REF_SPARSE_WEIGHT = {weight};",
         f"localparam int REF_WORDS = {word_count};",
         "localparam int REF_INDEX_W = $clog2(REF_R_BITS);",

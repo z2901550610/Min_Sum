@@ -541,9 +541,7 @@ module trike_decaps_synth_top
     end
   end
 
-  trike_decaps_pipeline_core #(
-      .DIGIT_W(16)
-  ) u_pipeline (
+  trike_decaps_pipeline_core #() u_pipeline (
       .i_clk                (i_clk),
       .i_rst_n              (rst_n_sync),
       .i_start              (core_start),

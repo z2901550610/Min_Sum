@@ -6,12 +6,12 @@
 // secret-candidate sampler, H1/H2/H3 generation, polynomial arithmetic, and
 // official PK/SK serialization. Secret sampling and H123 share one SM3 lane.
 module trike_keygen_core #(
-    parameter int M_BYTES = 32,
-    parameter int R_BITS = 15581,
-    parameter int SECRET_WEIGHT = 35,
+    parameter int M_BYTES         = 32,
+    parameter int R_BITS          = 15581,
+    parameter int SECRET_WEIGHT   = 35,
     parameter int CANDIDATE_COUNT = 16,
-    parameter int WORD_W = 64,
-    parameter int DIGIT_W = 16,
+    parameter int WORD_W          = 64,
+
     parameter bit USE_EXTERNAL_COMPRESS = 1'b0,
     parameter bit USE_EXTERNAL_MUL = 1'b0,
     parameter bit USE_EXTERNAL_H123 = 1'b0,
@@ -378,10 +378,10 @@ module trike_keygen_core #(
   endgenerate
 
   trike_keygen_arith_core #(
-      .R_BITS                    (R_BITS),
-      .SECRET_WEIGHT             (SECRET_WEIGHT),
-      .WORD_W                    (WORD_W),
-      .DIGIT_W                   (DIGIT_W),
+      .R_BITS       (R_BITS),
+      .SECRET_WEIGHT(SECRET_WEIGHT),
+      .WORD_W       (WORD_W),
+
       .USE_EXTERNAL_MUL          (USE_EXTERNAL_MUL),
       .USE_EXTERNAL_H123_STORE   (USE_EXTERNAL_H123_STORE),
       .USE_EXTERNAL_SUPPORT_STORE(1'b1),

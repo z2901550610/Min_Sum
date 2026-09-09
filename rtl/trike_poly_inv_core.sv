@@ -5,13 +5,12 @@
 // The public R-dependent addition chain uses a low-register short chain for
 // TRIKE-2 and the reference binary chains for the remaining profiles. Each
 // Frobenius map is a fixed 2*R_BITS-cycle bit permutation. All polynomial
-// products use one dense trike_poly_mul_core instance connected directly to
+// products use one folded Karatsuba-Comba instance connected directly to
 // the f/g/t scratch RAMs.
 module trike_poly_inv_core #(
-    parameter int R_BITS                = 15581,
-    parameter int WORD_W                = 64,
-    parameter int DIGIT_W               = 16,
-    parameter int DENSE_KARATSUBA_DEPTH = 0
+    parameter int R_BITS               = 15581,
+    parameter int WORD_W               = 64,
+    parameter int BASE_KARATSUBA_DEPTH = 1
 ) (
     input  logic              i_clk,
     input  logic              i_rst_n,
@@ -95,18 +94,17 @@ module trike_poly_inv_core #(
   logic   [     WORD_W-1:0] mul_ext_result_wdata;
   logic                     mul_busy;
   logic                     mul_done;
-  logic                     mul_stream_a_ready;
-  logic                     mul_stream_sparse_ready;
-  logic                     mul_stream_b_ready;
-  logic                     mul_stream_result_valid;
-  logic   [     WORD_W-1:0] mul_stream_result_data;
-  logic                     mul_stream_result_last;
 
   logic   [     WORD_W-1:0] perm_source_rdata_c;
   logic                     perm_source_bit_c;
   logic   [     WORD_W-1:0] perm_bit_mask_c;
   logic                     perm_word_end_c;
 
+  logic                     mul_operand_re;
+  logic                     mul_operand_we;
+  logic   [WORD_ADDR_W-1:0] mul_operand_waddr;
+  logic [WORD_W-1:0] mul_a_wdata, mul_b_wdata;
+  logic [WORD_ADDR_W-1:0] mul_output_idx_q;
   ram_bram #(
       .DATA_W(WORD_W),
       .DEPTH (WORDS)
@@ -146,47 +144,61 @@ module trike_poly_inv_core #(
       .o_rdata(t_rdata)
   );
 
-  trike_poly_mul_core #(
-      .R_BITS                (R_BITS),
-      .WORD_W                (WORD_W),
-      .DIGIT_W               (DIGIT_W),
-      .DENSE_KARATSUBA_DEPTH (DENSE_KARATSUBA_DEPTH),
-      .SPARSE_WEIGHT         (1),
-      .USE_EXTERNAL_DENSE_RAM(1'b1)
+  always_ff @(posedge i_clk or negedge i_rst_n) begin
+    if (!i_rst_n) mul_output_idx_q <= '0;
+    else if (mul_start) mul_output_idx_q <= '0;
+    else if (mul_ext_result_we) mul_output_idx_q <= mul_output_idx_q + 1'b1;
+  end
+  assign mul_ext_a_re = mul_operand_re;
+  assign mul_ext_b_re = mul_operand_re;
+  assign mul_ext_result_waddr = mul_output_idx_q;
+  // Stream or RAM outputs unused in this binding.
+  /* verilator lint_off PINCONNECTEMPTY */
+  trike_poly_mul_karatsuba_core #(
+      .R_BITS(R_BITS),
+      .WORD_W(WORD_W),
+      .BASE_KARATSUBA_DEPTH(BASE_KARATSUBA_DEPTH),
+      .EXTERNAL_OPERANDS(1'b1)
   ) u_mul (
-      .i_clk                  (i_clk),
-      .i_rst_n                (i_rst_n),
-      .i_start                (mul_start),
-      .i_runtime_r_bits       ('0),
-      .i_runtime_words        ('0),
-      .i_runtime_sparse_weight('0),
-      .i_sparse_a             (1'b0),
-      .i_a_valid              (1'b0),
-      .i_a_data               ('0),
-      .o_a_ready              (mul_stream_a_ready),
-      .i_sparse_index_valid   (1'b0),
-      .i_sparse_index         ('0),
-      .o_sparse_index_ready   (mul_stream_sparse_ready),
-      .i_b_valid              (1'b0),
-      .i_b_data               ('0),
-      .o_b_ready              (mul_stream_b_ready),
-      .o_result_valid         (mul_stream_result_valid),
-      .o_result_data          (mul_stream_result_data),
-      .o_result_last          (mul_stream_result_last),
-      .i_result_ready         (1'b0),
-      .o_ext_a_re             (mul_ext_a_re),
-      .o_ext_a_raddr          (mul_ext_a_raddr),
-      .i_ext_a_rdata          (mul_source_t_q ? t_rdata : f_rdata),
-      .o_ext_b_re             (mul_ext_b_re),
-      .o_ext_b_raddr          (mul_ext_b_raddr),
-      .i_ext_b_rdata          (g_rdata),
-      .o_ext_result_we        (mul_ext_result_we),
-      .o_ext_result_waddr     (mul_ext_result_waddr),
-      .o_ext_result_wdata     (mul_ext_result_wdata),
-      .o_busy                 (mul_busy),
-      .o_done                 (mul_done)
+      .i_clk(i_clk),
+      .i_rst_n(i_rst_n),
+      .i_start(mul_start),
+      .i_runtime_r_bits('0),
+      .i_runtime_words('0),
+      .o_operand_re(mul_operand_re),
+      .o_operand_we(mul_operand_we),
+      .o_operand_waddr(mul_operand_waddr),
+      .o_operand_a_wdata(mul_a_wdata),
+      .o_operand_b_wdata(mul_b_wdata),
+      .o_a0_addr(mul_ext_a_raddr),
+
+      .o_b0_addr(mul_ext_b_raddr),
+
+      .i_a0_data(mul_source_t_q ? t_rdata : f_rdata),
+
+      .i_b0_data(g_rdata),
+
+      .o_acc_we(),
+      .o_acc_re(),
+      .o_acc_waddr(),
+      .o_acc_raddr(),
+      .o_acc_wdata(),
+      .i_acc_rdata('0),
+      .i_a_valid(1'b0),
+      .i_a_data('0),
+      .o_a_ready(),
+      .i_b_valid(1'b0),
+      .i_b_data('0),
+      .o_b_ready(),
+      .o_result_valid(mul_ext_result_we),
+      .o_result_data(mul_ext_result_wdata),
+      .o_result_last(),
+      .i_result_ready(1'b1),
+      .o_busy(mul_busy),
+      .o_done(mul_done)
   );
 
+  /* verilator lint_on PINCONNECTEMPTY */
   always_comb begin
     perm_source_rdata_c = perm_source_t_q ? t_rdata : f_rdata;
     perm_source_bit_c = perm_source_rdata_c[perm_pos_q%WORD_W];
@@ -266,6 +278,20 @@ module trike_poly_inv_core #(
         if (mul_ext_b_re) begin
           g_re = 1'b1;
           g_raddr = mul_ext_b_raddr;
+        end
+        if (mul_operand_we) begin
+          if (mul_source_t_q) begin
+            t_we = 1'b1;
+            t_waddr = mul_operand_waddr;
+            t_wdata = mul_a_wdata;
+          end else begin
+            f_we = 1'b1;
+            f_waddr = mul_operand_waddr;
+            f_wdata = mul_a_wdata;
+          end
+          g_we = 1'b1;
+          g_waddr = mul_operand_waddr;
+          g_wdata = mul_b_wdata;
         end
         if (mul_ext_result_we) begin
           if (mul_dest_t_q) begin
@@ -480,15 +506,6 @@ module trike_poly_inv_core #(
 
 `ifndef SYNTHESIS
   always_ff @(posedge i_clk) begin
-    if (state_q != ST_IDLE) begin
-      if (mul_stream_a_ready || mul_stream_sparse_ready || mul_stream_b_ready) begin
-        $error("trike_poly_inv_core external multiplier requested streamed input");
-      end
-      if (mul_stream_result_valid) begin
-        $error("trike_poly_inv_core external multiplier emitted stream data=%h last=%b",
-               mul_stream_result_data, mul_stream_result_last);
-      end
-    end
     if (mul_done && (state_q == ST_IDLE)) begin
       $error("trike_poly_inv_core multiplier completed outside inversion schedule");
     end
@@ -502,9 +519,6 @@ module trike_poly_inv_core #(
       $error("trike_poly_inv_core short chain has no operations");
     end
     if (WORD_W < 2) $error("trike_poly_inv_core WORD_W must be at least 2");
-    if ((WORD_W % DIGIT_W) != 0) begin
-      $error("trike_poly_inv_core WORD_W must be divisible by DIGIT_W");
-    end
   end
 `endif
 

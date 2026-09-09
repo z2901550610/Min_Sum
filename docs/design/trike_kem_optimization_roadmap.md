@@ -1,8 +1,8 @@
 # TRIKE KEM优化路线图
 
-> 更新日期：2026-09-07<br>
-> 起点源码：`e2fbb8df068c`；EXP-0115至0122工作树待提交。
-> 当前乘法推进点：EXP-0123选择一层串行Karatsuba-Comba＋循环折叠候选，局部功能通过，下一门是同条件Vivado及KEM接口迁移。FFT不纳入当前路线。<br>
+> 更新日期：2026-09-08<br>
+> 当前集成起点：`7c7b75d327eb`；历史算术实验见EXP-0115至0122。
+> 当前乘法推进点：EXP-0123已接入求逆与统一乘法服务，采用原地交叉项扫描和恢复，本轮本地验收已按用户范围收尾，下一门是同条件Vivado。FFT不纳入当前路线。<br>
 > 求逆独立方向：EXP-0122完成`s=1/8` divstep锚点，下一门仍是`b=64,s=8`全长BRAM扫描核。
 
 本文是TRIKE KEM优化工作的长期推进入口，回答三个问题：已经完成哪些架构收敛、当前门禁是什么、
@@ -24,7 +24,7 @@
 | 方向 | 当前基线问题 | 长期目标 | 不可破坏的边界 |
 | --- | --- | --- | --- |
 | 统一KEM时序 | EXP-0114 pending run内部setup WNS `-4.017 ns` | 100 MHz内部setup/hold收敛 | 单SM3、固定握手和固定周期 |
-| KeyGen周期 | 两次求逆占KeyGen core约85.27% | 降低D×D与Frobenius总延时 | 两次固定求逆、无数据相关退出 |
+| KeyGen周期 | EXP-0123两次求逆占KeyGen core约36.14% | 降低D×D与Frobenius总延时 | 两次固定求逆、无数据相关退出 |
 | Encaps周期 | UV sparse阶段占Encaps core约86.71% | 减少support-word扫描和RMW | 每bank访问次数与秘密tag无关 |
 | Decaps周期 | syndrome与residual为主要阶段 | 优先降低syndrome多项式延时 | decoder与拒绝路径固定调度 |
 | KEM存储 | 最大几何统一入口受BRAM和路由约束 | 复用生命周期，减少乘法scratch | 不用重算秘密结果换取存储 |
@@ -37,10 +37,10 @@
 
 | Workstream | 状态 | 已有证据 | 当前缺口 | 下一门禁 |
 | --- | --- | --- | --- | --- |
-| KEM功能与固定周期 | `pending`当前G2高档复测 | KeyGen、Encaps及TRIKE160/256当前golden | TRIKE384/512当前周期 | 候选保留时运行完整门禁 |
+| KEM功能与固定周期 | 本轮按用户范围完成 | KeyGen、Encaps及TRIKE160/256当前golden | TRIKE384中止、TRIKE512未运行 | 高档端到端复测留待后续 |
 | 单发射统一服务 | `retained`，物理待收敛 | EXP-0100至0105结构与reference | 可比较统一ASIC route | 完成G0/G1 |
 | RAM生命周期复用 | `retained`，物理收益待归因 | EXP-0106至0110功能/结构门禁 | 层次RAMB映射和mux代价 | 纳入统一基线报告 |
-| D×D diagonal/Comba | `pending` | EXP-0115/0116局部golden与三档base周期矩阵 | Vivado资源、RAM映射与100 MHz route | 优先实现32-bit物理候选 |
+| D×D Karatsuba-Comba | `in_progress` | EXP-0123折叠与原地扫描，已迁移求逆/统一服务 | 当前集成Vivado | 同条件资源与时序比较 |
 | 统一KEM时序 | `in_progress` | EXP-0114中SM3退出内部top-20 | high-fanout、DRC和provenance缺失；support sorter/reset成为新瓶颈 | 先完成G0 |
 | Sparse accumulator | `planned` | 当前8拍/support-word基线 | forwarding/ping-pong实测 | G4 |
 | Encaps tagged pass | `planned` | 算法和constant-access方案已评估 | RTL、访问轨迹和route | G5 |
@@ -48,7 +48,7 @@
 | Divstep inverter | `in_progress` | EXP-0122的r13/r15581黄金模型、s1形式化和s8广播更新 | 全长BRAM扫描、实测周期与Vivado | G7 |
 | Addition-chain inverter | `in_progress` | EXP-0120官方inverse/KeyGen算术golden及D16/32/64周期矩阵；D16 routed diagnostic内部WNS +1.092 ns | 完整KeyGen与可复现Vivado结果 | G7 |
 | Karatsuba + Comba | `in_progress` | EXP-0117 base及EXP-0118/0119 word-array depth 1/2 | TRIKE-9 golden与Vivado实测 | G8 |
-| 一层Karatsuba循环折叠 | `in_progress` | EXP-0123边界/固定轨迹、官方TRIKE-2与四档项目几何卷积、同次Yosys估计 | 同条件Vivado及external-RAM/runtime接口迁移 | G3/G8 |
+| 一层Karatsuba循环折叠 | `in_progress` | EXP-0123边界/固定轨迹、官方TRIKE-2与四档项目几何卷积、同次Yosys估计 | 同条件Vivado；external-RAM/runtime接口已迁移 | G3/G8 |
 
 ## 已有EXP证据地图
 
@@ -129,44 +129,15 @@ RUN-20260826-01作为当前工作基线。新的候选run仍记录revision、fil
 
 退出条件：后续实验可以计算LUT/BRAM/WNS和`cycles/Fmax`严格增减。
 
-### G2：64-bit diagonal/Comba D×D
+### G2/G3：Karatsuba-Comba、原地交叉项与循环折叠
 
-目标：先消除当前每个word pair的product-RAM low/high反复RMW，不引入Karatsuba。
+生产路径复用一层Karatsuba-Comba，直接把子积折叠至结果RAM。外部操作数绑定在低积、高积之后
+原地生成交叉项，交叉积结束后恢复输入，避免双读RAM的端口宽度成本。求逆复用`f/g/t`，
+统一服务保留公开运行时参数和稀疏模式；数据容量分别为4W及3W（另计index）。
 
-第一组设计点：
-
-| 变量 | 设计点 |
-| --- | --- |
-| `WORD_W` | 64 |
-| base digit | 16、32、64 |
-| word-pair initiation interval目标 | 4、2、1 |
-| result | 独立`W`-word RAM |
-| reduction | 先保持清晰的固定折叠边界 |
-
-开发功能门：非64对齐、external dense、inversion official golden、KeyGen byte golden和精确访问计数。
-候选保留门再运行完整KEM公开profile；物理门要求100 MHz内部setup不失败，并以routed `cycles/Fmax`和
-BRAM而不是RTL周期单独选择Pareto点。
-
-EXP-0115已实现16x64 base：稳态word-pair initiation interval为4拍，保留完整`2W` product RAM与独立
-归约/result边界。TRIKE-2 internal/external dense固定240,585/239,609拍，求逆5,988,878拍；开发功能门已通过，
-状态保持`pending`直到Vivado确认RAM映射、资源和100 MHz内部setup/hold，并在候选保留点完成完整KEM门禁。
-
-EXP-0116在相同结构边界下完成16/32/64-bit base局部矩阵。TRIKE-2求逆固定周期分别为
-5,988,878/3,369,294/2,059,502；Yosys Estimated LC诊断为2,379/3,147/4,252，三档均为4个RAMB36。
-该结构结果不作为Vivado资源证据。32-bit以43.74%求逆周期降幅和32.28%本地LC增幅作为首选物理候选，
-64-bit作为激进候选；双lane因同时改变A/B读带宽和RAM复制边界，待三档同条件Vivado后独立比较。
-
-### G3：D×D direct cyclic fold
-
-前置条件：G2存在可保留的Comba基线。目标是删除`2W` product store或把它缩为`W`结果store。
-
-必须证明：末wordmask、high word跨两个目的word、连续同址RMW forwarding，以及inverter源bank在所有读取
-完成前不被覆盖。该门只改变reduction/store策略，不改变Karatsuba depth。
-
-[EXP-0123](../experiments/EXP-0123-trike-k1-cyclic-fold.md)在已存在的一层Karatsuba候选上完成
-直接折叠：删除完整product RAM，保留独立结果RAM与输入半bank。顺序RMW不依赖同拍RAW；
-TRIKE-2周期50,993→50,999，逻辑word容量1,220→732，本地Yosys RAMB36 6→5。
-四档项目几何卷积通过；物理和主线集成仍待完成，详见[架构说明](trike_karatsuba_fold.md)。
+当前验收边界、精确周期和复现入口见[架构说明](trike_karatsuba_fold.md)。EXP-0115/0116的
+D16/32/64搜索为历史结果；当前同条件物理比较围绕EXP-0123集成点，不再以digit宽度作主线配置。
+只有可比Vivado完成后才对FPGA资源和实际延时作保留结论。
 
 ### G4：Sparse accumulator
 
@@ -269,11 +240,9 @@ Frobenius结果，G8依赖稳定Comba base，因此不能提前。
 
 ## 近期执行队列
 
-1. **立即执行**：对EXP-0115运行同条件Vivado，检查product RAM映射、资源和100 MHz内部setup/hold。
-2. **若G2物理门通过**：在获胜Comba点上独立验证direct cyclic fold。
-3. **并列独立方向**：64-bit sparse accumulator和direct Frobenius实验核。
-4. **统一时序方向**：support sorter和reset分别立项，不与算术结构混改。
-5. **后置决策**：tagged Encaps、divstep与Karatsuba。
+1. 完成EXP-0123的同条件求逆、KeyGen、统一KEM Vivado比较；高档端到端回归按用户要求留待后续。
+2. 独立评估64-bit sparse accumulator和direct Frobenius，不改变当前已验证乘法语义。
+3. 统一时序方向继续处理support sorter/reset；divstep仍先完成独立全长扫描核。
 
 研究依据、周期模型和文献比较见已归档的调研快照
 [TRIKE KEM硬件优化分析](../archive/TRIKE_HARDWARE_OPTIMIZATION_ANALYSIS.md)；

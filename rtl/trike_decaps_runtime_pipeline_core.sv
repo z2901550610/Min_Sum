@@ -5,8 +5,8 @@
 // public profiles; active geometry is latched by the input loader at i_start.
 // Decoder H validation state makes this a one-transaction-per-reset boundary.
 module trike_decaps_runtime_pipeline_core #(
-    parameter int WORD_W                = 64,
-    parameter int DIGIT_W               = 16,
+    parameter int WORD_W = 64,
+
     parameter int BLOCKS                = 3,
     parameter int M_BYTES               = 32,
     parameter int MAX_R_BITS            = bike_pkg::P_R_VALS             [3],
@@ -186,8 +186,8 @@ MAX_ERROR_WEIGHT
       CT_ADDR_W'((2 * int'(o_r_bytes)) + c2_issue_count_q) : postprocess_ct_raddr;
 
   trike_decaps_input_decoder_load_core #(
-      .WORD_W           (WORD_W),
-      .DIGIT_W          (DIGIT_W),
+      .WORD_W(WORD_W),
+
       .BLOCKS           (BLOCKS),
       .M_BYTES          (M_BYTES),
       .USE_EXTERNAL_MUL (USE_EXTERNAL_MUL),
