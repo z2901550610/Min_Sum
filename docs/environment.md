@@ -13,25 +13,11 @@
 - 波形查看器不属于必需门禁；FST由workflow smoke生成后可用任意兼容查看器检查
 - Python/cocotb：项目`.venv`中的 Python 3.12.10 与 cocotb 2.0.1
 
-## 锁定版本
+## 版本来源
 
-| 工具 | 已验证版本 |
-| --- | --- |
-| Verilator | 5.051 devel, v5.050-277-g99c6f9ced |
-| Verible | v0.0-4133-g873f559f |
-| Slang | 11.0.448+e222e7dc0 |
-| Yosys | 0.68+132；`yosys -m slang`可用 |
-| SymbiYosys | 0.68 |
-| Z3 | 4.15.5 |
-| cocotb | 2.0.1 |
-| PyYAML | 6.0.3 |
-| pytest | 9.1.1 |
-| Python | 3.12.10 |
-
-主机辅助工具为 Homebrew 6.0.15、Apple Git 2.54.0、Apple clang 21.0.0 和
-GNU Make 3.81。Python依赖及哈希由`uv.lock`锁定；日常 `make tool-versions` 记录差异并告警，缺失/失败的工具仍报错；显式 `make check-tool-versions` 和完整资格验证要求版本匹配。版本基线由
-`config/rtl_toolchain.lock`和`scripts/check_tool_versions.py`执行，文档表格
-不是程序化锁源。
+工具版本以[工具锁](../config/rtl_toolchain.lock)为唯一基线，Python依赖以
+[uv.lock](../uv.lock)为准。`./eda make tool-versions`查看实际版本并告警差异；
+`./eda make check-tool-versions`要求版本匹配。缺失或执行失败的工具均报错。
 
 ## 已验证能力
 
@@ -50,3 +36,17 @@ GNU Make 3.81。Python依赖及哈希由`uv.lock`锁定；日常 `make tool-vers
 格式或诊断变化做有范围的修正，不恢复全局忽略错误。
 Vivado不随本地开源工具刷新；用新Vivado作物理比较前重跑同条件实现。
 命令入口与证据边界以[工作流](workflow.md)为准。
+
+## 已知限制
+
+- OSS CAD Suite 2026-08-27 自带 cocotb/Python 在本机加载`libpython3.11.dylib`
+  时无法解析相对`libintl.8.dylib`。环境入口使用`uv.lock`创建的项目 Python
+  3.12/cocotb 2.0.1环境；EDA可执行程序仍来自 Suite。
+- Suite Verilator 的 FST 构建需要 Homebrew lz4 的显式 include/link 参数。
+  `workflow-smoke/Makefile`仅在`WAVES=1`时加入这些参数。
+- `make synth`和`make qor`提供 Yosys 结构估计，不验证 Vivado XPM/RAMB映射、
+  布局、布线、时序或硬件功能。`make qor`当前固定报告组合模块`kem_ct_compare_select`，
+  是报告链路验证，不是译码器QoR基线。
+- PoC formal 的时钟是 SymbiYosys global clock；harness wire 无普通RTL驱动是建模边界。
+- 当前本地链路不运行 Vivado；物理实现继续在 Windows/Vivado 流程执行并以 run manifest 回传。
+- 本仓库不引入 ASIC synthesis、place-and-route 或 signoff backend。

@@ -38,7 +38,6 @@ SLANG ?= slang
 SBY ?= ./scripts/sby_quiet.py
 REAL_SBY ?= sby
 SBY_LOG_DIR ?= build/logs/sby
-CHECK_SUMMARY_PATH ?= build/results/check-summary.json
 Z3 ?= z3
 COCOTB_CONFIG ?= cocotb-config
 UV ?= uv
@@ -101,7 +100,6 @@ export REAL_VERILATOR
 export VERILATOR_LOG_DIR
 export REAL_SBY
 export SBY_LOG_DIR
-export CHECK_SUMMARY_PATH
 export BIKE_PARALLEL_L
 
 TOY_CASE_SVH := tb/generated/bike_toy_case.svh
@@ -150,10 +148,10 @@ build/test_catalog.mk: config/test_catalog.toml scripts/test_catalog.py
 	@python3 scripts/test_catalog.py --makefile $@
 include build/test_catalog.mk
 
-.PHONY: all format lint compile regress formal synth synth-generic synth-xilinx qor qor-report qor-record check validate-workflow workflow-smoke check-trike-sm3-sharing model-min-sum run-model-min-sum sweep-min-sum optimum-min-sum campaign-min-sum confirm-min-sum check-model-rtl check-model-rtl-bike128 software-trike-kem check-local-tools check-format-rtl lint-rtl lint-slang check-rtl formal-ct-select formal-ct-control formal-trike-poly-divstep-s1 formal-k-sign-overlap-scheduler formal-tile-scheduler vivado-synth vivado-synth-trike-unified-ksign vivado-impl-trike-kem-core vivado-impl-trike-poly-inv vivado-impl-trike-pseudohash vivado-impl-trike-encaps vivado-impl-trike-keygen vivado-impl-trike-decaps vivado-impl-trike-decaps-runtime vivado-impl-trike-kem-cores FORCE
+.PHONY: all format compile regress synth synth-generic synth-xilinx qor qor-report qor-record check validate-workflow workflow-smoke check-trike-sm3-sharing model-min-sum run-model-min-sum sweep-min-sum optimum-min-sum campaign-min-sum confirm-min-sum check-model-rtl check-model-rtl-bike128 software-trike-kem check-local-tools check-format-rtl lint-rtl lint-slang check-rtl formal-ct-select formal-ct-control formal-trike-poly-divstep-s1 formal-k-sign-overlap-scheduler formal-tile-scheduler vivado-synth vivado-synth-trike-unified-ksign vivado-impl-trike-kem-core FORCE
 .PHONY: gen-trike-minsum-kem-case formal-trike-kem-operation-control
 .PHONY: tool-versions check-tool-versions check-filelists check-records check-validation-profiles check-trike-reference-data lint-verilator formal-fast formal-nightly formal-ct-control-extended ci-fast ci-smoke ci-nightly ci-kem-reference check-plan check-agent-workflow
-.PHONY: python-sync format-changed format-all format-check
+.PHONY: python-sync format-changed format-all
 
 # Stable human and Agent entrypoints.
 all: test
@@ -174,9 +172,11 @@ format-all:
 	@$(VERIBLE_FORMAT) $(VERIBLE_FORMAT_FLAGS) --inplace $(MAINTAINED_SV)
 	@$(SV_DECL_FORMAT) $(MAINTAINED_SV)
 
-format-check: check-format-rtl
-
-lint: check-rtl
+# Removed aliases; fail loudly so the directory named formal/ is not a silent no-op.
+.PHONY: lint format-check formal
+lint format-check formal:
+	@echo "error: '$@' was removed; use check-rtl / check-format-rtl / formal-fast" >&2
+	@exit 1
 
 compile:
 	@mkdir -p build/compile/decoder build/compile/kem_ct_compare_select
@@ -209,14 +209,13 @@ workflow-smoke:
 	@$(MAKE) -C workflow-smoke check \
 		SBY="$(if $(findstring /,$(SBY)),$(abspath $(SBY)),$(SBY))" \
 		REAL_SBY="$(REAL_SBY)" \
-		SBY_LOG_DIR="$(abspath $(SBY_LOG_DIR))" \
-		CHECK_SUMMARY_PATH="$(abspath $(CHECK_SUMMARY_PATH))"
+		SBY_LOG_DIR="$(abspath $(SBY_LOG_DIR))"
 	@python3 scripts/validation_events.py record --layer workflow --name workflow-smoke --status PASS --signature workflow-smoke
 
 python-sync:
 	@$(UV) sync --frozen
 
-$(TOY_CASE_SVH): FORCE scripts/gen_toy_case_fixture.py scripts/run_bike_random.py scripts/qc_matrix_data.py
+$(TOY_CASE_SVH): FORCE scripts/gen_toy_case_fixture.py scripts/run_bike_random.py
 	@python3 scripts/gen_toy_case_fixture.py --output $@
 
 # Decoder and KEM unit tests. Each decoder test remains directly reproducible.
@@ -360,8 +359,6 @@ lint-slang:
 check-rtl: check-filelists check-format-rtl lint-rtl lint-verilator lint-slang
 	@python3 scripts/validation_events.py record --layer static --name check-rtl --status PASS --signature check-rtl
 
-formal: formal-fast
-
 formal-fast: formal-ct-select formal-ct-control formal-trike-kem-operation-control formal-trike-poly-divstep-s1 formal-k-sign-overlap-scheduler formal-tile-scheduler
 
 formal-k-sign-overlap-scheduler:
@@ -450,28 +447,7 @@ vivado-synth:
 vivado-synth-trike-unified-ksign:
 	@$(MAKE) vivado-synth BIKE_SYNTH_PARAM=TRIKE_UNIFIED_PARAMS BIKE_SYNTH_PARALLEL_L=$(TRIKE_UNIFIED_KSIGN_PARALLEL_L) BIKE_SYNTH_COLS_PER_TILE=$(TRIKE_UNIFIED_KSIGN_COLS_PER_TILE) VIVADO_BUILD_DIR=$(VIVADO_BUILD_DIR)/trike_unified_ksign_l$(TRIKE_UNIFIED_KSIGN_PARALLEL_L)_k$(TRIKE_UNIFIED_KSIGN_K)
 
+# Parameterized entry: make vivado-impl-trike-kem-core TRIKE_KEM_SYNTH_TOP=<top>
 vivado-impl-trike-kem-core:
 	@mkdir -p $(VIVADO_BUILD_DIR)
 	@TRIKE_KEM_SYNTH_TOP=$(TRIKE_KEM_SYNTH_TOP) VIVADO_PART=$(VIVADO_PART) VIVADO_XDC=constraints/trike_kem_core.xdc VIVADO_RUN_ID=$(VIVADO_RUN_TAG) $(VIVADO) -mode batch -source scripts/vivado_trike_kem_cores.tcl -tclargs $(VIVADO_BUILD_DIR)
-
-vivado-impl-trike-poly-inv:
-	@$(MAKE) vivado-impl-trike-kem-core TRIKE_KEM_SYNTH_TOP=trike_poly_inv_synth_top VIVADO_BUILD_DIR=$(VIVADO_BUILD_DIR)/trike_poly_inv
-
-vivado-impl-trike-pseudohash:
-	@$(MAKE) vivado-impl-trike-kem-core TRIKE_KEM_SYNTH_TOP=trike_pseudohash_synth_top VIVADO_BUILD_DIR=$(VIVADO_BUILD_DIR)/trike_pseudohash
-
-vivado-impl-trike-encaps:
-	@$(MAKE) vivado-impl-trike-kem-core TRIKE_KEM_SYNTH_TOP=trike_encaps_synth_top VIVADO_BUILD_DIR=$(VIVADO_BUILD_DIR)/trike_encaps
-
-vivado-impl-trike-keygen:
-	@$(MAKE) vivado-impl-trike-kem-core TRIKE_KEM_SYNTH_TOP=trike_keygen_synth_top VIVADO_BUILD_DIR=$(VIVADO_BUILD_DIR)/trike_keygen
-
-vivado-impl-trike-decaps:
-	@$(MAKE) vivado-impl-trike-kem-core TRIKE_KEM_SYNTH_TOP=trike_decaps_synth_top VIVADO_BUILD_DIR=$(VIVADO_BUILD_DIR)/trike_decaps
-
-vivado-impl-trike-decaps-runtime:
-	@$(MAKE) vivado-impl-trike-kem-core TRIKE_KEM_SYNTH_TOP=trike_decaps_runtime_synth_top VIVADO_BUILD_DIR=$(VIVADO_BUILD_DIR)/trike_decaps_runtime
-
-vivado-impl-trike-kem-cores:
-	@$(MAKE) vivado-impl-trike-poly-inv VIVADO_BUILD_DIR=$(VIVADO_BUILD_DIR)
-	@$(MAKE) vivado-impl-trike-pseudohash VIVADO_BUILD_DIR=$(VIVADO_BUILD_DIR)

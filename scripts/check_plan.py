@@ -49,13 +49,11 @@ def build_plan(
     selected_profiles: set[str] = set()
     fallback_profiles: set[str] = set()
     owner_targets: list[str] = []
-    manual: list[str] = []
     unrouted: list[str] = []
     for path in paths:
-        profiles, owners, requirements = classify_paths([path], config)
+        profiles, owners = classify_paths([path], config)
         selected_profiles.update(profiles)
-        manual.extend(requirements)
-        if not profiles and not owners and not requirements:
+        if not profiles and not owners:
             unrouted.append(path)
         handled = {profile for owner in owners for profile in owner.covers_profiles}
         # Coverage is local to this file. A proof for another file cannot replace
@@ -71,10 +69,6 @@ def build_plan(
     targets = [target for p in config.profile_order if p in fallback_profiles
                for target in config.profiles[p].targets]
     targets = list(dict.fromkeys([*targets, *owner_targets]))
-    manual = list(dict.fromkeys([
-        *manual, *(requirement for p in profile_ids
-                   for requirement in config.profiles[p].manual_requirements)
-    ]))
     commands: list[str] = []
     if paths:
         diff_command = "git diff --check"
@@ -84,7 +78,7 @@ def build_plan(
     if targets:
         commands.append("make " + " ".join(targets))
     return {
-        "schema_version": 4,
+        "schema_version": 5,
         "generated_at": datetime.now(UTC).isoformat(),
         "read_only": True,
         "changed_paths": paths,
@@ -98,7 +92,7 @@ def build_plan(
         ],
         "commands": commands,
         "targets": targets,
-        "manual_requirements": manual,
+        "guidance": "docs/workflow.md",
         "note": "Suggested focused checks only; select additional checks for changed behavior, not as a closing ritual.",
     }
 
@@ -119,10 +113,7 @@ def print_human(plan: dict[str, object]) -> None:
     print("Commands:")
     for command in plan["commands"]:
         print(f"  {command}")
-    if plan["manual_requirements"]:
-        print("Manual requirements:")
-        for requirement in plan["manual_requirements"]:
-            print(f"  - {requirement}")
+    print(f"Behavior-dependent checks: see {plan['guidance']}")
     print("NOT_RUN: this command only planned validation; it did not execute any gate.")
 
 

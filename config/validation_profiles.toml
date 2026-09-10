@@ -1,4 +1,4 @@
-schema_version = 5
+schema_version = 6
 profile_order = [
   "records",
   "tool_entry",
@@ -13,63 +13,53 @@ profile_order = [
 ]
 
 [profiles.records]
-description = "Documentation, experiment records, or Vivado manifests"
+description = "Documentation or Vivado manifests"
 targets = []
-manual_requirements = []
 covers = []
 
 [profiles.tool_entry]
 description = "Tool lock, filelist, waiver, Make, or Tcl entrypoint"
 targets = ["check-filelists"]
-manual_requirements = []
 covers = []
 
 [profiles.workflow]
 description = "Workflow helper scripts and CI configuration"
 targets = ["check-agent-workflow"]
-manual_requirements = []
 covers = []
 
 [profiles.workflow_core]
 description = "Core build/runner and tool interoperability"
 targets = ["validate-workflow"]
-manual_requirements = []
 covers = ["workflow"]
 
 [profiles.local_rtl]
 description = "Local RTL or testbench change"
 targets = []
-manual_requirements = ["Run the smallest deterministic test that owns the changed behavior."]
 covers = []
 
 [profiles.decoder]
 description = "Decoder datapath, scheduler, RAM, or K-sign change"
 targets = ["test-integration"]
-manual_requirements = ["If shared scheduling, geometry, or fixed cycles changed, run affected K=3/K=4 profiles and record the boundaries."]
 covers = ["local_rtl"]
 
 [profiles.public_params]
 description = "Public parameters or storage geometry"
 targets = []
-manual_requirements = ["Test the changed parameter levels; use representative endpoints for shared geometry changes. Recompute affected cycle budgets; do not run unrelated algorithm families."]
 covers = ["decoder", "local_rtl"]
 
 [profiles.kem]
 description = "KEM semantics, serialization, SM3/DRNG, or complete top-level change"
 targets = []
-manual_requirements = ["Choose the smallest relevant golden/reference test; check affected byte/word, cycle and rejection behavior. No automatic full KEM regression."]
 covers = ["local_rtl"]
 
 [profiles.formal]
 description = "Formal harness, property, or SymbiYosys task"
 targets = []
-manual_requirements = ["Report harness boundary, assumptions, parameters, and unreachable states."]
 covers = []
 
 [profiles.physical]
 description = "XDC or implementation behavior that can affect physical evidence"
 targets = []
-manual_requirements = ["For FPGA mapping, resource or timing acceptance, or physical baseline updates, run a provenance-complete, same-condition Vivado implementation and create a RUN manifest. For functional-only fixes, complete required functional gates and report physical effects as unverified; do not claim physical benefits or update physical baselines."]
 covers = []
 
 [[routing]]
@@ -79,7 +69,7 @@ prefixes = ["workflow-smoke/"]
 
 [[routing]]
 profile = "records"
-prefixes = ["docs/", "reports/", ".agents/skills/"]
+prefixes = ["docs/", "reports/"]
 exact = ["README.md", "CLAUDE.md", "AGENTS.md", ".gitignore"]
 
 [[routing]]
@@ -121,7 +111,6 @@ exact = [
   "scripts/check_model_rtl.py",
   "scripts/gen_toy_case_fixture.py",
   "scripts/min_sum_model.c",
-  "scripts/qc_matrix_data.py",
   "scripts/run_bike_random.py",
   "scripts/run_quantization_experiment.py",
 ]
@@ -262,8 +251,10 @@ profile = "physical"
 prefixes = ["constraints/", "scripts/vivado_"]
 
 [[owners]]
-prefixes = ["docs/experiments/", "reports/vivado/manifests/"]
-exact = ["docs/design/vivado_baseline_registry.md"]
+prefixes = ["reports/vivado/manifests/"]
+exact = [
+  "docs/design/vivado_baseline_registry.md",
+]
 targets = ["check-records"]
 covers_profiles = ["records"]
 
@@ -362,11 +353,3 @@ covers_profiles = ["public_params", "local_rtl"]
 exact = ["rtl/trike_kem_asic_top.sv"]
 targets = ["ci-kem-reference"]
 covers_profiles = ["kem", "local_rtl"]
-
-[[manual_rules]]
-suffixes = [".tcl"]
-requirement = "Dry-run the affected Vivado Tcl target."
-
-[[manual_rules]]
-exact = ["eda", "Makefile", "scripts/eda-env.sh"]
-requirement = "Run affected production targets if their recipes/environment changed; use make check when qualifying a new toolchain baseline. Workflow smoke alone is not production RTL evidence."

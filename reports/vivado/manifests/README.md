@@ -5,6 +5,8 @@
 环境、`config/vivado_local.tcl`或可选的`config/local.mk`配置；历史 manifest 保留
 该次运行实际使用的绝对路径。
 
+历史`experiment_id`保留供追溯，新RUN不需要EXP编号。
+
 1. 复制`template.toml.example`并更名为唯一run ID。
 2. 从外部run目录的`run_provenance.txt`填写Git revision、dirty状态、filelist、defines、XDC和directive；
    dirty运行必须在`notes`中说明变更边界。

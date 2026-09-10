@@ -1,10 +1,7 @@
 # TRIKE KEM硬件架构、公共核与复用设计
 
-2026-09-09稀疏调度已改为6拍/support-word，实测范围见[EXP-0124](../experiments/EXP-0124-sparse-rmw-overlap.md)。
-KeyGen基础配置和syndrome参考通过；KeyGen其他共享配置、替代输入及wrapper本轮NOT_RUN。
-Encaps现改为四次稠密乘法，UV/基础/共享error与乘法服务/wrapper均通过EXP-0125参考，见
-[Encaps稠密集成](../experiments/EXP-0125-encaps-dense-error-stream.md)。旧版golden记录仍见EXP-0123/0124。完整Decaps pipeline/runtime的下列周期
-属于EXP-0123八拍稀疏路径历史结果，本轮未复测，不能作为当前端到端周期。
+当前验证范围见[实现状态](implementation_status.md)。下列完整Decaps pipeline/runtime周期
+属于旧八拍稀疏检查点，不能作为当前端到端周期。
 
 本文档记录`trike-电子版材料0629`对应的TRIKE KEM硬件依赖、已有实现复用边界，以及本仓库公共RTL核。
 实现依据按以下顺序确定：随包KAT、随包Reference C、随包Optimized C、算法文档。KAT用于锁定字节序列化和
@@ -12,8 +9,14 @@ Encaps现改为四次稠密乘法，UV/基础/共享error与乘法服务/wrapper
 
 ## KEM依赖
 
-四个随包参数集（TRIKE-2/5/7/9 的 $r$、$d$、$t$、$\ell$、公钥/密文/共享密钥长度）见
-[BIKE 与 TRIKE KEM 机制及硬件核分层指南](bike_trike_kem_hardware_mechanism.md)第8节的参数表。
+随包参数集（TRIKE-2/5/7/9）：
+
+| 参数集 | $r$ | $d=w/3$ | $w$ | $t$ | $\ell$ | 公钥 byte | 密文 byte | 共享密钥 byte |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| TRIKE-2 | 15,581 | 35 | 105 | 263 | 256 | 1,980 | 3,928 | 32 |
+| TRIKE-5 | 35,363 | 55 | 165 | 429 | 256 | 4,453 | 8,874 | 32 |
+| TRIKE-7 | 69,691 | 83 | 249 | 659 | 512 | 8,776 | 17,488 | 64 |
+| TRIKE-9 | 114,043 | 111 | 333 | 877 | 512 | 14,320 | 28,576 | 64 |
 
 KEM数据通路需要以下模块：
 
@@ -28,8 +31,8 @@ KEM数据通路需要以下模块：
 
 H1/H2/H3由同一个SM3-DRNG上下文连续输出`t1`、`t2`、`r1`。H4使用`m || r2`初始化SM3-DRNG，
 每个候选消耗32 bit随机数并按multiply-high映射候选位置；碰撞时选择`pos`，循环边界由公开的
-$t$确定。候选映射公式和固定调用粒度的完整说明见
-[BIKE 与 TRIKE KEM 机制及硬件核分层指南](bike_trike_kem_hardware_mechanism.md)第11.1节。
+$t$确定。候选映射：`candidate = pos + high32(random * (length - pos))`。
+Reference C 对每个 candidate 单独调用一次 `Generate(4 byte)`；不能等价为一次 `Generate(4t byte)`。
 硬件实现需要每次都执行固定次数的查重读取或采用固定深度的确定性bank调度。
 
 Reference C对每个candidate分别调用一次4-byte DRNG Generate。每次Generate都会更新`V`和
@@ -769,7 +772,7 @@ READ/CAPTURE/EMIT组装；先用e0初始化u/v，再顺序把e1*r1、e2*r2、e1*
 固定读取e0/e1/e2/e1/e2共`5W*(WORD_W/8)`个byte，末word屏蔽padding；乘法输入背压时保持打包word。
 相邻乘法之间固定DRAIN一拍，等待共享稠密服务退休。令B=WORD_W/8、D为稠密流式核连续周期，
 则UV周期为`4D+(10B+9)W+3`。r13/WORD_W8的两种秘密分块输入固定305拍，TRIKE-2固定211475拍。
-完整CT/SS与共享存储/乘法服务验证见[EXP-0125](../experiments/EXP-0125-encaps-dense-error-stream.md)。
+完整CT/SS与共享存储/乘法服务验证见[实现状态](implementation_status.md)。
 其他调用方的小重量稀疏乘法继续使用EXP-0124六拍重叠读写路径。
 
 ## 固定周期与常数时间边界
@@ -881,8 +884,8 @@ KeyGen/Encaps/Decaps向量，并在统一LF换行后逐byte比较随包官方KAT
 `make test-trike-poly-reference`从TRIKE-2官方KAT第0组解析私钥中的$t_0$、$h_0$支持集以及公钥$r_2$，
 独立计算环乘golden。当前64-bit折叠路径的TRIKE-2稠密/稀疏周期为47,439/52,286拍；
 求逆为1,359,798拍。基础递归和整多项式分解是两个层次，生产64-bit基础递归深度为2。
-完整尺寸seed回归和KeyGen等集成结果见[EXP-0123](../experiments/EXP-0123-trike-k1-cyclic-fold.md)，
-旧digit-serial矩阵保留在EXP-0115/0116/0120，不代表当前RTL。
+完整尺寸seed回归和KeyGen等集成结果见[实现状态](implementation_status.md)，
+旧digit-serial矩阵见[Git历史入口](../experiments.md)（EXP-0115/0116/0120），不代表当前RTL。
 
 `make test-trike-encaps-components-reference`使用`gen_trike_encaps_fixture.py`恢复的官方Count=0中间量。
 生成器首先独立重算并验证完整CT/SS，然后RTL逐byte/逐word检查H1/H2/H3、H4和u/v；连续流固定周期分别

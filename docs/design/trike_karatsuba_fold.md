@@ -68,7 +68,6 @@ Karatsuba。`trike_poly_mul_core`和`trike_poly_inv_core`共用
 WRITE1/READ2、WRITE2，共6拍。三组结果读写均保留，读写次数分别为3dW；
 计入清零和输出后各为3dW+W。相邻访问同址时使用上一拍写回值转发，避开read-first旧值。
 新增一个WORD_W位转发寄存器，不新增RAM；地址相等比较只选择数据，不改变调度。
-详见[EXP-0124](../experiments/EXP-0124-sparse-rmw-overlap.md)。
 
 ## 固定周期和访问数
 
@@ -110,8 +109,7 @@ RAM绑定、固定访问与周期公式不变。基础核、运行时、独立�
 当时通用稠密乘法和求逆为51,733与1,432,796拍（下述重叠改动之前）。同条件r15581本地Yosys/ABC9估计：
 通用乘法LUT primitive总数4,438→4,162，FF=1,162、RAMB36=3、RAMB18=1不变；
 求逆综合wrapper LUT 3,822→3,547，FF=878、RAMB36=4不变。
-这不是Vivado时序或加速证据，历史depth-1记录保留。
-命令、源文件哈希和日志见[基础核集成证据](../../reports/qor/20260910-trike-base-depth2.json)。
+这不是Vivado时序或加速证据。
 
 2026-09-10进一步启用Comba/折叠重叠。r15581的`Delta=4294`，通用乘法47,439拍，
 求逆1,359,798拍；KeyGen算术/core为2,919,579/7,752,441拍，Encaps core为527,684拍。
@@ -119,9 +117,8 @@ RAM绑定、固定访问与周期公式不变。基础核、运行时、独立�
 r12589/r106781分别31,677/2,110,141拍。相对上述depth-2串行调度，同条件本地估计：
 通用乘法LUT 4,162→4,102、FF 1,162→1,101；求逆wrapper LUT 3,547→3,478、FF 878→817；
 各自BRAM不变。未建立Vivado时序或整乘法器形式证明。
-详细条件与测试日志见[重叠集成证据](../../reports/qor/20260910-trike-comba-overlap.json)。
 
-准确的已完成结果与比较记录见[EXP-0123](../experiments/EXP-0123-trike-k1-cyclic-fold.md)。
+早期EXP-0123的已完成结果与矩阵见[Git历史入口](../experiments.md)；上述2026-09-10结果属于后续检查点。
 仿真检查固定周期及测试覆盖下的轨迹，未建立整个乘法器的形式证明。
 
 ## Vivado 物理验收

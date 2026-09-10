@@ -79,7 +79,6 @@ def run_wrapper(tmp_path: Path, *, fail: bool) -> subprocess.CompletedProcess[st
         {
             "REAL_SBY": str(fake_sby),
             "SBY_LOG_DIR": str(tmp_path / "logs"),
-            "CHECK_SUMMARY_PATH": str(tmp_path / "results" / "check-summary.json"),
             "VALIDATION_RUN_ID": "wrapper-test",
             "VALIDATION_EVENTS_PATH": str(tmp_path / "results" / "events.jsonl"),
             "FAKE_SBY_FAIL": "1" if fail else "0",
@@ -104,24 +103,19 @@ def run_wrapper(tmp_path: Path, *, fail: bool) -> subprocess.CompletedProcess[st
     )
 
 
-def test_sby_quiet_pass_records_full_log_and_summary(tmp_path: Path) -> None:
+def test_sby_quiet_pass_records_full_log_and_event(tmp_path: Path) -> None:
     result = run_wrapper(tmp_path, fail=False)
     assert result.returncode == 0
     assert "sby PASS: proof.sby prove" in result.stdout
     assert "engine output" not in result.stdout
     log_text = next((tmp_path / "logs").glob("*.log")).read_text(encoding="utf-8")
     assert "engine output that stays in the log" in log_text
-    summary = json.loads(
-        (tmp_path / "results" / "check-summary.json").read_text(encoding="utf-8")
-    )
-    recorded = summary["results"][0]
-    assert recorded["status"] == "PASS"
-    assert recorded["task"] == "prove"
-    assert recorded["tool"]["version"] == "fake-sby 1.0"
-    assert recorded["source_digest"]
     event = json.loads(
         (tmp_path / "results" / "events.jsonl").read_text(encoding="utf-8").strip()
     )
+    assert event["task"] == "prove"
+    assert event["tool"]["version"] == "fake-sby 1.0"
+    assert event["source_digest"] and event["sources"] == ["proof.sby", "dut.sv"]
     assert event["evidence_layer"] == "formal"
     assert event["status"] == "PASS"
     assert event["run_id"] == "wrapper-test"
@@ -133,10 +127,8 @@ def test_sby_quiet_failure_preserves_return_code_and_diagnostics(tmp_path: Path)
     assert result.returncode == 1
     assert "sby FAIL: proof.sby prove" in result.stdout
     assert "ERROR: injected failure" in result.stderr
-    summary = json.loads(
-        (tmp_path / "results" / "check-summary.json").read_text(encoding="utf-8")
-    )
-    assert summary["results"][0]["status"] == "FAIL"
+    event = json.loads((tmp_path / "results/events.jsonl").read_text().strip())
+    assert event["status"] == "FAIL"
 
 
 def test_check_plan_routes_formal_and_workflow_changes() -> None:
@@ -239,7 +231,7 @@ def test_check_plan_uses_owning_targets_before_aggregate_gates() -> None:
     assert "release_commands" not in kem_plan
 
 
-def test_check_plan_command_coverage_keeps_manual_evidence_requirements() -> None:
+def test_check_plan_command_coverage_links_to_workflow() -> None:
     check_plan = load_script("check_plan")
     plan = check_plan.build_plan(
         [
@@ -251,11 +243,8 @@ def test_check_plan_command_coverage_keeps_manual_evidence_requirements() -> Non
     assert set(plan["targets"]) == {
         "validate-workflow", "test-integration", "formal-tile-scheduler"
     }
-    assert plan["manual_requirements"] == [
-        "Run the smallest deterministic test that owns the changed behavior.",
-        "If shared scheduling, geometry, or fixed cycles changed, run affected K=3/K=4 profiles and record the boundaries.",
-        "Report harness boundary, assumptions, parameters, and unreachable states.",
-    ]
+    assert plan["guidance"] == "docs/workflow.md"
+    assert "manual_requirements" not in plan
 
 
 def test_ci_nightly_dry_run_does_not_repeat_fast_formal_harnesses() -> None:
@@ -462,14 +451,13 @@ def test_reference_variants_have_unique_direct_build_directories() -> None:
 def test_validation_profiles_drive_routing() -> None:
     profiles = load_script("validation_profiles")
     config = profiles.load_profiles()
-    selected, owners, manual = profiles.classify_paths(
+    selected, owners = profiles.classify_paths(
         ["docs/removed-record.md", "formal/trike_ct_verify_stream_formal.sv"],
         config,
     )
     assert selected == ["records", "formal"]
     assert [action.targets for action in owners] == [("formal-ct-control",)]
     assert [action.covers_profiles for action in owners] == [("formal",)]
-    assert manual == []
 
 
 
@@ -594,7 +582,7 @@ def write_fake_make(path: Path) -> None:
         "#!/bin/sh\n"
         "printf '%s\\n' \"$*\" >> \"$FAKE_MAKE_CALLS\"\n"
         "printf '%s|%s|%s|%s\\n' \"${SBY_LOG_DIR-}\" \"${VERILATOR_LOG_DIR-}\" "
-        "\"${RUN_QUIET_LOG_DIR-}\" \"${CHECK_SUMMARY_PATH-}\" >> \"$FAKE_MAKE_ENV\"\n"
+        "\"${RUN_QUIET_LOG_DIR-}\" \"${VALIDATION_EVENTS_PATH-}\" >> \"$FAKE_MAKE_ENV\"\n"
         "if [ -n \"$FAKE_MAKE_FAIL_ON\" ] && [ \"$1\" = \"$FAKE_MAKE_FAIL_ON\" ]; then\n"
         "  echo 'ERROR: injected make failure'\n"
         "  exit 9\n"
@@ -659,7 +647,7 @@ def test_validation_profile_runs_deduplicated_stages_and_writes_summary(
             run_dir / "logs" / "sby",
             run_dir / "logs" / "verilator",
             run_dir / "logs" / "simulation",
-            run_dir / "check-summary.json",
+            run_dir / "events.jsonl",
         )
     )
     assert environments == [expected, expected, "|||"]
@@ -785,7 +773,7 @@ def test_daily_gate_excludes_formal_synthesis_and_workflow():
 def test_helper_and_skill_changes_do_not_qualify_toolchain():
     planner = load_script("check_plan")
     assert planner.build_plan(["scripts/sby_quiet.py"])["targets"] == ["check-agent-workflow"]
-    assert planner.build_plan([".agents/skills/rtl-implement/SKILL.md"])["targets"] == []
+    assert planner.build_plan(["docs/design/coding.md"])["targets"] == []
     assert planner.build_plan(["Makefile"])["targets"] == ["check-agent-workflow"]
 
 
@@ -854,10 +842,11 @@ def test_verilator_diagnostics_are_bounded_and_deduplicated(capsys, tmp_path):
     assert "%Error: diagnostic 0" in lines and "%Error: diagnostic 99" in lines
 
 
-def test_ordinary_docs_are_light_but_experiment_records_are_checked():
+def test_docs_and_lessons_are_light_but_physical_records_are_checked():
     planner = load_script("check_plan")
     assert planner.build_plan(["README.md", "docs/workflow.md"])["targets"] == []
-    assert planner.build_plan(["docs/experiments/index.md"])["targets"] == ["check-records"]
+    assert planner.build_plan(["docs/experiments.md"])["targets"] == []
+    assert planner.build_plan(["docs/design/vivado_baseline_registry.md"])["targets"] == ["check-records"]
 
 
 @pytest.mark.parametrize("path,expected", [
@@ -896,3 +885,45 @@ def test_combined_plan_preserves_each_files_checks(paths):
     backward = planner.build_plan(list(reversed(paths)))["targets"]
     assert set(forward) == set(backward) == expected
     assert len(forward) == len(set(forward))
+
+
+@pytest.mark.parametrize("legacy_id", [None, "EXP-0084", "bad-id"])
+def test_vivado_manifest_does_not_require_an_experiment(legacy_id, tmp_path):
+    records = load_script("check_project_records")
+    source = next((REPO_ROOT / "reports/vivado/manifests").glob("RUN-*.toml"))
+    lines = [line for line in source.read_text().splitlines()
+             if not line.startswith("experiment_id =")]
+    if legacy_id is not None:
+        lines.insert(0, f'experiment_id = "{legacy_id}"')
+    path = tmp_path / source.name
+    path.write_text("\n".join(lines) + "\n")
+    if legacy_id == "bad-id":
+        with pytest.raises(SystemExit, match="invalid legacy experiment_id"):
+            records.validate_manifest(path, set())
+    else:
+        records.validate_manifest(path, set())
+
+
+def test_standalone_formal_keeps_independent_events(tmp_path, monkeypatch):
+    wrapper = load_script("sby_quiet")
+    fake_sby = tmp_path / "fake-sby"
+    write_fake_sby(fake_sby)
+    (tmp_path / "dut.sv").write_text("module dut; endmodule\n")
+    (tmp_path / "proof.sby").write_text("[files]\ndut.sv\n")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("REAL_SBY", str(fake_sby))
+    monkeypatch.setenv("SBY_LOG_DIR", str(tmp_path / "logs"))
+    monkeypatch.setenv("VALIDATION_RUN_ROOT", str(tmp_path / "runs"))
+    monkeypatch.delenv("VALIDATION_EVENTS_PATH", raising=False)
+    monkeypatch.delenv("FAKE_SBY_FAIL", raising=False)
+    monkeypatch.setattr(sys, "argv", ["sby_quiet.py", "proof.sby", "prove"])
+    for _ in range(2):
+        monkeypatch.delenv("VALIDATION_RUN_ID", raising=False)
+        assert wrapper.main() == 0
+    paths = list((tmp_path / "runs").glob("*/events.jsonl"))
+    assert len(paths) == 2
+    for path in paths:
+        event = json.loads(path.read_text())
+        assert event["status"] == "PASS" and event["task"] == "prove"
+        assert event["sources"] == ["proof.sby", "dut.sv"]
+        assert Path(event["log"]).is_file()

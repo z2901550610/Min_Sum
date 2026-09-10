@@ -11,30 +11,35 @@
 
 局部修改默认只格式化任务文件并运行相关自检，按改变的接口/行为补调用方检查后停止。
 `ci-fast`、完整KEM reference和`check`是显式聚合入口，不是日常收尾清单。
-命令、选测和证据边界只维护在[工作流](docs/workflow.md)；未知测试时可用`check-plan`辅助选择。
+命令与证据边界见[工作流](docs/workflow.md)；未知测试时可用`check-plan`辅助选择。
 
-Vivado以 Windows Tcl Console 或直接 `vivado -mode batch -source scripts/vivado_trike_kem_cores.tcl` 为主入口，Make包装可选。
+Vivado以 Windows Tcl Console 或直接 `vivado -mode batch -source scripts/vivado_trike_kem_cores.tcl` 为主入口。
 资源与时序结论只使用同器件、Vivado版本、XDC、参数和报告阶段的可比结果。
 
 ## 目录
 
-- `rtl/`：可综合SystemVerilog RTL。
-- `tb/`：定向、reference和集成testbench。
-- `formal/`：SymbiYosys proof/cover harness。
-- `filelists/`：实现顶层的规范源文件顺序。
-- `scripts/`：生成、验证和Vivado入口。
-- `software/`：TRIKE软件参考与RTL对拍辅助实现。
-- `constraints/`：Vivado XDC约束。
-- `docs/`：成品设计、验证、实验和项目工作流。
-- `reports/vivado/manifests/`：版本化的Vivado运行摘要；原始报告保存在外部报告根目录。
-- `.agents/skills/`：按需查阅的RTL专题指导。
-- `workflow-smoke/`：不进入生产filelist的独立工具链PoC。
+- `rtl/`、`tb/`、`formal/`、`filelists/`：RTL、testbench、proof 与源文件顺序
+- `scripts/`：fixture 生成、验证入口与 Vivado Tcl
+- `software/`、`constraints/`：软件参考与 XDC
+- `config/`：测试 catalog、验证 profile、工具锁
+- `docs/`：设计、工作流、错题本、验证方法
+- `reports/vivado/manifests/`：Vivado 运行摘要；原始报告在外部报告根目录
+- `workflow-smoke/`：不进入生产 filelist 的独立工具链 PoC
 
-完整文档入口见[docs/README.md](docs/README.md)，本地流程见
-[docs/workflow.md](docs/workflow.md)，项目约束见[AGENTS.md](AGENTS.md)。
+## 文档入口
+
+| 问题 | 文档 |
+| --- | --- |
+| 怎样跑工具、选检查、何时停、记什么 | [工作流](docs/workflow.md) |
+| 当前实现与验证范围 | [实现状态](docs/design/implementation_status.md) |
+| Decoder / KEM 架构事实 | [Decoder](docs/design/decoder_hardware_design_guide.md)、[公共核](docs/design/trike_kem_common_cores.md)、[折叠](docs/design/trike_karatsuba_fold.md) |
+| 候选与下一步 | [路线图](docs/design/trike_kem_optimization_roadmap.md) |
+| 错题与历史 | [错题本](docs/experiments.md) |
+| 物理基线 | [Vivado注册表](docs/design/vivado_baseline_registry.md) |
+| 编码规范 | [coding](docs/design/coding.md) |
+| 工具基线 | [环境](docs/environment.md) |
 
 ## 本机配置
 
-将`config/local.mk.example`复制为不进入Git的`config/local.mk`，在其中设置官方TRIKE
-Reference C/KAT等机器相关路径。`external/trike-reference`只是本地配置的默认查找路径，
-该外部Reference C目录不随仓库分发，可在`config/local.mk`中覆盖。
+将`config/local.mk.example`复制为不进入Git的`config/local.mk`，设置官方TRIKE
+Reference C/KAT等机器相关路径。`external/trike-reference`只是本地默认查找路径。

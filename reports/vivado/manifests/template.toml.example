@@ -1,6 +1,5 @@
 schema_version = 1
 run_id = "RUN-YYYYMMDD-NN-top"
-experiment_id = "EXP-xxxx"
 date = "YYYY-MM-DD"
 status = "pending" # pending | pass | fail | incomparable | superseded
 verdict = "pending" # retained | rejected | pending | incomparable | superseded

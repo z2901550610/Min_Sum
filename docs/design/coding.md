@@ -1,4 +1,4 @@
-# Vivado SystemVerilog RTL 规范
+# RTL / Vivado 编码规范
 
 本规范用于本仓库 SystemVerilog RTL、testbench、Vivado 约束和综合脚本的生成、修改、审查。设计目标是保持 BIKE/MDPC min-sum decoder 的固定延迟行为，并让 Vivado 综合、实现、时序分析和资源推断得到清晰、一致的 RTL 输入。
 
@@ -12,14 +12,14 @@
 ## 目录和文件
 
 - 可综合 RTL 放在 `rtl/`，testbench 放在 `tb/`，Vivado 约束放在 `constraints/`，脚本放在 `scripts/`。
-- 公共参数、类型、打包布局和几何尺寸放在 [bike_pkg.sv](../rtl/bike_pkg.sv)。
+- 公共参数、类型、打包布局和几何尺寸放在 [bike_pkg.sv](../../rtl/bike_pkg.sv)。
 - 主要模块文件名与模块名保持一致。
 - 随机仿真 fixture 目录为 `tb/generated/`，本地生成产物由 `.gitignore` 管理。修改生成流程时同时更新生成脚本和验证入口。
 - 新增设计文档只描述目标架构和当前行为，不写迁移叙述。
 
 ## 命名和格式
 
-- 遵守 [naming_conventions.md](design/naming_conventions.md)。
+- 遵守下方「命名规范」一节。
 - 模块输入使用 `i_` 前缀，输出使用 `o_` 前缀，子模块实例使用 `u_` 前缀。
 - 时钟使用 `i_clk`。顶层外部复位端口使用 `i_rst_n`，含义是异步置位、同步释放的低有效复位源。
 - lane、tile、row、col、diagonal、pair、buffer 相关名称使用项目术语：`lane_idx`、`tile_idx`、`base_row_idx`、`check_row_idx`、`row_idx`、`col_idx`、`diag_idx_local`、`diag_idx_global`、`comp_clear_addr`、`fill_buf`、`active_buf`。
@@ -31,7 +31,7 @@ logic signed [ACC_W-1:0] c2v_raw_next[0:L-1];
 ```
 
 - 维护 RTL/TB/Formal 文件后运行 `make format FILES="<本任务修改的 .sv 文件>"`。
-  全仓格式门禁使用非修改式的 `make format-check`；仅在明确需要时运行
+  全仓格式门禁使用非修改式的 `make check-format-rtl`；仅在明确需要时运行
   `make format-changed`或`make format-all`。
 
 ## SystemVerilog 子集
@@ -200,17 +200,17 @@ localparam int ROW_IDX_W = (R > 1) ? $clog2(R) : 1;
 
 ## XDC 和 Vivado 脚本
 
-- 基本约束位于 [decoder_top.xdc](../constraints/decoder_top.xdc)。
+- 基本约束位于 [decoder_top.xdc](../../constraints/decoder_top.xdc)。
 - 约束顺序遵守 UG903：primary/generated clocks、clock groups、I/O delay、timing exceptions、physical constraints。
 - clock 必须先创建，再被后续约束引用。
 - false path、multicycle path、min/max delay 需要写清楚对象和功能理由。
 - 新增 clock、generated clock、异步输入、外设 I/O、debug ILA 或 CDC 结构时同步更新 XDC。
-- Vivado batch 流程使用 [vivado_synth.tcl](../scripts/vivado_synth.tcl)，报告至少包含 utilization、timing summary 和 messages。新增 CDC 结构时加入 `report_cdc`。
+- Vivado batch 流程使用 [vivado_synth.tcl](../../scripts/vivado_synth.tcl)，报告至少包含 utilization、timing summary 和 messages。新增 CDC 结构时加入 `report_cdc`。
 - 综合报告流程包含 methodology、CDC、timing summary、messages 和 utilization。methodology 报告用于发现约束、时钟、复位、综合属性和实现流程问题；CDC 报告用于发现跨域结构、复位同步和未识别同步链。
 
 ## 仿真和验证
 
-- 使用所属最小自检目标；范围与聚合入口只维护在[工作流](workflow.md)。
+- 使用所属最小自检目标；范围与聚合入口只维护在[工作流](../workflow.md)。
 - testbench 必须 self-checking，并包含 timeout。
 - 算法行为使用 Python/C golden model 或生成 fixture 对拍。
 - 随机 BIKE case 通过 `scripts/run_bike_random.py` 生成和运行。
@@ -218,7 +218,7 @@ localparam int ROW_IDX_W = (R > 1) ? $clog2(R) : 1;
 
 ## Lint、格式和综合检查
 
-日常检查遵循[工作流](workflow.md)，本文不另设完整lint/test前置条件。
+日常检查遵循[工作流](../workflow.md)，本文不另设完整lint/test前置条件。
 
 Vivado 检查：
 
@@ -242,25 +242,40 @@ make vivado-synth
 - `keep` 和 `dont_touch` 只用于明确需要保留结构的局部对象，并写明设计理由。
 - 属性不能掩盖 RTL 架构、CDC 或时序问题。
 
-## 代码审查清单
+## 命名规范
 
-审查 RTL 时按以下顺序看：
+### 坐标术语
 
-1. 固定延迟和常时间属性是否成立。
-2. 可综合 SystemVerilog 子集是否满足。
-3. `always_ff`/`always_comb` 赋值类型是否正确。
-4. reset 是否只覆盖需要复位的控制状态。
-5. RAM、DSP、FIFO 推断模板是否清晰。
-6. 参数边界和位宽转换是否完整。
-7. CDC、异步 reset、XDC 例外是否有配套结构和约束。
-8. testbench 是否覆盖功能、边界、timeout 和固定周期。
-9. Makefile 检查和 Vivado 报告是否足够。
+| 名称 | 范围 | 含义 |
+| --- | --- | --- |
+| `h_block_idx` | `0..N0-1` | circulant block 编号 |
+| `diag_idx_local` | `0..W-1` | 一个 block 内对角线编号 |
+| `base_row_idx` | `0..R-1` | H 第一列行索引 |
+| `diag_idx_global` | `0..N0*W-1` | 全局对角线编号 |
+| `tile_idx` | `0..TILE_COUNT-1` | block 内 tile 编号 |
+| `tile_linear` | `0..TILES_TOTAL-1` | 全局 tile 编号 |
+| `lane_group_idx` | `0..Q_TILE-1` | tile 内固定向量周期编号 |
+| `lane_idx` | `0..L-1` | 并行 lane 编号 |
+| `check_row_idx` | `0..R-1` | 校验行号 |
+| `row_idx` / `col_idx` | `0..R-1` / `0..N-1` | 通用行/列 |
+| `tile_offset` | `0..COLS_PER_TILE-1` | tile 内本地列 offset |
 
-## 规范落地清单
+### 后缀与前缀
 
-- 顶层外部 reset 进入 `reset_sync`，内部控制逻辑和子模块使用同步释放后的 reset。
-- RAM 数据阵列不写全阵列 reset；控制有效性由 loaded bit、valid、固定写入窗口或写入协议表达。
-- `ram_style`、`ASYNC_REG`、`mark_debug`、`keep`、`dont_touch` 只在设计意图明确时使用。
-- XDC 先声明 clock，再声明 clock groups、I/O delay、timing exception 和 physical constraint。
-- Vivado batch 报告保存 methodology、CDC、timing summary、messages 和 utilization。
-- RTL 改动完成后按风险运行 Makefile 测试、lint、格式检查和 Vivado synthesis。
+| 标记 | 用法 |
+| --- | --- |
+| `_idx` / `_seq` / `_addr` / `_offset` | 编号、扫描计数、存储地址、局部偏移 |
+| `_valid` / `_loaded` / `_error` | 有效、加载完成、错误 |
+| `_sel` / `_buf` / `_pair` | 选择、双缓冲、双 pair |
+| `i_` / `o_` / `u_` | 输入 / 输出 / 子模块实例 |
+
+unpacked 维度紧贴信号名，多 lane 用 `[0:L-1]`。Debug-only 信号用 `unused_*`/`observed_*` 并放进局部 lint waiver。
+
+## 复位与时钟契约
+
+- 时序逻辑使用单一、明确的时钟边沿；时钟不进入组合门控。需要降频或暂停时用同步 clock-enable。
+- 异步外部复位在`reset_sync`边界完成异步置位、同步释放；同步模块不得传播未同步的释放沿。
+- 同一时钟域内的 valid/ready、地址和数据必须按接口契约同周期对齐。跨域信号需专用 CDC 与独立约束/验证。
+- Testbench 与 formal harness 必须明确起始复位和 start/done 采样边界。
+- 复位 recovery/removal、同步数据 setup/hold、总体 I/O timing 和功能固定周期是四种不同证据，报告时不得互相替代。
+- `workflow-smoke`的低有效同步复位只属于独立工具 PoC，不定义生产顶层复位接口。

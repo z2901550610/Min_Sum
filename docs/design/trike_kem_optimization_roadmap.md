@@ -2,7 +2,7 @@
 
 更新：2026-09-09。仅维护值得跨任务保留的候选与进入条件，不记录推进过程。
 当前结构、周期和验证范围以[实现状态](implementation_status.md)和所属设计说明为准；
-失败教训与旧结果见[历史索引](../experiments/index.md)，物理基线见[注册表](vivado_baseline_registry.md)。
+失败教训与旧结果见[错题与历史查询](../experiments.md)，物理基线见[注册表](vivado_baseline_registry.md)。
 
 ## 当前进入条件
 
@@ -18,7 +18,7 @@
 | 方向 | 进入条件与最小待解决问题 |
 | --- | --- |
 | 当前集成物理比较 | 固定源码/参数/XDC等条件，对求逆、KeyGen、统一KEM测RAM映射、关键路径及cycles/Fmax；不混改sorter/reset |
-| 稀疏与Encaps物理收益 | 检查6拍RMW的转发/rotation路径，以及error流移除存储后的实际RAM与mux成本；功能范围见EXP-0124/0125 |
+| 稀疏与Encaps物理收益 | 检查6拍RMW的转发/rotation路径，以及error流移除存储后的实际RAM与mux成本；功能范围见[实现状态](implementation_status.md) |
 | Frobenius | 比较当前schedule实际k的direct/repeated置换成本；不照搬C的阈值64 |
 | Divstep | EXP-0122仅局部锚点；先做b=64、s=8全长四多项式BRAM扫描，处理padding/carry和固定访问，再决定是否接KeyGen |
 | 求逆系统比较 | 基于实际D×D和置换成本比较当前加法链与divstep的增量面积、延时；TRIKE仍需D×D，不能套用BIKE移除稠密核的收益 |

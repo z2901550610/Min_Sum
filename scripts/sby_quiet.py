@@ -3,15 +3,12 @@
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
-import json
 import os
 import re
 import shlex
 import subprocess
 import sys
-import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -121,45 +118,6 @@ def log_path(project: Path | None, task: str) -> Path:
     return new_log(log_dir, f"{project_name}-{task}")
 
 
-def write_summary(result: dict[str, object]) -> Path:
-    summary_path = Path(
-        os.environ.get("CHECK_SUMMARY_PATH", "build/results/check-summary.json")
-    )
-    summary_path.parent.mkdir(parents=True, exist_ok=True)
-    lock_path = summary_path.with_suffix(summary_path.suffix + ".lock")
-    with lock_path.open("a+", encoding="utf-8") as lock_file:
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
-        try:
-            current = json.loads(summary_path.read_text(encoding="utf-8"))
-        except (FileNotFoundError, json.JSONDecodeError):
-            current = {"schema_version": 1, "results": []}
-        by_id = {
-            item["id"]: item
-            for item in current.get("results", [])
-            if isinstance(item, dict) and isinstance(item.get("id"), str)
-        }
-        by_id[str(result["id"])] = result
-        document = {
-            "schema_version": 1,
-            "updated_at": datetime.now(UTC).isoformat(),
-            "note": "Latest recorded result per task; source_digest identifies its exact inputs.",
-            "results": [by_id[key] for key in sorted(by_id)],
-        }
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=summary_path.parent,
-            prefix=summary_path.name + ".",
-            suffix=".tmp",
-            delete=False,
-        ) as output:
-            json.dump(document, output, indent=2, sort_keys=True)
-            output.write("\n")
-            temporary_path = Path(output.name)
-        os.replace(temporary_path, summary_path)
-    return summary_path
-
-
 def emit_failure(output: str, log_file: Path) -> None:
     for line in diagnostic_lines(output, IMPORTANT_RE, failed=True):
         print(line, file=sys.stderr)
@@ -200,22 +158,15 @@ def main() -> int:
         "tool": {"command": real_sby, "version": tool_version(real_sby)},
     }
     try:
-        summary_path = write_summary(result)
-        append_event(
-            {
-                "evidence_layer": "formal",
-                "name": f"{project_name} {task}",
-                "status": result["status"],
-                "returncode": returncode,
-                "duration_seconds": result["duration_seconds"],
-                "command": [real_sby, *args],
-                "signature": f"sby:{digest}",
-                "log": result["log"],
-                "output_bytes": len(output.encode("utf-8")),
-                "output_lines": len(output.splitlines()),
-                "source_digest": digest,
-            }
-        )
+        os.environ.setdefault("VALIDATION_RUN_ID", log_file.stem)
+        events_path = append_event({
+            **result,
+            "name": f"{project_name} {task}",
+            "command": [real_sby, *args],
+            "signature": f"sby:{digest}",
+            "output_bytes": len(output.encode("utf-8")),
+            "output_lines": len(output.splitlines()),
+        })
     except (OSError, ValueError) as error:
         print(f"sby FAIL: could not update validation evidence: {error}", file=sys.stderr)
         return returncode if returncode != 0 else 1
@@ -225,7 +176,7 @@ def main() -> int:
     status = "PASS" if returncode == 0 else "FAIL"
     print(
         f"sby {status}: {project_name} {task} "
-        f"({duration_seconds:.2f}s, digest: {digest[:12]}, log: {log_file}, summary: {summary_path})"
+        f"({duration_seconds:.2f}s, digest: {digest[:12]}, log: {log_file}, events: {events_path})"
     )
     if returncode != 0:
         emit_failure(output, log_file)

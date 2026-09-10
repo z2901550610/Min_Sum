@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from qc_matrix_data import DEFAULT_H_BASE_ROWS
 from run_bike_random import bit_vector_hex, calc_syndrome, sv_array
 
 
@@ -22,7 +21,7 @@ def emit_fixture(path: Path, *, error_positions: list[int]) -> None:
     c_val = 2
     alpha_shift_0 = 1
     alpha_shift_1 = 3
-    h_base_rows = DEFAULT_H_BASE_ROWS["test"]
+    h_base_rows = [[0, 2, 4], [0, 3, 4]]
     n_value = len(h_base_rows) * r_value
     error_bits = [0 for _ in range(n_value)]
     for pos in error_positions:

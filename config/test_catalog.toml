@@ -1229,7 +1229,7 @@ commands = [
   "@$(SIM) $(VERILATOR_MDIR)/Vtb_decoder_top +verilator+quiet",
 ]
 [[tests.owners]]
-exact = ["scripts/gen_toy_case_fixture.py", "scripts/qc_matrix_data.py"]
+exact = ["scripts/gen_toy_case_fixture.py"]
 covers_profiles = ["decoder"]
 [[tests.owners]]
 exact = ["rtl/decoder_top.sv", "rtl/decoder_profile_config.sv", "rtl/ram_s.sv", "rtl/vnu.sv", "tb/tb_decoder_top.sv"]

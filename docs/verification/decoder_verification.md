@@ -107,9 +107,9 @@ VERILATOR_QUIET=0 make test
 
 ```sh
 make format FILES="<本任务修改的 .sv 文件>"
-make format-check
-make lint
+make check-format-rtl
+make check-rtl
 ```
 
-`make format`只原地修改显式列出的任务文件；`make format-check`通过
+`make format`只原地修改显式列出的任务文件；`make check-format-rtl`通过
 `MAINTAINED_SV`检查全部维护态 RTL/TB/Formal 文件。生成目录不参与格式化。
