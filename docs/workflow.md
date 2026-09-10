@@ -1,63 +1,70 @@
-# 本地 SystemVerilog 工作流
+# 本地研究工作流
 
-这是研究仓库。日常修改以相关静态检查和定向自检测试为主，完整验证用于集成、工具链资格和明确的研究结论。常数时间、功能正确性和证据真实性不因流程精简而放宽。
+默认流程：相关代码 → 修改 → 最小自检 → 按实际影响补检查 → 停止。
+不以生产资格验证作为日常完成条件。共享原则以[AGENTS](../AGENTS.md)为准。
 
-## 环境
+## 入口与选测
 
-checkout 或 Python 依赖变化后执行 `uv sync --frozen`；每个新终端执行 `source scripts/eda-env.sh`。环境脚本选择已安装的 OSS CAD Suite 和项目 `.venv`，不隐式安装工具。
+本地工具用`./eda <command>`，例如`./eda make test-ram-accum`。环境脚本选择现有OSS CAD Suite及项目
+`.venv`；环境缺失或依赖变化时执行`uv sync --frozen`。`tool-versions`告警版本差异，
+`check-tool-versions`用于显式基线核查。工具基线与限制见[环境](environment.md)。
 
-`make tool-versions` 输出实际版本：与 `config/rtl_toolchain.lock` 不同只告警，命令缺失或执行失败仍失败。`make check-tool-versions` 显式要求基线版本匹配；`make check-local-tools` 检查完整工具集和 Yosys Slang frontend 能力。日常定向测试只需要其实际使用的工具，不预先要求整个工具集。
-
-## 选择验证范围
-
-| 场景 | 命令或要求 |
+| 变化 | 最小检查 |
 | --- | --- |
-| 局部 RTL/TB 修改 | `make format FILES="..."`、`make check-fast`、所属 `make test-<name>` |
-| 日常集成/自动 CI | `make ci-fast`：`check-fast` 加单元及集成测试 |
-| 控制、调度或形式属性改变 | 相关 `make formal-<name>` proof/cover；改变参数时覆盖受影响 public profiles |
-| 算法、KEM共享语义或接口改变 | 相关 reference、集成和固定周期/访问计数检查；按研究结论决定随机试验规模 |
-| 广泛集成、工具链资格 | `make check`：完整工具检查、记录、静态、短形式矩阵、仿真、展开和本地综合 |
-| 核心 Make、验证 runner、环境或 smoke 机制改变 | `make validate-workflow`：工作流单测、正/负工具 smoke；生产 recipe 改变另运行所属目标 |
-| 普通工作流辅助脚本 | `make check-agent-workflow` 和脚本实际功能所需检查；无需完整 RTL 资格验证 |
-| 文档、Skill、实验记录 | 普通文档/Skill仅 `git diff --check` 并核对修改涉及的链接；实验/物理记录才运行 `make check-records` |
-| FPGA 资源/时序结论 | 同条件 Vivado 实现；本地 Yosys 结果不能代替 |
+| 局部RTL/TB | 格式化任务文件，运行所属自检 |
+| 接口、共享行为 | 补实际受影响调用方的reference/集成 |
+| filelist/package/top | filelist检查及相关展开；需要跨顶层时用`check-fast` |
+| 控制/调度属性 | 已有相关proof/cover；不要求新建形式工程 |
+| 参数表 | 测改变的档；通用几何变化才补最小/最大代表档 |
+| Make recipe、catalog、辅助脚本 | 相关工作流单测及改动命令 |
+| 执行器、环境或工具互操作 | `validate-workflow` |
+| 文档 | 差异和相关链接；RUN/物理基线关系改变才用`check-records` |
 
-`check-fast` 执行 filelist 检查和 Slang 展开；不声称覆盖所有运行参数或建立行为正确性，所属 TB 必须自检。`make lint`/`check-rtl` 仍保留完整 filelist、格式、Verible、Verilator、Slang 检查，供诊断或完整资格使用。`make format-check` 只读检查维护中的 SV 格式；`format-changed` 和 `format-all` 是显式批量修改入口。
+选测不明时用`./eda make check-plan VALIDATION_PATHS="..."`。缺少owner不等于已验证。
+`check-validation-profiles`只验证选测配置；文字规则只维护在本页。
 
-GitHub 的 `.github/workflows/ci.yml` 在 push/PR 调用 `make ci-fast`，手动 `workflow_dispatch` 调用完整 `make check`。CI 使用明确的安装版本；YAML 不复制测试、proof 或综合 recipe。`ci-nightly` 保留短形式矩阵、扩展形式及多 seed 随机测试；`ci-kem-reference` 保留 KEM 参考/KAT 边界。
+## 显式聚合入口
 
-## 定向规划
+- `check-fast`：filelist和多顶层Slang展开；`ci-fast`再加单元/集成。
+- `check-rtl`：完整格式、Verible、Verilator及Slang。
+- `test` = `test-unit` + `test-integration`；选择所需范围，不顺序重复。
+- `ci-kem-reference`：KEM参考集合及reference数据检查。
+- `regress`/`ci-smoke`/`ci-nightly`：显式随机或扩展覆盖。
+- `check`：新工具链或明确的广泛资格检查；`validate-workflow`不证明生产RTL。
+- `synth`：Yosys generic/Xilinx结构估计；`qor`专用于compare-select自检、proof和估计。
+  `qor-record`保存tracked结果；`qor-report`如实传入证据状态。
 
-`make check-plan VALIDATION_PATHS="..."` 为指定文件选择检查；全部差异属于当前任务时可省略路径。它只规划，不执行或产生 PASS。已知测试时直接运行，无需在每轮编辑前重复规划；范围明确且未变化时，完成定向检查即可，无需结束前再次规划。
+CI的代码push/PR使用`ci-fast`，纯Markdown/docs变化跳过；手动工作流使用`check`。
+`VALIDATION_PROFILE_SET=representative|all`控制完整尺寸入口，默认代表参数。
+Fold乘法/求逆几何不等同于完整KEM/KAT覆盖。
 
-`config/test_catalog.toml` 是测试命令、fixture 前置条件、测试分组和测试 owner 的唯一维护入口，`scripts/test_catalog.py` 为 Make 生成忽略的 `build/test_catalog.mk`。Make 会在清单或生成器变化时重建它；现有 `make test-*` 名称不变。规划器直接读取同一清单，不解析生成文件。测试命令保留 Make 原生变量展开，生产 `filelists/*.f` 仍控制规范源顺序。
+## 输出与证据
 
-`config/validation_profiles.toml` 只保存验证策略、非测试 owner、覆盖关系和生成表格；`docs/verification/validation_matrix.md` 展示最小门禁。owner 是选择最小测试的可选映射，缺少 owner 的硬件回退到 profile。已配置的无效 target、重叠硬件 owner 或核心文件未路由仍报错。普通研究脚本和数据可以不登记；规划器列出未路由文件，由任务选择适当检查，不自动将其算作通过。
+定向仿真使用独立`build/verilator/<target>/<variant>/`；quiet wrapper保留完整日志、退出码与失败摘录。
+结果事件统一写入`build/results/runs/<run-id>/events.jsonl`；`validate-workflow`自动生成摘要，
+单独formal执行也分配独立run。需要时用`./eda python3 scripts/validation_events.py summarize --events <events.jsonl> --run-id <run-id>`重建摘要。
+PASS/FAIL/NOT_RUN/NOT_APPLICABLE与CANCELLED分别表达实际边界。
+DFR结论保留trials、failures、停止规则及置信界；toy proof只证明其harness范围。
 
-修改配置后运行 `make update-validation-matrix` 和 `make check-validation-profiles`。后者由工作流单测入口执行，与文档记录检查分离。配置字段和覆盖关系需要有效，但文档句子的具体措辞不再作为机器门禁。
+物理结果用Windows Tcl Console或`vivado -mode batch -source scripts/vivado_trike_kem_cores.tcl`。
+RUN规则见[manifest规范](../reports/vivado/manifests/README.md)。
+日常功能探索无需Vivado；未测资源/时序不作物理收益声明。
+Yosys `synth`/`qor`只是结构估计，不是Vivado映射、布局、布线或时序结论。
 
-只运行适用的任务命令和升级项。已经通过且输入未变的检查无需重复；参数/接口、共享行为或新的失败证据改变了范围时再扩大。完整 `make check` 和 `validate-workflow` 不属于每个 helper、Skill 或局部 RTL 修改的默认要求。
+## 记录门槛
 
-## 日志与证据
+| 内容 | 唯一维护位置 | 何时更新 |
+| --- | --- | --- |
+| 普通修改、调试、测试输出 | Git、自动日志 | 不另写总结文件 |
+| 当前接口、RAM生命周期、固定周期 | 所属[设计文档](design/) | 采用的设计事实改变时 |
+| 当前验证范围与限制 | [实现状态](design/implementation_status.md) | 有新结果或旧结果失效时 |
+| 有证据放弃的方向 | [错题本](experiments.md) | 一条机制只记一次 |
+| 有价值但未完成的候选 | [路线图](design/trike_kem_optimization_roadmap.md) | 确需跨任务保留时 |
+| 正式物理结果 | RUN manifest、原始报告、[基线注册表](design/vivado_baseline_registry.md) | 按物理证据规则 |
 
-toy fixture 内容未变时不重写文件，避免无意义地改变依赖时间戳；测试仍每次执行。
-
-三个工具包装和工作流 runner 共用 `scripts/tool_runner.py` 的命令执行和诊断提取；工具日志通过原子分配独立路径，完整输出和退出码均保留。工具专属的参数、编译元数据和既有 SBY 摘要格式仍由相应包装维护。
-
-直接仿真使用 `build/verilator/<make-target>/<variant>/`；并行任务必须使用独立构建目录和原子创建的日志。终端输出简短状态和日志位置；详细诊断留在 `build/logs/`，需要时读取相应失败日志。默认只显示最多 20 行主要诊断和 20 行失败尾部并去重；仿真正常输出默认最多 20 行，`RUN_QUIET_MAX_LINES` 可显式调整。不要为减少输出而吞掉非零退出码。
-
-`make validate-workflow` 不调用生产 `check` 或生成 QoR 报告；其 PASS 只表示工作流与独立计数器 smoke 通过，不能表示产品 RTL 通过。`check` 与 `qor` 分别是独立的硬件验证和资源研究入口，只有任务需要时才组合执行。
-
-`make validate-workflow` 默认 `VALIDATION_JOBS=2`（用于工具 smoke），输出到 `build/results/runs/<run-id>/`：`run.json` 记录提交和非忽略工作树摘要，`run.log` 保存完整输出，`events.jsonl` 和 `summary.json`/`summary.txt` 记录实际执行结果。负向 smoke 的预期失败使用隔离环境。状态为 PASS、FAIL、NOT_RUN、NOT_APPLICABLE；未执行的层不能被其他 PASS 掩盖。重复 signature 和最慢任务仅用于诊断，不另设形式化门禁。当前不自动复用历史缓存证据。
-
-`make regress` 是固定 seed 随机 smoke。DFR/FLS 结论另须记录参数、trials、failures、停止规则和置信界。仿真比较数据结果、协议、访问次数和准确 start/done 周期；形式结论受 harness 和 assumptions 限定。
-
-`make synth` 使用 Yosys+Slang 做结构与资源估计。`make qor` 验证 `kem_ct_compare_select` 并写入 `build/results/qor/`；只有显式 `make qor-record` 更新 tracked 报告。普通修复由 Git 和测试记录；架构/QoR 假设使用一个 EXP 系列。
-
-## 按需参考与物理实现
-
-`.agents/skills/` 提供 spec、architecture、implement、lint-debug、verification、formal、synthesis 和 qor-opt 的专题指导。只读本任务真正需要的技能，没有强制级联；局部等价修改不要求新建规格或架构阶段。RTL 命名和编码细节见 `docs/design/naming_conventions.md`、`docs/vivado_systemverilog_guidelines.md`。
-
-Vivado 使用 Windows Tcl Console 或 `vivado -mode batch -source scripts/vivado_trike_kem_cores.tcl`，Make 包装可选。明确报告根目录、run ID、top、part、XDC、defines 和 directives；每次执行保存 RUN manifest，原始报告置于 `${VIVADO_REPORT_ROOT}/<run-id>/`。比较须保持器件/速度等级、版本、时钟、参数、L/K、存储几何和报告阶段一致，并记录 LUT、FF、Slice、BRAM/RAMB、DSP、setup WNS/TNS、hold WHS。只有保留的完整可比 placed/routed 结果才能更新物理基线。功能修改不要求额外跑 Vivado，也不宣称未经验证的物理收益。
-
-独立工具链 smoke 位于 `workflow-smoke/`，不进入生产 filelist。可用 `make workflow-smoke`、`make -C workflow-smoke check-failures` 单独定位环境问题；可选波形使用 `make -C workflow-smoke test WAVES=1 LZ4_PREFIX=/installed/lz4/prefix`。
+阅读、推导、参数试点默认留在对话与工具输出，不创建计划/日报/阶段总结；不再分配EXP。
+普通编译错误不进入错题本。只有证据表明某方向在当前约束下不值得继续时，记录
+“方向/条件、失败原因、关键证据、重新考虑的条件”。
+未测、CANCELLED与NOT_RUN不是失败；局部Yosys估计不是Vivado结论。
+成功方案只更新所属设计说明及必要验证边界。
+可重建fixtures、日志、波形、综合输出留在已有build/report目录。

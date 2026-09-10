@@ -5,12 +5,10 @@ VERILATOR ?= verilator
 SBY ?= $(abspath ../scripts/sby_quiet.py)
 REAL_SBY ?= sby
 SBY_LOG_DIR ?= $(abspath ../build/logs/sby)
-CHECK_SUMMARY_PATH ?= $(abspath ../build/results/check-summary.json)
 YOSYS ?= yosys
 
 export REAL_SBY
 export SBY_LOG_DIR
-export CHECK_SUMMARY_PATH
 
 BUILD_DIR ?= $(abspath ../build/workflow-smoke)
 SIM_BUILD := $(BUILD_DIR)/sim-host-cocotb-2.0b$(if $(filter 1,$(WAVES)),-waves-lz4,)

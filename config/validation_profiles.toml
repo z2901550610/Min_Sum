@@ -1,4 +1,4 @@
-schema_version = 3
+schema_version = 6
 profile_order = [
   "records",
   "tool_entry",
@@ -13,123 +13,63 @@ profile_order = [
 ]
 
 [profiles.records]
-description = "Documentation, experiment records, or Vivado manifests"
+description = "Documentation or Vivado manifests"
 targets = []
-release_targets = []
-iteration_targets = []
-manual_requirements = []
 covers = []
-scope = "纯文档、实验索引或Vivado manifest"
-minimum_gate = "`git diff --check`；实验/物理记录由owner选择`make check-records`"
-boundary = "普通文档/Skill不扫描全仓记录；相关链接由本次编辑核对"
 
 [profiles.tool_entry]
 description = "Tool lock, filelist, waiver, Make, or Tcl entrypoint"
-targets = ["check-filelists", "check-fast"]
-release_targets = []
-iteration_targets = []
-manual_requirements = []
+targets = ["check-filelists"]
 covers = []
-scope = "工具锁、filelist、waiver、Make/Tcl入口"
-minimum_gate = "`make check-filelists check-fast`"
-boundary = "工具锁按owning rule运行`make check`；Tcl改动至少dry-run对应Vivado目标"
 
 [profiles.workflow]
 description = "Workflow helper scripts and CI configuration"
 targets = ["check-agent-workflow"]
-release_targets = []
-iteration_targets = []
-manual_requirements = []
 covers = []
-scope = "工作流辅助脚本、综合/QoR脚本或CI配置"
-minimum_gate = "`make check-agent-workflow`；核心入口另运行`make validate-workflow`"
-boundary = "只有核心构建/runner或工具链资格需要`make validate-workflow`；普通辅助脚本运行相关测试"
 
 [profiles.workflow_core]
 description = "Core build/runner and tool interoperability"
 targets = ["validate-workflow"]
-release_targets = []
-iteration_targets = ["check-agent-workflow"]
-manual_requirements = []
 covers = ["workflow"]
-scope = "核心Make、验证runner、环境入口或依赖"
-minimum_gate = "`make validate-workflow`"
-boundary = "仅工作流单测和工具smoke；生产recipe改变另测受影响目标，工具链基线验收另跑make check"
 
 [profiles.local_rtl]
 description = "Local RTL or testbench change"
-targets = ["check-fast"]
-release_targets = []
-iteration_targets = []
-manual_requirements = ["Run the smallest deterministic test that owns the changed behavior."]
+targets = []
 covers = []
-scope = "局部RTL/TB修复"
-minimum_gate = "最小定向test + `make check-fast`"
-boundary = "接口、参数或共享源受影响时升级至`ci-fast`"
 
 [profiles.decoder]
 description = "Decoder datapath, scheduler, RAM, or K-sign change"
-targets = ["ci-fast"]
-release_targets = ["ci-fast"]
-iteration_targets = []
-manual_requirements = ["If shared scheduling, geometry, or fixed cycles changed, run affected K=3/K=4 profiles and record the boundaries."]
+targets = ["test-integration"]
 covers = ["local_rtl"]
-scope = "Decoder数据路径、调度、RAM或K-sign"
-minimum_gate = "所属定向test + `make check-fast`；无owner运行`make ci-fast`"
-boundary = "叶级定向目标完成后，发布或共享decoder改动运行`make ci-fast`；固定周期、`residual=0`和`exact=1`分开记录"
 
 [profiles.public_params]
 description = "Public parameters or storage geometry"
-targets = ["ci-smoke"]
-release_targets = ["ci-smoke"]
-iteration_targets = []
-manual_requirements = ["Run every affected public profile and recompute cycle budgets."]
+targets = []
 covers = ["decoder", "local_rtl"]
-scope = "公开参数、`r/L/K/COLS_PER_TILE`或存储几何"
-minimum_gate = "`make ci-smoke`并运行全部受影响profile"
-boundary = "发布运行`make ci-smoke`；重算周期；DFR/FLS报告trials、failures和置信界"
 
 [profiles.kem]
 description = "KEM semantics, serialization, SM3/DRNG, or complete top-level change"
-targets = ["ci-kem-reference"]
-release_targets = ["ci-kem-reference"]
-iteration_targets = []
-manual_requirements = ["Record byte/word golden results, fixed boundaries, and failure paths separately."]
+targets = []
 covers = ["local_rtl"]
-scope = "KEM密码语义、序列化、SM3/DRNG边界或完整顶层"
-minimum_gate = "所属最小reference test + `make check-fast`；无owner运行`make ci-kem-reference`"
-boundary = "定向目标完成后，发布或共享KEM语义改动运行`make ci-kem-reference`；逐byte/word golden、固定start/done边界和失败路径分开报告"
 
 [profiles.formal]
 description = "Formal harness, property, or SymbiYosys task"
-targets = ["formal-fast"]
-release_targets = ["formal-fast"]
-iteration_targets = []
-manual_requirements = ["Report harness boundary, assumptions, parameters, and unreachable states."]
+targets = []
 covers = []
-scope = "形式属性或constant-time小控制"
-minimum_gate = "所属proof + cover；无owner运行`make formal-fast`"
-boundary = "已知harness运行所属proof/cover；发布或共享formal基础设施运行`make formal-fast`；说明assumption、参数和未覆盖状态"
 
 [profiles.physical]
 description = "XDC or implementation behavior that can affect physical evidence"
 targets = []
-release_targets = []
-iteration_targets = []
-manual_requirements = ["For FPGA mapping, resource or timing acceptance, or physical baseline updates, run a provenance-complete, same-condition Vivado implementation and create a RUN manifest. For functional-only fixes, complete required functional gates and report physical effects as unverified; do not claim physical benefits or update physical baselines."]
 covers = []
-scope = "涉及FPGA映射、资源、布局或时序的RTL/XDC"
-minimum_gate = "所需功能门禁；物理验收或基线更新另须同条件Vivado"
-boundary = "仅功能修复标明物理影响未验证，不宣称物理收益或更新基线；Vivado执行须新run manifest，只有routed可比结果可更新基线"
 
 [[routing]]
 profile = "workflow_core"
-exact = ["Makefile", "config/test_catalog.toml", "scripts/test_catalog.py", "scripts/run_validation.py", "scripts/eda-env.sh", "pyproject.toml", "uv.lock"]
+exact = ["eda", "scripts/run_validation.py", "scripts/eda-env.sh"]
 prefixes = ["workflow-smoke/"]
 
 [[routing]]
 profile = "records"
-prefixes = ["docs/", "reports/", ".agents/skills/"]
+prefixes = ["docs/", "reports/"]
 exact = ["README.md", "CLAUDE.md", "AGENTS.md", ".gitignore"]
 
 [[routing]]
@@ -146,13 +86,14 @@ exact = [
   "pyproject.toml",
   "uv.lock",
   "config/validation_profiles.toml",
+  "config/test_catalog.toml",
+  "scripts/test_catalog.py",
   "scripts/check_filelists.py",
   "scripts/check_plan.py",
   "scripts/check_project_records.py",
   "scripts/check_tool_versions.py",
   "scripts/eda-env.sh",
   "scripts/format_sv_decls.py",
-  "scripts/render_validation_matrix.py",
   "scripts/report_qor.py",
   "scripts/run_quiet.py",
   "scripts/tool_runner.py",
@@ -170,7 +111,6 @@ exact = [
   "scripts/check_model_rtl.py",
   "scripts/gen_toy_case_fixture.py",
   "scripts/min_sum_model.c",
-  "scripts/qc_matrix_data.py",
   "scripts/run_bike_random.py",
   "scripts/run_quantization_experiment.py",
 ]
@@ -311,8 +251,10 @@ profile = "physical"
 prefixes = ["constraints/", "scripts/vivado_"]
 
 [[owners]]
-prefixes = ["docs/experiments/", "reports/vivado/manifests/"]
-exact = ["docs/design/vivado_baseline_registry.md", "docs/design/implementation_status.md", "docs/design/optimization_exploration_history.md"]
+prefixes = ["reports/vivado/manifests/"]
+exact = [
+  "docs/design/vivado_baseline_registry.md",
+]
 targets = ["check-records"]
 covers_profiles = ["records"]
 
@@ -322,7 +264,7 @@ targets = ["lint-verilator"]
 covers_profiles = ["tool_entry"]
 
 [[owners]]
-exact = ["config/validation_profiles.toml", "scripts/validation_profiles.py", "scripts/check_plan.py", "scripts/render_validation_matrix.py"]
+exact = ["config/validation_profiles.toml", "scripts/validation_profiles.py", "scripts/check_plan.py"]
 targets = ["check-agent-workflow"]
 covers_profiles = ["workflow"]
 
@@ -333,8 +275,8 @@ covers_profiles = ["workflow"]
 
 [[owners]]
 exact = ["pyproject.toml", "uv.lock"]
-targets = ["python-sync", "validate-workflow"]
-covers_profiles = ["workflow", "workflow_core"]
+targets = ["python-sync", "check-agent-workflow"]
+covers_profiles = ["workflow"]
 
 [[owners]]
 prefixes = ["scripts/vivado_"]
@@ -404,18 +346,10 @@ covers_profiles = ["decoder", "formal"]
 
 [[owners]]
 exact = ["rtl/bike_pkg.sv"]
-targets = ["ci-smoke"]
+targets = ["test-integration"]
 covers_profiles = ["public_params", "local_rtl"]
 
 [[owners]]
 exact = ["rtl/trike_kem_asic_top.sv"]
 targets = ["ci-kem-reference"]
 covers_profiles = ["kem", "local_rtl"]
-
-[[manual_rules]]
-suffixes = [".tcl"]
-requirement = "Dry-run the affected Vivado Tcl target."
-
-[[manual_rules]]
-exact = ["Makefile", "scripts/eda-env.sh"]
-requirement = "Run affected production targets if their recipes/environment changed; use make check when qualifying a new toolchain baseline. Workflow smoke alone is not production RTL evidence."

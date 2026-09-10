@@ -10,7 +10,7 @@ module tb_trike_encaps_components_reference;
   localparam int REF_WORD_ADDR_W = $clog2(REF_WORDS);
   localparam int REF_H123_BUSY_CYCLES = 44640;
   localparam int REF_H4_BUSY_CYCLES = 207017;
-  localparam int REF_UV_BUSY_CYCLES = 2062238;
+  localparam int REF_UV_BUSY_CYCLES = 211475;
 
   logic                          clk;
   logic                          rst_n;
@@ -41,10 +41,6 @@ module tb_trike_encaps_components_reference;
   logic                          h4_done;
 
   logic                          uv_start;
-  logic                          uv_error_valid;
-  logic [  REF_ERROR_ADDR_W-1:0] uv_error_position;
-  logic [REF_GLOBAL_INDEX_W-1:0] uv_error_index;
-  logic                          uv_error_ready;
   logic [                   1:0] uv_operand_select;
   logic [   REF_WORD_ADDR_W-1:0] uv_operand_word;
   logic                          uv_operand_valid;
@@ -93,8 +89,8 @@ module tb_trike_encaps_components_reference;
   );
 
   trike_h4_error_sampler #(
-      .M_BYTES     (REF_M_BYTES),
-      .R_BITS      (REF_R_BITS),
+      .M_BYTES(REF_M_BYTES),
+      .R_BITS(REF_R_BITS),
       .ERROR_WEIGHT(REF_ERROR_WEIGHT)
   ) u_h4 (
       .i_clk                 (clk),
@@ -125,17 +121,15 @@ module tb_trike_encaps_components_reference;
   /* verilator lint_on PINCONNECTEMPTY */
 
   trike_encaps_uv_core #(
-      .R_BITS      (REF_R_BITS),
-      .WORD_W      (64),
-      .ERROR_WEIGHT(REF_ERROR_WEIGHT)
+      .R_BITS(REF_R_BITS),
+      .WORD_W(64)
   ) u_uv (
       .i_clk           (clk),
       .i_rst_n         (rst_n),
       .i_start         (uv_start),
-      .i_error_valid   (uv_error_valid),
-      .i_error_position(uv_error_position),
-      .i_error_index   (uv_error_index),
-      .o_error_ready   (uv_error_ready),
+      .o_error_re      (uv_error_re),
+      .o_error_raddr   (uv_error_raddr),
+      .i_error_rdata   (uv_error_rdata),
       .o_operand_select(uv_operand_select),
       .o_operand_word  (uv_operand_word),
       .i_operand_valid (uv_operand_valid),
@@ -149,6 +143,11 @@ module tb_trike_encaps_components_reference;
       .o_busy          (uv_busy),
       .o_done          (uv_done)
   );
+
+  logic                                    uv_error_re;
+  logic [$clog2(3*REF_PADDED_R_BYTES)-1:0] uv_error_raddr;
+  logic [                             7:0] uv_error_rdata;
+  always_ff @(posedge clk) if (uv_error_re) uv_error_rdata <= REF_ERROR_PADDED[uv_error_raddr];
 
   always #5 clk = ~clk;
 
@@ -268,21 +267,18 @@ module tb_trike_encaps_components_reference;
     int          result_count  [0:1];
     logic [63:0] expected_word;
     begin
-      uv_error_valid = 1'b1;
       uv_operand_valid = 1'b1;
       uv_result_ready = 1'b1;
       error_count = 0;
       operand_count = 0;
       result_count[0] = 0;
       result_count[1] = 0;
-      uv_error_position = REF_ERROR_ADDR_W'(REF_ERROR_WEIGHT - 1);
-      uv_error_index = REF_ERROR_INDICES[REF_ERROR_WEIGHT-1];
       uv_start = 1'b1;
       @(negedge clk);
       uv_start = 1'b0;
       while (!uv_done) begin
         @(posedge clk);
-        if (uv_error_valid && uv_error_ready) error_count++;
+        if (uv_error_re) error_count++;
         if (uv_operand_valid && uv_operand_ready) operand_count++;
         if (uv_result_valid && uv_result_ready) begin
           expected_word = uv_result_select ? REF_V_WORDS[result_count[1]] :
@@ -297,19 +293,12 @@ module tb_trike_encaps_components_reference;
           end
         end
         @(negedge clk);
-        if (error_count == REF_ERROR_WEIGHT) begin
-          uv_error_valid = 1'b0;
-        end else begin
-          uv_error_position = REF_ERROR_ADDR_W'(REF_ERROR_WEIGHT - 1 - error_count);
-          uv_error_index = REF_ERROR_INDICES[REF_ERROR_WEIGHT-1-error_count];
-        end
       end
-      if (error_count != REF_ERROR_WEIGHT) $fatal(1, "UV error transfer mismatch");
+      if (error_count != 5 * REF_WORDS * 8) $fatal(1, "UV error transfer mismatch");
       if (operand_count != (4 * REF_WORDS)) $fatal(1, "UV operand transfer mismatch");
       if ((result_count[0] != REF_WORDS) || (result_count[1] != REF_WORDS)) begin
         $fatal(1, "UV result count mismatch");
       end
-      uv_error_valid   = 1'b0;
       uv_operand_valid = 1'b0;
       uv_result_ready  = 1'b0;
     end
@@ -327,9 +316,6 @@ module tb_trike_encaps_components_reference;
     h4_seed_data = '0;
     h4_index_ready = 1'b0;
     uv_start = 1'b0;
-    uv_error_valid = 1'b0;
-    uv_error_position = '0;
-    uv_error_index = '0;
     uv_operand_valid = 1'b0;
     uv_result_ready = 1'b0;
 

@@ -1104,4 +1104,4 @@ valid、装载完成标志或覆盖顺序定义数据何时有效。这样可以
 
 实现参数、验证状态、资源和时序基线见
 [implementation_status.md](implementation_status.md)。固定周期公式见本文 §14。
-参数宏、构建配置和顶层端口速查见 [bike_decoder.md](bike_decoder.md)。
+参数宏与构建配置见 `rtl/bike_pkg.sv` 与 `Makefile`/`filelists/`。

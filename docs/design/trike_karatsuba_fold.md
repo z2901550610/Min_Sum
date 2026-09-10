@@ -1,13 +1,13 @@
 # 一层 Karatsuba-Comba 与直接循环折叠
 
-生产稠密乘法使用一层整多项式 Karatsuba、单路 Comba 和 64-bit 基础乘法器内部一层
+生产稠密乘法使用一层整多项式 Karatsuba、单路 Comba 和 64-bit 基础乘法器内部两层
 Karatsuba。`trike_poly_mul_core`和`trike_poly_inv_core`共用
 `trike_poly_mul_karatsuba_core`；FFT不在当前选型范围内。物理验收仍需同条件Vivado。
 
 ## 接口与 RAM 生命周期
 
 `W=ceil(r/WORD_W)`、`H=ceil(W/2)`。系数在GF(2)，bit 0对应常数项，运算为
-`A*B mod (x^r-1)`。默认`WORD_W=64`、`BASE_KARATSUBA_DEPTH=1`。
+`A*B mod (x^r-1)`。默认`WORD_W=64`、`BASE_KARATSUBA_DEPTH=2`（非64-bit默认仍为1）。
 
 - 通用乘法核接收W个A word和W个B word，再计算、输出W个结果。稀疏模式接收公开数量的
   support index替代A流；两种模式共用B和结果RAM。数据存储为`3W`个word及index RAM。
@@ -53,17 +53,37 @@ Karatsuba。`trike_poly_mul_core`和`trike_poly_inv_core`共用
 结果访问为`READ0 -> WRITE0 -> [READ1 -> WRITE1]`。第二组访问只取决于公开几何；
 即使两片落入同址，后一次读取也在前一次写入之后，不依赖同拍RAW或旁路。
 
+## Comba与折叠重叠
+
+单路Comba生产下一条对角线时，折叠器顺序处理上一word。完成但尚未接收的
+对角线保留在原有low/high累加寄存器中；折叠器接收时才推进对角线并传递高字。
+两者仅交换一个word及其公开索引，无FIFO RAM、无新增操作数端口，并删除独立carry暂存寄存器。
+折叠器忙时生产者固定等待，生产者尚未完成时折叠器固定等待；等待只取决于公开对角线长度。
+最后carry word折叠完成后才切换相位、执行原地XOR/恢复或输出。结果RAM仍保持原顺序RMW，
+因此不引入新的同拍同址读取，也不改变每事务的有效读写次数。
+
+## 稀疏读写重叠
+
+稀疏路径每个support-word固定执行FETCH_B、PREPARE、READ0、WRITE0/READ1、
+WRITE1/READ2、WRITE2，共6拍。三组结果读写均保留，读写次数分别为3dW；
+计入清零和输出后各为3dW+W。相邻访问同址时使用上一拍写回值转发，避开read-first旧值。
+新增一个WORD_W位转发寄存器，不新增RAM；地址相等比较只选择数据，不改变调度。
+
 ## 固定周期和访问数
 
 令`J(a)=length([a,a+2H-1] ∩ [W-1,2W-2])`。r按word对齐时`S=0`，否则
-`S=J(0)+3J(H)+J(2H)`。以下均为连续握手的busy拍数，不计idle接受start前的拍：
+`S=J(0)+3J(H)+J(2H)`。令`ell(j)=min(j+1,2H-1-j)`，偏移集合`O0={0,H}`、`O1={2H,H}`、`O2={H}`。
+对实际对角线k，`m(p,k)`为该word的RMW次数：每个偏移贡献一次，非word对齐且
+`W-1 <= k+offset <= 2W-2`时再贡献一次。计算与折叠隐藏的拍数为
+`Delta=sum(p=0..2,k=0..2H-3) min(2*m(p,k)+1,ell(k+1)+1)`；H=1时空和为0。
+以下均为连续握手的busy拍数，不计idle接受start前的拍：
 
 | 边界 | 周期 |
 | --- | --- |
-| 独立半bank流式核 | `3H²+32H+5W-3+2*(W mod 2)+2S` |
-| 外部操作数核（含恢复、输出） | `3H²+38H+3W-3+2S` |
-| 通用乘法核稠密模式（含装载和控制） | `3H²+38H+5W-1+2S` |
-| 通用乘法核稀疏模式，weight=d | `4W+2d+8dW` |
+| 独立半bank流式核 | `3H²+32H+5W-3+2*(W mod 2)+2S-Delta` |
+| 外部操作数核（含恢复、输出） | `3H²+38H+3W-3+2S-Delta` |
+| 通用乘法核稠密模式（含装载和控制） | `3H²+38H+5W-1+2S-Delta` |
+| 通用乘法核稀疏模式，weight=d | `4W+2d+6dW` |
 
 生产绑定中，每份操作数计算期读`3H²+4H`次、写`2H`次；通用核另有W次输入写入。
 结果RMW次数为`M=10H+S`；累加RAM总读、总写均为`M+W`（输出读取、初始化清零）。
@@ -72,19 +92,33 @@ Karatsuba。`trike_poly_mul_core`和`trike_poly_inv_core`共用
 
 ## 本地验证与复现
 
-先在仓库根目录执行`source scripts/eda-env.sh`。
+以下是按验证边界选择的复现入口，不要求逐项执行；命令加`./eda`前缀。
 
 - `make test-trike-poly-mul-core test-trike-poly-inv-core`：卷积/求逆及固定周期。
-- `make test-trike-poly-mul-runtime`：13次公开几何选择、51个事务，覆盖输入/输出停顿、
+- `make test-trike-poly-mul-runtime`：13次公开几何选择、75个事务，覆盖输入/输出停顿、
   padding、大小参数切换、稀疏模式切换、有效访问轨迹和原地操作数恢复。
 - `make test-trike-poly-karatsuba-core`：独立半bank绑定13种几何，每种13个事务。
-- `make test-trike-poly-kernel-matrix`：由`scripts/run_trike_fold_profiles.py`生成独立golden，
-  运行五档项目/参考乘法几何和五档受支持求逆几何；结果与源文件哈希写入build目录。
+- `make test-trike-fold-profiles`：由`scripts/run_trike_fold_profiles.py`生成独立golden，
+  默认运行乘法/求逆代表几何，`VALIDATION_PROFILE_SET=all`显式选择全部几何；结果与源文件哈希写入build目录。
   这些seed卷积/求逆样本不是官方KAT或DFR证据。
 - `make ci-kem-reference`：官方TRIKE-2 KeyGen、Encaps及项目Decaps相关参考门禁。
-  完整运行时四档Decaps入口为`make test-trike-decaps-runtime-four-profile-reference`。
+  运行时Decaps入口为`./eda make test-trike-decaps-runtime-profiles-reference`，默认最小/最大代表档；显式全四档加`VALIDATION_PROFILE_SET=all`。
 
-准确的已完成结果与比较记录见[EXP-0123](../experiments/EXP-0123-trike-k1-cyclic-fold.md)。
+2026-09-10将64-bit基础核默认递归深度从1改为2，外层仍为一层；未增加流水寄存器，
+RAM绑定、固定访问与周期公式不变。基础核、运行时、独立折叠核及官方乘法/求逆参考测试通过，
+当时通用稠密乘法和求逆为51,733与1,432,796拍（下述重叠改动之前）。同条件r15581本地Yosys/ABC9估计：
+通用乘法LUT primitive总数4,438→4,162，FF=1,162、RAMB36=3、RAMB18=1不变；
+求逆综合wrapper LUT 3,822→3,547，FF=878、RAMB36=4不变。
+这不是Vivado时序或加速证据。
+
+2026-09-10进一步启用Comba/折叠重叠。r15581的`Delta=4294`，通用乘法47,439拍，
+求逆1,359,798拍；KeyGen算术/core为2,919,579/7,752,441拍，Encaps core为527,684拍。
+小几何固定轨迹、运行时、官方乘法/求逆与调用方测试通过，最小/最大乘法几何
+r12589/r106781分别31,677/2,110,141拍。相对上述depth-2串行调度，同条件本地估计：
+通用乘法LUT 4,162→4,102、FF 1,162→1,101；求逆wrapper LUT 3,547→3,478、FF 878→817；
+各自BRAM不变。未建立Vivado时序或整乘法器形式证明。
+
+早期EXP-0123的已完成结果与矩阵见[Git历史入口](../experiments.md)；上述2026-09-10结果属于后续检查点。
 仿真检查固定周期及测试覆盖下的轨迹，未建立整个乘法器的形式证明。
 
 ## Vivado 物理验收

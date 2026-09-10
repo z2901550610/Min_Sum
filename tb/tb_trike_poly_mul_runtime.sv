@@ -63,6 +63,8 @@ module tb_trike_poly_mul_runtime;
     dut.sparse_re,
     dut.sparse_raddr
   });
+  `include "trike_fold_schedule.svh"
+
   function automatic int dense_cycles(input int r);
     int n, h, extra, off;
     n = (r + WORD_W - 1) / WORD_W;
@@ -74,10 +76,11 @@ module tb_trike_poly_mul_runtime;
         off = k + p * h;
         if (off >= n - 1 && off <= 2 * n - 2) extra += (p == 1 ? 3 : 1);
       end
-    return 3 * h * h + 38 * h + 5 * n - 1 + 2 * extra;
+    return 3 * h * h + 38 * h + 5 * n - 1 + 2 * extra - trike_fold_overlap_savings(r, WORD_W);
   endfunction
   task automatic run_case(input int r, input int pattern, input bit use_sparse, input bit stall);
     int n, ai, bi, si, oi, cycles, waits, tick, expected_cycles;
+    int result_reads, result_writes, overlaps;
     bit at, bt, st, ot;
     logic [WORD_W-1:0] captured, golden, held;
     bit captured_last, held_last, holding;
@@ -116,6 +119,9 @@ module tb_trike_poly_mul_runtime;
     waits = 0;
     tick = 0;
     holding = 0;
+    result_reads = 0;
+    result_writes = 0;
+    overlaps = 0;
     while (!done) begin
       if (!busy) $fatal(1, "runtime busy dropped before done");
       av = !use_sparse && ai < n && (!stall || tick % 5 != 0);
@@ -144,7 +150,7 @@ module tb_trike_poly_mul_runtime;
       held = rd;
       held_last = last;
       if ((ar && !av) || (br && !bv) || (rv && !rr)) waits++;
-      if (!stall && !use_sparse) begin
+      if (!stall) begin
         if (pattern == 0) trace[cycles] = now_trace;
         else if (trace[cycles] !== now_trace)
           $fatal(1, "runtime trace mismatch r=%0d cycle=%0d", r, cycles);
@@ -152,6 +158,12 @@ module tb_trike_poly_mul_runtime;
       if (dut.a_re && (int'(dut.a_raddr) >= n)) $fatal(1, "A address bound");
       if (dut.b_re && int'(dut.b_raddr) >= n) $fatal(1, "B address bound");
       if (dut.result_we && int'(dut.result_waddr) >= n) $fatal(1, "result address bound");
+      if (dut.result_re) result_reads++;
+      if (dut.result_we) result_writes++;
+      if (use_sparse && dut.result_re && dut.result_we) begin
+        overlaps++;
+        if (dut.result_raddr == dut.result_waddr && dut.result_wdata != '0) nonzero_collisions++;
+      end
       @(posedge clk);
       #0.1;
       cycles++;
@@ -182,7 +194,16 @@ module tb_trike_poly_mul_runtime;
       if (dut.u_b_mem.g_block.mem[word_idx] !== golden)
         $fatal(1, "B was not restored r=%0d word=%0d", r, word_idx);
     end
-    expected_cycles = use_sparse ? 4 * n + 6 + 24 * n : dense_cycles(r);
+    expected_cycles = use_sparse ? 4 * n + 6 + 18 * n : dense_cycles(r);
+    if (use_sparse && (result_reads != 10 * n || result_writes != 10 * n || overlaps != 6 * n))
+      $fatal(
+          1,
+          "sparse access counts r=%0d read=%0d write=%0d overlap=%0d",
+          r,
+          result_reads,
+          result_writes,
+          overlaps
+      );
     if (oi != n || cycles != expected_cycles + waits)
       $fatal(
           1, "runtime r=%0d cycles=%0d expected=%0d waits=%0d", r, cycles, expected_cycles, waits
@@ -192,7 +213,8 @@ module tb_trike_poly_mul_runtime;
     sv = 0;
     rr = 0;
   endtask
-  int profiles[0:12] = '{2, 15, 16, 17, 31, 32, 33, 63, 65, 129, 257, 521, 17};
+  int profiles               [0:12] = '{2, 15, 16, 17, 31, 32, 33, 63, 65, 129, 257, 521, 17};
+  int nonzero_collisions = 0;
   initial begin
     clk = 0;
     rst_n = 0;
@@ -214,9 +236,16 @@ module tb_trike_poly_mul_runtime;
       run_case(profiles[k], 0, 0, 0);
       run_case(profiles[k], 1, 0, 0);
       run_case(profiles[k], 2, 0, 1);
-      if (profiles[k] >= 3) run_case(profiles[k], 3, 1, 1);
+      if (profiles[k] >= 3) begin
+        run_case(profiles[k], 0, 1, 0);
+        run_case(profiles[k], 3, 1, 0);
+        run_case(profiles[k], 3, 1, 1);
+      end
     end
-    $display("tb_trike_poly_mul_runtime PASS 13 profile transitions, 51 transactions");
+    if (nonzero_collisions == 0) $fatal(1, "same-address nonzero forwarding was not exercised");
+    $display(
+        "tb_trike_poly_mul_runtime PASS 13 profile transitions, 75 transactions, collisions=%0d",
+        nonzero_collisions);
     $finish;
   end
 endmodule

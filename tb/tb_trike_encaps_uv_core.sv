@@ -9,59 +9,52 @@ module tb_trike_encaps_uv_core #(
   localparam int ERROR_WEIGHT = 5;
   localparam int WORDS = (R_BITS + WORD_W - 1) / WORD_W;
   localparam int INDEX_W = $clog2(3 * R_BITS);
-  localparam int ERROR_ADDR_W = $clog2(ERROR_WEIGHT);
   localparam int WORD_ADDR_W = $clog2(WORDS);
 
-  logic                    clk;
-  logic                    rst_n;
-  logic                    start;
-  logic                    error_valid;
-  logic [ERROR_ADDR_W-1:0] error_position;
-  logic [     INDEX_W-1:0] error_index;
-  logic                    error_ready;
-  logic [             1:0] operand_select;
-  logic [ WORD_ADDR_W-1:0] operand_word;
-  logic                    operand_valid;
-  logic [      WORD_W-1:0] operand_data;
-  logic                    operand_ready;
-  logic                    result_valid;
-  logic                    result_select;
-  logic [      WORD_W-1:0] result_data;
-  logic                    result_last;
-  logic                    result_ready;
-  logic                    busy;
-  logic                    done;
-  logic                    store_u_we;
-  logic [ WORD_ADDR_W-1:0] store_u_waddr;
-  logic [      WORD_W-1:0] store_u_wdata;
-  logic                    store_u_re;
-  logic [ WORD_ADDR_W-1:0] store_u_raddr;
-  logic [      WORD_W-1:0] store_u_rdata;
-  logic                    store_v_we;
-  logic [ WORD_ADDR_W-1:0] store_v_waddr;
-  logic [      WORD_W-1:0] store_v_wdata;
-  logic                    store_v_re;
-  logic [ WORD_ADDR_W-1:0] store_v_raddr;
-  logic [      WORD_W-1:0] store_v_rdata;
+  logic                   clk;
+  logic                   rst_n;
+  logic                   start;
+  logic [            1:0] operand_select;
+  logic [WORD_ADDR_W-1:0] operand_word;
+  logic                   operand_valid;
+  logic [     WORD_W-1:0] operand_data;
+  logic                   operand_ready;
+  logic                   result_valid;
+  logic                   result_select;
+  logic [     WORD_W-1:0] result_data;
+  logic                   result_last;
+  logic                   result_ready;
+  logic                   busy;
+  logic                   done;
+  logic                   store_u_we;
+  logic [WORD_ADDR_W-1:0] store_u_waddr;
+  logic [     WORD_W-1:0] store_u_wdata;
+  logic                   store_u_re;
+  logic [WORD_ADDR_W-1:0] store_u_raddr;
+  logic [     WORD_W-1:0] store_u_rdata;
+  logic                   store_v_we;
+  logic [WORD_ADDR_W-1:0] store_v_waddr;
+  logic [     WORD_W-1:0] store_v_wdata;
+  logic                   store_v_re;
+  logic [WORD_ADDR_W-1:0] store_v_raddr;
+  logic [     WORD_W-1:0] store_v_rdata;
 
-  logic [     INDEX_W-1:0] error_sets[0:1][0:ERROR_WEIGHT-1];
-  logic [      WORD_W-1:0] operands[0:3][       0:WORDS-1];
-  logic [      R_BITS-1:0] expected_u[0:1];
-  logic [      R_BITS-1:0] expected_v[0:1];
+  logic [    INDEX_W-1:0] error_sets[0:1][0:ERROR_WEIGHT-1];
+  logic [     WORD_W-1:0] operands[0:3][       0:WORDS-1];
+  logic [     R_BITS-1:0] expected_u[0:1];
+  logic [     R_BITS-1:0] expected_v[0:1];
 
   trike_encaps_uv_core #(
       .R_BITS               (R_BITS),
       .WORD_W               (WORD_W),
-      .ERROR_WEIGHT         (ERROR_WEIGHT),
       .USE_EXTERNAL_UV_STORE(USE_EXTERNAL_UV_STORE)
   ) dut (
       .i_clk           (clk),
       .i_rst_n         (rst_n),
       .i_start         (start),
-      .i_error_valid   (error_valid),
-      .i_error_position(error_position),
-      .i_error_index   (error_index),
-      .o_error_ready   (error_ready),
+      .o_error_re      (error_re),
+      .o_error_raddr   (error_raddr),
+      .i_error_rdata   (error_rdata),
       .o_operand_select(operand_select),
       .o_operand_word  (operand_word),
       .i_operand_valid (operand_valid),
@@ -114,6 +107,13 @@ module tb_trike_encaps_uv_core #(
       .o_rdata(store_v_rdata)
   );
 
+  localparam int PADDED_R_BYTES = ((R_BITS + 511) / 512) * 64;
+  logic                                error_re;
+  logic [$clog2(3*PADDED_R_BYTES)-1:0] error_raddr;
+  logic [                         7:0] error_rdata;
+  logic [                         7:0] error_bytes[0:3*PADDED_R_BYTES-1];
+  always_ff @(posedge clk) if (error_re) error_rdata <= error_bytes[error_raddr];
+
   always #5 clk = ~clk;
 
   task automatic calculate_expected(input  logic case_idx);
@@ -165,6 +165,7 @@ module tb_trike_encaps_uv_core #(
     end
   endtask
 
+  integer error_trace[0:5*WORDS*(WORD_W/8)-1];
   task automatic run_case(input  logic case_idx, input int output_stall_cycles,
                           output int busy_cycles);
     int                        error_count;
@@ -173,6 +174,15 @@ module tb_trike_encaps_uv_core #(
     int                        output_count  [0:1];
     logic [(WORDS*WORD_W)-1:0] observed[0:1];
     begin
+      for (int byte_idx = 0; byte_idx < 3 * PADDED_R_BYTES; byte_idx++) error_bytes[byte_idx] = '0;
+      for (int idx = 0; idx < ERROR_WEIGHT; idx++) begin
+        int bit_idx;
+        bit_idx = int'(error_sets[case_idx][idx]);
+        error_bytes[(bit_idx/R_BITS)*PADDED_R_BYTES+(bit_idx%R_BITS)/8][(bit_idx%R_BITS)%8] ^= 1'b1;
+      end
+      for (int block_idx = 0; block_idx < 3; block_idx++)
+      for (int bit_idx = R_BITS; bit_idx < WORDS * WORD_W; bit_idx++)
+      error_bytes[block_idx*PADDED_R_BYTES+bit_idx/8][bit_idx%8] = 1'b1;
       error_count = 0;
       operand_count = 0;
       stall_left = output_stall_cycles;
@@ -180,9 +190,6 @@ module tb_trike_encaps_uv_core #(
       output_count[1] = 0;
       observed[0] = '0;
       observed[1] = '0;
-      error_valid = 1'b1;
-      error_position = ERROR_ADDR_W'(ERROR_WEIGHT - 1);
-      error_index = error_sets[case_idx][ERROR_WEIGHT-1];
       operand_valid = 1'b1;
       result_ready = output_stall_cycles == 0;
 
@@ -196,7 +203,11 @@ module tb_trike_encaps_uv_core #(
       while (!done) begin
         @(posedge clk);
         busy_cycles++;
-        if (error_valid && error_ready) begin
+        if (error_re) begin
+          if (error_count >= 5 * WORDS * (WORD_W / 8)) $fatal(1, "extra error RAM read");
+          if (!case_idx) error_trace[error_count] = int'(error_raddr);
+          else if (error_trace[error_count] != int'(error_raddr))
+            $fatal(1, "secret-dependent error RAM address");
           error_count++;
         end
         if (operand_valid && operand_ready) operand_count++;
@@ -210,12 +221,6 @@ module tb_trike_encaps_uv_core #(
         end
 
         @(negedge clk);
-        if (error_count == ERROR_WEIGHT) begin
-          error_valid = 1'b0;
-        end else begin
-          error_position = ERROR_ADDR_W'(ERROR_WEIGHT - 1 - error_count);
-          error_index = error_sets[case_idx][ERROR_WEIGHT-1-error_count];
-        end
         operand_data = operands[operand_select][operand_word];
         if (result_valid && (stall_left > 0)) begin
           result_ready = 1'b0;
@@ -225,7 +230,8 @@ module tb_trike_encaps_uv_core #(
         end
       end
 
-      if (error_count != ERROR_WEIGHT) $fatal(1, "error support transfer count mismatch");
+      if (error_count != 5 * WORDS * (WORD_W / 8))
+        $fatal(1, "error support transfer count mismatch");
       if (operand_count != (4 * WORDS)) $fatal(1, "operand transfer count mismatch");
       if ((output_count[0] != WORDS) || (output_count[1] != WORDS)) begin
         $fatal(1, "result word count mismatch u=%0d v=%0d", output_count[0], output_count[1]);
@@ -237,7 +243,6 @@ module tb_trike_encaps_uv_core #(
         $fatal(1, "v mismatch got=%h expected=%h", observed[1][R_BITS-1:0], expected_v[case_idx]);
       end
 
-      error_valid   = 1'b0;
       operand_valid = 1'b0;
       result_ready  = 1'b0;
       @(negedge clk);
@@ -252,9 +257,6 @@ module tb_trike_encaps_uv_core #(
     clk = 1'b0;
     rst_n = 1'b0;
     start = 1'b0;
-    error_valid = 1'b0;
-    error_position = '0;
-    error_index = '0;
     operand_valid = 1'b0;
     operand_data = '0;
     result_ready = 1'b0;

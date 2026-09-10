@@ -7,6 +7,8 @@ module tb_trike_poly_mul_core;
   localparam int SPARSE_WEIGHT = 3;
   localparam int WORDS = (R_BITS + WORD_W - 1) / WORD_W;
   localparam int INDEX_W = $clog2(R_BITS);
+  `include "trike_fold_schedule.svh"
+
   function automatic integer fold_cycles(input integer r, input integer w);
     integer n, h, extra, off;
     begin
@@ -21,13 +23,13 @@ module tb_trike_poly_mul_core;
           end
         end
       end
-      fold_cycles = 3 * h * h + 38 * h + 3 * n - 3 + 2 * extra;
+      fold_cycles = 3 * h * h + 38 * h + 3 * n - 3 + 2 * extra - trike_fold_overlap_savings(r, w);
     end
   endfunction
   localparam int DENSE_CYCLES = fold_cycles(
       R_BITS, WORD_W
   ) + 2 * ((R_BITS + WORD_W - 1) / WORD_W) + 2;
-  localparam int SPARSE_CYCLES = (4 * WORDS) + (2 * SPARSE_WEIGHT) + (8 * SPARSE_WEIGHT * WORDS);
+  localparam int SPARSE_CYCLES = (4 * WORDS) + (2 * SPARSE_WEIGHT) + (6 * SPARSE_WEIGHT * WORDS);
 
   logic               clk;
   logic               rst_n;
@@ -49,10 +51,10 @@ module tb_trike_poly_mul_core;
   logic               busy;
   logic               done;
 
-  logic [ WORD_W-1:0] a_words[        0:WORDS-1];
-  logic [ WORD_W-1:0] b_words[        0:WORDS-1];
-  logic [ WORD_W-1:0] expected_words[        0:WORDS-1];
-  logic [INDEX_W-1:0] sparse_indices[0:SPARSE_WEIGHT-1];
+  logic [ WORD_W-1:0] a_words            [        0:WORDS-1];
+  logic [ WORD_W-1:0] b_words            [        0:WORDS-1];
+  logic [ WORD_W-1:0] expected_words     [        0:WORDS-1];
+  logic [INDEX_W-1:0] sparse_indices     [0:SPARSE_WEIGHT-1];
 
   trike_poly_mul_core #(
       .R_BITS(R_BITS),
@@ -105,7 +107,7 @@ module tb_trike_poly_mul_core;
     end
   endtask
 
-  task automatic run_case(input  logic use_sparse, input int output_stall_cycles,
+  task automatic run_case(input logic use_sparse, input int output_stall_cycles,
                           output int busy_cycles);
     int                a_idx;
     int                b_idx;

@@ -85,7 +85,6 @@ def main() -> None:
             f"SBY={ROOT / 'scripts' / 'sby_quiet.py'}",
             "REAL_SBY=sby",
             f"SBY_LOG_DIR={OUTPUT / 'sby-logs'}",
-            f"CHECK_SUMMARY_PATH={OUTPUT / 'check-summary.json'}",
         ],
         ROOT,
     )

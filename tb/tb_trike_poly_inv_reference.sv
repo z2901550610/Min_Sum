@@ -2,13 +2,15 @@
 
 module tb_trike_poly_inv_reference #(
 
-    parameter int DUT_BASE_KARATSUBA_DEPTH = 1
+    parameter int DUT_BASE_KARATSUBA_DEPTH = 2
 );
 `ifdef TRIKE_MINSUM_INV_FIXTURE
   `include "generated/trike_poly_inv_minsum_case.svh"
 `else
   `include "generated/trike_poly_inv_reference_case.svh"
 `endif
+
+  `include "trike_fold_schedule.svh"
 
   function automatic integer fold_cycles(input integer r, input integer w);
     integer n, h, extra, off;
@@ -24,7 +26,7 @@ module tb_trike_poly_inv_reference #(
           end
         end
       end
-      fold_cycles = 3 * h * h + 38 * h + 3 * n - 3 + 2 * extra;
+      fold_cycles = 3 * h * h + 38 * h + 3 * n - 3 + 2 * extra - trike_fold_overlap_savings(r, w);
     end
   endfunction
   localparam int REF_INV_DENSE_MUL_CYCLES = fold_cycles(REF_INV_R_BITS, REF_INV_WORD_W);

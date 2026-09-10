@@ -2,12 +2,8 @@
 
 ## 回归入口
 
-```sh
-make test-unit
-make test-integration
-make test
-make test-bike-random BIKE_RANDOM_TRIALS=1
-```
+从所属`./eda make test-<name>`开始。`test`包含`test-unit`与`test-integration`，
+选择所需范围即可，不依次重复执行。随机测试按未覆盖的行为选择，详见[工作流](../workflow.md)。
 
 ## Testbench形式选择
 
@@ -111,9 +107,9 @@ VERILATOR_QUIET=0 make test
 
 ```sh
 make format FILES="<本任务修改的 .sv 文件>"
-make format-check
-make lint
+make check-format-rtl
+make check-rtl
 ```
 
-`make format`只原地修改显式列出的任务文件；`make format-check`通过
+`make format`只原地修改显式列出的任务文件；`make check-format-rtl`通过
 `MAINTAINED_SV`检查全部维护态 RTL/TB/Formal 文件。生成目录不参与格式化。

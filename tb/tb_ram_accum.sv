@@ -105,6 +105,52 @@ module tb_ram_accum;
     end
   endtask
 
+  task automatic write_buf_group(input  logic buf_sel, input int group_idx,
+                                 input  logic signed [ACC_W-1:0] base_value);
+    begin
+      clear_inputs();
+      c2v_write_buf = buf_sel;
+      for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
+        c2v_write_valid[lane_idx] = lane_idx < TEST_LANES;
+        c2v_write_tile_offset[lane_idx] = TILE_OFF_W'(group_idx * L + lane_idx);
+        updated_c2v_sum[lane_idx] = base_value + ACC_W'(lane_idx);
+      end
+      @(posedge clk);
+      #1;
+      clear_inputs();
+    end
+  endtask
+
+  task automatic expect_buffers_group(input  logic c2v_buf_sel, input int group_idx,
+                                      input  logic signed [ACC_W-1:0] c2v_base_value,
+                                      input  logic signed [ACC_W-1:0] v2c_base_value);
+    begin
+      c2v_read_buf = c2v_buf_sel;
+      active_buf   = ~c2v_buf_sel;
+      for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
+        c2v_read_valid[lane_idx] = lane_idx < TEST_LANES;
+        c2v_read_tile_offset[lane_idx] = TILE_OFF_W'(group_idx * L + lane_idx);
+        v2c_valid[lane_idx] = lane_idx < TEST_LANES;
+        v2c_tile_offset[lane_idx] = TILE_OFF_W'(group_idx * L + lane_idx);
+      end
+      #1;
+      for (int lane_idx = 0; lane_idx < L; lane_idx++) begin
+        if ((lane_idx < TEST_LANES) && (old_c2v_sum[lane_idx] !==
+                                       (c2v_base_value + ACC_W'(lane_idx)))) begin
+          $fatal(1, "c2v read mismatch group=%0d lane=%0d", group_idx, lane_idx);
+        end
+        if ((lane_idx < TEST_LANES) && (c2v_sum[lane_idx] !==
+                                       (v2c_base_value + ACC_W'(lane_idx)))) begin
+          $fatal(1, "v2c read mismatch group=%0d lane=%0d", group_idx, lane_idx);
+        end
+        if ((lane_idx >= TEST_LANES) &&
+            ((old_c2v_sum[lane_idx] !== '0) || (c2v_sum[lane_idx] !== '0))) begin
+          $fatal(1, "inactive lane read mismatch group=%0d lane=%0d", group_idx, lane_idx);
+        end
+      end
+    end
+  endtask
+
   initial begin
     clear_inputs();
 
@@ -113,6 +159,13 @@ module tb_ram_accum;
     expect_buffers(1'b0, ACC_W'(4), ACC_W'(12));
     clear_inputs();
     expect_buffers(1'b1, ACC_W'(12), ACC_W'(4));
+
+    if (Q_BASE > 1) begin
+      write_buf_group(1'b0, 1, ACC_W'(20));
+      write_buf_group(1'b1, 1, ACC_W'(30));
+      expect_buffers_group(1'b0, 1, ACC_W'(20), ACC_W'(30));
+      expect_buffers(1'b0, ACC_W'(4), ACC_W'(12));
+    end
 
     $display("tb_ram_accum PASS");
     $finish;

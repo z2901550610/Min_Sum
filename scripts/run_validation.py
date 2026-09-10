@@ -155,7 +155,6 @@ def main() -> int:
         "SBY_LOG_DIR": str(log_root / "sby"),
         "VERILATOR_LOG_DIR": str(log_root / "verilator"),
         "RUN_QUIET_LOG_DIR": str(log_root / "simulation"),
-        "CHECK_SUMMARY_PATH": str(run_dir / "check-summary.json"),
     }
     os.environ.update(validation_environment)
     environment = os.environ.copy()

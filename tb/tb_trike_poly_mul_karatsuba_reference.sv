@@ -21,9 +21,13 @@ module tb_trike_poly_mul_karatsuba_reference;
   ) + overlap_words(
       2 * HALF_WORDS
   );
+  `include "trike_fold_schedule.svh"
+
   localparam int REF_DENSE_CYCLES =
       (5 * REF_WORDS) + (3 * HALF_WORDS * HALF_WORDS) + (32 * HALF_WORDS) - 3 +
-      (2 * (REF_WORDS % 2)) + (2 * SECOND_WRITES);
+      (2 * (REF_WORDS % 2)) + (2 * SECOND_WRITES) - trike_fold_overlap_savings(
+      REF_R_BITS, REF_WORD_W
+  );
 
   logic                  clk;
   logic                  rst_n;
@@ -44,9 +48,8 @@ module tb_trike_poly_mul_karatsuba_reference;
   // Stream or RAM outputs unused in this binding.
   /* verilator lint_off PINCONNECTEMPTY */
   trike_poly_mul_karatsuba_core #(
-      .R_BITS              (REF_R_BITS),
-      .WORD_W              (REF_WORD_W),
-      .BASE_KARATSUBA_DEPTH(1)
+      .R_BITS(REF_R_BITS),
+      .WORD_W(REF_WORD_W)
   ) dut (
       .i_clk            (clk),
       .i_rst_n          (rst_n),

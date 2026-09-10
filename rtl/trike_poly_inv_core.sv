@@ -10,7 +10,7 @@
 module trike_poly_inv_core #(
     parameter int R_BITS               = 15581,
     parameter int WORD_W               = 64,
-    parameter int BASE_KARATSUBA_DEPTH = 1
+    parameter int BASE_KARATSUBA_DEPTH = (WORD_W == 64) ? 2 : 1
 ) (
     input  logic              i_clk,
     input  logic              i_rst_n,

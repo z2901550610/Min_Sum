@@ -4,10 +4,17 @@ module tb_trike_clmul_karatsuba;
 
   logic [ 63:0] operand_a;
   logic [ 63:0] operand_b;
+  logic [127:0] product_default;
   logic [127:0] product_depth0;
   logic [127:0] product_depth1;
   logic [127:0] product_depth2;
   logic [127:0] product_depth3;
+
+  trike_clmul_karatsuba u_default (
+      .i_a(operand_a),
+      .i_b(operand_b),
+      .o_product(product_default)
+  );
 
   trike_clmul_karatsuba #(
       .WIDTH (64),
@@ -45,7 +52,7 @@ module tb_trike_clmul_karatsuba;
       .o_product(product_depth3)
   );
 
-  function automatic logic [127:0] reference_clmul(input  logic [63:0] a, input  logic [63:0] b);
+  function automatic logic [127:0] reference_clmul(input logic [63:0] a, input logic [63:0] b);
     logic [127:0] product;
     begin
       product = '0;
@@ -56,14 +63,14 @@ module tb_trike_clmul_karatsuba;
     end
   endfunction
 
-  task automatic check_case(input  logic [63:0] a, input  logic [63:0] b);
+  task automatic check_case(input logic [63:0] a, input logic [63:0] b);
     logic [127:0] expected;
     begin
       operand_a = a;
       operand_b = b;
       #1;
       expected = reference_clmul(a, b);
-      if ((product_depth0 != expected) || (product_depth1 != expected) ||
+      if ((product_default != expected) || (product_depth0 != expected) || (product_depth1 != expected) ||
           (product_depth2 != expected) || (product_depth3 != expected)) begin
         $fatal(1, "clmul mismatch a=%016x b=%016x expected=%032x", a, b, expected);
       end

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import re
+import sys
 import subprocess
 import tomllib
 from dataclasses import dataclass
@@ -28,13 +29,7 @@ class Profile:
     profile_id: str
     description: str
     targets: tuple[str, ...]
-    release_targets: tuple[str, ...]
-    iteration_targets: tuple[str, ...]
-    manual_requirements: tuple[str, ...]
     covers: tuple[str, ...]
-    scope: str
-    minimum_gate: str
-    boundary: str
 
 
 @dataclass(frozen=True)
@@ -42,7 +37,6 @@ class ValidationProfiles:
     profiles: dict[str, Profile]
     profile_order: tuple[str, ...]
     routing: tuple[dict[str, Any], ...]
-    manual_rules: tuple[dict[str, Any], ...]
     owners: tuple[dict[str, Any], ...]
 
 
@@ -76,8 +70,6 @@ def _validate_rule(rule: object, context: str, profile_ids: set[str]) -> dict[st
         if profile_id not in profile_ids:
             raise ProfileConfigError(f"{context}.profile names unknown profile {profile_id!r}")
         normalized["profile"] = profile_id
-    if "requirement" in rule:
-        normalized["requirement"] = _required_string(rule, "requirement", context)
     for key in (*MATCH_KEYS, "within_prefixes"):
         if key in rule:
             normalized[key] = _string_list(rule[key], f"{context}.{key}")
@@ -95,8 +87,8 @@ def load_profiles(path: Path = DEFAULT_CONFIG_PATH, *, catalog_path: Path = CATA
     except (OSError, tomllib.TOMLDecodeError) as error:
         raise ProfileConfigError(f"cannot load {path}: {error}") from error
 
-    if data.get("schema_version") != 3:
-        raise ProfileConfigError("schema_version must be 3")
+    if data.get("schema_version") != 6:
+        raise ProfileConfigError("schema_version must be 6")
     raw_profiles = data.get("profiles")
     if not isinstance(raw_profiles, dict) or not raw_profiles:
         raise ProfileConfigError("profiles must be a non-empty table")
@@ -114,19 +106,7 @@ def load_profiles(path: Path = DEFAULT_CONFIG_PATH, *, catalog_path: Path = CATA
             profile_id=profile_id,
             description=_required_string(raw, "description", context),
             targets=_string_list(raw.get("targets"), f"{context}.targets"),
-            release_targets=_string_list(
-                raw.get("release_targets"), f"{context}.release_targets"
-            ),
-            iteration_targets=_string_list(
-                raw.get("iteration_targets"), f"{context}.iteration_targets"
-            ),
-            manual_requirements=_string_list(
-                raw.get("manual_requirements"), f"{context}.manual_requirements"
-            ),
             covers=_string_list(raw.get("covers"), f"{context}.covers"),
-            scope=_required_string(raw, "scope", context),
-            minimum_gate=_required_string(raw, "minimum_gate", context),
-            boundary=_required_string(raw, "boundary", context),
         )
 
     profile_ids = set(profiles)
@@ -165,16 +145,6 @@ def load_profiles(path: Path = DEFAULT_CONFIG_PATH, *, catalog_path: Path = CATA
         missing = sorted(profile_ids - routed_profiles)
         raise ProfileConfigError(f"profiles without path routing: {missing}")
 
-    raw_manual_rules = data.get("manual_rules", [])
-    if not isinstance(raw_manual_rules, list):
-        raise ProfileConfigError("manual_rules must be an array of tables")
-    manual_rules = tuple(
-        _validate_rule(rule, f"manual_rules[{index}]", profile_ids)
-        for index, rule in enumerate(raw_manual_rules)
-    )
-    if any("requirement" not in rule for rule in manual_rules):
-        raise ProfileConfigError("every manual rule needs a requirement")
-
     raw_owners = data.get("owners", [])
     if not isinstance(raw_owners, list):
         raise ProfileConfigError("owners must be an array of tables")
@@ -204,7 +174,6 @@ def load_profiles(path: Path = DEFAULT_CONFIG_PATH, *, catalog_path: Path = CATA
         profiles=profiles,
         profile_order=order,
         routing=routing,
-        manual_rules=manual_rules,
         owners=tuple(owners),
     )
 
@@ -223,7 +192,7 @@ def path_matches(path: str, rule: dict[str, Any]) -> bool:
 
 def classify_paths(
     paths: list[str], config: ValidationProfiles
-) -> tuple[list[str], list[OwnerAction], list[str]]:
+) -> tuple[list[str], list[OwnerAction]]:
     selected = {
         rule["profile"]
         for rule in config.routing
@@ -237,13 +206,8 @@ def classify_paths(
         for rule in config.owners
         if any(path_matches(path, rule) for path in paths)
     ]
-    manual = {
-        rule["requirement"]
-        for rule in config.manual_rules
-        if any(path_matches(path, rule) for path in paths)
-    }
     ordered = [profile_id for profile_id in config.profile_order if profile_id in selected]
-    return ordered, owner_actions, sorted(manual)
+    return ordered, owner_actions
 
 
 def covered_profiles(selected: list[str], config: ValidationProfiles) -> set[str]:
@@ -256,19 +220,6 @@ def covered_profiles(selected: list[str], config: ValidationProfiles) -> set[str
                 covered.add(covered_id)
                 pending.append(covered_id)
     return covered
-
-
-def render_profile_table(config: ValidationProfiles) -> str:
-    lines = [
-        "| 改动范围 | 最小必跑 | 附加边界 |",
-        "| --- | --- | --- |",
-    ]
-    for profile_id in config.profile_order:
-        profile = config.profiles[profile_id]
-        lines.append(
-            f"| {profile.scope} | {profile.minimum_gate} | {profile.boundary} |"
-        )
-    return "\n".join(lines)
 
 
 def repository_paths(repo_root: Path = REPO_ROOT) -> list[str]:
@@ -297,8 +248,6 @@ def configured_targets(config: ValidationProfiles) -> list[str]:
     targets: list[str] = []
     for profile in config.profiles.values():
         targets.extend(profile.targets)
-        targets.extend(profile.release_targets)
-        targets.extend(profile.iteration_targets)
     for rule in config.owners:
         targets.extend(rule["targets"])
     return list(dict.fromkeys(targets))
@@ -312,7 +261,6 @@ def repository_binding_errors(
     for category, rules in (
         ("routing", config.routing),
         ("owners", config.owners),
-        ("manual_rules", config.manual_rules),
     ):
         for index, rule in enumerate(rules):
             if not any(path_matches(path, rule) for path in paths):
@@ -342,3 +290,19 @@ def repository_binding_errors(
         if target not in known_targets:
             errors.append(f"configured owner names unknown Make target {target!r}")
     return errors
+
+
+def main() -> int:
+    try:
+        errors = repository_binding_errors(load_profiles())
+    except (OSError, ValueError) as error:
+        errors = [str(error)]
+    if errors:
+        print("Validation configuration FAIL: " + "; ".join(errors), file=sys.stderr)
+        return 1
+    print("Validation configuration PASS")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

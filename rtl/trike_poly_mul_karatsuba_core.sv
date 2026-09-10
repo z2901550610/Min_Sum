@@ -10,7 +10,7 @@
 module trike_poly_mul_karatsuba_core #(
     parameter int R_BITS = 15581,
     parameter int WORD_W = 64,
-    parameter int BASE_KARATSUBA_DEPTH = 1,
+    parameter int BASE_KARATSUBA_DEPTH = (WORD_W == 64) ? 2 : 1,
     parameter bit EXTERNAL_OPERANDS = 1'b0,
     parameter bit EXTERNAL_RESULT = 1'b0,
     parameter bit RUNTIME_GEOMETRY = 1'b0,
@@ -74,7 +74,7 @@ module trike_poly_mul_karatsuba_core #(
     ST_PAD_B,
     ST_CLEAR_RESULT,
     ST_SUB_PREFETCH,
-    ST_SUB_ACCUM,
+    ST_SUB_WAIT,
     ST_MIX_READ_0,
     ST_MIX_WRITE_0,
     ST_MIX_READ_1,
@@ -88,7 +88,18 @@ module trike_poly_mul_karatsuba_core #(
   } state_t;
 
   state_t state_q;
-  logic   restore_q;
+  // One-word producer/consumer rendezvous: operands and result use independent
+  // RAMs. A completed diagonal waits in its accumulator until folding accepts it.
+  typedef enum logic [1:0] {
+    PROD_IDLE,
+    PROD_PREFETCH,
+    PROD_ACCUM,
+    PROD_READY
+  } prod_state_t;
+  prod_state_t prod_state_q;
+  logic product_valid_c, product_take_c;
+  logic [WORD_W-1:0] product_low_c, product_high_c;
+  logic restore_q;
   logic [WORD_W-1:0] xor_a_low_q, xor_b_low_q;
   integer ext_a_addr_c, ext_b_addr_c;
 
@@ -105,7 +116,6 @@ module trike_poly_mul_karatsuba_core #(
   logic                       mix_term_q;
   logic   [       WORD_W-1:0] diagonal_low_q;
   logic   [       WORD_W-1:0] diagonal_high_q;
-  logic   [       WORD_W-1:0] carry_word_q;
   logic   [       WORD_W-1:0] sub_word_q;
 
   // Internal bank controls are pruned by the external operand binding.
@@ -272,6 +282,15 @@ module trike_poly_mul_karatsuba_core #(
       .o_product(base_product_c)
   );
 
+  assign product_valid_c = (prod_state_q == PROD_READY) ||
+      ((prod_state_q == PROD_ACCUM) && pair_end_c);
+  assign product_take_c = product_valid_c && ((state_q == ST_SUB_WAIT) ||
+      ((state_q == ST_SUB_ADVANCE) && !sub_is_carry_q));
+  assign product_low_c = diagonal_low_q ^
+      ((prod_state_q == PROD_ACCUM) ? base_product_c[WORD_W-1:0] : '0);
+  assign product_high_c = diagonal_high_q ^
+      ((prod_state_q == PROD_ACCUM) ? base_product_c[(2*WORD_W)-1:WORD_W] : '0);
+
   always_comb begin
     unique case (phase_q)
       0: begin
@@ -411,26 +430,9 @@ module trike_poly_mul_karatsuba_core #(
 
       ST_SUB_PREFETCH: begin
         a0_re = 1'b1;
-        a0_raddr = HALF_ADDR_W'(a_word_idx_q);
         a1_re = 1'b1;
-        a1_raddr = HALF_ADDR_W'(a_word_idx_q);
         b0_re = 1'b1;
-        b0_raddr = HALF_ADDR_W'(b_word_idx_q);
         b1_re = 1'b1;
-        b1_raddr = HALF_ADDR_W'(b_word_idx_q);
-      end
-
-      ST_SUB_ACCUM: begin
-        if (!pair_end_c) begin
-          a0_re = 1'b1;
-          a0_raddr = HALF_ADDR_W'(a_word_idx_q + 1);
-          a1_re = 1'b1;
-          a1_raddr = HALF_ADDR_W'(a_word_idx_q + 1);
-          b0_re = 1'b1;
-          b0_raddr = HALF_ADDR_W'(b_word_idx_q - 1);
-          b1_re = 1'b1;
-          b1_raddr = HALF_ADDR_W'(b_word_idx_q - 1);
-        end
       end
 
       ST_MIX_READ_0: begin
@@ -463,6 +465,18 @@ module trike_poly_mul_karatsuba_core #(
       default: begin
       end
     endcase
+    // The producer continues while the main FSM folds the previous word.
+    // No operand writes occur until the producer and folder finish the phase.
+    if ((prod_state_q == PROD_PREFETCH) || ((prod_state_q == PROD_ACCUM) && !pair_end_c)) begin
+      a0_re = 1'b1;
+      a1_re = 1'b1;
+      b0_re = 1'b1;
+      b1_re = 1'b1;
+      a0_raddr = HALF_ADDR_W'(a_word_idx_q + ((prod_state_q == PROD_ACCUM) ? 1 : 0));
+      a1_raddr = a0_raddr;
+      b0_raddr = HALF_ADDR_W'(b_word_idx_q - ((prod_state_q == PROD_ACCUM) ? 1 : 0));
+      b1_raddr = b0_raddr;
+    end
   end
 
   assign o_a_ready = (state_q == ST_LOAD_A);
@@ -478,6 +492,7 @@ module trike_poly_mul_karatsuba_core #(
       active_half_q <= HALF_WORDS;
       active_last_bits_q <= LAST_BITS;
       state_q <= ST_IDLE;
+      prod_state_q <= PROD_IDLE;
       word_idx_q <= 0;
       clear_idx_q <= 0;
       phase_q <= 0;
@@ -490,7 +505,6 @@ module trike_poly_mul_karatsuba_core #(
       mix_term_q <= 1'b0;
       diagonal_low_q <= '0;
       diagonal_high_q <= '0;
-      carry_word_q <= '0;
       sub_word_q <= '0;
       restore_q <= 1'b0;
       xor_a_low_q <= '0;
@@ -498,6 +512,54 @@ module trike_poly_mul_karatsuba_core #(
       o_done <= 1'b0;
     end else begin
       o_done <= 1'b0;
+
+      // Each phase starts after operand transformation, and retires only after
+      // the final carry word has been consumed and folded. No data-dependent exit.
+      if (state_q == ST_SUB_PREFETCH) begin
+        diagonal_idx_q <= 0;
+        a_word_idx_q <= 0;
+        b_word_idx_q <= 0;
+        diagonal_low_q <= '0;
+        diagonal_high_q <= '0;
+        prod_state_q <= PROD_ACCUM;
+      end else if (product_take_c) begin
+        if (diagonal_idx_q == (2 * active_half_q - 1)) begin
+          prod_state_q <= PROD_IDLE;
+        end else begin
+          diagonal_idx_q  <= diagonal_idx_q + 1;
+          diagonal_low_q  <= product_high_c;
+          diagonal_high_q <= '0;
+          if (diagonal_idx_q == (2 * active_half_q - 2)) begin
+            prod_state_q <= PROD_READY;
+          end else begin
+            prod_state_q <= PROD_PREFETCH;
+            if (diagonal_idx_q + 1 < active_half_q) begin
+              a_word_idx_q <= 0;
+              b_word_idx_q <= diagonal_idx_q + 1;
+            end else begin
+              a_word_idx_q <= diagonal_idx_q + 1 - (active_half_q - 1);
+              b_word_idx_q <= active_half_q - 1;
+            end
+          end
+        end
+      end else if (prod_state_q == PROD_PREFETCH) begin
+        prod_state_q <= PROD_ACCUM;
+      end else if (prod_state_q == PROD_ACCUM) begin
+        diagonal_low_q  <= product_low_c;
+        diagonal_high_q <= product_high_c;
+        if (pair_end_c) begin
+          prod_state_q <= PROD_READY;
+        end else begin
+          a_word_idx_q <= a_word_idx_q + 1;
+          b_word_idx_q <= b_word_idx_q - 1;
+        end
+      end
+      if (product_take_c) begin
+        sub_word_idx_q <= diagonal_idx_q;
+        sub_word_q <= product_low_c;
+        sub_is_carry_q <= (diagonal_idx_q == (2 * active_half_q - 1));
+        mix_term_q <= 1'b0;
+      end
 
       unique case (state_q)
         ST_IDLE: begin
@@ -545,35 +607,16 @@ module trike_poly_mul_karatsuba_core #(
         ST_CLEAR_RESULT: begin
           if (clear_idx_q == (active_words_q - 1)) begin
             phase_q <= 0;
-            diagonal_idx_q <= 0;
-            a_word_idx_q <= 0;
-            b_word_idx_q <= 0;
-            diagonal_low_q <= '0;
-            diagonal_high_q <= '0;
             state_q <= ST_SUB_PREFETCH;
           end else begin
             clear_idx_q <= clear_idx_q + 1;
           end
         end
 
-        ST_SUB_PREFETCH: begin
-          state_q <= ST_SUB_ACCUM;
-        end
+        ST_SUB_PREFETCH: state_q <= ST_SUB_WAIT;
 
-        ST_SUB_ACCUM: begin
-          diagonal_low_q  <= diagonal_low_q ^ base_product_c[WORD_W-1:0];
-          diagonal_high_q <= diagonal_high_q ^ base_product_c[(2*WORD_W)-1:WORD_W];
-          if (pair_end_c) begin
-            sub_word_idx_q <= diagonal_idx_q;
-            sub_word_q <= diagonal_low_q ^ base_product_c[WORD_W-1:0];
-            carry_word_q <= diagonal_high_q ^ base_product_c[(2*WORD_W)-1:WORD_W];
-            sub_is_carry_q <= 1'b0;
-            mix_term_q <= 1'b0;
-            state_q <= ST_MIX_READ_0;
-          end else begin
-            a_word_idx_q <= a_word_idx_q + 1;
-            b_word_idx_q <= b_word_idx_q - 1;
-          end
+        ST_SUB_WAIT: begin
+          if (product_valid_c) state_q <= ST_MIX_READ_0;
         end
 
         ST_MIX_READ_0: begin
@@ -605,13 +648,7 @@ module trike_poly_mul_karatsuba_core #(
         end
 
         ST_SUB_ADVANCE: begin
-          if (!sub_is_carry_q && (diagonal_idx_q == ((2 * active_half_q) - 2))) begin
-            sub_word_idx_q <= (2 * active_half_q) - 1;
-            sub_word_q <= carry_word_q;
-            sub_is_carry_q <= 1'b1;
-            mix_term_q <= 1'b0;
-            state_q <= ST_MIX_READ_0;
-          end else if (sub_is_carry_q) begin
+          if (sub_is_carry_q) begin
             if (phase_q == 2) begin
               output_idx_q <= 0;
               word_idx_q <= 0;
@@ -619,27 +656,12 @@ module trike_poly_mul_karatsuba_core #(
               state_q <= EXTERNAL_OPERANDS ? ST_XOR_READ_LOW : ST_OUTPUT_FETCH;
             end else begin
               phase_q <= phase_q + 1;
-              diagonal_idx_q <= 0;
-              a_word_idx_q <= 0;
-              b_word_idx_q <= 0;
-              diagonal_low_q <= '0;
-              diagonal_high_q <= '0;
               word_idx_q <= 0;
               restore_q <= 1'b0;
               state_q <= (EXTERNAL_OPERANDS && phase_q == 1) ? ST_XOR_READ_LOW : ST_SUB_PREFETCH;
             end
           end else begin
-            diagonal_idx_q  <= diagonal_idx_q + 1;
-            diagonal_low_q  <= carry_word_q;
-            diagonal_high_q <= '0;
-            if ((diagonal_idx_q + 1) < active_half_q) begin
-              a_word_idx_q <= 0;
-              b_word_idx_q <= diagonal_idx_q + 1;
-            end else begin
-              a_word_idx_q <= (diagonal_idx_q + 1) - (active_half_q - 1);
-              b_word_idx_q <= active_half_q - 1;
-            end
-            state_q <= ST_SUB_PREFETCH;
+            state_q <= product_valid_c ? ST_MIX_READ_0 : ST_SUB_WAIT;
           end
         end
 

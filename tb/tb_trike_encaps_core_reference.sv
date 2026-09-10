@@ -16,8 +16,8 @@ module tb_trike_encaps_core_reference #(
 
   localparam int REF_INPUT_BYTES = REF_R_BYTES + (2 * REF_M_BYTES);
   localparam int REF_CT_BYTES = (2 * REF_R_BYTES) + REF_M_BYTES;
-  localparam int REF_BUSY_CYCLES = 2378447;
-  localparam int REF_SYNTH_BUSY_CYCLES = 2384421;
+  localparam int REF_BUSY_CYCLES = 527684;
+  localparam int REF_SYNTH_BUSY_CYCLES = 533658;
   localparam int MAX_R_BITS = 106781;
   localparam int MUL_INDEX_W = $clog2(MAX_R_BITS);
   localparam int PADDED_R_BYTES = ((REF_R_BITS + 511) / 512) * 64;

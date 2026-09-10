@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the compact experiment and Vivado record structure."""
+"""Validate project links and Vivado records."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ def require(condition: bool, message: str) -> None:
         raise SystemExit(message)
 
 
-def validate_manifest(path: Path, seen_run_ids: set[str], experiment_ids: set[str]) -> None:
+def validate_manifest(path: Path, seen_run_ids: set[str]) -> None:
     with path.open("rb") as stream:
         data = tomllib.load(stream)
     run_id = data.get("run_id", "")
@@ -34,15 +34,11 @@ def validate_manifest(path: Path, seen_run_ids: set[str], experiment_ids: set[st
     require(path.stem == run_id, f"{path}: filename must match run_id")
     require(run_id not in seen_run_ids, f"{path}: duplicate run_id {run_id}")
     seen_run_ids.add(run_id)
-    experiment_id = data.get("experiment_id", "")
-    require(
-        EXPERIMENT_ID_RE.fullmatch(experiment_id) is not None,
-        f"{path}: invalid experiment_id {experiment_id!r}",
-    )
-    require(
-        experiment_id in experiment_ids,
-        f"{path}: experiment_id is missing from the decision index and detail records",
-    )
+    if "experiment_id" in data:
+        require(
+            EXPERIMENT_ID_RE.fullmatch(data["experiment_id"]) is not None,
+            f"{path}: invalid legacy experiment_id",
+        )
     require(data.get("status") in ALLOWED_STATUS, f"{path}: invalid status")
     require(data.get("verdict") in ALLOWED_VERDICT, f"{path}: invalid verdict")
     require(data.get("schema_version") == 1, f"{path}: unsupported schema_version")
@@ -133,13 +129,6 @@ def validate_formal_registration() -> None:
         )
 
 
-def validate_frozen_history(history: str) -> None:
-    require("归档状态" in history[:500], "legacy exploration history is not marked frozen")
-    stage_numbers = [int(value) for value in re.findall(r"^### 阶段(\d+)：", history, re.MULTILINE)]
-    require(stage_numbers, "legacy exploration history contains no numbered stages")
-    require(max(stage_numbers) == 81, "legacy exploration history must end at frozen stage 81")
-
-
 def validate_root_artifacts() -> None:
     misplaced = sorted(
         path.name
@@ -156,11 +145,10 @@ def validate_root_artifacts() -> None:
 
 def main() -> None:
     required_files = (
-        REPO_ROOT / "docs" / "experiments" / "index.md",
-        REPO_ROOT / "docs" / "experiments" / "template.md",
+        REPO_ROOT / "docs" / "experiments.md",
         REPO_ROOT / "docs" / "design" / "vivado_baseline_registry.md",
-        REPO_ROOT / "docs" / "project_workflow.md",
-        REPO_ROOT / "docs" / "verification" / "validation_matrix.md",
+        REPO_ROOT / "docs" / "design" / "coding.md",
+        REPO_ROOT / "docs" / "workflow.md",
         REPO_ROOT / "README.md",
         REPO_ROOT / "pyproject.toml",
         REPO_ROOT / "uv.lock",
@@ -170,30 +158,7 @@ def main() -> None:
     )
     for path in required_files:
         require(path.is_file(), f"missing project record file: {path}")
-    history = (REPO_ROOT / "docs" / "design" / "optimization_exploration_history.md").read_text(
-        encoding="utf-8"
-    )
-    validate_frozen_history(history)
     validate_root_artifacts()
-    index = (REPO_ROOT / "docs" / "experiments" / "index.md").read_text(encoding="utf-8")
-    next_match = re.search(r"下一个实验ID：`(EXP-\d{4})`", index)
-    require(next_match is not None, "experiment index lacks next ID")
-    detail_id_list: list[str] = []
-    for path in sorted((REPO_ROOT / "docs" / "experiments").glob("EXP-*.md")):
-        match = re.match(r"(EXP-\d{4})-", path.name)
-        require(match is not None, f"{path}: invalid experiment detail filename")
-        detail_id_list.append(match.group(1))
-    require(
-        len(detail_id_list) == len(set(detail_id_list)),
-        "experiment detail files contain duplicate IDs",
-    )
-    index_ids = set(re.findall(r"\bEXP-\d{4}\b", index))
-    index_ids.discard(next_match.group(1))
-    experiment_ids = set(detail_id_list) | index_ids
-    require(next_match.group(1) not in experiment_ids, "next experiment ID is already used")
-    if experiment_ids:
-        expected_next = f"EXP-{max(int(value.removeprefix('EXP-')) for value in experiment_ids) + 1:04d}"
-        require(next_match.group(1) == expected_next, f"next experiment ID must be {expected_next}")
     agents = (REPO_ROOT / "AGENTS.md").read_bytes()
     claude = (REPO_ROOT / "CLAUDE.md").read_bytes()
     require(agents == claude, "AGENTS.md and CLAUDE.md differ")
@@ -201,7 +166,7 @@ def main() -> None:
     validate_formal_registration()
     seen_run_ids: set[str] = set()
     for path in sorted(MANIFEST_DIR.glob("RUN-*.toml")):
-        validate_manifest(path, seen_run_ids, experiment_ids)
+        validate_manifest(path, seen_run_ids)
     print(f"Project records PASS ({len(seen_run_ids)} Vivado manifest(s))")
 
 

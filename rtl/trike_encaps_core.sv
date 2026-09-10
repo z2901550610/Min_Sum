@@ -133,7 +133,6 @@ module trike_encaps_core #(
   localparam int CIPHERTEXT_BYTES = (2 * R_BYTES) + M_BYTES;
   localparam int K_MESSAGE_BYTES = M_BYTES + CIPHERTEXT_BYTES;
   localparam int SUPPORT_ADDR_W = (ERROR_WEIGHT > 1) ? $clog2(ERROR_WEIGHT) : 1;
-  localparam int GLOBAL_INDEX_W = ((3 * R_BITS) > 1) ? $clog2(3 * R_BITS) : 1;
   localparam int ERROR_ADDR_W = (ERROR_BYTES > 1) ? $clog2(ERROR_BYTES) : 1;
   localparam int VECTOR_BYTE_W = (R_BYTES > 1) ? $clog2(R_BYTES) : 1;
 
@@ -160,7 +159,6 @@ module trike_encaps_core #(
   integer                      load_count_q;
   integer                      h123_seed_count_q;
   integer                      h4_seed_count_q;
-  integer                      uv_support_count_q;
   integer                      uv_u_word_count_q;
   integer                      uv_v_word_count_q;
   integer                      l_input_count_q;
@@ -170,7 +168,6 @@ module trike_encaps_core #(
   integer                      shared_secret_count_q;
   logic   [        WORD_W-1:0] r2_pack_q;
   logic   [        WORD_W-1:0] vector_pack_q;
-  logic                        uv_support_loaded_q;
   logic                        uv_operand_loaded_q;
   logic   [             511:0] l_digest_q;
   logic   [             511:0] k_digest_q;
@@ -236,7 +233,6 @@ module trike_encaps_core #(
   logic                        h4_seed_ready;
   logic                        h4_support_re;
   logic   [SUPPORT_ADDR_W-1:0] h4_support_raddr;
-  logic   [GLOBAL_INDEX_W-1:0] h4_support_rdata;
   logic                        h4_error_re;
   logic   [  ERROR_ADDR_W-1:0] h4_error_raddr;
   logic   [               7:0] h4_error_rdata;
@@ -246,10 +242,8 @@ module trike_encaps_core #(
   logic   [             255:0] h4_compress_state;
 
   logic                        uv_start;
-  logic                        uv_error_valid;
-  logic   [SUPPORT_ADDR_W-1:0] uv_error_position;
-  logic   [GLOBAL_INDEX_W-1:0] uv_error_index;
-  logic                        uv_error_ready;
+  logic                        uv_error_re;
+  logic   [  ERROR_ADDR_W-1:0] uv_error_raddr;
   logic   [               1:0] uv_operand_select;
   logic   [   WORD_ADDR_W-1:0] uv_operand_word;
   logic                        uv_operand_valid;
@@ -483,7 +477,7 @@ module trike_encaps_core #(
       .o_seed_pass                   (),
       .i_support_re                  (h4_support_re),
       .i_support_raddr               (h4_support_raddr),
-      .o_support_rdata               (h4_support_rdata),
+      .o_support_rdata               (),
       .i_error_re                    (h4_error_re),
       .i_error_raddr                 (h4_error_raddr),
       .o_error_rdata                 (h4_error_rdata),
@@ -533,7 +527,7 @@ module trike_encaps_core #(
   trike_encaps_uv_core #(
       .R_BITS               (R_BITS),
       .WORD_W               (WORD_W),
-      .ERROR_WEIGHT         (ERROR_WEIGHT),
+      .PADDED_R_BYTES       (PADDED_R_BYTES),
       .USE_EXTERNAL_MUL     (USE_EXTERNAL_MUL),
       .USE_EXTERNAL_UV_STORE(1'b1),
       .MUL_INDEX_W          (MUL_INDEX_W),
@@ -542,10 +536,9 @@ module trike_encaps_core #(
       .i_clk                      (i_clk),
       .i_rst_n                    (i_rst_n),
       .i_start                    (uv_start),
-      .i_error_valid              (uv_error_valid),
-      .i_error_position           (uv_error_position),
-      .i_error_index              (uv_error_index),
-      .o_error_ready              (uv_error_ready),
+      .o_error_re                 (uv_error_re),
+      .o_error_raddr              (uv_error_raddr),
+      .i_error_rdata              (h4_error_rdata),
       .o_operand_select           (uv_operand_select),
       .o_operand_word             (uv_operand_word),
       .i_operand_valid            (uv_operand_valid),
@@ -739,14 +732,11 @@ module trike_encaps_core #(
     h4_seed_data = (h4_seed_count_q < M_BYTES) ? message_mem[h4_seed_count_q] :
         word_byte(r2_rdata, h4_r2_byte_c % (WORD_W / 8));
     h4_support_re = 1'b0;
-    h4_support_raddr = SUPPORT_ADDR_W'(uv_support_count_q);
+    h4_support_raddr = '0;
     h4_error_re = 1'b0;
     h4_error_raddr = ERROR_ADDR_W'(l_input_count_q);
 
     uv_start = state_q == ST_UV_START;
-    uv_error_valid = (state_q == ST_UV_RUN) && uv_support_loaded_q;
-    uv_error_position = SUPPORT_ADDR_W'(uv_support_count_q);
-    uv_error_index = h4_support_rdata;
     uv_operand_valid = (state_q == ST_UV_RUN) && uv_operand_loaded_q;
     unique case (uv_operand_select)
       2'd0: uv_operand_data = r1_rdata;
@@ -833,13 +823,9 @@ module trike_encaps_core #(
       end
     end
 
-    if (state_q == ST_UV_START) begin
-      h4_support_re = 1'b1;
-      h4_support_raddr = '0;
-    end else if ((state_q == ST_UV_RUN) && uv_error_valid && uv_error_ready &&
-                 (uv_support_count_q != (ERROR_WEIGHT - 1))) begin
-      h4_support_re = 1'b1;
-      h4_support_raddr = SUPPORT_ADDR_W'(uv_support_count_q + 1);
+    if (state_q == ST_UV_RUN) begin
+      h4_error_re = uv_error_re;
+      h4_error_raddr = uv_error_raddr;
     end
 
     if ((state_q == ST_UV_RUN) && uv_operand_ready &&
@@ -943,7 +929,6 @@ module trike_encaps_core #(
       load_count_q <= 0;
       h123_seed_count_q <= 0;
       h4_seed_count_q <= 0;
-      uv_support_count_q <= 0;
       uv_u_word_count_q <= 0;
       uv_v_word_count_q <= 0;
       l_input_count_q <= 0;
@@ -953,7 +938,6 @@ module trike_encaps_core #(
       shared_secret_count_q <= 0;
       r2_pack_q <= '0;
       vector_pack_q <= '0;
-      uv_support_loaded_q <= 1'b0;
       uv_operand_loaded_q <= 1'b0;
       l_digest_q <= '0;
       k_digest_q <= '0;
@@ -1027,28 +1011,18 @@ module trike_encaps_core #(
                 h4_seed_count_q + 1;
           end
           if (h4_done) begin
-            uv_support_count_q <= 0;
             uv_u_word_count_q <= 0;
             uv_v_word_count_q <= 0;
-            uv_support_loaded_q <= 1'b0;
             uv_operand_loaded_q <= 1'b0;
             state_q <= ST_UV_START;
           end
         end
 
         ST_UV_START: begin
-          uv_support_loaded_q <= 1'b1;
           state_q <= ST_UV_RUN;
         end
 
         ST_UV_RUN: begin
-          if (uv_error_valid && uv_error_ready) begin
-            if (uv_support_count_q == (ERROR_WEIGHT - 1)) begin
-              uv_support_loaded_q <= 1'b0;
-            end else begin
-              uv_support_count_q <= uv_support_count_q + 1;
-            end
-          end
 
           if (uv_operand_ready) begin
             if (!uv_operand_loaded_q) begin
