@@ -5,6 +5,8 @@ module tb_trike_poly_inv_core;
   localparam int WORD_W = 8;
 
   localparam int WORDS  = (R_BITS + WORD_W - 1) / WORD_W;
+  `include "trike_fold_schedule.svh"
+
   function automatic integer fold_cycles(input integer r, input integer w);
     integer n, h, extra, off;
     begin
@@ -19,7 +21,7 @@ module tb_trike_poly_inv_core;
           end
         end
       end
-      fold_cycles = 3 * h * h + 38 * h + 3 * n - 3 + 2 * extra;
+      fold_cycles = 3 * h * h + 38 * h + 3 * n - 3 + 2 * extra - trike_fold_overlap_savings(r, w);
     end
   endfunction
   localparam int DENSE_MUL_CYCLES = fold_cycles(R_BITS, WORD_W);
@@ -42,7 +44,7 @@ module tb_trike_poly_inv_core;
   logic              busy;
   logic              done;
 
-  logic [WORD_W-1:0] input_words[0:WORDS-1];
+  logic [WORD_W-1:0] input_words  [0:WORDS-1];
   logic [WORD_W-1:0] inverse_words[0:WORDS-1];
 
   trike_poly_inv_core #(

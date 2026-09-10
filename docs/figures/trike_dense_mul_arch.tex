@@ -1,0 +1,298 @@
+% !TeX program = xelatex
+\documentclass{article}
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[utf8]{inputenc}
+  \usepackage[T1]{fontenc}
+\else
+  \usepackage{fontspec}
+  \ifXeTeX
+    \usepackage{xeCJK}
+    \IfFontExistsTF{PingFang SC}{
+      \setCJKmainfont{PingFang SC}
+    }{
+      \IfFontExistsTF{Songti SC}{
+        \setCJKmainfont{Songti SC}
+      }{
+        \IfFontExistsTF{Noto Serif CJK SC}{
+          \setCJKmainfont{Noto Serif CJK SC}
+        }{}
+      }
+    }
+  \fi
+\fi
+\usepackage[a4paper,margin=17mm]{geometry}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage[font=small,labelfont=bf]{caption}
+\usetikzlibrary{arrows.meta,backgrounds,calc,fit,positioning}
+
+\definecolor{ctrlfill}{RGB}{232,240,248}
+\definecolor{memfill}{RGB}{246,246,246}
+\definecolor{c2vfill}{RGB}{255,246,229}
+\definecolor{v2cfill}{RGB}{236,248,239}
+\definecolor{accent}{RGB}{46,88,125}
+
+\tikzset{
+  block/.style={
+    draw,
+    very thick,
+    rounded corners=1pt,
+    align=center,
+    inner sep=3.5pt,
+    minimum height=8mm,
+    font=\footnotesize
+  },
+  mem/.style={block, fill=memfill, text width=30mm},
+  ctrl/.style={block, fill=ctrlfill, text width=26mm},
+  comp/.style={block, fill=white, text width=30mm},
+  stagebox/.style={draw=accent, rounded corners=2pt, thick, inner sep=6pt},
+  bus/.style={-{Latex[length=2.3mm]}, very thick},
+  sig/.style={-{Latex[length=2.0mm]}, thick},
+  ctl/.style={-{Latex[length=1.8mm]}, thick, densely dashed},
+  note/.style={align=center, font=\footnotesize},
+  title/.style={font=\small\bfseries, text=accent}
+}
+
+\newcommand{\wop}{\omega}
+
+\title{TRIKE 稠密多项式乘法器微架构}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{设计约束与总体结构}
+
+TRIKE KEM 的密钥生成、封装与解封装均需在环 $\mathrm{GF}(2)[x]/(x^r-1)$ 上执行稠密多项式乘法。
+本设计受三项约束支配：其一，调度必须固定，周期与存储访问数不得依赖秘密数据、
+输入内容或收敛状态；其二，五档公开参数 $r\in\{12589,15581,30389,63773,106781\}$
+须在同一硬件上运行时切换；其三，存储预算受统一乘法服务共享限制。
+为此，微架构采用``一层 Karatsuba 分解 $+$ 单路对角线 Comba $+$ 直接循环折叠''的组合，
+其总体结构如图~\ref{fig:arch}~所示。
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[node distance=4mm and 5mm]
+
+% ---------- 第一层：统一乘法服务壳 ----------
+\node[mem] (aram) {\textbf{A RAM}\\ $W\times\wop$\,b};
+\node[mem, right=of aram] (bram) {\textbf{B RAM}\\ $W\times\wop$\,b};
+\node[mem, right=of bram] (sram) {\textbf{Sparse idx}\\ $d\times\lceil\log_2 r\rceil$\,b};
+\node[mem, right=of sram] (rram) {\textbf{Result RAM}\\ $W\times\wop$\,b};
+
+\node[note, above=1.5mm of aram] (ain) {A 流 / 稀疏索引流};
+\node[note, above=1.5mm of bram] (bin) {B 流（输入握手）};
+\node[note, above=1.5mm of rram] (rout) {结果流（背压握手）};
+
+\node[fit=(aram)(bram)(sram)(rram)(ain)(bin)(rout), stagebox, inner sep=5pt] (shell) {};
+\node[note, anchor=south west] at (shell.north west)
+  {\textbf{统一乘法服务 \texttt{trike\_poly\_mul\_core}（稠密 / 稀疏双模式，运行时锁存五档几何）}};
+
+% ---------- 第二层：Karatsuba 相位调度 ----------
+\node[ctrl, below=17mm of shell.south west, anchor=north west] (p0)
+  {相位 0\\ $Z_0=A_0\!\cdot\! B_0$\\ 混入偏移 $0,\;H$};
+\node[ctrl, right=of p0] (p1)
+  {相位 1\\ $Z_2=A_1\!\cdot\! B_1$\\ 混入偏移 $2H,\;H$};
+\node[comp, right=of p1] (pre)
+  {原地扫描\\ $\mathrm{low}\oplus{=}\mathrm{high}$\\ 固定 $3H$ 拍};
+\node[ctrl, right=of pre] (p2)
+  {相位 2\\ $Z_s=(A_0{\oplus}A_1)(B_0{\oplus}B_1)$\\ 混入偏移 $H$};
+\node[comp, right=of p2] (post)
+  {恢复扫描\\ $(l{\oplus}h){\oplus}h=l$\\ 固定 $3H$ 拍};
+
+\draw[bus] (p0) -- (p1);
+\draw[bus] (p1) -- (pre);
+\draw[bus] (pre) -- (p2);
+\draw[bus] (p2) -- (post);
+
+\node[fit=(p0)(p1)(pre)(p2)(post), stagebox, inner sep=6pt] (kbox) {};
+\node[note, anchor=south west] at (kbox.north west)
+  {\textbf{一层 Karatsuba 相位调度（word 域拆半，$H=\lceil W/2\rceil$，顺序固定）}};
+
+% ---------- 第三层：Comba 数据通路与循环折叠 ----------
+\node[comp, below=17mm of kbox.south west, anchor=north west] (agen)
+  {对角线地址生成\\ $k=0..2H{-}2$，$i{+}j=k$\\ $a$ 索引递增、$b$ 递减};
+\node[comp, right=of agen] (mul)
+  {$64{\times}64$ 无进位乘\\ 内部两层 Karatsuba\\ $9\times(16{\times}16)$ 结构};
+\node[comp, right=of mul] (acc)
+  {对角线累加寄存器\\ $\{L,\;Hh\}$，单拍 XOR\\ 高字即下对角线初值};
+\node[comp, right=of acc] (fold)
+  {循环折叠单元\\ $m<W$：单次 RMW\\ $m\ge W$：移位拆两片混入};
+
+\draw[bus] (agen) -- (mul);
+\draw[bus] (mul) -- (acc);
+\draw[bus] (acc) -- (fold);
+
+\node[fit=(agen)(mul)(acc)(fold), stagebox, inner sep=6pt] (cbox) {};
+\node[note, anchor=south west] at (cbox.north west)
+  {\textbf{单路 Comba 与折叠并行工作（三相位顺序复用）}};
+
+% ---------- 层间连接 ----------
+\draw[ctl] (shell.south) -- node[above, note, font=\scriptsize]
+  {RAM 读写控制权移交（无操作数复制）} (kbox.north);
+\draw[bus] (kbox.south) -- node[above, note, font=\scriptsize]
+  {子积 word 流出} (cbox.north);
+\draw[bus] (cbox.east) -- ++(8mm,0) |- node[pos=0.5, right, note, font=\scriptsize, align=left]
+  {RMW 写回\\ $R_0{\to}W_0{\to}[R_1{\to}W_1]$} (rram.south);
+
+\end{tikzpicture}
+\caption{TRIKE KEM 稠密多项式乘法器微架构。统一服务壳持有 $A$、$B$、结果三块
+$W{\times}64$ 位 RAM；稠密模式下其读写控制权直通内部折叠核，无操作数复制。
+一层 Karatsuba 的三个半尺寸子积相位共享单路对角线 Comba 数据通路；相位 2
+前后各执行一次固定原地扫描，分别生成与恢复交叉项操作数。每个完成的子积 word
+交给折叠器后，Comba 即可预取并计算下一条对角线；省去 $2W$-word 完整乘积存储。}
+\label{fig:arch}
+\end{figure}
+
+记字宽 $\wop=64$，$W=\lceil r/\wop\rceil$，$H=\lceil W/2\rceil$，末字有效位宽
+$\lambda=r-(W-1)\wop$。操作数在 word 域拆半：$A=A_1 x^{\wop H}+A_0$，$B=B_1 x^{\wop H}+B_0$，
+其中奇数 $W$ 时虚拟高半末 word 以固定 dummy 读强制为零。
+
+\section{一层 Karatsuba 分解与原地交叉项}
+
+Karatsuba 分解将 $W^2$ 量级的 word 对缩减为 $3H^2$，同时保持加法结构在 GF(2) 上的线性性：
+\begin{equation}
+C \;=\; Z_0 \;\oplus\; x^{\wop H}\!\cdot\!(Z_s\oplus Z_0\oplus Z_2) \;\oplus\; x^{2\wop H}\!\cdot\! Z_2
+\pmod{x^r-1},
+\label{eq:recomb}
+\end{equation}
+其中 $Z_0=A_0B_0$，$Z_2=A_1B_1$，$Z_s=(A_0{\oplus}A_1)(B_0{\oplus}B_1)$。
+三个子积依次占用同一数据通路（表~\ref{tab:offset}）。
+
+\begin{table}[htbp]
+\centering
+\caption{子积相位的固定混入偏移（单位：word）}
+\label{tab:offset}
+\begin{tabular}{lcl}
+\toprule
+相位 & 子积 & 混入偏移 \\
+\midrule
+0 & $Z_0=A_0\cdot B_0$ & $0$、$H$ \\
+1 & $Z_2=A_1\cdot B_1$ & $2H$、$H$ \\
+2 & $Z_s=(A_0{\oplus}A_1)\cdot(B_0{\oplus}B_1)$ & $H$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+交叉项操作数 $A_0{\oplus}A_1$、$B_0{\oplus}B_1$ 不设专用暂存 RAM。相位 2 之前，
+控制器对 $A$、$B$ 各执行固定 $H$ 次三拍扫描
+（读低半、读高半、写低半 $\mathrm{low}\oplus{=}\mathrm{high}$，共 $3H$ 拍），
+将交叉操作数原地写入低半区；高半区只读，低半读取值暂存于两个 $\wop$ 位寄存器。
+相位 2 完成后执行相同扫描，由 $(l\oplus h)\oplus h=l$ 恢复原操作数，
+保证结果输出前两份输入完好。两次扫描共 $6H$ 拍；
+其代价是乘法期间调用方让出 RAM 所有权，收益是操作数零复制、
+通用核逻辑容量由 $5W$ 降至 $3W$ 个 word。
+
+\section{对角线 Comba 数据通路}
+
+三个相位共享单路数据通路，按对角线索引 $k$ 扫描（算法~\ref{alg:fold}）。
+GF(2) 上 $64{\times}64$ 无进位积的高 word 恰为下一对角线低 word 的贡献，
+因此跨对角线进位链压缩为一对 $\wop$ 位寄存器 $\{L,Hh\}$，
+无需多字进位传播。叶子乘法器内部再作两层 Karatsuba 递归
+（九个 $16{\times}16$ 子乘替代全展开），减少基础部分积；实际面积与时序以综合及布线结果为准。
+Comba 与折叠器分别访问操作数 RAM 和结果 RAM；已完成的对角线在原有累加寄存器内
+等待折叠器接收，接收后即计算下一条。等待只取决于公开几何，未增加 RAM 或乘法器。
+相位切换、原地恢复和输出前必须完成最后一个 word 的折叠。
+
+\begin{algorithm}[htbp]
+\caption{固定调度一层 Karatsuba-Comba 直接循环折叠}
+\label{alg:fold}
+\begin{algorithmic}[1]
+\Require $A,B\in\mathrm{GF}(2)[x]/(x^r-1)$；$W,H,\lambda$ 如正文所定义
+\Ensure $C=A\cdot B \bmod (x^r-1)$
+\State $C[m]\gets 0$，$m=0,\dots,W-1$ \Comment{固定清零活动结果区}
+\For{$p\in\{0,1,2\}$} \Comment{相位顺序固定，与数据无关}
+  \State 若 $p=2$：先执行原地扫描 $\mathrm{low}\oplus{=}\mathrm{high}$（$3H$ 拍）
+  \State $(X,Y)\gets$ 相位操作数，见式~\eqref{eq:recomb} 与表~\ref{tab:offset}
+  \State $(L,Hh)\gets(0,0)$
+  \For{$k=0$ \textbf{to} $2H-2$}
+    \ForAll{word 对 $(i,j)$ 满足 $i{+}j=k$}
+      \State $(L,Hh)\gets(L,Hh)\oplus\mathrm{clmul}_{\wop}(X_i,Y_j)$ \Comment{单拍累加}
+    \EndFor
+    \State $\mathrm{fold}(C,\,L,\,k)$ \Comment{交给折叠器，允许与下一对角线重叠}
+    \State $(L,Hh)\gets(Hh,\,0)$ \Comment{进位传递至下一对角线}
+  \EndFor
+  \State $\mathrm{fold}(C,\,L,\,2H-1)$ \Comment{最高对角线进位}
+  \State 等待该相位全部折叠完成
+  \State 若 $p=2$：再执行原地恢复扫描（$3H$ 拍）
+\EndFor
+\State 输出 $C$（背压握手，不改变访问序列）
+\end{algorithmic}
+\end{algorithm}
+
+\section{直接循环折叠}
+
+本设计不设 $2W$-word 完整乘积 RAM。其依据是：GF(2) 上 Karatsuba 重组
+（式~\eqref{eq:recomb}）与模 $x^r-1$ 归约均为线性算子，可合并为先折后存——
+每个完成的子积 word $u$（线性域位置 $m$，$0\le m\le 2W-2$）立即按如下规则
+混入 $W$-word 结果 RAM：
+\begin{equation}
+\mathrm{fold}(C,u,m):\quad
+\begin{cases}
+C[m]\oplus= u, \;\text{且若 } m=W{-}1,\ \lambda\ne\wop:\ C[0]\oplus= u\gg\lambda, & m<W; \\[2pt]
+C[m{-}W]\oplus= u\ll(\wop{-}\lambda),\ \ C[m{-}W{+}1]\oplus= u\gg\lambda, & m\ge W.
+\end{cases}
+\label{eq:fold}
+\end{equation}
+超界片（$m{-}W{+}1\ge W$）与高于 $2r$ 次的重组项一致截断而不回卷填充——
+后者在完整乘积中必然抵消；末 word 统一按 $\lambda$ 掩码。
+每次折叠为 $R_0{\to}W_0{\to}[R_1{\to}W_1]$ 的顺序 RMW，
+第二组访问是否发生仅由公开几何决定，且时序上不依赖同拍读写旁路。
+
+\section{固定调度与恒定时间}
+
+折叠地址、第二 word RMW、原地扫描次数、清零范围全部由锁存的公开几何
+$(W,H,\lambda)$ 决定，不存在数据相关分支；输出背压仅拉长握手而不改变
+存储访问序列。恒定时间性质以仿真门界验证：13 种小几何、每几何 13 个事务
+的测试对逐拍地址轨迹做了数据无关性检查；尚未建立整个乘法器的形式化证明。
+
+\section{复杂度与设计权衡}
+
+外部操作数绑定核（求逆内边界）在连续握手下的周期为
+\begin{equation}
+T \;=\; 3H^2 + 38H + 3W - 3 + 2S - \Delta, \qquad
+S = J(0)+3J(H)+J(2H),\quad J(a)=\bigl|[a,a{+}2H{-}1]\cap[W{-}1,\,2W{-}2]\bigr|,
+\end{equation}
+其中 $S$ 为 $\lambda\ne\wop$ 时第二 word 折叠的附加访问项；
+通用乘法核稠密模式（含装载与控制）为 $3H^2+38H+5W-1+2S-\Delta$。
+重叠节省
+$\Delta=\sum_{p=0}^{2}\sum_{k=0}^{2H-3}\min(2m_{p,k}+1,\ell_{k+1}+1)$，
+其中 $m_{p,k}$ 为该 word 的 RMW 次数，$\ell_j=\min(j+1,2H-1-j)$；$H=1$ 时空和为零。
+本轮已实测边界见表~\ref{tab:cycles}；破折号表示该边界本轮未运行。
+
+\begin{table}[htbp]
+\centering
+\caption{Comba/折叠重叠后的周期（RTL 仿真实测，连续握手 busy 拍数）}
+\label{tab:cycles}
+\begin{tabular}{rrrrr}
+\toprule
+$r$ & $W$ & $H$ & 稠密乘法周期 & 求逆周期 \\
+\midrule
+12589 & 197 & 99 & 31\,677 & -- \\
+15581 & 244 & 122 & 47\,439 & 1\,359\,798 \\
+106781 & 1669 & 835 & 2\,110\,141 & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+相对重叠前的一层 Karatsuba 调度，TRIKE-2 稠密乘法周期减少 $8.30\%$，
+求逆周期减少 $5.09\%$。同条件本地 Yosys generic-RAM 估计（非 Vivado 证据）：
+通用乘法核 LUT $4162\to4102$、FF $1162\to1101$；求逆 wrapper LUT $3547\to3478$、
+FF $878\to817$；各自 BRAM 不变。物理资源与频率仍需同条件 Vivado 验证。
+
+三项设计权衡值得说明。其一，Karatsuba 深度止于 1：两层分解（四 quarter bank、
+九个子积、独立乘积 RAM、后置归约）在 TRIKE-2 档实测 $44\,216$ 拍
+（Fully Routed $3712$ LUT、$10$ RAMB36、WNS $+1.483$\,ns），
+延时再降 $13.3\%$ 但 LUT $+35\%$、BRAM $+67\%$，仅作为大参数下的最低延时候选保留。
+其二，FFT 方案在 $r\le 2^{17}$ 量级下相对 Karatsuba 无明显收益且引入实现复杂度，不在选型范围。
+其三，原地交叉项扫描的固定 $6H$ 拍开销使极小几何（如 $r{=}13$）周期由 $603$ 增至 $967$ 拍，
+属于以小参数吞吐换取大参数存储效率的显式取舍。
+
+\end{document}

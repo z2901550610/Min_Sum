@@ -59,8 +59,12 @@ module trike_poly_fold_test_case #(
   ) + overlap_words(
       2 * HALF_WORDS
   );
+  `include "trike_fold_schedule.svh"
+
   localparam int EXPECTED_CYCLES = 3 * HALF_WORDS * HALF_WORDS + 32 * HALF_WORDS +
-      5 * WORDS - 3 + 2 * (WORDS % 2) + 2 * SECOND_WRITES;
+      5 * WORDS - 3 + 2 * (WORDS % 2) + 2 * SECOND_WRITES - trike_fold_overlap_savings(
+      R_BITS, WORD_W
+  );
   localparam int MIX_WRITES = 10 * HALF_WORDS + SECOND_WRITES;
   logic [     361:0] reference_trace[0:EXPECTED_CYCLES-1];
 
@@ -80,15 +84,14 @@ module trike_poly_fold_test_case #(
   logic              busy;
   logic              done;
 
-  logic [R_BITS-1:0] case_a[               0:11];
-  logic [R_BITS-1:0] case_b[               0:11];
+  logic [R_BITS-1:0] case_a         [               0:11];
+  logic [R_BITS-1:0] case_b         [               0:11];
 
   // Stream or RAM outputs unused in this binding.
   /* verilator lint_off PINCONNECTEMPTY */
   trike_poly_mul_karatsuba_core #(
-      .R_BITS              (R_BITS),
-      .WORD_W              (WORD_W),
-      .BASE_KARATSUBA_DEPTH(1)
+      .R_BITS(R_BITS),
+      .WORD_W(WORD_W)
   ) dut (
       .i_clk            (clk),
       .i_rst_n          (rst_n),
@@ -131,8 +134,8 @@ module trike_poly_fold_test_case #(
   /* verilator lint_on PINCONNECTEMPTY */
   always #1 clk = ~clk;
 
-  function automatic logic [R_BITS-1:0] reference_product(input  logic [R_BITS-1:0] a,
-                                                          input  logic [R_BITS-1:0] b);
+  function automatic logic [R_BITS-1:0] reference_product(input logic [R_BITS-1:0] a,
+                                                          input logic [R_BITS-1:0] b);
     logic [R_BITS-1:0] value;
     begin
       value = '0;
@@ -145,7 +148,7 @@ module trike_poly_fold_test_case #(
     end
   endfunction
 
-  task automatic run_case(input  logic [R_BITS-1:0] a, input  logic [R_BITS-1:0] b,
+  task automatic run_case(input logic [R_BITS-1:0] a, input logic [R_BITS-1:0] b,
                           input int case_idx, input bit stalls, output int busy_cycles);
     logic [PAD_BITS-1:0] a_padded;
     logic [PAD_BITS-1:0] b_padded;

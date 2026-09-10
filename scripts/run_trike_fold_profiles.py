@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Reproduce dense/sparse runtime and inversion full-geometry fold regressions.
 
-Run from the repository root after sourcing scripts/eda-env.sh. These are
+Run through ./eda from the repository root. These are
 seeded independent polynomial goldens, not official KAT records or DFR trials.
 """
 import argparse
@@ -18,22 +18,35 @@ from trike_fixture_utils import cyclic_multiply, format_word_array, words_from_v
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--suite", choices=["multiply", "inverse", "all"], default="all")
+    parser.add_argument("--profiles", choices=["representative", "all"], default="representative")
+    parser.add_argument("--r-bits", type=int, nargs="+", help="Explicit geometries; inverse requires a schedule supported by the RTL")
+    parser.add_argument("--list", action="store_true", help="Print selected cases without running tools")
     parser.add_argument("--build-dir", type=Path, default=Path("build/trike-fold-profiles"))
     args = parser.parse_args()
+    if args.r_bits and any(r < 2 for r in args.r_bits):
+        parser.error("--r-bits values must be at least 2")
+    geometries = {"multiply": [12589, 15581, 30389, 63773, 106781],
+                  "inverse": [12589, 15581, 35363, 69691, 114043]}
+    suites = ["multiply", "inverse"] if args.suite == "all" else [args.suite]
+    selected = {suite: (args.r_bits if args.r_bits else
+                       (geometries[suite] if args.profiles == "all" else
+                        [geometries[suite][0], geometries[suite][-1]]))
+                for suite in suites}
+    if args.list:
+        print(json.dumps(selected))
+        return
     results = []
     args.build_dir.mkdir(parents=True, exist_ok=True)
     report_path = args.build_dir / f"results-{args.suite}.json"
-    report = {"status": "RUNNING", "cases": results,
+    report = {"status": "RUNNING", "selected_geometries": selected, "cases": results,
               "source_sha256": {str(p): hashlib.sha256(p.read_bytes()).hexdigest()
                                 for p in [Path("rtl/trike_poly_mul_core.sv"),
                                           Path("rtl/trike_poly_mul_karatsuba_core.sv"),
-                                          Path("rtl/trike_poly_inv_core.sv")]}}
+                                          Path("rtl/trike_poly_inv_core.sv"),
+                                          Path("tb/trike_fold_schedule.svh")]}}
     report_path.write_text(json.dumps(report, indent=2) + "\n")
-    suites = ["multiply", "inverse"] if args.suite == "all" else [args.suite]
     for suite in suites:
-        profiles = ([12589, 15581, 30389, 63773, 106781] if suite == "multiply"
-                    else [12589, 15581, 35363, 69691, 114043])
-        for r in profiles:
+        for r in selected[suite]:
             case_dir = args.build_dir / suite / f"r{r}"
             generated = case_dir / "generated"
             generated.mkdir(parents=True, exist_ok=True)

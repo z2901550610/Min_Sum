@@ -6,21 +6,12 @@
 ## 快速入口
 
 ```sh
-source scripts/eda-env.sh
-make check-fast
-make test-trike-poly-mul-core  # 换成当前模块的定向测试
+./eda make test-trike-poly-mul-core  # 换成当前模块的定向自检
 ```
 
-- `ci-fast`：轻量静态检查（filelist + Slang）、单元和集成测试；局部修改使用 `check-fast` 加定向 test。
-- `ci-smoke`：加入固定seed的BIKE和TRIKE K=3/K=4随机点。
-- `ci-nightly`：加入扩展形式参数与多参数、多seed回归。
-- `ci-kem-reference`：使用机器本地的官方TRIKE KAT/Reference C执行KeyGen、Encaps和Decaps
-  byte-for-byte发布门禁；该入口明确不属于日常快速回归。
-- `validate-workflow`：工作流单测与正/负工具 smoke；不运行生产 RTL 全套检查或 QoR。
-- `workflow-smoke`：独立计数器的lint、cocotb、formal与Yosys互操作证明。
-- `synth` / `qor`：本地Yosys结构估计与受验证状态约束的JSON/Markdown报告，
-  不属于Vivado物理证据。
-- `check`：工具基线、记录、完整静态、短形式矩阵、仿真、展开与本地综合；独立 PoC 属于 `validate-workflow`。
+局部修改默认只格式化任务文件并运行相关自检，按改变的接口/行为补调用方检查后停止。
+`ci-fast`、完整KEM reference和`check`是显式聚合入口，不是日常收尾清单。
+命令、选测和证据边界只维护在[工作流](docs/workflow.md)；未知测试时可用`check-plan`辅助选择。
 
 Vivado以 Windows Tcl Console 或直接 `vivado -mode batch -source scripts/vivado_trike_kem_cores.tcl` 为主入口，Make包装可选。
 资源与时序结论只使用同器件、Vivado版本、XDC、参数和报告阶段的可比结果。
@@ -36,7 +27,7 @@ Vivado以 Windows Tcl Console 或直接 `vivado -mode batch -source scripts/viva
 - `constraints/`：Vivado XDC约束。
 - `docs/`：成品设计、验证、实验和项目工作流。
 - `reports/vivado/manifests/`：版本化的Vivado运行摘要；原始报告保存在外部报告根目录。
-- `.agents/skills/`：仓库级Codex RTL工作阶段指令。
+- `.agents/skills/`：按需查阅的RTL专题指导。
 - `workflow-smoke/`：不进入生产filelist的独立工具链PoC。
 
 完整文档入口见[docs/README.md](docs/README.md)，本地流程见

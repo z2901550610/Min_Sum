@@ -654,6 +654,10 @@ commands = [
 exact = ["rtl/trike_poly_mul_karatsuba_core.sv", "tb/tb_trike_poly_mul_karatsuba_core.sv", "tb/tb_trike_poly_mul_karatsuba_reference.sv"]
 covers_profiles = ["kem"]
 also_targets = ["test-trike-poly-karatsuba-reference"]
+[[tests.owners]]
+exact = ["tb/trike_fold_schedule.svh"]
+covers_profiles = ["local_rtl"]
+also_targets = ["test-trike-poly-mul-runtime", "test-trike-poly-inv-reference"]
 
 [[tests]]
 name = "test-trike-poly-karatsuba-reference"
@@ -1067,10 +1071,10 @@ commands = [
 [[tests.owners]]
 exact = ["rtl/trike_decaps_runtime_pipeline_core.sv", "rtl/trike_decaps_runtime_synth_top.sv", "rtl/trike_decaps_unified_core.sv", "tb/tb_trike_decaps_runtime_synth_reference.sv"]
 covers_profiles = ["kem"]
-also_targets = ["test-trike-decaps-runtime-four-profile-reference"]
+also_targets = ["test-trike-decaps-runtime-profiles-reference"]
 
 [[tests]]
-name = "test-trike-decaps-runtime-four-profile-reference"
+name = "test-trike-decaps-runtime-profiles-reference"
 commands = [
   "@for profile in $(TRIKE_MINSUM_PROFILES); do \\",
   "\t$(MAKE) test-trike-decaps-runtime-synth-reference TRIKE_MINSUM_PROFILE=$$profile TRIKE_RUNTIME_REFERENCE_DEFINES=-DTRIKE_RUNTIME_ACCEPT_REJECT_ONLY || exit 1; \\",
@@ -1284,3 +1288,7 @@ commands = [
 [[tests.owners]]
 exact = ["tb/tb_trike_poly_mul_runtime.sv"]
 covers_profiles = ["local_rtl"]
+
+[[tests]]
+name = "test-trike-fold-profiles"
+commands = ["@python3 scripts/run_trike_fold_profiles.py --profiles $(VALIDATION_PROFILE_SET) $(FOLD_ARGS)"]

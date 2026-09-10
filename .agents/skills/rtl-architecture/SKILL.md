@@ -13,5 +13,6 @@ and lifecycle, handshake boundaries, and a symbolic fixed-cycle equation.
 Evaluate public parameter profiles separately. Compare options by fixed cycles,
 achievable clock/timing margin, memory footprint, and routing cost. Treat Yosys
 counts as estimates and require comparable Vivado placed/routed reports for
-physical conclusions. Record an architecture experiment when required by
-`AGENTS.md`; do not implement unless requested.
+physical conclusions. Describe exploration in the response; do not create a
+tracked plan or experiment merely because a candidate was considered. Apply
+`AGENTS.md` recording thresholds; do not implement unless requested.

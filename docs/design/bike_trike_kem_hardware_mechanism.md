@@ -385,7 +385,7 @@ flowchart TB
 - $r_1h_0$ 可由 $h_0$ support 驱动固定 $d$ 槽稀疏乘法；$h_1/h_2$ 通过固定长度 XOR 注入；
 - 其余公钥派生乘法按稠密模式执行。
 
-本仓库 [trike_poly_inv_core.sv](../../rtl/trike_poly_inv_core.sv) 使用公开 $r$ 决定的 Frobenius/addition-chain 调度，链长、乘法次数和 RAM 地址数不依赖输入系数。TRIKE-2使用18次置换和17次乘法；`WORD_W=64`、一层Karatsuba-Comba与原地交叉项扫描时，官方 KAT 的求逆 reference 对拍周期为1,432,796拍。该数字是 RTL 固定周期，不是端到端 KeyGen 周期。
+本仓库 [trike_poly_inv_core.sv](../../rtl/trike_poly_inv_core.sv) 使用公开 $r$ 决定的 Frobenius/addition-chain 调度，链长、乘法次数和 RAM 地址数不依赖输入系数。TRIKE-2使用18次置换和17次乘法；`WORD_W=64`、一层Karatsuba-Comba与原地交叉项扫描时，官方 KAT 的求逆 reference 对拍周期为1,359,798拍。该数字是 RTL 固定周期，不是端到端 KeyGen 周期。
 
 ### 10.2 weak-key test 与固定周期
 

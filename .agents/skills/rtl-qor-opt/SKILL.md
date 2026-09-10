@@ -11,5 +11,6 @@ and report stage. Make one structural change at a time, preserve fixed-cycle and
 functional/formal gates, and compare like-for-like metrics. `make qor` is a local
 Yosys estimate for `kem_ct_compare_select`; it is not physical evidence. Require
 comparable Vivado placed/routed reports before claiming FPGA resource or timing
-improvement. Record attempted, failed, and withdrawn architecture experiments
-as required by `AGENTS.md`.
+improvement. Follow `AGENTS.md` for recording: no attempt diary; capture an evidence-backed
+rejection once, and keep successful design facts in their owning document.
+Baseline metadata may live in existing machine evidence; do not duplicate it in prose.

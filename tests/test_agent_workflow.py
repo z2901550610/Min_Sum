@@ -13,6 +13,37 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.mark.parametrize("scope,expected", [
+    ("representative", {"multiply": [12589, 106781], "inverse": [12589, 114043]}),
+    ("all", {"multiply": [12589, 15581, 30389, 63773, 106781],
+             "inverse": [12589, 15581, 35363, 69691, 114043]}),
+])
+def test_full_size_profile_selection(scope, expected, tmp_path: Path) -> None:
+    result = subprocess.run(
+        [sys.executable, str(REPO_ROOT / "scripts/run_trike_fold_profiles.py"),
+         "--profiles", scope, "--list", "--build-dir", str(tmp_path / "unused")],
+        capture_output=True, text=True, check=True,
+    )
+    assert json.loads(result.stdout) == expected
+    assert not (tmp_path / "unused").exists()
+
+
+@pytest.mark.parametrize("scope,trike,bike,reference", [
+    ("representative", "trike160 trike512", "bike128 bike256", "TRIKE-2 TRIKE-9"),
+    ("all", "trike160 trike256 trike384 trike512", "bike128 bike192 bike256",
+     "TRIKE-2 TRIKE-5 TRIKE-7 TRIKE-9"),
+])
+def test_make_profile_defaults(scope, trike, bike, reference, tmp_path: Path) -> None:
+    probe = tmp_path / "scope.mk"
+    probe.write_text("print-scope:\n\t@echo '$(TRIKE_KEM_TEST_PROFILES)|$(TRIKE_MINSUM_PROFILES)|$(TRIKE_UNIFIED_KSIGN_PARAM_SETS)|$(BIKE_UNIFIED_RANDOM_PARAM_SETS)|$(TRIKE_REFERENCE_PARAM_SETS)'\n")
+    result = subprocess.run(
+        ["make", "--no-print-directory", "-s", f"VALIDATION_PROFILE_SET={scope}",
+         "-f", "Makefile", "-f", str(probe),
+         "print-scope"], cwd=REPO_ROOT, capture_output=True, text=True, check=True,
+    )
+    assert result.stdout.strip() == "|".join([trike, trike, trike, bike, reference])
+
+
 def load_script(name: str):
     path = REPO_ROOT / "scripts" / f"{name}.py"
     scripts_path = str(path.parent)
@@ -120,11 +151,11 @@ def test_check_plan_routes_formal_and_workflow_changes() -> None:
     profile_ids = [profile["id"] for profile in plan["profiles"]]
     assert "workflow" in profile_ids
     assert "formal" in profile_ids
-    assert "validate-workflow" in plan["targets"]
+    assert "check-agent-workflow" in plan["targets"]
     assert "make check" not in plan["commands"]
     assert "formal-ct-control" in plan["targets"]
     assert "make formal-fast" not in plan["commands"]
-    assert plan["release_commands"] == ["make formal-fast"]
+    assert "release_commands" not in plan
     assert plan["read_only"] is True
 
 
@@ -145,7 +176,7 @@ def test_check_plan_self_routes_workflow_and_scopes_hardware_tokens() -> None:
         "git diff --check -- tests/test_agent_workflow.py",
         "make check-agent-workflow",
     ]
-    assert test_plan["release_commands"] == []
+    assert "release_commands" not in test_plan
 
     documentation_plan = check_plan.build_plan(
         ["docs/k_sign_notes.md", "docs/parameter_notes.md"]
@@ -158,7 +189,7 @@ def test_check_plan_self_routes_workflow_and_scopes_hardware_tokens() -> None:
     dependency_plan = check_plan.build_plan(["pyproject.toml"])
     assert dependency_plan["commands"] == [
         "git diff --check -- pyproject.toml",
-        "make python-sync validate-workflow",
+        "make python-sync check-agent-workflow",
     ]
 
     scoped = subprocess.run(
@@ -175,7 +206,7 @@ def test_check_plan_self_routes_workflow_and_scopes_hardware_tokens() -> None:
     )
     assert scoped.returncode == 0
     assert "Validation plan: 2 changed path(s)" in scoped.stdout
-    assert "make check-fast test-reset-sync" in scoped.stdout
+    assert "make test-reset-sync" in scoped.stdout
 
 
 def test_check_plan_uses_owning_targets_before_aggregate_gates() -> None:
@@ -187,7 +218,7 @@ def test_check_plan_uses_owning_targets_before_aggregate_gates() -> None:
         "git diff --check -- formal/tile_scheduler_formal.sv",
         "make formal-tile-scheduler",
     ]
-    assert formal_plan["release_commands"] == ["make formal-fast"]
+    assert "release_commands" not in formal_plan
 
     ram_plan = check_plan.build_plan(["rtl/ram_i.sv"])
     assert [profile["id"] for profile in ram_plan["profiles"]] == [
@@ -196,16 +227,16 @@ def test_check_plan_uses_owning_targets_before_aggregate_gates() -> None:
     ]
     assert ram_plan["commands"] == [
         "git diff --check -- rtl/ram_i.sv",
-        "make check-fast test-ram-i",
+        "make test-ram-i",
     ]
-    assert ram_plan["release_commands"] == ["make ci-fast"]
+    assert "release_commands" not in ram_plan
 
     kem_plan = check_plan.build_plan(["rtl/kem_ct_compare_select.sv"])
     assert kem_plan["commands"] == [
         "git diff --check -- rtl/kem_ct_compare_select.sv",
-        "make check-fast test-kem-ct-compare-select formal-ct-select",
+        "make test-kem-ct-compare-select formal-ct-select",
     ]
-    assert kem_plan["release_commands"] == ["make ci-kem-reference"]
+    assert "release_commands" not in kem_plan
 
 
 def test_check_plan_command_coverage_keeps_manual_evidence_requirements() -> None:
@@ -218,7 +249,7 @@ def test_check_plan_command_coverage_keeps_manual_evidence_requirements() -> Non
         ]
     )
     assert set(plan["targets"]) == {
-        "validate-workflow", "check-fast", "test-integration", "formal-tile-scheduler"
+        "validate-workflow", "test-integration", "formal-tile-scheduler"
     }
     assert plan["manual_requirements"] == [
         "Run the smallest deterministic test that owns the changed behavior.",
@@ -346,16 +377,16 @@ def test_check_plan_routes_kem_units_without_aggregate_replay() -> None:
     implementation_plan = check_plan.build_plan(["rtl/trike_encaps_uv_core.sv"])
     assert implementation_plan["commands"] == [
         "git diff --check -- rtl/trike_encaps_uv_core.sv",
-        "make check-fast test-trike-encaps-uv-core test-trike-encaps-uv-core-external-store",
+        "make test-trike-encaps-uv-core test-trike-encaps-uv-core-external-store",
     ]
-    assert implementation_plan["release_commands"] == ["make ci-kem-reference"]
+    assert "release_commands" not in implementation_plan
 
     runtime_tb_plan = check_plan.build_plan(
         ["tb/tb_trike_pseudohash512_runtime.sv"]
     )
     assert runtime_tb_plan["commands"] == [
         "git diff --check -- tb/tb_trike_pseudohash512_runtime.sv",
-        "make check-fast test-trike-pseudohash-runtime",
+        "make test-trike-pseudohash-runtime",
     ]
     assert "make test-kem-unit" not in runtime_tb_plan["commands"]
 
@@ -364,7 +395,7 @@ def test_check_plan_routes_kem_units_without_aggregate_replay() -> None:
     )
     assert reference_plan["commands"] == [
         "git diff --check -- tb/tb_trike_keygen_secret_sampler_schedule.sv",
-        "make check-fast test-trike-keygen-secret-schedule-reference",
+        "make test-trike-keygen-secret-schedule-reference",
     ]
     assert "make ci-kem-reference" not in reference_plan["commands"]
 
@@ -428,9 +459,8 @@ def test_reference_variants_have_unique_direct_build_directories() -> None:
         assert f"build/verilator/{aggregate}/" not in result.stdout
 
 
-def test_validation_profiles_drive_routing_and_generated_matrix(tmp_path: Path) -> None:
+def test_validation_profiles_drive_routing() -> None:
     profiles = load_script("validation_profiles")
-    renderer = load_script("render_validation_matrix")
     config = profiles.load_profiles()
     selected, owners, manual = profiles.classify_paths(
         ["docs/removed-record.md", "formal/trike_ct_verify_stream_formal.sv"],
@@ -441,33 +471,6 @@ def test_validation_profiles_drive_routing_and_generated_matrix(tmp_path: Path) 
     assert [action.covers_profiles for action in owners] == [("formal",)]
     assert manual == []
 
-    document_path = REPO_ROOT / "docs" / "verification" / "validation_matrix.md"
-    document = document_path.read_text(encoding="utf-8")
-    assert renderer.render_document(
-        document, profiles.render_profile_table(config)
-    ) == document
-
-    stale_document = tmp_path / "validation_matrix.md"
-    stale_document.write_text(
-        document.replace("纯文档、实验索引或Vivado manifest", "stale row", 1),
-        encoding="utf-8",
-    )
-    result = subprocess.run(
-        [
-            sys.executable,
-            str(REPO_ROOT / "scripts" / "render_validation_matrix.py"),
-            "--check",
-            "--document",
-            str(stale_document),
-        ],
-        cwd=REPO_ROOT,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        check=False,
-    )
-    assert result.returncode == 1
-    assert "generated table is stale" in result.stderr
 
 
 def test_validation_profile_repository_bindings_are_live() -> None:
@@ -481,14 +484,14 @@ def test_public_parameter_and_kem_aggregate_plans_do_not_repeat_static_gate() ->
     decoder_plan = check_plan.build_plan(["rtl/decoder_profile_config.sv"])
     assert decoder_plan["commands"] == [
         "git diff --check -- rtl/decoder_profile_config.sv",
-        "make ci-smoke",
+        "make test-integration",
     ]
     assert "public_params" in [profile["id"] for profile in decoder_plan["profiles"]]
 
     trike_plan = check_plan.build_plan(["rtl/trike_decaps_profile_config.sv"])
     assert trike_plan["commands"] == [
         "git diff --check -- rtl/trike_decaps_profile_config.sv",
-        "make ci-smoke test-trike-decaps-runtime-four-profile-reference",
+        "make test-trike-decaps-runtime-profiles-reference",
     ]
     assert all(command != "make check-fast" for command in trike_plan["commands"])
 
@@ -524,7 +527,7 @@ def test_validation_profile_allows_missing_owner_and_rejects_multiple(
     )
     assert missing_plan["commands"] == [
         "git diff --check -- rtl/reset_sync.sv",
-        "make ci-fast",
+        "make test-integration",
     ]
 
     duplicate_path = tmp_path / "duplicate-owner.toml"
@@ -783,7 +786,7 @@ def test_helper_and_skill_changes_do_not_qualify_toolchain():
     planner = load_script("check_plan")
     assert planner.build_plan(["scripts/sby_quiet.py"])["targets"] == ["check-agent-workflow"]
     assert planner.build_plan([".agents/skills/rtl-implement/SKILL.md"])["targets"] == []
-    assert "validate-workflow" in planner.build_plan(["Makefile"])["targets"]
+    assert planner.build_plan(["Makefile"])["targets"] == ["check-agent-workflow"]
 
 
 @pytest.mark.parametrize("strict,returncode,output,failed", [
@@ -855,3 +858,41 @@ def test_ordinary_docs_are_light_but_experiment_records_are_checked():
     planner = load_script("check_plan")
     assert planner.build_plan(["README.md", "docs/workflow.md"])["targets"] == []
     assert planner.build_plan(["docs/experiments/index.md"])["targets"] == ["check-records"]
+
+
+@pytest.mark.parametrize("path,expected", [
+    ("Makefile", ["check-agent-workflow"]),
+    ("rtl/ram_accum.sv", ["test-ram-accum"]),
+    ("docs/design/implementation_status.md", []),
+    ("rtl/decoder_profile_config.sv", ["test-integration"]),
+])
+def test_focused_plan_has_one_check_set(path, expected):
+    plan = load_script("check_plan").build_plan([path])
+    assert plan["targets"] == expected
+    assert not any("release" in key or "iteration" in key for key in plan)
+
+
+def test_reference_and_qor_do_not_require_unrelated_qualification():
+    records = load_script("check_project_records")
+    dependencies, _ = records.parse_make_targets((REPO_ROOT / "Makefile").read_text())
+    for target in ["ci-kem-reference", "qor", "qor-record"]:
+        closure = records.dependency_closure(target, dependencies)
+        assert not closure.intersection({"check-local-tools", "check-tool-versions", "check-records", "check-rtl"})
+    result = subprocess.run(["make", "-n", "qor"], cwd=REPO_ROOT,
+                            capture_output=True, text=True, check=True)
+    assert "QOR_LINT_STATUS=NOT_RUN" in result.stdout
+    assert "formal/kem_ct_compare_select.sby" in result.stdout
+
+
+@pytest.mark.parametrize("paths", [
+    ["rtl/ram_i.sv", "rtl/k_sign_overlap_scheduler.sv"],
+    ["rtl/ram_i.sv", "rtl/unowned_decoder_probe.sv"],
+    ["rtl/ram_i.sv", "rtl/k_sign_overlap_scheduler.sv", "scripts/run_validation.py"],
+])
+def test_combined_plan_preserves_each_files_checks(paths):
+    planner = load_script("check_plan")
+    expected = {target for path in paths for target in planner.build_plan([path])["targets"]}
+    forward = planner.build_plan(paths)["targets"]
+    backward = planner.build_plan(list(reversed(paths)))["targets"]
+    assert set(forward) == set(backward) == expected
+    assert len(forward) == len(set(forward))

@@ -1,9 +1,15 @@
 # RTL实现状态
 
+2026-09-09稀疏调度已改为6拍/support-word，实测范围见[EXP-0124](../experiments/EXP-0124-sparse-rmw-overlap.md)。
+KeyGen基础配置和syndrome参考通过；KeyGen其他共享配置、替代输入及wrapper本轮NOT_RUN。
+Encaps现改为四次稠密乘法，UV/基础/共享error与乘法服务/wrapper均通过EXP-0125参考，见
+[Encaps稠密集成](../experiments/EXP-0125-encaps-dense-error-stream.md)。旧版golden记录仍见EXP-0123/0124。完整Decaps pipeline/runtime的下列周期
+属于EXP-0123八拍稀疏路径历史结果，本轮未复测，不能作为当前端到端周期。
+
 > 本文只描述当前成品架构、固定周期、验证结论和证据边界。设计动机与实验结论见
 > [实验索引](../experiments/index.md)，精确Vivado运行条件见
 > [Vivado基线注册表](vivado_baseline_registry.md)，门禁选择见
-> [验证矩阵](../verification/validation_matrix.md)，KEM优化的当前推进状态与下一门禁见
+> [工作流](../workflow.md)，KEM优化的当前推进状态与下一门禁见
 > [TRIKE KEM优化路线图](trike_kem_optimization_roadmap.md)。
 
 ## Decoder配置
@@ -91,31 +97,31 @@ Decaps继承decoder H验证状态的一次复位一笔事务约束；同一复�
 
 三阶段普通多项式请求经过同一operation mux连接最大几何`trike_poly_mul_core`。服务在命令边界装载公开
 `r_bits/words/sparse_weight`，反馈只送入活动stage。完整层次固定包含一个共享流式乘法器和一个KeyGen
-求逆内部乘法器。KeyGen、Encaps和Decaps syndrome外置服务reference分别固定7,928,399、2,378,447和
-123,123拍并通过golden。
+求逆内部乘法器。KeyGen、Encaps和Decaps syndrome外置服务reference分别固定7,752,441、527,684和
+101,749拍并通过golden。
 
 KeyGen与Encaps的H1/H2/H3请求连接同一`trike_h123_vectors`。服务保存一份DRNG
 Instantiate/Generate状态并复用一个`trike_parity_map_stream`，seed与vector握手由公开operation选择。
-两阶段外置H123、SM3和乘法组合reference分别固定7,928,399和2,378,447拍并通过byte golden。
+两阶段外置H123、SM3和乘法组合reference分别固定7,752,441和527,684拍并通过byte golden。
 
 共享H123 byte流同时写入一个`trike_h123_vector_store`。该服务按官方TRIKE-2几何保存三组
 244x64-bit的`t1/t2/r1`，并用三个独立同步读口满足KeyGen的`t1/r1`并行读取及Encaps读序列。
 KeyGen第一次分母完整装载后，通过固定写口把`t1` bank依次重命名为两次inverse scratch；Encaps阶段
 保持三组H123只读角色。operation mux转发活动stage的读写地址；完整层次恰好一个H123 vector store。两阶段全外置组合reference
-分别固定7,928,399和2,378,447拍并通过byte golden；具体RAMB映射及读口复制行为等待Vivado确认。
+分别固定7,752,441和527,684拍并通过byte golden；具体RAMB映射及读口复制行为等待Vivado确认。
 
 KeyGen秘密support、Encaps H4和Decaps重加密H4连接同一最大几何`trike_drng_weight_sampler`。命令装载
 公开`length/weight`与DRNG state，index和最终state只返回活动stage。完整层次恰好一个
 `trike_drng_weight_sampler`及其`trike_fixed_weight_sampler`。固定重量采样的已选索引由一个无复位数据阵列的
 同步`ram_bram`保存；每个position的随机字数、公开weight全扫描和输出握手调度固定。三阶段外置
-reference分别固定7,928,399、
-2,378,447和257,417拍并通过golden。seed Instantiate控制、KeyGen弱密钥检测和秘密support RAM位于stage
+reference分别固定7,752,441、
+527,684和257,417拍并通过golden。seed Instantiate控制、KeyGen弱密钥检测和秘密support RAM位于stage
 层次。
 
 Encaps与Decaps的H4 support和三块padded dense error连接同一最大几何`trike_error_support_store`。
 命令锁存公开`r/t/padded_r_bytes`，两个边界比较和减法把全局index映射到三块dense error，index写入及
 后续support/error同步读取只选择活动operation。完整层次
-恰好一个H4 store；两阶段外置store reference分别保持2,378,447和257,417拍，并通过CT/SS byte golden及
+恰好一个H4 store；两阶段外置store reference分别保持527,684和257,417拍，并通过CT/SS byte golden及
 有效/拒绝成对固定周期验证。Decaps decoder error RAM属于译码后检查生命周期，不接入该服务。
 
 该入口的KeyGen/Encaps采用官方TRIKE-2 `r=15581,w=35,t=263`，Decaps采用四档项目K-sign profile。
@@ -136,9 +142,9 @@ inverse结果。结构门禁要求算术核只展开external support/result stor
 | 边界 | 固定周期 | golden范围 |
 | --- | ---: | --- |
 | 秘密support调度 | 4,778,975 | 候选0合格与候选1才合格 |
-| KeyGen算术 | 3,095,537 | 官方TRIKE-2 `t0/r2`逐word |
-| KeyGen core | 7,928,399 | PK/SK逐byte，两种候选路径 |
-| `trike_keygen_synth_top` | 7,935,970 | 8-bit输入、PK、SK流逐byte |
+| KeyGen算术 | 2,919,579 | 官方TRIKE-2 `t0/r2`逐word |
+| KeyGen core | 7,752,441 | PK/SK逐byte，两种候选路径 |
+| `trike_keygen_synth_top` | 7,760,012 | 8-bit输入、PK、SK流逐byte |
 
 `success`只报告固定候选集合中是否找到合格support，不改变H123、算术或序列化调度。
 
@@ -151,13 +157,13 @@ UV核通过外部store接口直接读写外层两组244x64-bit持久`u/v` RAM；
 
 | 边界 | 固定周期 | golden范围 |
 | --- | ---: | --- |
-| H123/H4/UV组件 | 44,640 / 207,017 / 2,062,238 | 官方中间量 |
-| Encaps core | 2,378,447 | 3,928-byte CT与32-byte SS |
-| `trike_encaps_synth_top` | 2,384,421 | 窄I/O完整输出 |
+| H123/H4/UV组件 | 44,640 / 207,017 / 211,475 | 官方中间量 |
+| Encaps core | 527,684 | 3,928-byte CT与32-byte SS |
+| `trike_encaps_synth_top` | 533,658 | 窄I/O完整输出 |
 
 生产KEM稠密路径为`WORD_W=64`的一层Karatsuba-Comba与循环折叠。输入RAM采用固定原地
-XOR/恢复扫描，不增加读端口；恢复后才开放输出。TRIKE-2稀疏/稠密乘法为69,366/51,733拍，
-求逆1,432,796拍，KeyGen算术/core/窄I/O分别3,095,537/7,928,399/7,935,970拍。
+XOR/恢复扫描，不增加读端口；恢复后才开放输出。TRIKE-2稀疏/稠密乘法为52,286/47,439拍，
+求逆1,359,798拍，KeyGen算术/core/窄I/O分别2,919,579/7,752,441/7,760,012拍。
 这些是功能和固定周期边界，不能据此更新历史Vivado资源或时序基线。详见
 [架构说明](trike_karatsuba_fold.md)与[EXP-0123](../experiments/EXP-0123-trike-k1-cyclic-fold.md)。
 
@@ -180,7 +186,7 @@ error writer和residual checker，之后postprocess才读取error RAM。
 
 | 边界 | 固定周期 | 当前验证 |
 | --- | ---: | --- |
-| syndrome core | 123,123 | 244个word匹配独立模型 |
+| syndrome core | 101,749 | 244个word匹配独立模型 |
 | message recover | 28,431 | 正常与全零error |
 | reencrypt verify | 209,659 | 匹配与首byte扰动 |
 | KDF | 19,323 | 接受与拒绝SS逐byte |
@@ -212,7 +218,7 @@ syndrome和共享`trike_poly_mul_core`支持可选运行时公开环几何。sta
 `h0/t0/u/v`顺序访问最大几何输入RAM；valid等待期间保持数据且不重复读。`r=7/13/23`小几何逐word
 golden通过。项目TRIKE160完整`SK || CT`装载、预取和syndrome输出接受8,386 byte、输出197个word，
 局部小几何两套payload匹配golden且周期相同；项目TRIKE160该独立边界待复测。TRIKE syndrome reference为
-123,123拍，独立稠密/稀疏乘法reference为51,733/69,366拍。
+101,749拍，独立稠密/稀疏乘法reference为47,439/52,286拍。
 
 support排序器和decoder装载桥支持可选运行时公开几何。start边界锁存`r/w`后，三块support分别固定执行
 `w*(w-1)/2`次compare-swap并输出`w`项；syndrome按活动`r`逐bit写入并只产生一次decoder start。

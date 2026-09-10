@@ -2,9 +2,11 @@
 
 module tb_trike_poly_mul_reference #(
 
-    parameter int DUT_BASE_KARATSUBA_DEPTH = 1
+    parameter int DUT_BASE_KARATSUBA_DEPTH = 2
 );
   `include "generated/trike_poly_mul_reference_case.svh"
+
+  `include "trike_fold_schedule.svh"
 
   function automatic integer fold_cycles(input integer r, input integer w);
     integer n, h, extra, off;
@@ -20,7 +22,7 @@ module tb_trike_poly_mul_reference #(
           end
         end
       end
-      fold_cycles = 3 * h * h + 38 * h + 3 * n - 3 + 2 * extra;
+      fold_cycles = 3 * h * h + 38 * h + 3 * n - 3 + 2 * extra - trike_fold_overlap_savings(r, w);
     end
   endfunction
   localparam int REF_DENSE_CYCLES = fold_cycles(
@@ -28,7 +30,7 @@ module tb_trike_poly_mul_reference #(
   ) + 2 * ((REF_R_BITS + REF_WORD_W - 1) / REF_WORD_W) + 2;
   localparam int REF_SPARSE_CYCLES =
       (4 * REF_WORDS) + (2 * REF_SPARSE_WEIGHT) +
-      (8 * REF_SPARSE_WEIGHT * REF_WORDS);
+      (6 * REF_SPARSE_WEIGHT * REF_WORDS);
 
   logic                   clk;
   logic                   rst_n;
@@ -85,7 +87,7 @@ module tb_trike_poly_mul_reference #(
 
   always #1 clk = ~clk;
 
-  task automatic run_reference_case(input  logic use_sparse, output int busy_cycles);
+  task automatic run_reference_case(input logic use_sparse, output int busy_cycles);
     int                    a_idx;
     int                    b_idx;
     int                    support_idx;

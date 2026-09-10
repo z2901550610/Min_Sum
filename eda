@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Project-scoped tools, without changing the user's global Python or PATH.
+set -e
+cd "$(dirname "${BASH_SOURCE[0]}")"
+source scripts/eda-env.sh
+if [[ $# == 0 ]]; then set -- make; fi
+exec "$@"

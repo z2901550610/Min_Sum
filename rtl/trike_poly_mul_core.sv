@@ -6,7 +6,7 @@
 /* verilator lint_off DECLFILENAME */
 module trike_clmul_karatsuba #(
     parameter int WIDTH  = 64,
-    parameter int LEVELS = 1
+    parameter int LEVELS = (WIDTH == 64) ? 2 : 1
 ) (
     input  logic [    WIDTH-1:0] i_a,
     input  logic [    WIDTH-1:0] i_b,
@@ -92,7 +92,7 @@ endmodule
 module trike_poly_mul_core #(
     parameter int R_BITS = 15581,
     parameter int WORD_W = 64,
-    parameter int BASE_KARATSUBA_DEPTH = 1,
+    parameter int BASE_KARATSUBA_DEPTH = (WORD_W == 64) ? 2 : 1,
     parameter int SPARSE_WEIGHT = 263,
     parameter bit RUNTIME_GEOMETRY = 1'b0,
     parameter int WORD_ADDR_W = ((((R_BITS + WORD_W - 1) / WORD_W) > 1) ? $clog2(
@@ -143,9 +143,7 @@ module trike_poly_mul_core #(
     ST_SPARSE_PREPARE,
     ST_SPARSE_READ_0,
     ST_SPARSE_WRITE_0,
-    ST_SPARSE_READ_1,
     ST_SPARSE_WRITE_1,
-    ST_SPARSE_READ_2,
     ST_SPARSE_WRITE_2,
     ST_OUTPUT_FETCH,
     ST_OUTPUT_VALID
@@ -202,10 +200,11 @@ module trike_poly_mul_core #(
   logic   [                             WORD_W-1:0] sparse_source_word_q;
   logic   [                             WORD_W-1:0] sparse_first_mask_c;
   logic   [                         (2*WORD_W)-1:0] sparse_first_wide_c;
-  logic   [                             WORD_W-1:0] sparse_contribution_c[0:2];
-  logic   [                        WORD_ADDR_W-1:0] sparse_result_addr_c[0:2];
-  logic   [                             WORD_W-1:0] sparse_contribution_q[0:2];
-  logic   [                        WORD_ADDR_W-1:0] sparse_result_addr_q[0:2];
+  logic   [                             WORD_W-1:0] sparse_contribution_c  [0:2];
+  logic   [                        WORD_ADDR_W-1:0] sparse_result_addr_c   [0:2];
+  logic   [                             WORD_W-1:0] sparse_contribution_q  [0:2];
+  logic   [                             WORD_W-1:0] sparse_forward_q;
+  logic   [                        WORD_ADDR_W-1:0] sparse_result_addr_q   [0:2];
 
   logic   [                       SPARSE_SUM_W-1:0] sparse_sum_c;
   logic   [                       SPARSE_SUM_W-1:0] sparse_dest_start_c;
@@ -479,9 +478,7 @@ module trike_poly_mul_core #(
         result_we = 1'b1;
         result_waddr = sparse_result_addr_q[0];
         result_wdata = result_rdata ^ sparse_contribution_q[0];
-      end
-
-      ST_SPARSE_READ_1: begin
+        // The SDP read port fetches the next contribution while writing this one.
         result_re = 1'b1;
         result_raddr = sparse_result_addr_q[1];
       end
@@ -489,10 +486,8 @@ module trike_poly_mul_core #(
       ST_SPARSE_WRITE_1: begin
         result_we = 1'b1;
         result_waddr = sparse_result_addr_q[1];
-        result_wdata = result_rdata ^ sparse_contribution_q[1];
-      end
-
-      ST_SPARSE_READ_2: begin
+        result_wdata = ((sparse_result_addr_q[1] == sparse_result_addr_q[0]) ?
+                        sparse_forward_q : result_rdata) ^ sparse_contribution_q[1];
         result_re = 1'b1;
         result_raddr = sparse_result_addr_q[2];
       end
@@ -500,7 +495,8 @@ module trike_poly_mul_core #(
       ST_SPARSE_WRITE_2: begin
         result_we = 1'b1;
         result_waddr = sparse_result_addr_q[2];
-        result_wdata = result_rdata ^ sparse_contribution_q[2];
+        result_wdata = ((sparse_result_addr_q[2] == sparse_result_addr_q[1]) ?
+                        sparse_forward_q : result_rdata) ^ sparse_contribution_q[2];
       end
 
       ST_OUTPUT_FETCH: begin
@@ -650,18 +646,14 @@ module trike_poly_mul_core #(
         end
 
         ST_SPARSE_WRITE_0: begin
-          state_q <= ST_SPARSE_READ_1;
-        end
-
-        ST_SPARSE_READ_1: begin
+          // read_first returns the old word on a same-address read/write.
+          // Forward the committed value instead; no schedule/access is skipped.
+          sparse_forward_q <= result_wdata;
           state_q <= ST_SPARSE_WRITE_1;
         end
 
         ST_SPARSE_WRITE_1: begin
-          state_q <= ST_SPARSE_READ_2;
-        end
-
-        ST_SPARSE_READ_2: begin
+          sparse_forward_q <= result_wdata;
           state_q <= ST_SPARSE_WRITE_2;
         end
 

@@ -1,0 +1,277 @@
+{
+  "date": "2026-09-10",
+  "scope": "One-level polynomial Karatsuba, base depth 2, single Comba producer overlapped with sequential direct-fold consumer. No new multiplier or RAM ports.",
+  "source_revision": "a17f0f1b7c24ca6ed832fc4497d26d85fa36c656",
+  "dirty_tree": true,
+  "fixed_access": "Same operand/result access counts; public diagonal-dependent rendezvous; finish last carry fold before phase transitions, restore or output.",
+  "geometry": {
+    "r_bits": 15581,
+    "word_w": 64,
+    "base_karatsuba_depth": 2
+  },
+  "tool": "Yosys 0.68+132 13b43f8c8-dirty; Slang; synth_xilinx -family xc7 default ABC9",
+  "ram_model": "Generic synchronous read-first branch only; not XPM/Vivado physical evidence",
+  "comparisons": [
+    {
+      "case": "trike_poly_inv_synth_top-before",
+      "lut_primitives": 3547,
+      "ff": 878,
+      "ramb36": 4,
+      "ramb18": 0,
+      "stat_path": "build/trike-comba-overlap/trike_poly_inv_synth_top-before/xilinx-stat.json",
+      "stat_sha256": "9f19da502ccafe24a0f11f5ccd10aa4e1f3b57891a9d04a1ad9943a51c3b2d39",
+      "command": [
+        "./eda",
+        "make",
+        "synth-xilinx",
+        "LOCAL_SYNTH_TOP=trike_poly_inv_synth_top",
+        "LOCAL_SYNTH_SOURCES=rtl/reset_sync.sv rtl/trike_inv_schedule_pkg.sv /Users/z2901550610/Documents/Min_Sum/build/trike-comba-overlap/ram_bram_estimate.sv rtl/trike_poly_mul_core.sv /Users/z2901550610/Documents/Min_Sum/build/trike-comba-overlap/before/trike_poly_mul_karatsuba_core.sv rtl/trike_poly_inv_core.sv rtl/trike_poly_inv_synth_top.sv",
+        "LOCAL_SYNTH_BUILD_DIR=/Users/z2901550610/Documents/Min_Sum/build/trike-comba-overlap/trike_poly_inv_synth_top-before"
+      ],
+      "exit_code": 0
+    },
+    {
+      "case": "trike_poly_inv_synth_top-overlap",
+      "lut_primitives": 3478,
+      "ff": 817,
+      "ramb36": 4,
+      "ramb18": 0,
+      "stat_path": "build/trike-comba-overlap/trike_poly_inv_synth_top-overlap/xilinx-stat.json",
+      "stat_sha256": "9eb75cf67927ddf6da5114fee4a448750dafb97ba53b95844da7488deec08442",
+      "command": [
+        "./eda",
+        "make",
+        "synth-xilinx",
+        "LOCAL_SYNTH_TOP=trike_poly_inv_synth_top",
+        "LOCAL_SYNTH_SOURCES=rtl/reset_sync.sv rtl/trike_inv_schedule_pkg.sv /Users/z2901550610/Documents/Min_Sum/build/trike-comba-overlap/ram_bram_estimate.sv rtl/trike_poly_mul_core.sv rtl/trike_poly_mul_karatsuba_core.sv rtl/trike_poly_inv_core.sv rtl/trike_poly_inv_synth_top.sv",
+        "LOCAL_SYNTH_BUILD_DIR=/Users/z2901550610/Documents/Min_Sum/build/trike-comba-overlap/trike_poly_inv_synth_top-overlap"
+      ],
+      "exit_code": 0
+    },
+    {
+      "case": "trike_poly_mul_core-before",
+      "lut_primitives": 4162,
+      "ff": 1162,
+      "ramb36": 3,
+      "ramb18": 1,
+      "stat_path": "build/trike-comba-overlap/trike_poly_mul_core-before/xilinx-stat.json",
+      "stat_sha256": "8ea306152d87c1786e1776bdef38c43a522c1c44bd843372c3e0acfa1a14a18b",
+      "command": [
+        "./eda",
+        "make",
+        "synth-xilinx",
+        "LOCAL_SYNTH_TOP=trike_poly_mul_core",
+        "LOCAL_SYNTH_SOURCES=rtl/reset_sync.sv rtl/trike_inv_schedule_pkg.sv /Users/z2901550610/Documents/Min_Sum/build/trike-comba-overlap/ram_bram_estimate.sv rtl/trike_poly_mul_core.sv /Users/z2901550610/Documents/Min_Sum/build/trike-comba-overlap/before/trike_poly_mul_karatsuba_core.sv rtl/trike_poly_inv_core.sv rtl/trike_poly_inv_synth_top.sv",
+        "LOCAL_SYNTH_BUILD_DIR=/Users/z2901550610/Documents/Min_Sum/build/trike-comba-overlap/trike_poly_mul_core-before"
+      ],
+      "exit_code": 0
+    },
+    {
+      "case": "trike_poly_mul_core-overlap",
+      "lut_primitives": 4102,
+      "ff": 1101,
+      "ramb36": 3,
+      "ramb18": 1,
+      "stat_path": "build/trike-comba-overlap/trike_poly_mul_core-overlap/xilinx-stat.json",
+      "stat_sha256": "1a2e99036c507e9a7743256ad7f9a982882812420a65e5d4bfb75b513f6a4c39",
+      "command": [
+        "./eda",
+        "make",
+        "synth-xilinx",
+        "LOCAL_SYNTH_TOP=trike_poly_mul_core",
+        "LOCAL_SYNTH_SOURCES=rtl/reset_sync.sv rtl/trike_inv_schedule_pkg.sv /Users/z2901550610/Documents/Min_Sum/build/trike-comba-overlap/ram_bram_estimate.sv rtl/trike_poly_mul_core.sv rtl/trike_poly_mul_karatsuba_core.sv rtl/trike_poly_inv_core.sv rtl/trike_poly_inv_synth_top.sv",
+        "LOCAL_SYNTH_BUILD_DIR=/Users/z2901550610/Documents/Min_Sum/build/trike-comba-overlap/trike_poly_mul_core-overlap"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "cycles": {
+    "r15581": {
+      "standalone_halfbank": [
+        50999,
+        46705
+      ],
+      "dense_stream": [
+        51733,
+        47439
+      ],
+      "inverse": [
+        1432796,
+        1359798
+      ],
+      "keygen_arithmetic": [
+        3078457,
+        2919579
+      ],
+      "keygen_core": [
+        7911319,
+        7752441
+      ],
+      "keygen_wrapper": [
+        7918890,
+        7760012
+      ],
+      "encaps_uv": [
+        228651,
+        211475
+      ],
+      "encaps_core": [
+        544860,
+        527684
+      ],
+      "encaps_wrapper": [
+        550834,
+        533658
+      ],
+      "syndrome": [
+        106043,
+        101749
+      ]
+    },
+    "r12589_dense": [
+      35149,
+      31677
+    ],
+    "r106781_dense": [
+      2140109,
+      2110141
+    ]
+  },
+  "validation": [
+    {
+      "log": "build/trike-comba-overlap/unit-1.log",
+      "sha256": "6a640a1dae20e87651d96c9c6d8ce2022083934fde927bdfe12580081be71f25",
+      "status": "PASS",
+      "result_lines": [
+        "fold case PASS r=64 cycles=39 result_RMW=10",
+        "fold case PASS r=63 cycles=41 result_RMW=11",
+        "fold case PASS r=13 cycles=41 result_RMW=11",
+        "fold case PASS r=2 cycles=41 result_RMW=11",
+        "fold case PASS r=128 cycles=42 result_RMW=10",
+        "fold case PASS r=127 cycles=58 result_RMW=18",
+        "fold case PASS r=65 cycles=58 result_RMW=18",
+        "fold case PASS r=192 cycles=75 result_RMW=20",
+        "fold case PASS r=191 cycles=99 result_RMW=32",
+        "fold case PASS r=129 cycles=99 result_RMW=32",
+        "fold case PASS r=193 cycles=104 result_RMW=33",
+        "fold case PASS r=257 cycles=151 result_RMW=50",
+        "fold case PASS r=513 cycles=247 result_RMW=80",
+        "tb_trike_poly_mul_karatsuba_core PASS geometries=13 cases_per_geometry=13"
+      ]
+    },
+    {
+      "log": "build/trike-comba-overlap/arithmetic.log",
+      "sha256": "9bac4d7e42910e3ecf00f66344f247fbe364984d35b7c98c2bf44185f3a62824",
+      "status": "PASS",
+      "result_lines": [
+        "tb_trike_poly_mul_core PASS",
+        "tb_trike_poly_mul_runtime PASS 13 profile transitions, 75 transactions, collisions=74",
+        "tb_trike_poly_inv_core PASS cycles=467",
+        "tb_trike_poly_mul_karatsuba_reference PASS r=15581 dense=46705",
+        "tb_trike_poly_mul_reference PASS dense=47439 sparse=52286",
+        "tb_trike_poly_inv_reference PASS cycles=1359798"
+      ]
+    },
+    {
+      "log": "build/trike-comba-overlap/callers.log",
+      "sha256": "c91c0c88ec176bc49501c26d9ae3567167e5b7f13a7afef2851d2722470a5d82",
+      "status": "PASS",
+      "result_lines": [
+        "tb_trike_encaps_uv_core PASS external_store=0 cycles=305",
+        "tb_trike_encaps_components_reference PASS h123=44640 h4=207017 uv=211475",
+        "tb_trike_encaps_core_reference PASS cycles=527684 ct=3928 ss=32",
+        "tb_trike_encaps_core_reference PASS cycles=527684 ct=3928 ss=32",
+        "tb_trike_encaps_core_reference PASS cycles=527684 ct=3928 ss=32",
+        "tb_trike_keygen_arith_reference PASS cycles=2919579",
+        "tb_trike_keygen_core_reference PASS alt=0 synth=0 pk=1980 sk=6328 cycles=7752441",
+        "tb_trike_keygen_core_reference PASS alt=1 synth=0 pk=1980 sk=6328 cycles=7752441",
+        "tb_trike_keygen_core_reference PASS alt=0 synth=0 pk=1980 sk=6328 cycles=7752441",
+        "tb_trike_keygen_core_reference PASS alt=0 synth=0 pk=1980 sk=6328 cycles=7752441"
+      ]
+    },
+    {
+      "log": "build/trike-comba-overlap/bindings.log",
+      "sha256": "c4fe7e0801e56d0b248fa6870c84fdbab99fa0982f6b1113c712c9aff8c20de1",
+      "status": "PASS",
+      "result_lines": [
+        "tb_trike_decaps_syndrome_reference PASS cycles=101749",
+        "tb_trike_decaps_syndrome_reference PASS cycles=101749",
+        "tb_trike_decaps_syndrome_runtime PASS",
+        "tb_trike_keygen_core_reference PASS alt=0 synth=1 pk=1980 sk=6328 cycles=7760012",
+        "tb_trike_encaps_core_reference PASS cycles=533658 ct=3928 ss=32"
+      ]
+    },
+    {
+      "log": "build/trike-comba-overlap/profiles.log",
+      "sha256": "7b58b6d862e4fad945cd2adbeb376fe8fc8d2327251cc4b8a3f0405eaf1e7e44",
+      "status": "PASS",
+      "result_lines": [
+        "tb_trike_poly_mul_reference PASS dense=31677 sparse=4340",
+        "tb_trike_poly_mul_reference PASS dense=2110141 sparse=36724",
+        "PASS 2 full-geometry cases"
+      ]
+    },
+    {
+      "log": "build/trike-comba-overlap/catalog.log",
+      "sha256": "930344255180abdfc6934384fe09dbb8e1971bf8ee43af0060e83336a725502e",
+      "status": "FAIL_RESOLVED",
+      "result_lines": [
+        "1 failed, 1 passed, 50 deselected in 0.07s"
+      ]
+    },
+    {
+      "log": "build/trike-comba-overlap/catalog-retry.log",
+      "sha256": "d0dc7a905a59510a4895ad51327589e298b117c223cf70eb7a4a0922141a0d0e",
+      "status": "PASS",
+      "result_lines": [
+        "1 passed, 51 deselected in 0.05s"
+      ]
+    },
+    {
+      "log": "build/trike-comba-overlap/k2-model.log",
+      "sha256": "03548c659ba4de2396b4dc62fe025ea941180f00aad6227044659e15ee133d7a",
+      "status": "PASS",
+      "result_lines": [
+        "r=2 arithmetic_restore=PASS K1_current_formula=47 K2_proposed_budget=175",
+        "r=63 arithmetic_restore=PASS K1_current_formula=47 K2_proposed_budget=175",
+        "r=64 arithmetic_restore=PASS K1_current_formula=45 K2_proposed_budget=173",
+        "r=65 arithmetic_restore=PASS K1_current_formula=66 K2_proposed_budget=200",
+        "r=127 arithmetic_restore=PASS K1_current_formula=66 K2_proposed_budget=200",
+        "r=128 arithmetic_restore=PASS K1_current_formula=50 K2_proposed_budget=178",
+        "r=129 arithmetic_restore=PASS K1_current_formula=111 K2_proposed_budget=249",
+        "r=191 arithmetic_restore=PASS K1_current_formula=111 K2_proposed_budget=249",
+        "r=192 arithmetic_restore=PASS K1_current_formula=87 K2_proposed_budget=183",
+        "r=193 arithmetic_restore=PASS K1_current_formula=118 K2_proposed_budget=262",
+        "r=255 arithmetic_restore=PASS K1_current_formula=118 K2_proposed_budget=262",
+        "r=256 arithmetic_restore=PASS K1_current_formula=92 K2_proposed_budget=188",
+        "r=257 arithmetic_restore=PASS K1_current_formula=169 K2_proposed_budget=492",
+        "r=15581 arithmetic_restore=PASS K1_current_formula=47439 K2_proposed_budget=47902",
+        "PASS 42 software cases; K2 RTL/synthesis/Vivado NOT_RUN"
+      ]
+    }
+  ],
+  "validation_note": "PASS values are completed self-checking test outputs. Original callers/bindings aggregate process handles were no longer available after user continuation; aggregate exit codes are not asserted. Four synthesis exit codes retained. Catalog ownership mismatch was corrected and the failing binding test passed on rerun.",
+  "not_run": [
+    "Whole-multiplier formal proof",
+    "Vivado post-route resources and timing",
+    "Full Decaps pipeline/runtime campaign"
+  ],
+  "source_sha256": {
+    "rtl/trike_poly_mul_karatsuba_core.sv": "d2a4b7fe04a8ec3bf84e4f20ee40ff416502bdc568af01fbf196be2b83810a67",
+    "rtl/trike_poly_mul_core.sv": "8cf97a727906931b855a51b516a45e5fef82a018320276d00507278010f00251",
+    "rtl/trike_poly_inv_core.sv": "9848e6b14295c0f21b1ede7117b215cc204bca04fe0260b24b43d5bdcd94d0e6",
+    "rtl/trike_poly_inv_synth_top.sv": "82c2aeca39062546aa12bbe295c2dbac3ec0df3e170e28b828dcd15748541d51",
+    "rtl/reset_sync.sv": "7e2c1c2ff7359061d22ba56d4181c2f2a28d2e2ebcb342f99c557cfa10309170",
+    "rtl/trike_inv_schedule_pkg.sv": "2b3b75b2c3b5dd15d565e2c9039b2df650813f264bb64c2cc50163642b33c397",
+    "tb/trike_fold_schedule.svh": "2bf21d86b0b9b264615882ddec0251c522169418988b1c6f414d8cc044ee47ad",
+    "tb/tb_trike_poly_mul_karatsuba_core.sv": "53afc7af43669b3b007ea89f4c0b2f00d2158a7cd37c0306c3a151e540a6d7f5",
+    "tb/tb_trike_poly_mul_karatsuba_reference.sv": "1ed48dba993ac207c405771b96ebe7587a89389f824bea059ddb9bb3286341a7",
+    "tb/tb_trike_poly_mul_reference.sv": "7ddace8b889ca38f0b0b13d2327e133f639510da097feb5e5160c1d0f03a4f06",
+    "tb/tb_trike_poly_mul_runtime.sv": "75b56950066060a4093fe2cdb0efb481446de98730639a0cd7df5ad04ece29e8",
+    "tb/tb_trike_poly_inv_reference.sv": "7aa36c2130b43ed2a8b2b50096531bb7e1cc76a0d52a396f938c10e4caa73425",
+    "scripts/model_trike_k2_fold.py": "7a91ae0635e74fd925991c5b4264cfb70b670d6f250d9a4a9396297719b7ab4a",
+    "scripts/run_trike_fold_profiles.py": "5ed39b2002229e1a520195e31debebb74a053834b0098dfaf3e7bc8246edc7a0",
+    "build/trike-comba-overlap/before/trike_poly_mul_karatsuba_core.sv": "33718bd1064af6dfcec3c8a97fa6766d87363f8acd35c3d4c825e7e86c591a2e",
+    "build/trike-comba-overlap/ram_bram_estimate.sv": "194aa00ace72ff2bd5e3edf1def56a33be7c772fd1fcb787e53910dc57eb5621"
+  }
+}

@@ -1,45 +1,42 @@
-# 文档索引
+# 文档入口
 
-本目录包含译码器设计说明、验证说明、图文件和 RTL/Vivado 实现规范。
+按本次问题选择一份主文档；不默认遍历历史。当前设计、验证状态、未来候选和旧证据分别维护，
+不在各处重复同步。文档写入门槛见[记录规则](project_workflow.md)。
 
-## 设计文档
+## 日常入口
 
-- [BIKE syndrome 输入 min-sum 译码器](design/bike_decoder.md)：参数宏、构建配置、顶层端口和译码语义速查。
-- [译码器硬件设计说明](design/decoder_hardware_design_guide.md)：译码器数据通路、存储组织、K-sign、固定调度和周期预算的完整设计说明。
-- [RTL实现状态](design/implementation_status.md)：当前配置、数据通路、RAM生命周期、固定周期、验证状态和证据边界。
-- [Vivado基线注册表](design/vivado_baseline_registry.md)：指向各实现顶层的有效基线、历史参考和待测边界。
-- [实验决策索引](experiments/index.md)：按可比较假设/实验系列汇总架构、RAM、周期、资源与时序结论。
-- [历史探索归档](design/optimization_exploration_history.md)：阶段1至81的冻结历史记录。
-- [RTL 命名规范](design/naming_conventions.md)：坐标、buffer、端口和 debug 信号命名规则。
+| 要解决的问题 | 主文档 |
+| --- | --- |
+| 怎样运行工具、选检查、何时停止 | [工作流](workflow.md) |
+| 当前实现与验证到了哪里 | [实现状态](design/implementation_status.md) |
+| 某方向是否已经踩过坑 | [错题与历史摘要](experiments/index.md) |
+| 下一步有哪些值得保留的候选 | [KEM路线图](design/trike_kem_optimization_roadmap.md) |
+| 哪个物理结果可作为基线 | [Vivado注册表](design/vivado_baseline_registry.md)与[manifest规范](../reports/vivado/manifests/README.md) |
 
-## 项目管理
+## 按需设计与方法参考
 
-- [项目工作流](project_workflow.md)：Git、实验、Vivado报告、基线和生成物的记录边界。
-- [本地SystemVerilog工作流](workflow.md)：环境入口、统一Make目标、PoC、真实RTL切入和证据边界。
-- [本地RTL环境基线](environment.md)：安装布局、锁定工具版本和已验证能力。
-- [已知限制](known-limitations.md)：cocotb/FST兼容层、Yosys估计和物理实现边界。
-- [复位与时钟契约](reset-and-clock.md)：生产RTL的复位、时钟、CDC和报告边界速查。
-- [Vivado manifest规范](../reports/vivado/manifests/README.md)：外部`VIVADO_REPORT_ROOT`中的原始报告如何与仓库中的结构化结果对应。
+以下文档保存技术内容，不充当任务日记；仅在对应接口、实现或方法改变时更新所属部分。
 
-## 验证和结果
+| 主题 | 内容归属 |
+| --- | --- |
+| Decoder硬件 | [硬件设计说明](design/decoder_hardware_design_guide.md)：数据通路、K-sign、RAM与固定调度；[BIKE速查](design/bike_decoder.md)：BIKE参数和接口 |
+| TRIKE KEM实现 | [公共核](design/trike_kem_common_cores.md)：共享服务、接口和生命周期；[直接折叠](design/trike_karatsuba_fold.md)：乘法推导、周期和复现 |
+| KEM算法教学 | [BIKE/TRIKE机制](design/bike_trike_kem_hardware_mechanism.md)：数学语义与核分层，不作为当前实例或验证状态清单 |
+| 编码约束 | [命名](design/naming_conventions.md)、[复位/时钟](reset-and-clock.md)、[Vivado RTL规范](vivado_systemverilog_guidelines.md) |
+| 环境 | [工具基线](environment.md)、[已知限制](known-limitations.md)；执行命令以工作流为准 |
+| 验证方法 | [Decoder验证](verification/decoder_verification.md)、[量化模型](verification/quantization_model.md)、[FLS外推](verification/k4_minsum_trike_bf_fls_extrapolation.md)；保留trials、置信界与适用范围 |
+| 图与文献 | [图源及数据](figures/README.md)、[Cai与Zhang论文](references/cai-zhang-2023-low-complexity-parallel-min-sum-mdpc-decoder.pdf) |
 
-- [译码器验证](verification/decoder_verification.md)：回归入口、随机用例、检查项、日志、格式化和 lint。
-- [验证矩阵](verification/validation_matrix.md)：把文档、RTL、RAM/调度、参数和KEM改动映射到最小必要门禁。
-- [量化模型](verification/quantization_model.md)：C 模型、量化参数、fixtures 和 sweep 流程。
-- [K=4 Min-Sum 与 TRIKE BF 的 FLS 外推](verification/k4_minsum_trike_bf_fls_extrapolation.md)：外推方法、95% 置信区间、K=4 候选 `r` 和适用边界。
+## 历史文档的归属
 
-## 图文件
+所有历史材料先经[错题与主题摘要](experiments/index.md)查找，命中具体问题再下钻。
 
-- [figures/](figures/)：图源文件和导出的 SVG/PNG/PDF 文件。
+| 历史集合 | 已提炼到哪里 | 原文用途 |
+| --- | --- | --- |
+| 冻结阶段1–81 | 实验索引的错题与主题摘要；现役Decoder/KEM设计 | [冻结原文](design/optimization_exploration_history.md)仅核查原配置、数值和取舍，不追加阶段 |
+| EXP-0082至0126（含索引内0121） | 实验索引按配置基线、Decaps、共享服务、算术分组 | [实验目录说明](experiments/README.md)；原ID和RUN引用保留，历史“当前”不代表今日状态 |
+| 已归档架构、调度、K-sign、tile文档 | Decoder硬件设计说明 | [归档索引](archive/README.md)，不再平行维护 |
+| 已归档参数结果、硬件优化调研 | 验证方法、实现状态、候选路线图 | 原始参数/调研快照，不视为当前结论 |
+| 旧图和恢复素材 | 图文件索引中的现役素材 | 归档保留，不要求重新导出 |
 
-## RTL 和 Vivado 规范
-
-- [Vivado SystemVerilog RTL 规范](vivado_systemverilog_guidelines.md)：RTL、testbench、Vivado、复位、RAM 推断、CDC 和审查规则。
-
-## 参考资料
-
-- [Cai and Zhang 2023 low-complexity parallel min-sum MDPC decoder](references/cai-zhang-2023-low-complexity-parallel-min-sum-mdpc-decoder.pdf)
-
-## 归档
-
-- [归档文件](archive/README.md)：不再使用的历史文档和图文件，仅供历史参考。
+新增内容先更新已有归属，不因新任务新建同类文档。旧证据不为压缩篇幅改写数字或覆盖原结论。

@@ -160,7 +160,7 @@ def main() -> None:
         REPO_ROOT / "docs" / "experiments" / "template.md",
         REPO_ROOT / "docs" / "design" / "vivado_baseline_registry.md",
         REPO_ROOT / "docs" / "project_workflow.md",
-        REPO_ROOT / "docs" / "verification" / "validation_matrix.md",
+        REPO_ROOT / "docs" / "workflow.md",
         REPO_ROOT / "README.md",
         REPO_ROOT / "pyproject.toml",
         REPO_ROOT / "uv.lock",

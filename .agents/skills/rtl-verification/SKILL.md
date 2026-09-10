@@ -15,12 +15,14 @@ simulator and does not generate SystemVerilog. A hybrid SV harness plus generate
 Python fixture is often the best fit. Do not introduce cocotb for a test whose
 essential checks are simpler and more explicit in self-checking SV.
 
-Use `docs/verification/validation_matrix.md` to choose scope. Start with the
+Consult docs/workflow.md only when scope is unclear. Start with the
 smallest existing deterministic `make test-<name>` target, use `make test` for
 the aggregate fast suite, and use `make regress` for the fixed-seed random gate.
 Check data results, protocol behavior, memory transaction counts, and exact
 start/done cycle boundaries independently. For randomized failures, print
 parameter set, seed, trial, expected and actual values, and preserve the runtime
-log. Exercise K=3/K=4 and all affected public profiles when required. State
+log. Follow AGENTS.md representative-profile scope: retain cheap boundary cases,
+add middle profiles only for their changed branch/table or an explicit request.
+Exercise affected K=3/K=4 behavior when required. State
 trials, failures, stopping rule, and confidence bound for DFR/FLS results.
 Simulation does not establish FPGA mapping or timing.

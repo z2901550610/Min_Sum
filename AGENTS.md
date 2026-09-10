@@ -1,25 +1,30 @@
 # Research RTL Agent Instructions
 
-This graduate research repository contains fixed-schedule BIKE/MDPC decoding and TRIKE KEM RTL. Production sources are in `rtl/`, ordered by `filelists/*.f`; tests, proofs and references are in `tb/`, `formal/` and `software/`.
+This is a graduate research exploration repository, not a production qualification program.
+RTL lives in `rtl/`, ordered by `filelists/*.f`; tests, proofs and references live in `tb/`, `formal/`, `software/`.
 
-## Non-negotiable boundaries
+## Preserve the research contract
 
-- Preserve functional and golden/KAT semantics. Within each public parameter level, cycles and memory-access counts must not depend on secrets, input data, mismatch position, success or convergence. No early exit. Public profiles may use different fixed schedules.
-- Keep simulation, formal, local synthesis estimates and Vivado physical evidence distinct. Never report an unfinished or unavailable check as PASS. DFR results need trials, failures and a confidence bound.
-- Physical claims require comparable Vivado device/version/XDC/parameters/defines/report stage and a RUN manifest. Functional-only work does not require Vivado. Use Windows Tcl Console or direct batch Tcl; see `docs/workflow.md`.
+- Preserve golden/KAT semantics. Within each public parameter level, cycles and memory-access counts must not depend on secrets, data, mismatch position, success or convergence. No early exit.
+- Distinguish simulation, scoped formal, local synthesis estimates and Vivado results. Never call unfinished or unrun checks PASS. DFR claims need trials, failures and a confidence bound.
+- Physical comparisons need matching device/tool/XDC/parameters/defines/report stage and RUN evidence. Functional exploration needs no Vivado. Use Windows Tcl Console or direct batch Tcl.
 
-## Work within the task
+## Work and stop
 
-- Inspect `git status --short` and relevant sources/callers first. Preserve unrelated changes. Review requests do not authorize edits; existing implementation authorization covers necessary reversible work without repeated approval. Clarify only material scope, interface, cryptographic or cycle-contract changes.
-- Prefer one canonical implementation. Migrate internal callers together; do not add speculative compatibility layers, aliases or fallback paths. Preserve external contracts and experiment provenance.
-- Read only relevant documentation and failing-log excerpts; avoid dumping whole files, unchanged diffs or successful logs. Skills in `.agents/skills/` are task-specific references, not a mandatory stage sequence. A local equivalent fix needs no new specification or architecture ceremony. Consult the appropriate skill for unfamiliar design, verification or tool work; do not reread unchanged guidance.
+- Inspect Git status and relevant sources/callers; preserve unrelated changes. Review requests do not authorize edits. Existing implementation authorization covers necessary reversible work; clarify only material scope/interface/cryptographic/cycle-contract changes.
+- Read only what resolves the current question. Known local work needs no mandatory planner, design-status/matrix read, specification phase or Skill chain. Skills are references for unfamiliar work, not stages.
+- Prefer one canonical implementation and existing scripts/Make entrypoints. Migrate callers together; avoid speculative compatibility layers, extra runners and one-task configuration systems.
+- Use `./eda <command>` for local tools. Sync Python dependencies only for a missing environment or changed dependencies. Git and file operations need no EDA setup.
+- Format only task-owned SV files. Start with the smallest self-checking test that detects the changed behavior; its compilation supplies local syntax/elaboration feedback. During debugging rerun only the failing test.
+- Add caller/reference checks when interfaces or shared behavior change; add relevant elaboration for filelist/package/top changes. Run affected existing proof/cover for changed scheduling/control properties; do not create a formal project for every FSM edit.
+- Test changed parameter entries directly. Shared geometry changes use the smallest/largest relevant profiles (TRIKE160/512, BIKE128/256), plus cheap boundary cases. Do not run unrelated families or add middle profiles without a changed branch/table or explicit request.
+- `make check-plan VALIDATION_PATHS="..."` is optional advice when test selection is unclear. It does not execute checks or establish PASS. Missing owners require selecting a relevant test, not running every suite.
+- `check-fast`/`ci-fast`, full KEM reference, random campaigns and `check` are explicit integration/research tools, not automatic closing gates. Workflow helpers/Make recipes need relevant unit tests and the changed command; environment/runner interoperability needs `validate-workflow`. A new toolchain baseline needs `check`.
+- Reuse passing results when inputs/conditions are unchanged. Wait for required running checks, report unresolved limits, then stop. Do not add another review, benchmark, report or test because it is available.
 
-## Proportional validation
+## Keep records small
 
-- Use `source scripts/eda-env.sh` in each terminal; run `uv sync --frozen` after checkout or Python dependency changes. Required tools must work. Day-to-day version differences are warnings; `make check-tool-versions` verifies the recorded baseline explicitly.
-- For local RTL edits: format task-owned files with `make format FILES="..."`, run `make check-fast` and the smallest self-checking test. Keep interfaces, fixtures and filelists synchronized. Follow existing naming and Vivado coding conventions when editing RTL.
-- Use `make check-plan VALIDATION_PATHS="..."` when test selection is unclear or the task scope changes; a known focused test needs no planning round. Maintain test commands/groups/owners in `config/test_catalog.toml`; Make and the planner consume it. Owners select focused tests; unowned hardware falls back to its profile. Unrouted research scripts/data need task-appropriate review, not registration.
-- Run affected proof/cover when control, scheduling or formal properties change; affected public profiles when parameters change; integration/reference tests when shared behavior changes. Use `make check` for broad integration/toolchain qualification and `make validate-workflow` for core build/runner changes. Workflow validation runs only unit tests and tool smoke; it never substitutes for production RTL checks or invokes QoR. Neither is required for every local edit, documentation update or helper script.
-- Reuse checks already passed in this task if inputs and conditions are unchanged. Follow required running checks to completion. Report unavailable gates as NOT_RUN with a concrete blocker; inapplicable evidence is NOT_APPLICABLE.
-
-Keep active docs about the current design, historical comparisons in experiment records, and generated artifacts out of source directories. Use one EXP per architecture/QoR hypothesis, not per ordinary fix. Keep `AGENTS.md` and `CLAUDE.md` identical; use conventional commit subjects. Detailed commands and evidence rules: `docs/workflow.md` and `docs/verification/validation_matrix.md`.
+- Batch independent reads, inspect failure excerpts, and wait on the original process. Keep full automatic logs and exit codes; return a short result and useful log path.
+- Exploration and routine debugging need no tracked diary or plan. Record a short lesson only for an evidence-backed rejected direction: conditions, reason, evidence/reproduction and retry conditions. Pending/cancelled/untested is not failure.
+- Successful changes update only affected current design facts and necessary evidence. Keep historical EXP/RUN references; read old records only for a relevant question. Do not duplicate results across documents or append stages. Generated artifacts stay outside source directories.
+- Keep `AGENTS.md` and `CLAUDE.md` identical. Use conventional commit subjects. Details: [workflow](docs/workflow.md), [record policy](docs/project_workflow.md), [historical lessons](docs/experiments/index.md).

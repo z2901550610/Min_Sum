@@ -24,7 +24,7 @@ spec/design docs
 - 生产 RTL：`rtl/`；验证 oracle：`tb/`、`formal/`、`software/` 和 fixture 生成器。
 - 日常行为契约：`AGENTS.md`，`CLAUDE.md` 为逐字镜像。
 - 当前架构和证据边界：`docs/design/implementation_status.md`。
-- 验证选择：`docs/verification/validation_matrix.md`。
+- 验证选择：`docs/workflow.md`（现役入口；生成矩阵已移除）。
 - 物理结果：外部 raw Vivado run + `reports/vivado/manifests/RUN-*.toml`。
 
 ### Canonical commands

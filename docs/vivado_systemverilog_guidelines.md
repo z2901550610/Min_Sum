@@ -210,26 +210,15 @@ localparam int ROW_IDX_W = (R > 1) ? $clog2(R) : 1;
 
 ## 仿真和验证
 
-- 优先使用 Makefile 入口：
-  - `make test-unit`
-  - `make test-integration`
-  - `make test-bike-random BIKE_RANDOM_TRIALS=1`
-  - `make test`
+- 使用所属最小自检目标；范围与聚合入口只维护在[工作流](workflow.md)。
 - testbench 必须 self-checking，并包含 timeout。
 - 算法行为使用 Python/C golden model 或生成 fixture 对拍。
 - 随机 BIKE case 通过 `scripts/run_bike_random.py` 生成和运行。
-- 修改固定调度、cycle budget、banking、tile 几何、message 编码或 syndrome/decision 存储时，至少运行集成测试和一个随机生成 case。
+- 上述行为改变时，选择能检测该变化的定向、周期或调用方测试；已有定向覆盖足够时不额外要求随机case。
 
 ## Lint、格式和综合检查
 
-常规检查：
-
-```bash
-make format FILES="rtl/foo.sv tb/tb_foo.sv"
-make format-check
-make lint
-make test
-```
+日常检查遵循[工作流](workflow.md)，本文不另设完整lint/test前置条件。
 
 Vivado 检查：
 

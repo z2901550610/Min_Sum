@@ -1,0 +1,131 @@
+{
+  "date": "2026-09-10",
+  "scope": "64-bit base Karatsuba depth 1 -> 2; outer polynomial depth remains 1; no state or cycle changes",
+  "source_revision": "a17f0f1b7c24ca6ed832fc4497d26d85fa36c656",
+  "dirty_tree": true,
+  "geometry": {
+    "r_bits": 15581,
+    "word_w": 64
+  },
+  "tool": "Yosys 0.68+132 (13b43f8c8-dirty), Slang; synth_xilinx -family xc7 default ABC9",
+  "ram_model": "generic synchronous read-first branch of current ram_bram; XPM disabled only in build snapshot; not Vivado evidence",
+  "comparisons": [
+    {
+      "case": "trike_poly_inv_synth_top-d1",
+      "lut_primitives": 3822,
+      "ff": 878,
+      "ramb36": 4,
+      "ramb18": 0,
+      "stat_path": "build/clmul64-depth2-integration/trike_poly_inv_synth_top-d1/xilinx-stat.json",
+      "stat_sha256": "20459aa9fee32d34c3411d1d0c30cdf3ea623c542316740cb8c307ea6879fcd0",
+      "command": [
+        "./eda",
+        "make",
+        "synth-xilinx",
+        "LOCAL_SYNTH_TOP=trike_poly_inv_synth_top",
+        "LOCAL_SYNTH_SOURCES=-G BASE_KARATSUBA_DEPTH=1 rtl/reset_sync.sv rtl/trike_inv_schedule_pkg.sv /Users/z2901550610/Documents/Min_Sum/build/clmul64-depth2-integration/ram_bram_estimate.sv rtl/trike_poly_mul_core.sv rtl/trike_poly_mul_karatsuba_core.sv rtl/trike_poly_inv_core.sv rtl/trike_poly_inv_synth_top.sv",
+        "LOCAL_SYNTH_BUILD_DIR=/Users/z2901550610/Documents/Min_Sum/build/clmul64-depth2-integration/trike_poly_inv_synth_top-d1"
+      ],
+      "exit_code": 0
+    },
+    {
+      "case": "trike_poly_inv_synth_top-d2",
+      "lut_primitives": 3547,
+      "ff": 878,
+      "ramb36": 4,
+      "ramb18": 0,
+      "stat_path": "build/clmul64-depth2-integration/trike_poly_inv_synth_top-d2/xilinx-stat.json",
+      "stat_sha256": "9f19da502ccafe24a0f11f5ccd10aa4e1f3b57891a9d04a1ad9943a51c3b2d39",
+      "command": [
+        "./eda",
+        "make",
+        "synth-xilinx",
+        "LOCAL_SYNTH_TOP=trike_poly_inv_synth_top",
+        "LOCAL_SYNTH_SOURCES=-G BASE_KARATSUBA_DEPTH=2 rtl/reset_sync.sv rtl/trike_inv_schedule_pkg.sv /Users/z2901550610/Documents/Min_Sum/build/clmul64-depth2-integration/ram_bram_estimate.sv rtl/trike_poly_mul_core.sv rtl/trike_poly_mul_karatsuba_core.sv rtl/trike_poly_inv_core.sv rtl/trike_poly_inv_synth_top.sv",
+        "LOCAL_SYNTH_BUILD_DIR=/Users/z2901550610/Documents/Min_Sum/build/clmul64-depth2-integration/trike_poly_inv_synth_top-d2"
+      ],
+      "exit_code": 0
+    },
+    {
+      "case": "trike_poly_mul_core-d1",
+      "lut_primitives": 4438,
+      "ff": 1162,
+      "ramb36": 3,
+      "ramb18": 1,
+      "stat_path": "build/clmul64-depth2-integration/trike_poly_mul_core-d1/xilinx-stat.json",
+      "stat_sha256": "002c8b3df12feaa0d65d502228db4e0a25f0205d8d3d442da0bde694ab067ba8",
+      "command": [
+        "./eda",
+        "make",
+        "synth-xilinx",
+        "LOCAL_SYNTH_TOP=trike_poly_mul_core",
+        "LOCAL_SYNTH_SOURCES=-G BASE_KARATSUBA_DEPTH=1 rtl/trike_inv_schedule_pkg.sv /Users/z2901550610/Documents/Min_Sum/build/clmul64-depth2-integration/ram_bram_estimate.sv rtl/trike_poly_mul_core.sv rtl/trike_poly_mul_karatsuba_core.sv rtl/trike_poly_inv_core.sv rtl/trike_poly_inv_synth_top.sv",
+        "LOCAL_SYNTH_BUILD_DIR=/Users/z2901550610/Documents/Min_Sum/build/clmul64-depth2-integration/trike_poly_mul_core-d1"
+      ],
+      "exit_code": 0
+    },
+    {
+      "case": "trike_poly_mul_core-d2",
+      "lut_primitives": 4162,
+      "ff": 1162,
+      "ramb36": 3,
+      "ramb18": 1,
+      "stat_path": "build/clmul64-depth2-integration/trike_poly_mul_core-d2/xilinx-stat.json",
+      "stat_sha256": "8ea306152d87c1786e1776bdef38c43a522c1c44bd843372c3e0acfa1a14a18b",
+      "command": [
+        "./eda",
+        "make",
+        "synth-xilinx",
+        "LOCAL_SYNTH_TOP=trike_poly_mul_core",
+        "LOCAL_SYNTH_SOURCES=-G BASE_KARATSUBA_DEPTH=2 rtl/trike_inv_schedule_pkg.sv /Users/z2901550610/Documents/Min_Sum/build/clmul64-depth2-integration/ram_bram_estimate.sv rtl/trike_poly_mul_core.sv rtl/trike_poly_mul_karatsuba_core.sv rtl/trike_poly_inv_core.sv rtl/trike_poly_inv_synth_top.sv",
+        "LOCAL_SYNTH_BUILD_DIR=/Users/z2901550610/Documents/Min_Sum/build/clmul64-depth2-integration/trike_poly_mul_core-d2"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "validation": {
+    "status": "PASS",
+    "test_targets": [
+      "test-trike-clmul-karatsuba",
+      "test-trike-poly-mul-core",
+      "test-trike-poly-mul-runtime",
+      "test-trike-poly-karatsuba-core",
+      "test-trike-poly-karatsuba-reference",
+      "test-trike-poly-reference",
+      "test-trike-poly-inv-reference"
+    ],
+    "logs": [
+      "build/clmul64-depth2-integration/tests.log",
+      "build/clmul64-depth2-integration/reference-depth2.log"
+    ],
+    "exit_codes": [
+      0,
+      0
+    ],
+    "cycles": {
+      "dense_stream": 51733,
+      "standalone_halfbank": 50999,
+      "inverse": 1432796
+    },
+    "runtime": "13 profile transitions, 75 transactions, 74 same-address sparse collisions",
+    "standalone": "13 geometries x 13 transactions"
+  },
+  "resolved_setup_errors": [
+    "Initial synthesis attempt used WORD_W in fixed-64 wrapper default; corrected to constant 2 before successful synthesis.",
+    "Inversion wrapper synthesis omitted reset_sync; added source before successful synthesis."
+  ],
+  "not_run": [
+    "Vivado placed/routed resources and timing",
+    "whole-multiplier formal",
+    "full KEM regression"
+  ],
+  "source_sha256": {
+    "rtl/trike_poly_mul_core.sv": "8cf97a727906931b855a51b516a45e5fef82a018320276d00507278010f00251",
+    "rtl/trike_poly_mul_karatsuba_core.sv": "33718bd1064af6dfcec3c8a97fa6766d87363f8acd35c3d4c825e7e86c591a2e",
+    "rtl/trike_poly_inv_core.sv": "9848e6b14295c0f21b1ede7117b215cc204bca04fe0260b24b43d5bdcd94d0e6",
+    "rtl/trike_poly_inv_synth_top.sv": "82c2aeca39062546aa12bbe295c2dbac3ec0df3e170e28b828dcd15748541d51",
+    "rtl/reset_sync.sv": "7e2c1c2ff7359061d22ba56d4181c2f2a28d2e2ebcb342f99c557cfa10309170",
+    "rtl/trike_inv_schedule_pkg.sv": "2b3b75b2c3b5dd15d565e2c9039b2df650813f264bb64c2cc50163642b33c397",
+    "build/clmul64-depth2-integration/ram_bram_estimate.sv": "29b0e7270665ba7764b7e9b1216a1b173fed4d95a4facee74018b9ee98c8740e"
+  }
+}

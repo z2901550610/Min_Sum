@@ -2,12 +2,8 @@
 
 ## 回归入口
 
-```sh
-make test-unit
-make test-integration
-make test
-make test-bike-random BIKE_RANDOM_TRIALS=1
-```
+从所属`./eda make test-<name>`开始。`test`包含`test-unit`与`test-integration`，
+选择所需范围即可，不依次重复执行。随机测试按未覆盖的行为选择，详见[工作流](../workflow.md)。
 
 ## Testbench形式选择
 

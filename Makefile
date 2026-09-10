@@ -1,6 +1,20 @@
 .DEFAULT_GOAL := all
 -include config/local.mk
 
+# Full-size regression scope; individual suite variables remain overridable.
+VALIDATION_PROFILE_SET ?= representative
+ifeq ($(VALIDATION_PROFILE_SET),representative)
+TRIKE_TEST_PROFILES := trike160 trike512
+BIKE_TEST_PROFILES := bike128 bike256
+TRIKE_REFERENCE_PROFILES := TRIKE-2 TRIKE-9
+else ifeq ($(VALIDATION_PROFILE_SET),all)
+TRIKE_TEST_PROFILES := trike160 trike256 trike384 trike512
+BIKE_TEST_PROFILES := bike128 bike192 bike256
+TRIKE_REFERENCE_PROFILES := TRIKE-2 TRIKE-5 TRIKE-7 TRIKE-9
+else
+$(error VALIDATION_PROFILE_SET must be representative or all)
+endif
+
 # Tool and build configuration.
 VERILATOR ?= ./scripts/verilator_quiet.py
 REAL_VERILATOR ?= verilator
@@ -58,17 +72,17 @@ AWS_FIPS202_INCLUDE := $(AWS_BIKE_KEM_DIR)/src/third_party_src
 TRIKE_KEM_BUILD_DIR ?= build/software/trike_kem
 TRIKE_KEM_SELFTEST ?= $(TRIKE_KEM_BUILD_DIR)/trike_kem_selftest
 TRIKE_KEM_SOURCES := software/trike_kem/trike_kem.c software/trike_kem/trike_ms_quant.c software/trike_kem/selftest.c
-TRIKE_KEM_TEST_PROFILES ?= trike160 trike256 trike384 trike512
+TRIKE_KEM_TEST_PROFILES ?= $(TRIKE_TEST_PROFILES)
 TRIKE_REFERENCE_SOURCE_ROOT ?= external/trike-reference
 TRIKE_REFERENCE_BUILD_DIR ?= build/software/trike_reference
-TRIKE_REFERENCE_PARAM_SETS ?= TRIKE-2 TRIKE-5 TRIKE-7 TRIKE-9
+TRIKE_REFERENCE_PARAM_SETS ?= $(TRIKE_REFERENCE_PROFILES)
 TRIKE_POLY_REFERENCE_KAT ?= $(TRIKE_REFERENCE_SOURCE_ROOT)/Test_Vectors/KAT_KEM_TRIKE-2.txt
 TRIKE_POLY_REFERENCE_FIXTURE ?= tb/generated/trike_poly_mul_reference_case.svh
 TRIKE_POLY_INV_REFERENCE_FIXTURE ?= tb/generated/trike_poly_inv_reference_case.svh
 TRIKE_MINSUM_POLY_INV_FIXTURE ?= tb/generated/trike_poly_inv_minsum_case.svh
-TRIKE_POLY_KARATSUBA_DEPTH ?= 1
+TRIKE_POLY_KARATSUBA_DEPTH ?= 2
 TRIKE_MINSUM_PROFILE ?= trike160
-TRIKE_MINSUM_PROFILES ?= trike160 trike256 trike384 trike512
+TRIKE_MINSUM_PROFILES ?= $(TRIKE_TEST_PROFILES)
 TRIKE_RUNTIME_REFERENCE_DEFINES ?=
 TRIKE_RUNTIME_REFERENCE_CFLAGS ?= -CFLAGS -O3
 TRIKE_MINSUM_KEM_CASE ?= build/generated/trike_minsum_kem/$(TRIKE_MINSUM_PROFILE)_seed1.json
@@ -120,13 +134,13 @@ BIKE_RANDOM_PARALLEL_L ?= $(BIKE_PARALLEL_L)
 BIKE_RANDOM_COLS_PER_TILE ?= 256
 BIKE_RANDOM_TIMEOUT_CYCLES ?= 800000
 BIKE_RANDOM_ERROR_ARG := $(if $(BIKE_RANDOM_ERROR_COUNT),--error-count $(BIKE_RANDOM_ERROR_COUNT),)
-BIKE_UNIFIED_RANDOM_PARAM_SETS ?= bike128 bike192 bike256
+BIKE_UNIFIED_RANDOM_PARAM_SETS ?= $(BIKE_TEST_PROFILES)
 BIKE_UNIFIED_RANDOM_COLS_PER_TILE ?= 576
 BIKE_UNIFIED_RANDOM_TIMEOUT_CYCLES ?= 40000000
 TRIKE_UNIFIED_KSIGN_PARALLEL_L ?= 32
 TRIKE_UNIFIED_KSIGN_COLS_PER_TILE ?= 1152
 TRIKE_UNIFIED_KSIGN_K ?= 4
-TRIKE_UNIFIED_KSIGN_PARAM_SETS ?= trike160 trike256 trike384 trike512
+TRIKE_UNIFIED_KSIGN_PARAM_SETS ?= $(TRIKE_TEST_PROFILES)
 TRIKE_UNIFIED_KSIGN_TIMEOUT_CYCLES ?= 40000000
 CI_SMOKE_SEED ?= 1
 CI_NIGHTLY_TRIALS ?= 4
@@ -138,7 +152,7 @@ include build/test_catalog.mk
 
 .PHONY: all format lint compile regress formal synth synth-generic synth-xilinx qor qor-report qor-record check validate-workflow workflow-smoke check-trike-sm3-sharing model-min-sum run-model-min-sum sweep-min-sum optimum-min-sum campaign-min-sum confirm-min-sum check-model-rtl check-model-rtl-bike128 software-trike-kem check-local-tools check-format-rtl lint-rtl lint-slang check-rtl formal-ct-select formal-ct-control formal-trike-poly-divstep-s1 formal-k-sign-overlap-scheduler formal-tile-scheduler vivado-synth vivado-synth-trike-unified-ksign vivado-impl-trike-kem-core vivado-impl-trike-poly-inv vivado-impl-trike-pseudohash vivado-impl-trike-encaps vivado-impl-trike-keygen vivado-impl-trike-decaps vivado-impl-trike-decaps-runtime vivado-impl-trike-kem-cores FORCE
 .PHONY: gen-trike-minsum-kem-case formal-trike-kem-operation-control
-.PHONY: tool-versions check-tool-versions check-filelists check-records check-validation-profiles update-validation-matrix check-trike-reference-data lint-verilator formal-fast formal-nightly formal-ct-control-extended ci-fast ci-smoke ci-nightly ci-kem-reference check-plan check-agent-workflow
+.PHONY: tool-versions check-tool-versions check-filelists check-records check-validation-profiles check-trike-reference-data lint-verilator formal-fast formal-nightly formal-ct-control-extended ci-fast ci-smoke ci-nightly ci-kem-reference check-plan check-agent-workflow
 .PHONY: python-sync format-changed format-all format-check
 
 # Stable human and Agent entrypoints.
@@ -312,10 +326,7 @@ check-filelists:
 	@python3 scripts/check_filelists.py
 
 check-validation-profiles:
-	@python3 scripts/render_validation_matrix.py --check
-
-update-validation-matrix:
-	@python3 scripts/render_validation_matrix.py --write
+	@python3 scripts/validation_profiles.py
 
 check-records:
 	@python3 scripts/check_project_records.py
@@ -410,7 +421,7 @@ ci-nightly:
 	@$(MAKE) test-trike-unified-ksign-random TRIKE_UNIFIED_KSIGN_K=3 BIKE_RANDOM_BASE_SEED=$(CI_SMOKE_SEED) BIKE_RANDOM_TRIALS=$(CI_NIGHTLY_TRIALS)
 	@$(MAKE) test-trike-unified-ksign-random TRIKE_UNIFIED_KSIGN_K=4 BIKE_RANDOM_BASE_SEED=$(CI_SMOKE_SEED) BIKE_RANDOM_TRIALS=$(CI_NIGHTLY_TRIALS)
 
-ci-kem-reference: check-local-tools check-tool-versions check-records check-rtl check-trike-reference-data $(TRIKE_KEM_REFERENCE_TARGETS)
+ci-kem-reference: check-trike-reference-data $(TRIKE_KEM_REFERENCE_TARGETS)
 
 synth: synth-generic synth-xilinx
 	@python3 scripts/validation_events.py record --layer synthesis --name synth --status PASS --signature "synth:$(LOCAL_SYNTH_TOP):$(LOCAL_SYNTH_SOURCES)"
@@ -423,14 +434,14 @@ synth-xilinx:
 	@mkdir -p $(LOCAL_SYNTH_BUILD_DIR)
 	@$(YOSYS) -m slang -ql $(LOCAL_SYNTH_BUILD_DIR)/xilinx.log -p 'read_slang --std 1800-2017 $(LOCAL_SYNTH_SOURCES) --top $(LOCAL_SYNTH_TOP); synth_xilinx -family xc7 -top $(LOCAL_SYNTH_TOP); tee -o $(LOCAL_SYNTH_BUILD_DIR)/xilinx-stat.json stat -json'
 
-qor: check-rtl test-kem-ct-compare-select formal-ct-select synth
-	@$(MAKE) qor-report QOR_LINT_STATUS=PASS QOR_SIMULATION_STATUS=PASS QOR_FORMAL_STATUS=PASS
+qor: test-kem-ct-compare-select formal-ct-select synth
+	@$(MAKE) qor-report QOR_LINT_STATUS=NOT_RUN QOR_SIMULATION_STATUS=PASS QOR_FORMAL_STATUS=PASS
 
 qor-report:
 	@python3 scripts/report_qor.py --top $(QOR_TOP) --generic $(QOR_BUILD_DIR)/generic-stat.json --xilinx $(QOR_BUILD_DIR)/xilinx-stat.json --output-json $(QOR_REPORT_DIR)/latest.json --output-markdown $(QOR_REPORT_DIR)/latest.md --lint $(QOR_LINT_STATUS) --simulation $(QOR_SIMULATION_STATUS) --formal $(QOR_FORMAL_STATUS) $(if $(QOR_VALIDATION_RUN_ID),--validation-run-id $(QOR_VALIDATION_RUN_ID),)
 
-qor-record: check-rtl test-kem-ct-compare-select formal-ct-select synth
-	@$(MAKE) qor-report QOR_REPORT_DIR=$(QOR_RECORD_DIR) QOR_LINT_STATUS=PASS QOR_SIMULATION_STATUS=PASS QOR_FORMAL_STATUS=PASS
+qor-record: test-kem-ct-compare-select formal-ct-select synth
+	@$(MAKE) qor-report QOR_REPORT_DIR=$(QOR_RECORD_DIR) QOR_LINT_STATUS=NOT_RUN QOR_SIMULATION_STATUS=PASS QOR_FORMAL_STATUS=PASS
 
 vivado-synth:
 	@mkdir -p $(VIVADO_BUILD_DIR)

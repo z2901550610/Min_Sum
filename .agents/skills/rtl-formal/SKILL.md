@@ -8,8 +8,8 @@ description: Add or debug scoped SymbiYosys proofs and cover witnesses for RTL c
 Define the exact harness boundary, assumptions, parameters, safety property, and
 reachable cover witness. Use repository `formal/` conventions and the owning
 `make formal-<name>` proof/cover target as the task completion gate. Use the
-aggregate `make formal` gate only for shared formal infrastructure, an unknown
-owner, or release qualification. Keep assumptions no
+aggregate `make formal` gate only for explicitly broad formal validation. An
+unknown owner requires choosing the relevant harness, not running all proofs. Keep assumptions no
 stronger than the real interface contract and pair safety checks with cover
 reachability. Treat a counterexample as a trace to debug, not hardware evidence.
 Do not claim properties beyond the selected harness or attempt whole-decoder

@@ -2,8 +2,10 @@ name: RTL checks
 
 on:
   pull_request:
+    paths-ignore: ["docs/**", "*.md", ".agents/**"]
   push:
     branches: [main]
+    paths-ignore: ["docs/**", "*.md", ".agents/**"]
   workflow_dispatch:
 
 permissions:

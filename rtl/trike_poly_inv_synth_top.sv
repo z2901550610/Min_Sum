@@ -3,7 +3,7 @@
 // TRIKE-2 polynomial-inversion implementation wrapper for Vivado measurement.
 module trike_poly_inv_synth_top #(
 
-    parameter int BASE_KARATSUBA_DEPTH = 1
+    parameter int BASE_KARATSUBA_DEPTH = 2
 ) (
     input  logic        i_clk,
     input  logic        i_rst_n,
